@@ -15,6 +15,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/app/options"
 	"github.com/cloudnativelabs/kube-router/app/watchers"
+	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	"github.com/mqliang/libipvs"
@@ -38,12 +39,14 @@ const (
 // and endpoints
 
 type NetworkServicesController struct {
-	nodeIP       net.IP
-	nodeHostName string
-	syncPeriod   time.Duration
-	mu           sync.Mutex
-	serviceMap   serviceInfoMap
-	endpointsMap endpointsInfoMap
+	nodeIP        net.IP
+	nodeHostName  string
+	syncPeriod    time.Duration
+	mu            sync.Mutex
+	serviceMap    serviceInfoMap
+	endpointsMap  endpointsInfoMap
+	podCidr       string
+	masqueradeAll bool
 }
 
 // internal representation of kubernetes service
@@ -75,8 +78,14 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 
 	glog.Infof("Starting network services controller")
 
+	// enable masquerade rule
+	err := ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
+	if err != nil {
+		panic("Failed to do add masqurade rule in POSTROUTING chain of nat table due to: %s" + err.Error())
+	}
+
 	// enable ipvs connection tracking
-	err := ensureIpvsConntrack()
+	err = ensureIpvsConntrack()
 	if err != nil {
 		panic("Failed to do sysctl net.ipv4.vs.conntrack=1 due to: %s" + err.Error())
 	}
@@ -329,14 +338,20 @@ func buildEndpointsInfo() endpointsInfoMap {
 }
 
 // Add an iptable rule to masqurade outbound IPVS traffic. IPVS nat requires that reverse path traffic
-// to go through the director for its functioning. So the masqurae rule ensures source IP is modifed
+// to go through the director for its functioning. So the masquerade rule ensures source IP is modifed
 // to node ip, so return traffic from real server (endpoint pods) hits the node/lvs director
-func ensureMasqueradeIptablesRule() error {
+func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
 	}
-	args := []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"}
+	var args []string
+	if masqueradeAll {
+		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"}
+	} else {
+		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
+			"!", "-s", podCidr, "-j", "MASQUERADE"}
+	}
 	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 	if err != nil {
 		return errors.New("Failed to run iptables command" + err.Error())
@@ -354,10 +369,18 @@ func deleteMasqueradeIptablesRule() error {
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
 	}
-	args := []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"}
-	err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
+	postRoutingChainRules, err := iptablesCmdHandler.List("nat", "POSTROUTING")
 	if err != nil {
-		return errors.New("Failed to run iptables command" + err.Error())
+		return errors.New("Failed to list iptable rules in POSTROUTING chain in nat table" + err.Error())
+	}
+	for i, rule := range postRoutingChainRules {
+		if strings.Contains(rule, "ipvs") && strings.Contains(rule, "MASQUERADE") {
+			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", strconv.Itoa(i))
+			if err != nil {
+				return errors.New("Failed to run iptables command" + err.Error())
+			}
+			break
+		}
 	}
 	return nil
 }
@@ -460,7 +483,11 @@ func (nsc *NetworkServicesController) Cleanup() {
 	}
 
 	// cleanup iptable masqurade rule
-	deleteMasqueradeIptablesRule()
+	err = deleteMasqueradeIptablesRule()
+	if err != nil {
+		glog.Errorf("Failed to cleanup iptable masquerade rule due to: ", err.Error())
+		return
+	}
 
 	// delete dummy interface used to assign cluster IP's
 	dummyVipInterface, err := netlink.LinkByName(KUBE_DUMMY_IF)
@@ -485,6 +512,16 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 
 	nsc.serviceMap = make(serviceInfoMap)
 	nsc.endpointsMap = make(endpointsInfoMap)
+
+	nsc.masqueradeAll = true
+	if config.RunRouter {
+		subnet, cidrLen, err := utils.GetPodCidrDetails(config.CniConfFile)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to get pod CIDR details from CNI conf file: %s", err.Error())
+		}
+		nsc.masqueradeAll = false
+		nsc.podCidr = subnet + "/" + strconv.Itoa(cidrLen)
+	}
 
 	nodeHostName, err := os.Hostname()
 	if err != nil {

@@ -106,31 +106,31 @@ func (kr *KubeRouter) Run() error {
 	if kr.Config.RunFirewall {
 		npc, err := controllers.NewNetworkPolicyController(kr.Client, kr.Config)
 		if err != nil {
-			panic("Failed to create network policy controller")
+			panic("Failed to create network policy controller: " + err.Error())
 		}
 		npcStopCh = make(chan struct{})
 		wg.Add(1)
 		go npc.Run(npcStopCh, &wg)
 	}
 
-	if kr.Config.RunServiceProxy {
-		nsc, err := controllers.NewNetworkServicesController(kr.Client, kr.Config)
-		if err != nil {
-			panic("Failed to create network services controller")
-		}
-		nscStopCh = make(chan struct{})
-		wg.Add(1)
-		go nsc.Run(nscStopCh, &wg)
-	}
-
 	if kr.Config.RunRouter {
 		nrc, err := controllers.NewNetworkRoutingController(kr.Client, kr.Config)
 		if err != nil {
-			panic("Failed to create network routing controller")
+			panic("Failed to create network routing controller: " + err.Error())
 		}
 		nrcStopCh = make(chan struct{})
 		wg.Add(1)
 		go nrc.Run(nrcStopCh, &wg)
+	}
+
+	if kr.Config.RunServiceProxy {
+		nsc, err := controllers.NewNetworkServicesController(kr.Client, kr.Config)
+		if err != nil {
+			panic("Failed to create network services controller: " + err.Error())
+		}
+		nscStopCh = make(chan struct{})
+		wg.Add(1)
+		go nsc.Run(nscStopCh, &wg)
 	}
 
 	// Handle SIGINT and SIGTERM

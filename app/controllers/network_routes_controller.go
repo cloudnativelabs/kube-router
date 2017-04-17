@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/containernetworking/cni/libcni"
-	"github.com/containernetworking/cni/plugins/ipam/host-local/backend/allocator"
+	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/golang/glog"
 	bgpapi "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/config"
@@ -109,34 +108,20 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 	}
 }
 
-func (nrc *NetworkRoutingController) getIpamConfig() (*allocator.IPAMConfig, error) {
-	netconfig, err := libcni.ConfFromFile(nrc.cniConfFile)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to load CNI conf: %s", err.Error())
-	}
-	var ipamConfig *allocator.IPAMConfig
-	ipamConfig, _, err = allocator.LoadIPAMConfig(netconfig.Bytes, "")
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get IPAM details from the CNI conf file: %s", err.Error())
-	}
-	return ipamConfig, nil
-}
-
 func (nrc *NetworkRoutingController) advertiseRoute() error {
 
-	ipamConfig, err := nrc.getIpamConfig()
+	subnet, cidrlen, err := utils.GetPodCidrDetails(nrc.cniConfFile)
 	if err != nil {
 		return err
 	}
-	cidrlen, _ := ipamConfig.Subnet.Mask.Size()
 	attrs := []bgp.PathAttributeInterface{
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 		bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{4000, 400000, 300000, 40001})}),
 	}
-	glog.Infof("Advertising route: '%s/%s via %s' to peers", ipamConfig.Subnet.IP.String(), strconv.Itoa(cidrlen), nrc.nodeIP.String())
+	glog.Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrlen), nrc.nodeIP.String())
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrlen),
-		ipamConfig.Subnet.IP.String()), false, attrs, time.Now(), false)}); err != nil {
+		subnet), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
 	}
 	return nil
@@ -167,12 +152,17 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
 	nrc.cniConfFile = kubeRouterConfig.CniConfFile
-	if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
-		panic("Specified CNI conf file does not exist")
+
+	if kubeRouterConfig.CniConfFile == "" {
+		panic("Please specify a valid CNF conf file path in the command line parameter --cni-conf-file ")
 	}
-	_, err := nrc.getIpamConfig()
+
+	if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
+		panic("Specified CNI conf file does not exist. Conf file: " + nrc.cniConfFile)
+	}
+	_, _, err := utils.GetPodCidrDetails(nrc.cniConfFile)
 	if err != nil {
-		panic("Failed to read IPAM conf from the CNI conf file: " + err.Error())
+		panic("Failed to read IPAM conf from the CNI conf file: " + nrc.cniConfFile + " due to " + err.Error())
 	}
 
 	nodeHostName, err := os.Hostname()
