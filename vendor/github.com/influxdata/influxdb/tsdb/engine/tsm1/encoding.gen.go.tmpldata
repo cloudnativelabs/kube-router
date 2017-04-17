@@ -1,0 +1,27 @@
+[
+	{
+		"Name":"",
+		"name":"",
+		"Type":""
+	},
+	{
+		"Name":"Float",
+		"name":"float",
+		"Type":"BlockFloat64"
+	},
+	{
+		"Name":"Integer",
+		"name":"integer",
+		"Type":"BlockInteger"
+	},
+	{
+		"Name":"String",
+		"name":"string",
+		"Type":"BlockString"
+	},
+	{
+		"Name":"Boolean",
+		"name":"boolean",
+		"Type":"BlockBoolean"
+	}
+]

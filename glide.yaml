@@ -1,0 +1,41 @@
+package: github.com/cloudnativelabs/kube-router
+import:
+- package: github.com/coreos/go-iptables
+  version: master
+  subpackages:
+  - iptables
+- package: github.com/golang/glog
+- package: github.com/janeczku/go-ipset
+  version: master
+  subpackages:
+  - ipset
+- package: github.com/mqliang/libipvs
+- package: github.com/osrg/gobgp
+  version: ^1.17.0
+  subpackages:
+  - api
+  - config
+  - packet/bgp
+  - server
+  - table
+- package: github.com/spf13/pflag
+- package: github.com/vishvananda/netlink
+- package: k8s.io/apimachinery
+  subpackages:
+  - pkg/apis/meta/v1
+  - pkg/fields
+  - pkg/labels
+- package: k8s.io/client-go
+  version: ^3.0.0-beta.0
+  subpackages:
+  - kubernetes
+  - listers/core/v1
+  - pkg/api/v1
+  - pkg/apis/extensions/v1beta1
+  - tools/cache
+  - tools/clientcmd
+- package: github.com/armon/go-radix
+- package: google.golang.org/grpc
+  version: ~1.2.1
+- package: github.com/containernetworking/cni
+  version: ^0.5.2
