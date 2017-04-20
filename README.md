@@ -10,6 +10,7 @@ Kube-router can be configured to provide on each node:
   balancing
 - a router to advertise the routes to the pod IP's to the peer nodes in the cluster
 
+For a quick walkthrough of kube-router  in action take a look at https://cloudnativelabs.github.io/blog/post/kube-router/
 ## Motivation
 Kube-proxy which is core component of Kubernetes runs on each node as a simple network proxy and load balancer for the services on that node. You will have to deploy additional addons or solutions like Flannel, Calico, Weave etc to provide pod networking. Simillarly you will have to use different solutions that enforces network policies. It is challenging to deploy, monitor and troubleshoot multiple solutions at runtime. Also individual solution need to work well together. For e.g. enforcing network policies both source and destination pod IP must be matched. So soltion like kube-proxy providing service proxy must ensure source pod ip is retained. Kube-router aims to provide operational simplicity by combining all the networking functionality that can be provided at the node in to one cohesive solution.
 
