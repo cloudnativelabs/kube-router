@@ -700,6 +700,22 @@ func (npc *NetworkPolicyController) Cleanup() {
 		}
 	}
 
+	// delete jump rules in OUTPUT chain to pod specific firewall chain
+	forwardChainRules, err = iptablesCmdHandler.List("filter", "OUTPUT")
+	if err != nil {
+		glog.Errorf("Failed to delete iptable rules as part of cleanup")
+		return
+	}
+
+	// TODO: need a better way to delte rule with out using number
+	realRuleNo = 0
+	for i, rule := range forwardChainRules {
+		if strings.Contains(rule, "KUBE-POD-FW-") {
+			err = iptablesCmdHandler.Delete("filter", "OUTPUT", strconv.Itoa(i-realRuleNo))
+			realRuleNo++
+		}
+	}
+
 	// flush and delete pod specific firewall chain
 	chains, err := iptablesCmdHandler.ListChains("filter")
 	for _, chain := range chains {
