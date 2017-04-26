@@ -22,6 +22,13 @@ type KubeRouter struct {
 
 func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error) {
 
+	if len(config.Master) == 0 || len(config.Kubeconfig) == 0 {
+		if _, err := os.Stat("/var/lib/kube-router/kubeconfig"); os.IsNotExist(err) {
+			panic("Either one of --master or --kubeconfig must be specified. Or valid kubeconfig file must exist as /var/lib/kube-router/kubeconfig")
+		}
+		config.Kubeconfig = "/var/lib/kube-router/kubeconfig"
+	}
+
 	clientconfig, err := clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
 	if err != nil {
 		panic(err.Error())

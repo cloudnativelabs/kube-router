@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,11 +28,29 @@ type NetworkRoutingController struct {
 	mu           sync.Mutex
 	clientset    *kubernetes.Clientset
 	bgpServer    *gobgp.BgpServer
-	cniConfFile  string
 	syncPeriod   time.Duration
 }
 
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+
+	cidr, err := utils.GetPodCidrFromCniSpec("/etc/cni/net.d/10-kuberouter.conf")
+	if err != nil {
+		glog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err.Error())
+	}
+	cidrlen, _ := cidr.Mask.Size()
+	oldCidr := cidr.IP.String() + "/" + strconv.Itoa(cidrlen)
+
+	currentCidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset)
+	if err != nil {
+		glog.Errorf("Failed to get pod CIDR from node spec: %s", err.Error())
+	}
+
+	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
+		err = utils.InsertPodCidrInCniSpec("/etc/cni/net.d/10-kuberouter.conf", currentCidr)
+		if err != nil {
+			glog.Errorf("Failed to insert pod CIDR into CNI conf file: %s", err.Error())
+		}
+	}
 
 	t := time.NewTicker(nrc.syncPeriod)
 	defer t.Stop()
@@ -110,17 +129,20 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 
 func (nrc *NetworkRoutingController) advertiseRoute() error {
 
-	subnet, cidrlen, err := utils.GetPodCidrDetails(nrc.cniConfFile)
+	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset)
 	if err != nil {
 		return err
 	}
+	cidrStr := strings.Split(cidr, "/")
+	subnet := cidrStr[0]
+	cidrLen, err := strconv.Atoi(cidrStr[1])
 	attrs := []bgp.PathAttributeInterface{
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 		bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{4000, 400000, 300000, 40001})}),
 	}
-	glog.Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrlen), nrc.nodeIP.String())
-	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrlen),
+	glog.Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
+	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrLen),
 		subnet), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
 	}
@@ -151,19 +173,6 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
-	nrc.cniConfFile = kubeRouterConfig.CniConfFile
-
-	if kubeRouterConfig.CniConfFile == "" {
-		panic("Please specify a valid CNF conf file path in the command line parameter --cni-conf-file ")
-	}
-
-	if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
-		panic("Specified CNI conf file does not exist. Conf file: " + nrc.cniConfFile)
-	}
-	_, _, err := utils.GetPodCidrDetails(nrc.cniConfFile)
-	if err != nil {
-		panic("Failed to read IPAM conf from the CNI conf file: " + nrc.cniConfFile + " due to " + err.Error())
-	}
 
 	nodeHostName, err := os.Hostname()
 	if err != nil {

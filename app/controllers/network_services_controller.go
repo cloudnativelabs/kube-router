@@ -47,6 +47,7 @@ type NetworkServicesController struct {
 	endpointsMap  endpointsInfoMap
 	podCidr       string
 	masqueradeAll bool
+	client        *kubernetes.Clientset
 }
 
 // internal representation of kubernetes service
@@ -348,13 +349,18 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 	var args []string
 	if masqueradeAll {
 		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"}
-	} else {
+		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
+		if err != nil {
+			return errors.New("Failed to run iptables command" + err.Error())
+		}
+	}
+	if len(podCidr) > 0 {
 		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
 			"!", "-s", podCidr, "-j", "MASQUERADE"}
-	}
-	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
-	if err != nil {
-		return errors.New("Failed to run iptables command" + err.Error())
+		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
+		if err != nil {
+			return errors.New("Failed to run iptables command" + err.Error())
+		}
 	}
 	glog.Infof("Successfully added iptables masqurade rule")
 	return nil
@@ -512,15 +518,19 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 
 	nsc.serviceMap = make(serviceInfoMap)
 	nsc.endpointsMap = make(endpointsInfoMap)
+	nsc.client = clientset
 
-	nsc.masqueradeAll = true
+	nsc.masqueradeAll = false
+	if config.MasqueradeAll {
+		nsc.masqueradeAll = true
+	}
+
 	if config.RunRouter {
-		subnet, cidrLen, err := utils.GetPodCidrDetails(config.CniConfFile)
+		cidr, err := utils.GetPodCidrFromNodeSpec(nsc.client)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get pod CIDR details from CNI conf file: %s", err.Error())
+			return nil, fmt.Errorf("Failed to get pod CIDR details from Node.spec: %s", err.Error())
 		}
-		nsc.masqueradeAll = false
-		nsc.podCidr = subnet + "/" + strconv.Itoa(cidrLen)
+		nsc.podCidr = cidr
 	}
 
 	nodeHostName, err := os.Hostname()
