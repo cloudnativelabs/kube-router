@@ -1,6 +1,6 @@
 kube-router
 ==========
-Kube-router is a distributed load balancer, firewall and router for Kubernetes. Kube-router can be configured to provide on each node:
+Kube-router is a distributed load balancer, firewall and router for Kubernetes. Kube-router can be configured to provide on each cluster node:
 
 - an ingress firewall for the pods running on the node as per the defined Kubernetes network policies
 - a service proxy on each node for *ClusterIP* and *NodePort* service types, providing service discovery and load balancing
@@ -17,13 +17,12 @@ We have Kube-proxy which provides service proxy and load balancer. We have sever
 
 ## Theory of Operation
 
-Kube-router runs as agent on each node and leverages standard Linux technologies **iptables, ipvs/lvs, ipset, iproute2** 
+Kube-router can be run as a agent or a pod (through daemonset) on each node and leverages standard Linux technologies **iptables, ipvs/lvs, ipset, iproute2** 
 
 ### service proxy and load balancing 
 
-Kube-router uses IPVS/LVS technology built in Linux to provide L4 load balancing. Each of the kubernetes service of **ClusterIP** and **NodePort**
-type is configured as IPVS virtual service. Each service endpoint is configured as real server to the virtual service.
-Standard **ipvsadm** tool can be used to verify the configuration and monitor the status. 
+Kube-router uses IPVS/LVS technology built in Linux to provide L4 load balancing. Each of the kubernetes service of **ClusterIP** and **NodePort** type is configured as IPVS virtual service. Each service endpoint is configured as real server to the virtual service.
+Standard **ipvsadm** tool can be used to verify the configuration and monitor the active connections. 
 
 Below is example set of services on kubernetes
 
@@ -100,7 +99,7 @@ Alternatively you can download the prebuilt binary from https://github.com/cloud
   --run-router                      If true each node advertise routes the rest of the nodes and learn the routes for the pods. false by default
   --run-service-proxy               If false, kube-router won't setup IPVS for services proxy. true by default.
   --cleanup-config                  If true cleanup iptables rules, ipvs, ipset configuration and exit.
-  --cni-conf-file string            Full path to CNI configuration file.
+  --masquerade-all                  SNAT all traffic to cluster IP/node port. False by default
   --config-sync-period duration     How often configuration from the apiserver is refreshed. Must be greater than 0. (default 1m0s)
   --iptables-sync-period duration   The maximum interval of how often iptables rules are refreshed (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
   --ipvs-sync-period duration       The maximum interval of how often ipvs config is refreshed (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
