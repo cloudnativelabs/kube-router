@@ -3,7 +3,7 @@ kube-router
 Kube-router is a distributed load balancer, firewall and router for Kubernetes. Kube-router can be configured to provide on each cluster node:
 
 - a IPVS/LVS based service proxy on each node for *ClusterIP* and *NodePort* service types, providing service discovery and load balancing
-- an ingress firewall for the pods running on the node as per the defined Kubernetes network policies using iptables
+- an ingress firewall for the pods running on the node as per the defined Kubernetes network policies using iptables and ipset
 - a BGP router to advertise and learn the routes to the pod IP's for cross-node pod-to-pod connectivity
 
 ## Why Kube-router
@@ -190,6 +190,4 @@ Kube-router build upon following libraries:
 - IPVS: https://github.com/mqliang/libipvs
 
 ## Feedback
-
-Kube-router is in early stage. There are many more things to explore around IPVS and monitoring. Feel free to leave
-feedback or raise questions at any time by opening an issue [here](https://github.com/cloudnativelabs/kube-router/issues).
+Kube-router is in active development, the most up-to-date version is HEAD.There are many more things to explore around IPVS and monitoring. If you experience any problems, feel free to leave feedback or raise questions at any time by opening an issue [here](https://github.com/cloudnativelabs/kube-router/issues).
