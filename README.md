@@ -15,6 +15,10 @@ We have Kube-proxy which provides service proxy and load balancer. We have sever
 
 - Kube-router builds on standard Linux technologies, so you can verify the configuration and troubleshoot with Linux networking tools (ipvsadm, ip route, iptables, ipset etc).
 
+## See it in action
+
+<a href="https://asciinema.org/a/118056" target="_blank"><img src="https://asciinema.org/a/118056.png" /></a>
+
 ## Getting Started
 
 ### building
@@ -57,15 +61,17 @@ Also you can choose to run kube-router as agent running on each cluster node. Al
 
 - If you choose to run kube-router as daemonset, then both kube-apiserver and kubelet must be run with `--allow-privileged=true` option
 
-- If you choose to use kube-router for pod-to-pod network connecitvity then Kubernetes cluster must be configured to use CNI network plugins. On each node CNI conf file is expected to be present as /etc/cni/net.d/10-kuberouter.conf .`bridge` CNI plugin and `host-local` for IPAM should be used. A sample conf file that can be downloaded as `wget -O /etc/cni/net.d/10-kuberouter.conf https://raw.githubusercontent.com/cloudnativelabs/kube-router/readme/cni/10-kuberouter.conf`
+- If you choose to use kube-router for pod-to-pod network connecitvity then Kubernetes cluster must be configured to use CNI network plugins. On each node CNI conf file is expected to be present as /etc/cni/net.d/10-kuberouter.conf .`bridge` CNI plugin and `host-local` for IPAM should be used. A sample conf file that can be downloaded as `wget -O /etc/cni/net.d/10-kuberouter.conf https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/cni/10-kuberouter.conf`
 
 ### running as daemonset
 
 This is quickest way to deploy kube-router. Just run
 
-`kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/readme/daemonset/kube-router-all-service-daemonset.yaml`
+```
+kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kube-router-all-service-daemonset.yaml
+```
 
-Above will run kube-router as pod on each node automatically. You can change the arguments in the daemonset definition as required to suit your needs. Some samples can be found at https://github.com/cloudnativelabs/kube-router/tree/readme/daemonset with different argument to select set of the services kube-router should run.
+Above will run kube-router as pod on each node automatically. You can change the arguments in the daemonset definition as required to suit your needs. Some samples can be found at https://github.com/cloudnativelabs/kube-router/tree/master/daemonset with different argument to select set of the services kube-router should run.
 
 ### running as agent
 
@@ -81,7 +87,7 @@ You can clean up all the configurations done (to ipvs, iptables, ip routes) by k
  kube-router --cleanup-config
 ```
 
-#### trying kube-router as alternative to kube-proxy
+### trying kube-router as alternative to kube-proxy
 
 If you have a kube-proxy in use, and want to try kube-router just for service proxy you can do
 ```
@@ -96,10 +102,6 @@ and if you want to move back to kube-proxy then clean up config done by kube-rou
  kube-router --cleanup-config
 ```
 and run kube-proxy with the configuration you have.
-
-## See it in action
-
-For a quick walkthrough of kube-router in action take a look at https://cloudnativelabs.github.io/blog/post/kube-router/
 
 ## Theory of Operation
 
@@ -170,9 +172,12 @@ local node routing table. On the data path, inter node pod-to-pod communication 
 
 
 ## TODO
-- convert Kube-router to docker image and run it as daemonset
+- ~~convert Kube-router to docker image and run it as daemonset~~
 - heathcheck pods
-- get pod CIDR from node.PodCidr when kube-controller-manager is run with `--allocate-node-cidrs=true` option
+- ~~get pod CIDR from node.PodCidr when kube-controller-manager is run with `--allocate-node-cidrs=true` option~~
+- explore the possibility of using IPVS direct routing mode
+- Explore the possibilities of making Kube-router on the node a Prometheus endpoint
+- session persistence
 
 ## Acknowledgement
 
@@ -183,3 +188,8 @@ Kube-router build upon following libraries:
 - Netlink: https://github.com/vishvananda/netlink
 - Ipset: https://github.com/janeczku/go-ipset
 - IPVS: https://github.com/mqliang/libipvs
+
+## Feedback
+
+Kube-router is in early stage. There are many more things to explore around IPVS and monitoring. Feel free to leave
+feedback or raise questions at any time by opening an issue [here](https://github.com/cloudnativelabs/kube-router/issues).
