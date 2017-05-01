@@ -65,7 +65,7 @@ Also you can choose to run kube-router as agent running on each cluster node. Al
 
 ### running as daemonset
 
-This is quickest way to deploy kube-router. Just run
+This is quickest way to deploy kube-router (**dont forget to ensure the requirements**). Just run
 
 ```
 kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kube-router-all-service-daemonset.yaml
