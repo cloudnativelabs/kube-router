@@ -13,7 +13,7 @@ We have Kube-proxy which provides service proxy and load balancer. We have sever
 
 - Kube-router is motivated to provide optimized solution for performance. Kube-router uses IPVS for service proxy as compared to iptables by Kube-proxy. Kube-router uses solutions like ipsets to optimize iptables rules matching while providing ingress firewall for the pods. For inter-node pod-to-pod communication, routing rules added by kube-router ensures data path is efficient (one hop for pod-to-pod connectivity) with out overhead of overlays.
 
-- Kube-router builds on standard Linux technologies, so you can verify the configuration and troubleshoot with Linux networking tools (ipvsadm, ip route, iptables, ipset etc).
+- Kube-router builds on standard Linux technologies, so you can verify the configuration and troubleshoot with standard Linux networking tools (ipvsadm, ip route, iptables, ipset, traceroute, tcpdump etc).
 
 ## See it in action
 
