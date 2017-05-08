@@ -28,7 +28,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		MasqueradeAll:      false,
 		RunServiceProxy:    true,
 		RunFirewall:        true,
-		RunRouter:          false}
+		RunRouter:          true}
 }
 
 func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
