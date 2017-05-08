@@ -52,10 +52,11 @@ type NetworkServicesController struct {
 
 // internal representation of kubernetes service
 type serviceInfo struct {
-	clusterIP net.IP
-	port      int
-	protocol  string
-	nodePort  int
+	clusterIP       net.IP
+	port            int
+	protocol        string
+	nodePort        int
+	sessionAffinity bool
 }
 
 // map of all services, with unique service id(namespace name, service name, port) as key
@@ -201,7 +202,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// create IPVS service for the service to be exposed through the cluster ip
-		ipvs_cluster_vip_svc, err := ipvsAddService(svc.clusterIP, protocol, uint16(svc.port))
+		ipvs_cluster_vip_svc, err := ipvsAddService(svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity)
 		if err != nil {
 			glog.Errorf("Failed to create ipvs service for cluster ip: ", err.Error())
 			continue
@@ -213,7 +214,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		var ipvs_nodeport_svc *libipvs.Service
 		var nodeServiceId string
 		if svc.nodePort != 0 {
-			ipvs_nodeport_svc, err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort))
+			ipvs_nodeport_svc, err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity)
 			if err != nil {
 				glog.Errorf("Failed to create ipvs service for node port")
 				continue
@@ -314,6 +315,7 @@ func buildServicesInfo() serviceInfoMap {
 				protocol:  strings.ToLower(string(port.Protocol)),
 				nodePort:  int(port.NodePort),
 			}
+			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
 			svcId := generateServiceId(svc.Namespace, svc.Name, strconv.Itoa(int(port.Port)))
 			serviceMap[svcId] = &svcInfo
 		}
@@ -391,7 +393,7 @@ func deleteMasqueradeIptablesRule() error {
 	return nil
 }
 
-func ipvsAddService(vip net.IP, protocol, port uint16) (*libipvs.Service, error) {
+func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*libipvs.Service, error) {
 	h, err := libipvs.New()
 	if err != nil {
 		panic(err)
@@ -414,6 +416,14 @@ func ipvsAddService(vip net.IP, protocol, port uint16) (*libipvs.Service, error)
 		Protocol:      libipvs.Protocol(protocol),
 		Port:          port,
 		SchedName:     libipvs.RoundRobin,
+	}
+
+	if persistent {
+		// set bit to enable service persistence
+		svc.Flags.Flags |= (1 << 24)
+		svc.Flags.Mask |= 0xFFFFFFFF
+		// TODO: once service manifest supports timeout time remove hardcoding
+		svc.Timeout = 180 * 60
 	}
 	if err := h.NewService(&svc); err != nil {
 		return nil, fmt.Errorf("Failed to create service: %s:%s:%s", vip.String(), libipvs.Protocol(protocol), strconv.Itoa(int(port)))
