@@ -177,7 +177,7 @@ local node routing table. On the data path, inter node pod-to-pod communication 
 - ~~get pod CIDR from node.PodCidr when kube-controller-manager is run with `--allocate-node-cidrs=true` option~~
 - explore the possibility of using IPVS direct routing mode
 - Explore the possibilities of making Kube-router on the node a Prometheus endpoint
-- session persistence
+- ~~session persistence~~
 
 ## Acknowledgement
 
