@@ -174,6 +174,7 @@ local node routing table. On the data path, inter node pod-to-pod communication 
 ## TODO
 - ~~convert Kube-router to docker image and run it as daemonset~~
 - heathcheck pods
+- explore integration of an ingress controller so Kube-router will be one complete solution for both east-west and north-south traffic
 - ~~get pod CIDR from node.PodCidr when kube-controller-manager is run with `--allocate-node-cidrs=true` option~~
 - explore the possibility of using IPVS direct routing mode
 - Explore the possibilities of making Kube-router on the node a Prometheus endpoint
