@@ -53,7 +53,9 @@ Also you can choose to run kube-router as agent running on each cluster node. Al
 
 ### requirements
 
-- Kube-router need to access kubernetes API server to get information on pods, services, endpoints, network policies etc. The very minimum information it requires is the details on where to access the kubernetes API server. This information can be passed as `kube-router --master=http://192.168.1.99:8080/` or `kube-router --kubeconfig=<path to kubeconfig file>`. If neither `--master` nor `--kubeconfig` option is specified then kube-router will look for kubeconfig at `/var/lib/kube-router/kubeconfig` location.
+- Kube-router need to access kubernetes API server to get information on pods, services, endpoints, network policies etc. The very minimum information it requires is the details on where to access the kubernetes API server. This information can be passed as `kube-router --master=http://192.168.1.99:8080/` or `kube-router --kubeconfig=<path to kubeconfig file>`. If neither `--master` nor `--kubeconfig` option is specified then kube-router will look for kubeconfig at `/var/lib/kube-router/kubeconfig` location. 
+
+caveat: **Please use unsecure API port when using kubeconfig file option for now. Need further work on documentation about setting up certificate for kube-router to access API server. Kube-router is in catch-22 situation where it can not use incluster configuration to access the API server as it has setup the IPVS for kubernetes service cluster API**
 
 - If you run kube-router as agent on the node, ipset package must be installed on each of the nodes (when run as daemonset, container image is prepackaged with ipset)
 
