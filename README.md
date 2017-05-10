@@ -132,6 +132,8 @@ currently. Source pod IP is preserved so that appropriate network policies can b
 
 ### pod ingress firewall 
 
+refer to https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/ for the detailed design details
+
 Kube-router provides implementation of network policies semantics through the use of iptables, ipset and conntrack.
 All the pods in a namespace with 'DefaultDeny' ingress isolation policy has ingress blocked. Only traffic that matches
 whitelist rules specified in the network policies are permitted to reach pod. Following set of iptables rules and 
