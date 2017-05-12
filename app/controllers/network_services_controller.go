@@ -316,7 +316,7 @@ func buildServicesInfo() serviceInfoMap {
 				nodePort:  int(port.NodePort),
 			}
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
-			svcId := generateServiceId(svc.Namespace, svc.Name, strconv.Itoa(int(port.Port)))
+			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
 			serviceMap[svcId] = &svcInfo
 		}
 	}
@@ -328,7 +328,7 @@ func buildEndpointsInfo() endpointsInfoMap {
 	for _, ep := range watchers.EndpointsWatcher.List() {
 		for _, ep_subset := range ep.Subsets {
 			for _, port := range ep_subset.Ports {
-				svcId := generateServiceId(ep.Namespace, ep.Name, strconv.Itoa(int(port.Port)))
+				svcId := generateServiceId(ep.Namespace, ep.Name, port.Name)
 				endpoints := make([]endpointsInfo, 0)
 				for _, addr := range ep_subset.Addresses {
 					endpoints = append(endpoints, endpointsInfo{ip: addr.IP, port: int(port.Port)})
