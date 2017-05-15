@@ -111,6 +111,8 @@ Kube-router can be run as a agent or a pod (through daemonset) on each node and 
 
 ### service proxy and load balancing 
 
+refer to https://cloudnativelabs.github.io/post/2017-05-10-kube-network-service-proxy/ for the design details and demo
+
 Kube-router uses IPVS/LVS technology built in Linux to provide L4 load balancing. Each of the kubernetes service of **ClusterIP** and **NodePort** type is configured as IPVS virtual service. Each service endpoint is configured as real server to the virtual service.
 Standard **ipvsadm** tool can be used to verify the configuration and monitor the active connections. 
 
