@@ -18,6 +18,10 @@ type KubeRouterConfig struct {
 	RunFirewall        bool
 	RunRouter          bool
 	MasqueradeAll      bool
+	AdvertiseClusterIp bool
+	PeerRouter         string
+	ClusterAsn         string
+	PeerAsn            string
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
@@ -28,7 +32,8 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		MasqueradeAll:      false,
 		RunServiceProxy:    true,
 		RunFirewall:        true,
-		RunRouter:          true}
+		RunRouter:          true,
+		AdvertiseClusterIp: false}
 }
 
 func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
@@ -43,4 +48,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod, "The maximum interval of how often iptables rules are refreshed (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod, "The maximum interval of how often ipvs config is refreshed (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod, "The maximum interval of how often routes are adrvertised and learned (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
+	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", s.AdvertiseClusterIp, "If true then cluster IP will be added into the RIB and will be advertised to the peers. False by default.")
+	fs.StringVar(&s.PeerRouter, "peer-router", s.PeerRouter, "The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's")
+	fs.StringVar(&s.ClusterAsn, "cluster-asn", s.ClusterAsn, "ASN number under which cluster nodes will run iBGP")
+	fs.StringVar(&s.PeerAsn, "peer-asn", s.PeerAsn, "ASN number of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr")
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/app/options"
+	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/golang/glog"
 	bgpapi "github.com/osrg/gobgp/api"
@@ -23,12 +24,16 @@ import (
 )
 
 type NetworkRoutingController struct {
-	nodeIP       net.IP
-	nodeHostName string
-	mu           sync.Mutex
-	clientset    *kubernetes.Clientset
-	bgpServer    *gobgp.BgpServer
-	syncPeriod   time.Duration
+	nodeIP             net.IP
+	nodeHostName       string
+	mu                 sync.Mutex
+	clientset          *kubernetes.Clientset
+	bgpServer          *gobgp.BgpServer
+	syncPeriod         time.Duration
+	advertiseClusterIp bool
+	peerRouter         string
+	asnNumber          uint32
+	peerAsnNumber      uint32
 }
 
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
@@ -70,14 +75,28 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		if nodeIP.String() == nrc.nodeIP.String() {
 			continue
 		}
+
 		n := &config.Neighbor{
 			Config: config.NeighborConfig{
 				NeighborAddress: nodeIP.String(),
-				PeerAs:          65000,
+				PeerAs:          nrc.asnNumber,
 			},
 		}
 		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
 			panic(err)
+		}
+	}
+
+	// if the global routing peer is configured then peer with it
+	if len(nrc.peerRouter) != 0 {
+		n := &config.Neighbor{
+			Config: config.NeighborConfig{
+				NeighborAddress: nrc.peerRouter,
+				PeerAs:          nrc.peerAsnNumber,
+			},
+		}
+		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
+			glog.Errorf("Failed to peer with global peer routeri: %s", nrc.peerRouter)
 		}
 	}
 
@@ -88,6 +107,17 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			glog.Infof("Shutting down network routes controller")
 			return
 		default:
+		}
+
+		// advertise cluster IP for the service to be reachable via host
+		if nrc.advertiseClusterIp {
+			glog.Infof("Advertising cluster ips")
+			for _, svc := range watchers.ServiceWatcher.List() {
+				if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
+					glog.Infof("found a service of cluster ip type")
+					nrc.AdvertiseClusterIp(svc.Spec.ClusterIP)
+				}
+			}
 		}
 
 		glog.Infof("Performing periodic syn of the routes")
@@ -149,6 +179,21 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 	return nil
 }
 
+func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error {
+
+	attrs := []bgp.PathAttributeInterface{
+		bgp.NewPathAttributeOrigin(0),
+		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
+		bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{4000, 400000, 300000, 40001})}),
+	}
+	glog.Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
+	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
+		clusterIp), false, attrs, time.Now(), false)}); err != nil {
+		return fmt.Errorf(err.Error())
+	}
+	return nil
+}
+
 func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	nexthop := path.GetNexthop()
 	nlri := path.GetNlri()
@@ -174,6 +219,41 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
 
+	if len(kubeRouterConfig.ClusterAsn) != 0 {
+		asn, err := strconv.ParseUint(kubeRouterConfig.ClusterAsn, 0, 32)
+		if err != nil {
+			panic("Invalid cluster ASN: " + err.Error())
+		}
+		if asn > 65534 || asn < 64512 {
+			panic("Invalid ASN number for cluster ASN")
+		}
+		nrc.asnNumber = uint32(asn)
+	} else {
+		nrc.asnNumber = 64512 // this magic number is first of the private ASN range, use it as default
+	}
+
+	nrc.advertiseClusterIp = kubeRouterConfig.AdvertiseClusterIp
+
+	if len(kubeRouterConfig.PeerRouter) != 0 {
+		if net.ParseIP(kubeRouterConfig.PeerRouter) == nil {
+			panic("Invalid peer router ip: " + nrc.peerRouter)
+		}
+
+		nrc.peerRouter = kubeRouterConfig.PeerRouter
+
+		if len(kubeRouterConfig.PeerAsn) == 0 {
+			panic("ASN number for peer router must be specified")
+		}
+		asn, err := strconv.ParseUint(kubeRouterConfig.PeerAsn, 0, 32)
+		if err != nil {
+			panic("Invalid BGP peer ASN: " + err.Error())
+		}
+		if asn > 65534 {
+			panic("Invalid ASN number for cluster ASN")
+		}
+		nrc.peerAsnNumber = uint32(asn)
+	}
+
 	nodeHostName, err := os.Hostname()
 	if err != nil {
 		panic(err.Error())
@@ -198,7 +278,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 
 	global := &config.Global{
 		Config: config.GlobalConfig{
-			As:       65000,
+			As:       nrc.asnNumber,
 			RouterId: nrc.nodeIP.String(),
 		},
 	}

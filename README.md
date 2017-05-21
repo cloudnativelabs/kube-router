@@ -43,6 +43,10 @@ Alternatively you can download the prebuilt binary from https://github.com/cloud
   --kubeconfig string               Path to kubeconfig file with authorization information (the master location is set by the master flag).
   --master string                   The address of the Kubernetes API server (overrides any value in kubeconfig)
   --routes-sync-period duration     The maximum interval of how often routes are advertised and learned (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
+  --advertise-cluster-ip            If true then cluster IP will be added into the RIB and will be advertised to the peers. False by default.
+  --cluster-asn                     ASN number under which cluster nodes will run iBGP
+  --peer-asn                        ASN number of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr
+  --peer-router                     The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's
 ```
 
 ### deployment
