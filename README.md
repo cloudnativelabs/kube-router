@@ -175,6 +175,8 @@ dynamically updates iptables and ipset configuration to reflect desired state of
 
 ### Pod networking
 
+Please see the [blog](https://cloudnativelabs.github.io/post/2017-05-22-kube-pod-networking/) for design details.
+
 Kube-router is expected to run on each node. Subnet of the node is learnt by kube-router from the CNI configuration file on the node or through the node.PodCidr. Each kube-router
 instance on the node acts a BGP router and advertise the pod CIDR assigned to the node. Each node peers with rest of the 
 nodes in the cluster forming full mesh. Learned routes about the pod CIDR from the other nodes (BGP peers) are injected into
