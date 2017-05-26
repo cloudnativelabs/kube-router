@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-router-cfg
+  namespace: kube-system
+  labels:
+    tier: node
+    k8s-app: kube-router
+data:
+  cni-conf.json: |
+    {
+      "name":"kubernetes",
+      "type":"bridge",
+      "bridge":"kube-bridge",
+      "isDefaultGateway":true,
+      "ipam": {
+        "type":"host-local"
+      }
+    }
