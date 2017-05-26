@@ -1,0 +1,79 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  labels:
+    k8s-app: kube-router
+    tier: node
+  name: kube-router
+  namespace: kube-system
+spec:
+  template:
+    metadata:
+      labels:
+        k8s-app: kube-router
+        tier: node
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
+        pod.beta.kubernetes.io/init-containers: '[
+            {
+                "name": "install-cni",
+                "image": "busybox",
+                "command": [ "/bin/sh", "-c", "set -e -x; if [ ! -f /etc/cni/net.d/10-kuberouter.conf ]; then TMP=/etc/cni/net.d/.tmp-kuberouter-cfg; cp /etc/kube-router/cni-conf.json ${TMP}; mv ${TMP} /etc/cni/net.d/10-kuberouter.conf; fi" ],
+                "volumeMounts": [
+                    {
+                        "name": "cni",
+                        "mountPath": "/etc/cni/net.d"
+                    },
+                    {
+                        "name": "kube-router-cfg",
+                        "mountPath": "/etc/kube-router"
+                    }
+                ]
+            }
+        ]'
+    spec:
+      containers:
+      - name: kube-router
+        image: cloudnativelabs/kube-router
+        imagePullPolicy: Always
+        args:
+        - --run-router=true
+        - --run-firewall=true
+        - --run-service-proxy=true
+        - --kubeconfig=/etc/kubernetes/kubeconfig
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: lib-modules
+          mountPath: /lib/modules
+          readOnly: true
+        - name: cni
+          mountPath: /etc/cni/net.d
+        - name: kubeconfig
+          mountPath: /etc/kubernetes/kubeconfig
+          readOnly: true
+      hostNetwork: true
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
+      volumes:
+      - hostPath:
+          path: /lib/modules
+        name: lib-modules
+      - hostPath:
+          path: /etc/kubernetes/cni/net.d
+        name: cni
+      - name: kubeconfig
+        hostPath:
+          path: /etc/kubernetes/kubeconfig
+      - name: kube-router-cfg
+        configMap:
+          name: kube-router-cfg
