@@ -258,12 +258,19 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 	if err != nil {
 		panic(err.Error())
 	}
-	nrc.nodeHostName = nodeHostName
+	nodeFqdnHostName := utils.GetFqdn()
 
 	node, err := clientset.Core().Nodes().Get(nodeHostName, metav1.GetOptions{})
 	if err != nil {
-		panic(err.Error())
+		node, err = clientset.Core().Nodes().Get(nodeFqdnHostName, metav1.GetOptions{})
+		if err != nil {
+			panic(err.Error())
+		}
+		nrc.nodeHostName = nodeFqdnHostName
+	} else {
+		nrc.nodeHostName = nodeHostName
 	}
+
 	nodeIP, err := getNodeIP(node)
 	if err != nil {
 		panic(err.Error())

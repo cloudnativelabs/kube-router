@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/app/options"
 	"github.com/cloudnativelabs/kube-router/app/watchers"
+	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	"github.com/janeczku/go-ipset/ipset"
@@ -775,12 +776,19 @@ func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options
 	if err != nil {
 		panic(err.Error())
 	}
-	npc.nodeHostName = nodeHostName
+	nodeFqdnHostName := utils.GetFqdn()
 
 	node, err := clientset.Core().Nodes().Get(nodeHostName, metav1.GetOptions{})
 	if err != nil {
-		panic(err.Error())
+		node, err = clientset.Core().Nodes().Get(nodeFqdnHostName, metav1.GetOptions{})
+		if err != nil {
+			panic(err.Error())
+		}
+		npc.nodeHostName = nodeFqdnHostName
+	} else {
+		npc.nodeHostName = nodeHostName
 	}
+
 	nodeIP, err := getNodeIP(node)
 	if err != nil {
 		panic(err.Error())

@@ -547,11 +547,17 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 	if err != nil {
 		panic(err.Error())
 	}
-	nsc.nodeHostName = nodeHostName
+	nodeFqdnHostName := utils.GetFqdn()
 
 	node, err := clientset.Core().Nodes().Get(nodeHostName, v1.GetOptions{})
 	if err != nil {
-		panic(err.Error())
+		node, err = clientset.Core().Nodes().Get(nodeFqdnHostName, v1.GetOptions{})
+		if err != nil {
+			panic(err.Error())
+		}
+		nsc.nodeHostName = nodeFqdnHostName
+	} else {
+		nsc.nodeHostName = nodeHostName
 	}
 	nodeIP, err := getNodeIP(node)
 	if err != nil {
