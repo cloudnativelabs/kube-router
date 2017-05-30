@@ -50,8 +50,8 @@ Next move/delete the manifests for kube-proxy and flannel from
 this repo.
 ```
 rm assets/manifests/kube-flannel{,-cfg}.yaml assets/manifests/kube-proxy.yaml
-curl -L https://raw.githubusercontent.com/cloudnativelabs/kube-router/bootkube/contrib/bootkube/kube-router-cfg.yaml -o assets/manifests/kube-router-cfg.yaml
-curl -L https://raw.githubusercontent.com/cloudnativelabs/kube-router/bootkube/contrib/bootkube/kube-router.yaml -o assets/manifests/kube-router.yaml
+curl -L https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/contrib/bootkube/kube-router-cfg.yaml -o assets/manifests/kube-router-cfg.yaml
+curl -L https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/contrib/bootkube/kube-router.yaml -o assets/manifests/kube-router.yaml
 ```
 
 ## Cluster Startup
