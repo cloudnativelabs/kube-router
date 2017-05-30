@@ -107,6 +107,10 @@ and if you want to move back to kube-proxy then clean up config done by kube-rou
 ```
 and run kube-proxy with the configuration you have.
 
+### Kube-router with cluster installers
+
+Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/master/contrib/bootkube) to deploy Kubernetes cluster with Kube-router using bootkube
+
 ## Theory of Operation
 
 Kube-router can be run as a agent or a pod (through daemonset) on each node and leverages standard Linux technologies **iptables, ipvs/lvs, ipset, iproute2** 
