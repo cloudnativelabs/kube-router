@@ -35,6 +35,9 @@ type NetworkRoutingController struct {
 	asnNumber          uint32
 	peerAsnNumber      uint32
 }
+var(
+	activeNodes = make(map[string]bool)
+)
 
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 
@@ -61,31 +64,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	defer t.Stop()
 	defer wg.Done()
 
-	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		glog.Errorf("Failed to list nodes: %s", err.Error())
-		return
-	}
-
 	glog.Infof("Starting network route controller")
-
-	// add the current set of nodes (excluding self) as BGP peers. Nodes form full mesh
-	for _, node := range nodes.Items {
-		nodeIP, _ := getNodeIP(&node)
-		if nodeIP.String() == nrc.nodeIP.String() {
-			continue
-		}
-
-		n := &config.Neighbor{
-			Config: config.NeighborConfig{
-				NeighborAddress: nodeIP.String(),
-				PeerAs:          nrc.asnNumber,
-			},
-		}
-		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
-			panic(err)
-		}
-	}
 
 	// if the global routing peer is configured then peer with it
 	if len(nrc.peerRouter) != 0 {
@@ -108,6 +87,9 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			return
 		default:
 		}
+
+		// add the current set of nodes (excluding self) as BGP peers. Nodes form full mesh
+		nrc.syncPeers()
 
 		// advertise cluster IP for the service to be reachable via host
 		if nrc.advertiseClusterIp {
@@ -209,7 +191,108 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 }
 
 func (nrc *NetworkRoutingController) Cleanup() {
+}
 
+// Refresh the peer relationship rest of the nodes in the cluster. Node add/remove
+// events should ensure peer relationship with only currently active nodes. In case
+// we miss any events from API server this method which is called periodically
+// ensure peer relationship with removed nodes is deleted.
+func (nrc *NetworkRoutingController) syncPeers() {
+
+	// get the current list of the nodes from API server
+	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		glog.Errorf("Failed to list nodes: %s", err.Error())
+		return
+	}
+
+	// establish peer with current set of nodes
+	currentNodes := make([]string, 0)
+	for _, node := range nodes.Items {
+		nodeIP, _ := getNodeIP(&node)
+		if nodeIP.String() == nrc.nodeIP.String() {
+			continue
+		}
+		currentNodes = append(currentNodes, nodeIP.String())
+		activeNodes[nodeIP.String()] = true
+		n := &config.Neighbor{
+			Config: config.NeighborConfig{
+				NeighborAddress: nodeIP.String(),
+				PeerAs:          nrc.asnNumber,
+			},
+		}
+		// TODO: check if a node is alredy added as nieighbour in a better way that add and catch error
+		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
+			if !strings.Contains(err.Error(), "Can't overwrite the existing peer") {
+				glog.Errorf("Failed to add node %s as peer due to %s", nodeIP.String(), err)
+			}
+		}
+	}
+
+	// find the list of the node removed, from the last known list of active nodes
+	removedNodes := make([]string, 0)
+	for ip, _ := range activeNodes {
+		stillActive := false
+		for _, node := range currentNodes {
+			if ip == node {
+				stillActive = true
+				break
+			}
+		}
+		if !stillActive {
+			removedNodes = append(removedNodes, ip)
+		}
+	}
+
+	// delete the neighbor for the node that is removed
+	for _, ip := range removedNodes {
+		n := &config.Neighbor{
+			Config: config.NeighborConfig{
+				NeighborAddress: ip,
+				PeerAs:          nrc.asnNumber,
+			},
+		}
+		if err := nrc.bgpServer.DeleteNeighbor(n); err != nil {
+			glog.Errorf("Failed to remove node %s as peer due to %s", ip, err)
+		}
+		delete(activeNodes, ip)
+	}
+}
+
+// Handle updates from Node watcher. Node watcher calls this method whenever there is
+// new node is added or old node is deleted. So peer up with new node and drop peering
+// from old node
+func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdate) {
+	nrc.mu.Lock()
+	defer nrc.mu.Unlock()
+
+	node := nodeUpdate.Node
+	nodeIP, _ := getNodeIP(node)
+	if nodeUpdate.Op == watchers.ADD {
+		glog.Infof("Received node %s added update from watch API so peer with new node", nodeIP)
+		n := &config.Neighbor{
+			Config: config.NeighborConfig{
+				NeighborAddress: nodeIP.String(),
+				PeerAs:          nrc.asnNumber,
+			},
+		}
+		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
+			glog.Errorf("Failed to add node %s as peer due to %s", nodeIP, err)
+		}
+		activeNodes[nodeIP.String()] = true
+	} else if nodeUpdate.Op == watchers.REMOVE {
+		glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
+		n := &config.Neighbor{
+			Config: config.NeighborConfig{
+				NeighborAddress: nodeIP.String(),
+				PeerAs:          nrc.asnNumber,
+			},
+		}
+		if err := nrc.bgpServer.DeleteNeighbor(n); err != nil {
+			glog.Errorf("Failed to remove node %s as peer due to %s", nodeIP, err)
+		}
+		delete(activeNodes, nodeIP.String())
+	}
 }
 
 func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
@@ -294,6 +377,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 		panic(err)
 	}
 
+	watchers.NodeWatcher.RegisterHandler(&nrc)
 	go nrc.watchBgpUpdates()
 
 	return &nrc, nil

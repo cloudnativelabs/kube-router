@@ -49,7 +49,7 @@ func (nsw *namespaceWatcher) namespaceDeleteEventHandler(obj interface{}) {
 	nsw.broadcaster.Notify(&NamespaceUpdate{Op: REMOVE, Namespace: namespace})
 }
 
-func (nsw *namespaceWatcher) namespaceAUpdateEventHandler(oldObj, newObj interface{}) {
+func (nsw *namespaceWatcher) namespaceUpdateEventHandler(oldObj, newObj interface{}) {
 	namespace, ok := newObj.(*api.Namespace)
 	if !ok {
 		return
@@ -81,7 +81,7 @@ func StartNamespaceWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Du
 	eventHandler := cache.ResourceEventHandlerFuncs{
 		AddFunc:    nsw.namespaceAddEventHandler,
 		DeleteFunc: nsw.namespaceDeleteEventHandler,
-		UpdateFunc: nsw.namespaceAUpdateEventHandler,
+		UpdateFunc: nsw.namespaceUpdateEventHandler,
 	}
 
 	nsw.clientset = clientset

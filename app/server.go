@@ -83,6 +83,11 @@ func (kr *KubeRouter) startApiWatchers() error {
 		return errors.New("Failed to launch service api watcher: " + err.Error())
 	}
 
+	_, err = watchers.StartNodeWatcher(kr.Client, kr.Config.ConfigSyncPeriod)
+	if err != nil {
+		return errors.New("Failed to launch nodes api watcher: " + err.Error())
+	}
+
 	return nil
 }
 
@@ -92,6 +97,7 @@ func (kr *KubeRouter) stopApiWatchers() {
 	watchers.StopNetworkPolicyWatcher()
 	watchers.StopNamespaceWatcher()
 	watchers.StopServiceWatcher()
+	watchers.StopNodeWatcher()
 }
 
 func (kr *KubeRouter) Run() error {
