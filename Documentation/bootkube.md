@@ -54,6 +54,16 @@ curl -L https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/con
 curl -L https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/contrib/bootkube/kube-router.yaml -o assets/manifests/kube-router.yaml
 ```
 
+## Additional steps when deploying on AWS
+
+Since kube-router uses node routing rules to directly route pod-to-pod traffic to destination node, nodes will send and recieve IP traffic with source and destination IP's from pod CIDR. AWS by default prevents sending and recieving traffic from ip different from instance private ip. So we need to relax this restricition. Please run below commnad on each of the node in the cluster to send and recieve traffic from pod IP's.
+
+```
+aws ec2 modify-instance-attribute --instance-id <instance id>--no-source-dest-check
+```
+
+Bootkube deploys kubelet with `--hostname-override=${COREOS_PRIVATE_IPV4}` in the manifest which means nodes will register with IP address instead of node hostname to Kubernetes API server. Which will cause problem for both Kube-proxy (unless you use `--hostname-override `with kube-proxy as well) and Kube-router. Kube-router does not implement `--hostname-override` yet. So remove `--hostname-override` flag from both kubelet.master and kubelet.worker manifests.
+
 ## Cluster Startup
 
 Finally, proceed by following the Bootkube documentation, which generally
