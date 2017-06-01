@@ -12,6 +12,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/app/options"
 	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/cloudnativelabs/kube-router/utils"
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	bgpapi "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/config"
@@ -34,6 +35,7 @@ type NetworkRoutingController struct {
 	peerRouter         string
 	asnNumber          uint32
 	peerAsnNumber      uint32
+	clusterCIDR        string
 }
 var(
 	activeNodes = make(map[string]bool)
@@ -76,6 +78,18 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
 			glog.Errorf("Failed to peer with global peer routeri: %s", nrc.peerRouter)
+		}
+	}
+
+	if len(nrc.clusterCIDR) != 0 {
+		args := []string{"-s", nrc.clusterCIDR, "!", "-d", nrc.clusterCIDR, "-j", "MASQUERADE"}
+		iptablesCmdHandler, err := iptables.New()
+		if err != nil {
+			glog.Errorf("Failed to add iptable rule to masqurade outbound traffic from pods due to %s. External connectivity will not work.", err.Error())
+		}
+		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
+		if err != nil {
+			glog.Errorf("Failed to add iptable rule to masqurade outbound traffic from pods due to %s. External connectivity will not work.", err.Error())
 		}
 	}
 
@@ -305,6 +319,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 
 	nrc := NetworkRoutingController{}
 
+	nrc.clusterCIDR = kubeRouterConfig.ClusterCIDR
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
 

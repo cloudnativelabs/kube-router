@@ -37,6 +37,7 @@ Alternatively you can download the prebuilt binary from https://github.com/cloud
   --run-service-proxy               If false, kube-router won't setup IPVS for services proxy. true by default.
   --cleanup-config                  If true cleanup iptables rules, ipvs, ipset configuration and exit.
   --masquerade-all                  SNAT all traffic to cluster IP/node port. False by default
+  --cluster-cidr                    CIDR range of pods in the cluster. If specified external traffic from the pods will be masquraded
   --config-sync-period duration     How often configuration from the apiserver is refreshed. Must be greater than 0. (default 1m0s)
   --iptables-sync-period duration   The maximum interval of how often iptables rules are refreshed (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
   --ipvs-sync-period duration       The maximum interval of how often ipvs config is refreshed (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
