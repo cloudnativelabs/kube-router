@@ -52,9 +52,13 @@ func GetPodCidrFromNodeSpec(clientset *kubernetes.Clientset) (string, error) {
 	if err != nil {
 		panic(err.Error())
 	}
+	nodeFqdnHostName := GetFqdn()
 	node, err := clientset.Core().Nodes().Get(nodeHostName, metav1.GetOptions{})
 	if err != nil {
-		panic(err.Error())
+		node, err = clientset.Core().Nodes().Get(nodeFqdnHostName, metav1.GetOptions{})
+		if err != nil {
+			panic(err.Error())
+		}
 	}
 	return node.Spec.PodCIDR, nil
 }
