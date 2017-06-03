@@ -4,3 +4,4 @@
 
 - [General Setup](/README.md#getting-started)
 - [Bootkube Deployment](bootkube.md)
+- [Kops deployment](kops.md)

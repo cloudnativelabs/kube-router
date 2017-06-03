@@ -50,6 +50,12 @@ Alternatively you can download the prebuilt binary from https://github.com/cloud
   --peer-router                     The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's
 ```
 
+### Try Kube-router with cluster installers
+
+Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/kops.md) to deploy Kubernetes cluster with Kube-router using [Kops](https://github.com/kubernetes/kops)
+
+Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/master/contrib/bootkube) to deploy Kubernetes cluster with Kube-router using [bootkube](https://github.com/kubernetes-incubator/bootkube)
+
 ### deployment
 
 Depending on what functionality of kube-router you want to use, multiple deployment options are possible. You can use the flags `--run-firewall`, `--run-router`, `--run-service-proxy` to selectively enable only required functionality of kube-router.
@@ -107,10 +113,6 @@ and if you want to move back to kube-proxy then clean up config done by kube-rou
  kube-router --cleanup-config
 ```
 and run kube-proxy with the configuration you have.
-
-### Kube-router with cluster installers
-
-Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/master/contrib/bootkube) to deploy Kubernetes cluster with Kube-router using bootkube
 
 ## Theory of Operation
 
