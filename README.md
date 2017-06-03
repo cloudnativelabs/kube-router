@@ -52,8 +52,10 @@ Alternatively you can download the prebuilt binary from https://github.com/cloud
 
 ### Try Kube-router with cluster installers
 
+#### kops
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/kops.md) to deploy Kubernetes cluster with Kube-router using [Kops](https://github.com/kubernetes/kops)
 
+#### bootkube
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/master/contrib/bootkube) to deploy Kubernetes cluster with Kube-router using [bootkube](https://github.com/kubernetes-incubator/bootkube)
 
 ### deployment
