@@ -62,8 +62,6 @@ Since kube-router uses node routing rules to directly route pod-to-pod traffic t
 aws ec2 modify-instance-attribute --instance-id <instance id>--no-source-dest-check
 ```
 
-Bootkube deploys kubelet with `--hostname-override=${COREOS_PRIVATE_IPV4}` in the manifest which means nodes will register with IP address instead of node hostname to Kubernetes API server. Which will cause problem for both Kube-proxy (unless you use `--hostname-override `with kube-proxy as well) and Kube-router. Kube-router does not implement `--hostname-override` yet. So remove `--hostname-override` flag from both kubelet.master and kubelet.worker manifests.
-
 ## Cluster Startup
 
 Finally, proceed by following the Bootkube documentation, which generally
