@@ -3,7 +3,6 @@ package controllers
 import (
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -358,22 +357,13 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 		nrc.peerAsnNumber = uint32(asn)
 	}
 
-	nodeHostName, err := os.Hostname()
+
+	node, err := utils.GetNodeObject(clientset)
 	if err != nil {
 		panic(err.Error())
 	}
-	nodeFqdnHostName := utils.GetFqdn()
 
-	node, err := clientset.Core().Nodes().Get(nodeHostName, metav1.GetOptions{})
-	if err != nil {
-		node, err = clientset.Core().Nodes().Get(nodeFqdnHostName, metav1.GetOptions{})
-		if err != nil {
-			panic(err.Error())
-		}
-		nrc.nodeHostName = nodeFqdnHostName
-	} else {
-		nrc.nodeHostName = nodeHostName
-	}
+	nrc.nodeHostName = node.Name
 
 	nodeIP, err := getNodeIP(node)
 	if err != nil {

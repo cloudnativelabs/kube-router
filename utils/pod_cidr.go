@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"os"
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/plugins/ipam/host-local/backend/allocator"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -48,17 +46,9 @@ func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 }
 
 func GetPodCidrFromNodeSpec(clientset *kubernetes.Clientset) (string, error) {
-	nodeHostName, err := os.Hostname()
+	node, err := GetNodeObject(clientset)
 	if err != nil {
-		panic(err.Error())
-	}
-	nodeFqdnHostName := GetFqdn()
-	node, err := clientset.Core().Nodes().Get(nodeHostName, metav1.GetOptions{})
-	if err != nil {
-		node, err = clientset.Core().Nodes().Get(nodeFqdnHostName, metav1.GetOptions{})
-		if err != nil {
-			panic(err.Error())
-		}
+		return "", fmt.Errorf("Failed to get pod CIDR allocated for the node due to: " + err.Error())
 	}
 	return node.Spec.PodCIDR, nil
 }

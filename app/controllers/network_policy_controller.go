@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -20,7 +19,6 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	"github.com/janeczku/go-ipset/ipset"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
@@ -772,22 +770,12 @@ func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options
 
 	npc.syncPeriod = config.IPTablesSyncPeriod
 
-	nodeHostName, err := os.Hostname()
+	node, err := utils.GetNodeObject(clientset)
 	if err != nil {
 		panic(err.Error())
 	}
-	nodeFqdnHostName := utils.GetFqdn()
 
-	node, err := clientset.Core().Nodes().Get(nodeHostName, metav1.GetOptions{})
-	if err != nil {
-		node, err = clientset.Core().Nodes().Get(nodeFqdnHostName, metav1.GetOptions{})
-		if err != nil {
-			panic(err.Error())
-		}
-		npc.nodeHostName = nodeFqdnHostName
-	} else {
-		npc.nodeHostName = nodeHostName
-	}
+	npc.nodeHostName = node.Name
 
 	nodeIP, err := getNodeIP(node)
 	if err != nil {

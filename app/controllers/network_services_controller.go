@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -20,7 +19,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/mqliang/libipvs"
 	"github.com/vishvananda/netlink"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -543,22 +541,12 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 		nsc.podCidr = cidr
 	}
 
-	nodeHostName, err := os.Hostname()
+	node, err := utils.GetNodeObject(clientset)
 	if err != nil {
 		panic(err.Error())
 	}
-	nodeFqdnHostName := utils.GetFqdn()
 
-	node, err := clientset.Core().Nodes().Get(nodeHostName, v1.GetOptions{})
-	if err != nil {
-		node, err = clientset.Core().Nodes().Get(nodeFqdnHostName, v1.GetOptions{})
-		if err != nil {
-			panic(err.Error())
-		}
-		nsc.nodeHostName = nodeFqdnHostName
-	} else {
-		nsc.nodeHostName = nodeHostName
-	}
+	nsc.nodeHostName = node.Name
 	nodeIP, err := getNodeIP(node)
 	if err != nil {
 		panic(err.Error())
