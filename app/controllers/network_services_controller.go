@@ -29,6 +29,10 @@ const (
 	IPVS_SERVER_EXISTS = "file exists"
 )
 
+var (
+	h libipvs.IPVSHandle
+)
+
 // Network services controller enables local node as network service proxy through IPVS/LVS.
 // Support only Kuberntes network services of type NodePort, ClusterIP. For each service a
 // IPVS service is created and for each service endpoint a server is added to the IPVS service.
@@ -247,10 +251,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	// cleanup stale ipvs service and servers
 	glog.Infof("Cleaning up if any, old ipvs service and servers which are no longer needed")
-	h, err := libipvs.New()
-	if err != nil {
-		panic(err)
-	}
 	ipvsSvcs, err := h.ListServices()
 	if err != nil {
 		panic(err)
@@ -392,10 +392,6 @@ func deleteMasqueradeIptablesRule() error {
 }
 
 func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*libipvs.Service, error) {
-	h, err := libipvs.New()
-	if err != nil {
-		panic(err)
-	}
 	svcs, err := h.ListServices()
 	if err != nil {
 		panic(err)
@@ -431,12 +427,8 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*libipv
 }
 
 func ipvsAddServer(service *libipvs.Service, dest *libipvs.Destination) error {
-	h, err := libipvs.New()
-	if err != nil {
-		panic(err)
-	}
 
-	err = h.NewDestination(service, dest)
+	err := h.NewDestination(service, dest)
 	if err == nil {
 		glog.Infof("Successfully added destination %s:%s to the service %s:%s:%s", dest.Address,
 			strconv.Itoa(int(dest.Port)), service.Address, service.Protocol, strconv.Itoa(int(service.Port)))
@@ -485,12 +477,8 @@ func getKubeDummyInterface() netlink.Link {
 func (nsc *NetworkServicesController) Cleanup() {
 
 	// cleanup ipvs rules by flush
-	h, err := libipvs.New()
-	if err != nil {
-		panic(err)
-	}
 	glog.Infof("Cleaning up IPVS configuration permanently")
-	err = h.Flush()
+	err := h.Flush()
 	if err != nil {
 		glog.Errorf("Failed to cleanup ipvs rules: ", err.Error())
 		return
@@ -520,6 +508,12 @@ func (nsc *NetworkServicesController) Cleanup() {
 }
 
 func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
+
+	handle, err := libipvs.New()
+	if err != nil {
+		panic(err)
+	}
+	h = handle
 
 	nsc := NetworkServicesController{}
 	nsc.syncPeriod = config.IpvsSyncPeriod
