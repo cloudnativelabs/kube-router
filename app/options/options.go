@@ -23,6 +23,7 @@ type KubeRouterConfig struct {
 	PeerRouter         string
 	ClusterAsn         string
 	PeerAsn            string
+	HostnameOverride   string
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
@@ -54,4 +55,5 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.PeerRouter, "peer-router", s.PeerRouter, "The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's")
 	fs.StringVar(&s.ClusterAsn, "cluster-asn", s.ClusterAsn, "ASN number under which cluster nodes will run iBGP")
 	fs.StringVar(&s.PeerAsn, "peer-asn", s.PeerAsn, "ASN number of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr")
+	fs.StringVar(&s.HostnameOverride, "hostname-override", s.HostnameOverride, "If non-empty, will use this string as identification instead of the actual hostname.")
 }

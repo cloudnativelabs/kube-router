@@ -35,6 +35,7 @@ type NetworkRoutingController struct {
 	asnNumber          uint32
 	peerAsnNumber      uint32
 	clusterCIDR        string
+	hostnameOverride   string
 }
 var(
 	activeNodes = make(map[string]bool)
@@ -49,7 +50,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	cidrlen, _ := cidr.Mask.Size()
 	oldCidr := cidr.IP.String() + "/" + strconv.Itoa(cidrlen)
 
-	currentCidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset)
+	currentCidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
 		glog.Errorf("Failed to get pod CIDR from node spec: %s", err.Error())
 	}
@@ -160,7 +161,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 
 func (nrc *NetworkRoutingController) advertiseRoute() error {
 
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset)
+	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
 		return err
 	}
@@ -357,8 +358,8 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 		nrc.peerAsnNumber = uint32(asn)
 	}
 
-
-	node, err := utils.GetNodeObject(clientset)
+	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
+	node, err := utils.GetNodeObject(clientset, nrc.hostnameOverride)
 	if err != nil {
 		panic(err.Error())
 	}

@@ -770,7 +770,7 @@ func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options
 
 	npc.syncPeriod = config.IPTablesSyncPeriod
 
-	node, err := utils.GetNodeObject(clientset)
+	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {
 		panic(err.Error())
 	}
