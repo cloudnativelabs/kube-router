@@ -10,4 +10,4 @@
 
 ## BGP configuration
 
-[Configuring BGP Peers](/bgp.md)
+[Configuring BGP Peers](bgp.md)
