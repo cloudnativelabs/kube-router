@@ -19,11 +19,12 @@ type KubeRouterConfig struct {
 	RunRouter          bool
 	MasqueradeAll      bool
 	ClusterCIDR        string
+	HostnameOverride   string
 	AdvertiseClusterIp bool
 	PeerRouter         string
 	ClusterAsn         string
 	PeerAsn            string
-	HostnameOverride   string
+	FullMeshMode       bool
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
@@ -35,6 +36,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		RunServiceProxy:    true,
 		RunFirewall:        true,
 		RunRouter:          true,
+		FullMeshMode:       true,
 		AdvertiseClusterIp: false}
 }
 
@@ -55,5 +57,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.PeerRouter, "peer-router", s.PeerRouter, "The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's")
 	fs.StringVar(&s.ClusterAsn, "cluster-asn", s.ClusterAsn, "ASN number under which cluster nodes will run iBGP")
 	fs.StringVar(&s.PeerAsn, "peer-asn", s.PeerAsn, "ASN number of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr")
+	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", s.FullMeshMode, "When enabled each node in the cluster will setup BGP peer with rest of the nodes. True by default")
 	fs.StringVar(&s.HostnameOverride, "hostname-override", s.HostnameOverride, "If non-empty, will use this string as identification instead of the actual hostname.")
 }

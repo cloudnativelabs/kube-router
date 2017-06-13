@@ -48,6 +48,7 @@ Alternatively you can download the prebuilt binary from https://github.com/cloud
   --cluster-asn                     ASN number under which cluster nodes will run iBGP
   --peer-asn                        ASN number of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr
   --peer-router                     The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's
+  --nodes-full-mesh                 When enabled each node in the cluster will setup BGP peer with rest of the nodes. True by default
   --hostname-override               If non-empty, this string will be used as identification of node name instead of the actual hostname.
 ```
 
