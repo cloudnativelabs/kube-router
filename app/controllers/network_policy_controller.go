@@ -320,6 +320,9 @@ func (npc *NetworkPolicyController) syncPodFirewallChains() (map[string]bool, er
 
 	// loop through the pods running on the node which has default ingress to be denied
 	podsOnNodeInfo, err := getPodsRunningOnNode(npc.nodeIP.String())
+	if err != nil {
+		return nil, err
+	}
 	for _, pod := range *podsOnNodeInfo {
 
 		// below condition occurs when we get trasient update while removing or adding pod
@@ -623,6 +626,9 @@ func getNameSpaceDefaultPolicy(namespace string) (string, error) {
 				err := json.Unmarshal([]byte(networkPolicyAnnotation), &annot)
 				if err == nil {
 					return annot["ingress"]["isolation"], nil
+				} else {
+					glog.Errorf("Skipping invalid network-policy for namespace \"%s\": %s", namespace, err)
+					return "DefaultAllow", errors.New("Invalid NetworkPolicy.")
 				}
 			} else {
 				return "DefaultAllow", nil
