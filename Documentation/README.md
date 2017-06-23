@@ -1,12 +1,12 @@
 # Kube-router Documentation
 
-## General overview
+## Architecture
 
-Kube-router consist of 3 core components
+Kube-router is built around concept of watchers and controllers. Watchers use Kubernetes watch API to get notification on events related to create, update, delete of Kubernetes objects. Each watcher gets notification related to a particular API object. On receiving an event from API server, watcher broadcasts events. Controller registers to get event updates from the watchers and act up on the events.
 
-* [Network Services Controller](#network-services-controller)
-* [Network Policy Controller](#network-policy-controller)
-* [Network Routes Controller](#network-routes-controller)
+Kube-router consists of 3 core controllers and multiple watchers as depicted in below diagram.
+
+![Arch](./img/kube-router-arch.png)
 
 #### Network Services Controller
 

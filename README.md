@@ -31,6 +31,7 @@ If you experience any problems please reach us on gitter [community forum](https
 
 Use below guides to get started.
 
+- [Architecture](./Documentation/README.md#architecture)
 - [Users Guide](./Documentation/README.md#user-guide)
 - [Developers Guide](./Documentation/README.md#develope-guide)
 
