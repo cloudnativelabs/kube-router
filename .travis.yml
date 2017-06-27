@@ -4,7 +4,6 @@ services:
 language: go
 go: 
  - 1.7.x
- - release
  - master
 
 script:
