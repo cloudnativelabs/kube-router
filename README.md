@@ -1,5 +1,8 @@
 kube-router
 ==========
+
+- [![Gitter chat](http://badges.gitter.im/kube-router/Lobby.png)](https://gitter.im/kube-router/Lobby)
+
 Kube-router is a distributed load balancer, firewall and router for Kubernetes. Kube-router can be configured to provide on each cluster node:
 
 - a IPVS/LVS based service proxy on each node for *ClusterIP* and *NodePort* service types, providing service discovery and load balancing
