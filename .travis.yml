@@ -1,10 +1,14 @@
 services:
- - docker
+  - docker
 
 language: go
 go: 
- - 1.7.x
- - master
+  - 1.7.x
 
+after_success:
+  - if [ "$TRAVIS_BRANCH" == "master" ]; then
+    docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
+    docker push cloudnativelabs/kube-router
+ 
 script:
  - make all 
