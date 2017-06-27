@@ -1,8 +1,8 @@
 kube-router
 ==========
 
-[![Build Status](https://travis-ci.org/cloudnativelabs/kube-router.png?branch=master)](https://travis-ci.org/cloudnativelabs/kube-router)
-[![Gitter chat](http://badges.gitter.im/kube-router/Lobby.png)](https://gitter.im/kube-router/Lobby)
+[![Build Status](https://travis-ci.org/cloudnativelabs/kube-router.svg?branch=master)](https://travis-ci.org/cloudnativelabs/kube-router)
+[![Gitter chat](http://badges.gitter.im/kube-router/Lobby.svg)](https://gitter.im/kube-router/Lobby)
 
 Kube-router is a distributed load balancer, firewall and router for Kubernetes. Kube-router can be configured to provide on each cluster node:
 
