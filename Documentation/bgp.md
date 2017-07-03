@@ -32,16 +32,17 @@ Only nodes with in same ASN form full mesh. Two nodes with different configured 
 
 An optional global BGP peer can be configured by specifying `--peer-asn` and `--peer-router` parameters. When configured
 each node in the cluster forms a peer relationship with specified global peer. Pod cidr, cluster IP's get advertised to
-the global BGP peer.
+the global BGP peer. For redundancy you can also configure more than one peer router by specifying comma seperated list
+of BGP peers for `--peer-router` flag, like `--peer-router=192.168.1.99,192.168.1.100`
 
 ### Node specific BGP peer
 
-Alternativley, each node can be configured with node specific BGP peer. Information regarding node specific BGP peer is
+Alternativley, each node can be configured with one or mode node specific BGP peer. Information regarding node specific BGP peer is
 read from node API object annotations `net.kuberouter.node.bgppeer.address` and `net.kuberouter.node.bgppeer.asn`.
 
 
 For e.g users can annotate node object with below commands
 ```
-kubectl annotate node <kube-node> “net.kuberouter.node.bgppeer.address=192.168.1.98”
+kubectl annotate node <kube-node> “net.kuberouter.node.bgppeer.address=192.168.1.98,192.168.1.99”
 kubectl annotate node <kube-node> "net.kuberouter.node.bgppeer.asn=64513”"
 ```
