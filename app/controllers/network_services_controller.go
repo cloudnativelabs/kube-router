@@ -172,8 +172,9 @@ func (nsc *NetworkServicesController) OnServiceUpdate(serviceUpdate *watchers.Se
 	}
 }
 
-// sync the ipvs service and server details configured to reflect the desired state of services and endpoint
-// as learned from services and endpoints information from the api server
+// sync the ipvs service and server details configured to reflect the desired
+// state of services and endpoint as learned from services and endpoints
+// information from the api server
 func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap) {
 
 	start := time.Now()
@@ -195,7 +196,8 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			protocol = syscall.IPPROTO_UDP
 		}
 
-		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
+		// assign cluster IP of the service to the dummy interface so that its
+		// routable from the pod's on the node
 		vip := &netlink.Addr{IPNet: &net.IPNet{svc.clusterIP, net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 		err := netlink.AddrAdd(dummyVipInterface, vip)
 		if err != nil && err.Error() != IFACE_HAS_ADDR {
@@ -234,17 +236,23 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				Port:          uint16(endpoint.port),
 				Weight:        1,
 			}
+
 			err := ipvsAddServer(ipvs_cluster_vip_svc, &dst)
 			if err != nil {
 				glog.Errorf(err.Error())
 			}
-			activeServiceEndpointMap[clusterServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+
+			activeServiceEndpointMap[clusterServiceId] =
+				append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+
 			if svc.nodePort != 0 {
 				err := ipvsAddServer(ipvs_nodeport_svc, &dst)
-				activeServiceEndpointMap[nodeServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 				if err != nil {
 					glog.Errorf(err.Error())
 				}
+
+				activeServiceEndpointMap[nodeServiceId] =
+					append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 			}
 		}
 	}
@@ -313,6 +321,7 @@ func buildServicesInfo() serviceInfoMap {
 				protocol:  strings.ToLower(string(port.Protocol)),
 				nodePort:  int(port.NodePort),
 			}
+
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
 			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
 			serviceMap[svcId] = &svcInfo
