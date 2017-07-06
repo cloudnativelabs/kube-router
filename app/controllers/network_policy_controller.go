@@ -92,7 +92,10 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 
 		if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 			glog.Infof("Performing periodic syn of the iptables to reflect network policies")
-			npc.Sync()
+			err := npc.Sync()
+			if err != nil {
+				glog.Errorf("Error during periodic sync: ", err)
+			}
 		} else {
 			continue
 		}
@@ -109,7 +112,10 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
 	glog.Infof("Received pod update namspace:%s pod name:%s", podUpdate.Pod.Namespace, podUpdate.Pod.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
-		npc.Sync()
+		err := npc.Sync()
+		if err != nil {
+			glog.Errorf("Error syncing on pod update: ", err)
+		}
 	} else {
 		glog.Infof("Received pod update, but controller not in sync")
 	}
@@ -118,7 +124,10 @@ func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
 func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(networkPolicyUpdate *watchers.NetworkPolicyUpdate) {
 	glog.Infof("Received network policy update namspace:%s policy name:%s", networkPolicyUpdate.NetworkPolicy.Namespace, networkPolicyUpdate.NetworkPolicy.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
-		npc.Sync()
+		err := npc.Sync()
+		if err != nil {
+			glog.Errorf("Error syncing on network policy update: ", err)
+		}
 	} else {
 		glog.Infof("Received network policy update, but controller not in sync")
 	}
@@ -127,18 +136,26 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(networkPolicyUpdate *w
 func (npc *NetworkPolicyController) OnNamespaceUpdate(namespaceUpdate *watchers.NamespaceUpdate) {
 	glog.Infof("Received namesapce update namspace:%s", namespaceUpdate.Namespace.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
-		npc.Sync()
+		err := npc.Sync()
+		if err != nil {
+			glog.Errorf("Error syncing on namespace update: ", err)
+		}
 	} else {
 		glog.Infof("Received namspace update, but controller not in sync")
 	}
 }
 
 // Sync synchronizes iptables to desired state of network policies
-func (npc *NetworkPolicyController) Sync() {
+func (npc *NetworkPolicyController) Sync() error {
 
 	var err error
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
+
+	_, err = exec.LookPath("ipset")
+	if err != nil {
+		return errors.New("Ensure ipset package is installed: " + err.Error())
+	}
 
 	start := time.Now()
 	defer func() {
@@ -147,27 +164,25 @@ func (npc *NetworkPolicyController) Sync() {
 
 	npc.networkPoliciesInfo, err = buildNetworkPoliciesInfo()
 	if err != nil {
-		glog.Errorf("Aborting sync. Failed to build network policies: %s", err.Error())
-		return
+		return errors.New("Aborting sync. Failed to build network policies: %s" + err.Error())
 	}
 
 	activePolicyChains, err := npc.syncNetworkPolicyChains()
 	if err != nil {
-		glog.Errorf("Aborting sync. Failed to sync network policy chains: %s", err.Error())
-		return
+		return errors.New("Aborting sync. Failed to sync network policy chains: %s" + err.Error())
 	}
 
 	activePodFwChains, err := npc.syncPodFirewallChains()
 	if err != nil {
-		glog.Errorf("Aborting sync. Failed to sync pod firewalls: %s", err.Error())
-		return
+		return errors.New("Aborting sync. Failed to sync pod firewalls: %s" + err.Error())
 	}
 
 	err = cleanupStaleRules(activePolicyChains, activePodFwChains)
 	if err != nil {
-		glog.Errorf("Aborting sync. Failed to cleanup stale iptable rules: %s", err.Error())
-		return
+		return errors.New("Aborting sync. Failed to cleanup stale iptable rules: %s" + err.Error())
 	}
+
+	return nil
 }
 
 // Configure iptable rules representing each network policy. All pod's matched by
@@ -763,13 +778,6 @@ func (npc *NetworkPolicyController) Cleanup() {
 	glog.Infof("Successfully cleaned the iptables configuration done by kube-router")
 }
 
-func init() {
-	_, err := exec.LookPath("ipset")
-	if err != nil {
-		panic("ipset command not found ensure ipset package is installed")
-	}
-}
-
 func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkPolicyController, error) {
 
 	npc := NetworkPolicyController{}
@@ -778,14 +786,14 @@ func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options
 
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
 
 	npc.nodeHostName = node.Name
 
 	nodeIP, err := getNodeIP(node)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
 	npc.nodeIP = nodeIP
 
