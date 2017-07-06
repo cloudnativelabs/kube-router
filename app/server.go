@@ -24,19 +24,19 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 
 	if len(config.Master) == 0 && len(config.Kubeconfig) == 0 {
 		if _, err := os.Stat("/var/lib/kube-router/kubeconfig"); os.IsNotExist(err) {
-			panic("Either one of --master or --kubeconfig must be specified. Or valid kubeconfig file must exist as /var/lib/kube-router/kubeconfig")
+			return nil, errors.New("Either one of --master or --kubeconfig must be specified. Or valid kubeconfig file must exist as /var/lib/kube-router/kubeconfig")
 		}
 		config.Kubeconfig = "/var/lib/kube-router/kubeconfig"
 	}
 
 	clientconfig, err := clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
 	if err != nil {
-		panic(err.Error())
+		return nil, errors.New("Failed to build configuration from CLI: " + err.Error())
 	}
 
 	clientset, err := kubernetes.NewForConfig(clientconfig)
 	if err != nil {
-		panic(err.Error())
+		return nil, errors.New("Failed to create Kubernetes client: " + err.Error())
 	}
 
 	return &KubeRouter{Client: clientset, Config: config}, nil
@@ -108,7 +108,7 @@ func (kr *KubeRouter) Run() error {
 
 	err = kr.startApiWatchers()
 	if err != nil {
-		panic("Failed to start API watchers: " + err.Error())
+		return errors.New("Failed to start API watchers: " + err.Error())
 	}
 
 	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
@@ -119,7 +119,7 @@ func (kr *KubeRouter) Run() error {
 	if kr.Config.RunFirewall {
 		npc, err := controllers.NewNetworkPolicyController(kr.Client, kr.Config)
 		if err != nil {
-			panic("Failed to create network policy controller: " + err.Error())
+			return errors.New("Failed to create network policy controller: " + err.Error())
 		}
 		npcStopCh = make(chan struct{})
 		wg.Add(1)
@@ -129,7 +129,7 @@ func (kr *KubeRouter) Run() error {
 	if kr.Config.RunRouter {
 		nrc, err := controllers.NewNetworkRoutingController(kr.Client, kr.Config)
 		if err != nil {
-			panic("Failed to create network routing controller: " + err.Error())
+			return errors.New("Failed to create network routing controller: " + err.Error())
 		}
 		nrcStopCh = make(chan struct{})
 		wg.Add(1)
@@ -139,7 +139,7 @@ func (kr *KubeRouter) Run() error {
 	if kr.Config.RunServiceProxy {
 		nsc, err := controllers.NewNetworkServicesController(kr.Client, kr.Config)
 		if err != nil {
-			panic("Failed to create network services controller: " + err.Error())
+			return errors.New("Failed to create network services controller: " + err.Error())
 		}
 		nscStopCh = make(chan struct{})
 		wg.Add(1)

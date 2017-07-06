@@ -18,8 +18,13 @@ func main() {
 
 	flag.Set("logtostderr", "true")
 
+	if config.HelpRequested {
+		pflag.Usage()
+		os.Exit(0)
+	}
+
 	if os.Geteuid() != 0 {
-		fmt.Fprintf(os.Stderr, "kube-router need to be run by user with previlages to execute iptables, ipset and configure ipvs\n")
+		fmt.Fprintf(os.Stderr, "kube-router needs to be run with privileges to execute iptables, ipset and configure ipvs\n")
 		os.Exit(1)
 	}
 
@@ -34,7 +39,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = kubeRouter.Run(); err != nil {
+	err = kubeRouter.Run()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to run kube-router: %v\n", err)
 		os.Exit(1)
 	}
