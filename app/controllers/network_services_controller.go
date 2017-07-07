@@ -519,22 +519,9 @@ func hairpinRuleFrom(serviceIP string, endpointIP string, servicePort int) (stri
 }
 
 func deleteHairpinIptablesRules() error {
-	// TODO: Factor these variables out
-	hairpinChain := "KUBE-ROUTER-HAIRPIN"
-	hasHairpinChain := false
-
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
-	}
-
-	// TODO: Factor this static jump rule out
-	jumpArgs := []string{"-m", "ipvs", "-j", hairpinChain}
-	err = iptablesCmdHandler.Delete("nat", "POSTROUTING", jumpArgs...)
-	if err != nil {
-		glog.Errorf("Unable to delete hairpin jump rule from chain \"POSTROUTING\": %e", err)
-	} else {
-		glog.Info("Deleted hairpin jump rule from chain \"POSTROUTING\"")
 	}
 
 	// TODO: Factor out this code
@@ -543,22 +530,51 @@ func deleteHairpinIptablesRules() error {
 		return errors.New("Failed to list iptables chains: " + err.Error())
 	}
 
+	// TODO: Factor these variables out
+	hairpinChain := "KUBE-ROUTER-HAIRPIN"
+	hasHairpinChain := false
+
 	// TODO: Factor out this code
 	for _, chain := range chains {
 		if chain == hairpinChain {
 			hasHairpinChain = true
+			break
 		}
 	}
 
-	// Delete the chain for hairpin rules, if needed
-	if hasHairpinChain != true {
-		err = iptablesCmdHandler.DeleteChain("nat", hairpinChain)
+	// Nothing left to do if hairpin chain doesn't exist
+	if !hasHairpinChain {
+		return nil
+	}
+
+	// TODO: Factor this static jump rule out
+	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", hairpinChain}
+	hasHairpinJumpRule, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", jumpArgs...)
+	if err != nil {
+		return errors.New("Failed to search POSTROUTING iptable rules: " + err.Error())
+	}
+
+	// Delete the jump rule to the hairpin chain
+	if hasHairpinJumpRule {
+		err = iptablesCmdHandler.Delete("nat", "POSTROUTING", jumpArgs...)
 		if err != nil {
-			return errors.New("Failed to delete iptables chain \"" + hairpinChain +
-				"\": " + err.Error())
+			glog.Errorf("Unable to delete hairpin jump rule from chain \"POSTROUTING\": %e", err)
+		} else {
+			glog.Info("Deleted hairpin jump rule from chain \"POSTROUTING\"")
 		}
 	}
 
+	// Flush and delete the chain for hairpin rules
+	err = iptablesCmdHandler.ClearChain("nat", hairpinChain)
+	if err != nil {
+		return errors.New("Failed to flush iptables chain \"" + hairpinChain +
+			"\": " + err.Error())
+	}
+	err = iptablesCmdHandler.DeleteChain("nat", hairpinChain)
+	if err != nil {
+		return errors.New("Failed to delete iptables chain \"" + hairpinChain +
+			"\": " + err.Error())
+	}
 	return nil
 }
 
