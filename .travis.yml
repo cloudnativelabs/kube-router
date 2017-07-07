@@ -5,17 +5,18 @@ language: go
 go: 
   - 1.7.x
 
+env:
+  - REPO=cloudnativelabs/kube-router
 after_success:
     - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
-    - export REPO=cloudnativelabs/kube-router;
     - export TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo "master"; else echo $TRAVIS_BRANCH ; fi`
-    - docker build -f Dockerfile -t $REPO:$COMMIT .
-    - docker tag $REPO:$COMMIT $REPO:$TAG
+    - docker build -f Dockerfile -t "$REPO":"$TRAVIS_COMMIT" .
+    - docker tag "$REPO":"$TRAVIS_COMMIT" "$REPO":"$TAG"
     - if [ ! -z ${TRAVIS_TAG+x} ]; then
-          docker tag $REPO:$COMMIT $REPO:$TRAVIS_TAG;
-          docker tag $REPO:$COMMIT $REPO:latest;
+          docker tag "$REPO":"$TRAVIS_COMMIT" "$REPO":"$TRAVIS_TAG";
+          docker tag "$REPO":"$TRAVIS_COMMIT" "$REPO":"latest";
       fi
-    - docker push $REPO
+    - docker push "$REPO"
  
 script:
  - make all 
