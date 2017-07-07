@@ -49,7 +49,7 @@ However BGP can be leveraged to other use cases like advertising the cluster ip,
 
 ### Try Kube-router with cluster installers
 
-Best way to get started is to deploy Kubernetes with Kube-router is through cluster installer.
+The best way to get started is to deploy Kubernetes with Kube-router is with a cluster installer.
 
 #### kops
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/kops.md) to deploy Kubernetes cluster with Kube-router using [Kops](https://github.com/kubernetes/kops)
@@ -84,6 +84,7 @@ Also you can choose to run kube-router as agent running on each cluster node. Al
   --peer-router                     The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's
   --nodes-full-mesh                 When enabled each node in the cluster will setup BGP peer with rest of the nodes. True by default
   --hostname-override               If non-empty, this string will be used as identification of node name instead of the actual hostname.
+  --hairpin-mode                    Adds iptable rules for every ClusterIP Service Endpoint to support hairpin traffic. False by default
 ```
 
 ### requirements
@@ -138,6 +139,42 @@ and if you want to move back to kube-proxy then clean up config done by kube-rou
 ```
 and run kube-proxy with the configuration you have.
 - [General Setup](/README.md#getting-started)
+
+### Hairpin Mode
+
+Communication from a Pod that is behind a Service to its own ClusterIP:Port is
+not supported by default.  However, It can be enabled per-service by adding the
+`kube-router.io/hairpin-mode=` annotation, or for all Services in a cluster by
+passing the flag `--hairpin-mode=true` to kube-router.
+
+Additionally, the `hairpin_mode` sysctl option must be set to `1` for all veth
+interfaces on each node.  This can be done by adding the `"hairpinMode": true`
+option to your CNI configuration and rebooting all cluster nodes if they are
+already running kubernetes.
+
+Hairpin traffic will be seen by the pod it originated from as coming from the
+Service ClusterIP if it is logging the source IP.
+
+#### Hairpin Mode Example
+
+10-kuberouter.conf
+```json
+{
+    "name":"mynet",
+    "type":"bridge",
+    "bridge":"kube-bridge",
+    "isDefaultGateway":true,
+    "hairpinMode":true,
+    "ipam": {
+        "type":"host-local"
+     }
+}
+```
+
+To enable hairpin traffic for Service `my-service`:
+```
+kubectl annotate service my-service 'kube-router.io/hairpin-mode='
+```
 
 ## Develope Guide
 

@@ -49,6 +49,7 @@ type NetworkServicesController struct {
 	endpointsMap  endpointsInfoMap
 	podCidr       string
 	masqueradeAll bool
+	globalHairpin bool
 	client        *kubernetes.Clientset
 }
 
@@ -59,6 +60,7 @@ type serviceInfo struct {
 	protocol        string
 	nodePort        int
 	sessionAffinity bool
+	hairpin         bool
 }
 
 // map of all services, with unique service id(namespace name, service name, port) as key
@@ -125,6 +127,10 @@ func (nsc *NetworkServicesController) sync() {
 
 	nsc.serviceMap = buildServicesInfo()
 	nsc.endpointsMap = buildEndpointsInfo()
+	err := nsc.syncHairpinIptablesRules()
+	if err != nil {
+		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
+	}
 	nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 }
 
@@ -237,17 +243,23 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				Port:          uint16(endpoint.port),
 				Weight:        1,
 			}
+
 			err := ipvsAddServer(ipvs_cluster_vip_svc, &dst)
 			if err != nil {
 				glog.Errorf(err.Error())
 			}
-			activeServiceEndpointMap[clusterServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+
+			activeServiceEndpointMap[clusterServiceId] =
+				append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+
 			if svc.nodePort != 0 {
 				err := ipvsAddServer(ipvs_nodeport_svc, &dst)
-				activeServiceEndpointMap[nodeServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 				if err != nil {
 					glog.Errorf(err.Error())
 				}
+
+				activeServiceEndpointMap[nodeServiceId] =
+					append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 			}
 		}
 	}
@@ -317,7 +329,10 @@ func buildServicesInfo() serviceInfoMap {
 				protocol:  strings.ToLower(string(port.Protocol)),
 				nodePort:  int(port.NodePort),
 			}
+
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
+			_, svcInfo.hairpin = svc.ObjectMeta.Annotations["kube-router.io/hairpin-mode"]
+
 			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
 			serviceMap[svcId] = &svcInfo
 		}
@@ -367,6 +382,201 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 		}
 	}
 	glog.Infof("Successfully added iptables masqurade rule")
+	return nil
+}
+
+// syncHairpinIptablesRules adds/removes iptables rules pertaining to traffic
+// from an Endpoint (Pod) to its own service VIP. Rules are only applied if
+// enabled globally via CLI argument or a service has an annotation requesting
+// it.
+func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
+	//TODO: Use ipset?
+	//TODO: Log a warning that this will not work without hairpin sysctl set on veth
+
+	// Key is a string that will match iptables.List() rules
+	// Value is a string[] with arguments that iptables transaction functions expect
+	rulesNeeded := make(map[string][]string, 0)
+
+	// Generate the rules that we need
+	for svcName, svcInfo := range nsc.serviceMap {
+		if nsc.globalHairpin || svcInfo.hairpin {
+			for _, ep := range nsc.endpointsMap[svcName] {
+				// Handle ClusterIP Service
+				rule, ruleArgs := hairpinRuleFrom(svcInfo.clusterIP.String(), ep.ip, svcInfo.port)
+				rulesNeeded[rule] = ruleArgs
+
+				// Handle NodePort Service
+				if svcInfo.nodePort != 0 {
+					rule, ruleArgs := hairpinRuleFrom(nsc.nodeIP.String(), ep.ip, svcInfo.nodePort)
+					rulesNeeded[rule] = ruleArgs
+				}
+			}
+		}
+	}
+
+	// Cleanup (if needed) and return if there's no hairpin-mode Services
+	if len(rulesNeeded) == 0 {
+		glog.Infof("No hairpin-mode enabled services found -- no hairpin rules created")
+		err := deleteHairpinIptablesRules()
+		if err != nil {
+			return errors.New("Error deleting hairpin rules: " + err.Error())
+		}
+		return nil
+	}
+
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed to initialize iptables executor" + err.Error())
+	}
+
+	// TODO: Factor these variables out
+	hairpinChain := "KUBE-ROUTER-HAIRPIN"
+	hasHairpinChain := false
+
+	// TODO: Factor out this code
+	chains, err := iptablesCmdHandler.ListChains("nat")
+	if err != nil {
+		return errors.New("Failed to list iptables chains: " + err.Error())
+	}
+
+	// TODO: Factor out this code
+	for _, chain := range chains {
+		if chain == hairpinChain {
+			hasHairpinChain = true
+		}
+	}
+
+	// Create a chain for hairpin rules, if needed
+	if hasHairpinChain != true {
+		err = iptablesCmdHandler.NewChain("nat", hairpinChain)
+		if err != nil {
+			return errors.New("Failed to create iptables chain \"" + hairpinChain +
+				"\": " + err.Error())
+		}
+	}
+
+	// Create a rule that targets our hairpin chain, if needed
+	// TODO: Factor this static rule out
+	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", hairpinChain}
+	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", jumpArgs...)
+	if err != nil {
+		return errors.New("Failed to add hairpin iptables jump rule: %s" + err.Error())
+	}
+
+	// Apply the rules we need
+	for _, ruleArgs := range rulesNeeded {
+		err = iptablesCmdHandler.AppendUnique("nat", hairpinChain, ruleArgs...)
+		if err != nil {
+			return errors.New("Failed to apply hairpin iptables rule: " + err.Error())
+		}
+	}
+
+	rulesFromNode, err := iptablesCmdHandler.List("nat", hairpinChain)
+	if err != nil {
+		return errors.New("Failed to get rules from iptables chain \"" +
+			hairpinChain + "\": " + err.Error())
+	}
+
+	// Delete invalid/outdated rules
+	for _, ruleFromNode := range rulesFromNode {
+		_, ruleIsNeeded := rulesNeeded[ruleFromNode]
+		if !ruleIsNeeded {
+			args := strings.Fields(ruleFromNode)
+			if len(args) > 2 {
+				args = args[2:] // Strip "-A CHAIN_NAME"
+
+				err = iptablesCmdHandler.Delete("nat", hairpinChain, args...)
+				if err != nil {
+					glog.Errorf("Unable to delete hairpin rule \"%s\" from chain %s: %e", ruleFromNode, hairpinChain, err)
+				} else {
+					glog.Info("Deleted invalid/outdated hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
+				}
+			} else {
+				// Ignore the chain creation rule
+				if ruleFromNode == "-N "+hairpinChain {
+					continue
+				}
+				glog.Infof("Not removing invalid hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
+			}
+		}
+	}
+
+	return nil
+}
+
+func hairpinRuleFrom(serviceIP string, endpointIP string, servicePort int) (string, []string) {
+	// TODO: Factor hairpinChain out
+	hairpinChain := "KUBE-ROUTER-HAIRPIN"
+
+	ruleArgs := []string{"-s", endpointIP + "/32", "-d", endpointIP + "/32",
+		"-m", "ipvs", "--vaddr", serviceIP, "--vport", strconv.Itoa(servicePort),
+		"-j", "SNAT", "--to-source", serviceIP}
+
+	// Trying to ensure this matches iptables.List()
+	ruleString := "-A " + hairpinChain + " -s " + endpointIP + "/32" + " -d " +
+		endpointIP + "/32" + " -m ipvs" + " --vaddr " + serviceIP + " --vport " +
+		strconv.Itoa(servicePort) + " -j SNAT" + " --to-source " + serviceIP
+
+	return ruleString, ruleArgs
+}
+
+func deleteHairpinIptablesRules() error {
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed to initialize iptables executor" + err.Error())
+	}
+
+	// TODO: Factor out this code
+	chains, err := iptablesCmdHandler.ListChains("nat")
+	if err != nil {
+		return errors.New("Failed to list iptables chains: " + err.Error())
+	}
+
+	// TODO: Factor these variables out
+	hairpinChain := "KUBE-ROUTER-HAIRPIN"
+	hasHairpinChain := false
+
+	// TODO: Factor out this code
+	for _, chain := range chains {
+		if chain == hairpinChain {
+			hasHairpinChain = true
+			break
+		}
+	}
+
+	// Nothing left to do if hairpin chain doesn't exist
+	if !hasHairpinChain {
+		return nil
+	}
+
+	// TODO: Factor this static jump rule out
+	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", hairpinChain}
+	hasHairpinJumpRule, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", jumpArgs...)
+	if err != nil {
+		return errors.New("Failed to search POSTROUTING iptable rules: " + err.Error())
+	}
+
+	// Delete the jump rule to the hairpin chain
+	if hasHairpinJumpRule {
+		err = iptablesCmdHandler.Delete("nat", "POSTROUTING", jumpArgs...)
+		if err != nil {
+			glog.Errorf("Unable to delete hairpin jump rule from chain \"POSTROUTING\": %e", err)
+		} else {
+			glog.Info("Deleted hairpin jump rule from chain \"POSTROUTING\"")
+		}
+	}
+
+	// Flush and delete the chain for hairpin rules
+	err = iptablesCmdHandler.ClearChain("nat", hairpinChain)
+	if err != nil {
+		return errors.New("Failed to flush iptables chain \"" + hairpinChain +
+			"\": " + err.Error())
+	}
+	err = iptablesCmdHandler.DeleteChain("nat", hairpinChain)
+	if err != nil {
+		return errors.New("Failed to delete iptables chain \"" + hairpinChain +
+			"\": " + err.Error())
+	}
 	return nil
 }
 
@@ -479,7 +689,6 @@ func getKubeDummyInterface() (netlink.Link, error) {
 
 // clean up all the configurations (IPVS, iptables, links)
 func (nsc *NetworkServicesController) Cleanup() {
-
 	// cleanup ipvs rules by flush
 	glog.Infof("Cleaning up IPVS configuration permanently")
 	err := h.Flush()
@@ -492,6 +701,13 @@ func (nsc *NetworkServicesController) Cleanup() {
 	err = deleteMasqueradeIptablesRule()
 	if err != nil {
 		glog.Errorf("Failed to cleanup iptable masquerade rule due to: ", err.Error())
+		return
+	}
+
+	// cleanup iptable hairpin rules
+	err = deleteHairpinIptablesRules()
+	if err != nil {
+		glog.Errorf("Failed to cleanup iptable hairpin rules: ", err.Error())
 		return
 	}
 
