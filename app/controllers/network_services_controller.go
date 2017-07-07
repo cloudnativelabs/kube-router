@@ -502,17 +502,18 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	return nil
 }
 
-func hairpinRuleFrom(serviceIP string, endpointIP string) (string, []string) {
+func hairpinRuleFrom(serviceIP string, endpointIP string, servicePort int) (string, []string) {
 	// TODO: Factor hairpinChain out
 	hairpinChain := "KUBE-ROUTER-HAIRPIN"
 
 	ruleArgs := []string{"-s", endpointIP + "/32", "-d", endpointIP + "/32",
-		"-m", "ipvs", "--vaddr", serviceIP, "-j", "SNAT", "--to-source", serviceIP}
+		"-m", "ipvs", "--vaddr", serviceIP, "--vport", strconv.Itoa(servicePort),
+		"-j", "SNAT", "--to-source", serviceIP}
 
 	// Trying to ensure this matches iptables.List()
 	ruleString := "-A " + hairpinChain + " -s " + endpointIP + "/32" + " -d " +
-		endpointIP + "/32" + " -m ipvs" + " --vaddr " + serviceIP + " -j SNAT" +
-		" --to-source " + serviceIP
+		endpointIP + "/32" + " -m ipvs" + " --vaddr " + serviceIP + " --vport " +
+		strconv.Itoa(servicePort) + " -j SNAT" + " --to-source " + serviceIP
 
 	return ruleString, ruleArgs
 }
