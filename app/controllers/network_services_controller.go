@@ -391,6 +391,37 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	//TODO: Use ipset?
 	//TODO: Log a warning that this will not work without hairpin sysctl set on veth
 
+	// Key is a string that will match iptables.List() rules
+	// Value is a string[] with arguments that iptables transaction functions expect
+	rulesNeeded := make(map[string][]string, 0)
+
+	// Generate the rules that we need
+	for svcName, svcInfo := range nsc.serviceMap {
+		if nsc.globalHairpin || svcInfo.hairpin {
+			for _, ep := range nsc.endpointsMap[svcName] {
+				// Handle ClusterIP Service
+				rule, ruleArgs := hairpinRuleFrom(svcInfo.clusterIP.String(), ep.ip, svcInfo.port)
+				rulesNeeded[rule] = ruleArgs
+
+				// Handle NodePort Service
+				if svcInfo.nodePort != 0 {
+					rule, ruleArgs := hairpinRuleFrom(nsc.nodeIP.String(), ep.ip, svcInfo.nodePort)
+					rulesNeeded[rule] = ruleArgs
+				}
+			}
+		}
+	}
+
+	// Cleanup (if needed) and return if there's no hairpin-mode Services
+	if len(rulesNeeded) == 0 {
+		glog.Infof("No hairpin-mode enabled services found -- no hairpin rules created")
+		err := deleteHairpinIptablesRules()
+		if err != nil {
+			return errors.New("Error deleting hairpin rules: " + err.Error())
+		}
+		return nil
+	}
+
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
@@ -428,20 +459,6 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", jumpArgs...)
 	if err != nil {
 		return errors.New("Failed to add hairpin iptables jump rule: %s" + err.Error())
-	}
-
-	// Key is a string that will match iptables.List() rules
-	// Value is a string[] with arguments that iptables transaction functions expect
-	rulesNeeded := make(map[string][]string, 0)
-
-	// Generate the rules that we need
-	for svcName, svcInfo := range nsc.serviceMap {
-		if nsc.globalHairpin || svcInfo.hairpin {
-			for _, ep := range nsc.endpointsMap[svcName] {
-				rule, ruleArgs := hairpinRuleFrom(svcInfo.clusterIP.String(), ep.ip)
-				rulesNeeded[rule] = ruleArgs
-			}
-		}
 	}
 
 	// Apply the rules we need
