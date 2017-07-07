@@ -76,7 +76,7 @@ type endpointsInfo struct {
 type endpointsInfoMap map[string][]endpointsInfo
 
 // periodically sync ipvs configuration to reflect desired state of services and endpoints
-func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
@@ -87,13 +87,13 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	// enable masquerade rule
 	err := ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
 	if err != nil {
-		panic("Failed to do add masqurade rule in POSTROUTING chain of nat table due to: %s" + err.Error())
+		return errors.New("Failed to do add masqurade rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
 
 	// enable ipvs connection tracking
 	err = ensureIpvsConntrack()
 	if err != nil {
-		panic("Failed to do sysctl net.ipv4.vs.conntrack=1 due to: %s" + err.Error())
+		return errors.New("Failed to do sysctl net.ipv4.vs.conntrack=1 due to: %s" + err.Error())
 	}
 
 	// loop forever unitl notified to stop on stopCh
@@ -101,7 +101,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down network services controller")
-			return
+			return nil
 		default:
 		}
 
@@ -115,7 +115,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down network services controller")
-			return
+			return nil
 		case <-t.C:
 		}
 	}
@@ -178,17 +178,19 @@ func (nsc *NetworkServicesController) OnServiceUpdate(serviceUpdate *watchers.Se
 	}
 }
 
-// sync the ipvs service and server details configured to reflect the desired
-// state of services and endpoint as learned from services and endpoints
-// information from the api server
-func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap) {
+// sync the ipvs service and server details configured to reflect the desired state of services and endpoint
+// as learned from services and endpoints information from the api server
+func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap) error {
 
 	start := time.Now()
 	defer func() {
 		glog.Infof("sync ipvs servers took %v", time.Since(start))
 	}()
 
-	dummyVipInterface := getKubeDummyInterface()
+	dummyVipInterface, err := getKubeDummyInterface()
+	if err != nil {
+		return errors.New("Failed creating dummy interface: " + err.Error())
+	}
 
 	// map of active services and service endpoints
 	activeServiceEndpointMap := make(map[string][]string)
@@ -202,8 +204,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			protocol = syscall.IPPROTO_UDP
 		}
 
-		// assign cluster IP of the service to the dummy interface so that its
-		// routable from the pod's on the node
+		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
 		vip := &netlink.Addr{IPNet: &net.IPNet{svc.clusterIP, net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 		err := netlink.AddrAdd(dummyVipInterface, vip)
 		if err != nil && err.Error() != IFACE_HAS_ADDR {
@@ -267,7 +268,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	glog.Infof("Cleaning up if any, old ipvs service and servers which are no longer needed")
 	ipvsSvcs, err := h.ListServices()
 	if err != nil {
-		panic(err)
+		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
 	for _, ipvsSvc := range ipvsSvcs {
 		key := generateIpPortId(ipvsSvc.Address.String(), ipvsSvc.Protocol.String(), strconv.Itoa(int(ipvsSvc.Port)))
@@ -304,6 +305,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 	}
 	glog.Infof("IPVS servers and services are synced to desired state!!")
+	return nil
 }
 
 func buildServicesInfo() serviceInfoMap {
@@ -606,7 +608,7 @@ func deleteMasqueradeIptablesRule() error {
 func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*libipvs.Service, error) {
 	svcs, err := h.ListServices()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	for _, svc := range svcs {
 		if strings.Compare(vip.String(), svc.Address.String()) == 0 &&
@@ -667,22 +669,22 @@ func generateIpPortId(ip, protocol, port string) string {
 	return ip + "-" + protocol + "-" + port
 }
 
-func getKubeDummyInterface() netlink.Link {
+func getKubeDummyInterface() (netlink.Link, error) {
 	var dummyVipInterface netlink.Link
 	dummyVipInterface, err := netlink.LinkByName(KUBE_DUMMY_IF)
 	if err != nil && err.Error() == IFACE_NOT_FOUND {
 		glog.Infof("Could not find dummy interface: " + KUBE_DUMMY_IF + " to assign cluster ip's, so creating one")
 		err = netlink.LinkAdd(&netlink.Dummy{netlink.LinkAttrs{Name: KUBE_DUMMY_IF}})
 		if err != nil {
-			panic("Failed to add dummy interface:  " + err.Error())
+			return nil, errors.New("Failed to add dummy interface:  " + err.Error())
 		}
 		dummyVipInterface, err = netlink.LinkByName(KUBE_DUMMY_IF)
 		err = netlink.LinkSetUp(dummyVipInterface)
 		if err != nil {
-			panic("Failed to bring dummy interface up: " + err.Error())
+			return nil, errors.New("Failed to bring dummy interface up: " + err.Error())
 		}
 	}
-	return dummyVipInterface
+	return dummyVipInterface, nil
 }
 
 // clean up all the configurations (IPVS, iptables, links)
@@ -729,7 +731,7 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 
 	handle, err := libipvs.New()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	h = handle
 
@@ -755,13 +757,13 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
 
 	nsc.nodeHostName = node.Name
 	nodeIP, err := getNodeIP(node)
 	if err != nil {
-		panic(err.Error())
+		return nil, err
 	}
 	nsc.nodeIP = nodeIP
 

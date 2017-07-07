@@ -7,6 +7,7 @@ import (
 )
 
 type KubeRouterConfig struct {
+	HelpRequested      bool
 	Kubeconfig         string
 	Master             string
 	ConfigSyncPeriod   time.Duration
@@ -43,6 +44,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 }
 
 func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
+	fs.BoolVarP(&s.HelpRequested, "help", "h", false, "Print usage information.")
 	fs.BoolVar(&s.RunServiceProxy, "run-service-proxy", s.RunServiceProxy, "If false, kube-router wont setup IPVS for services proxy. True by default.")
 	fs.BoolVar(&s.RunFirewall, "run-firewall", s.RunFirewall, "If false, kube-router wont setup iptables to provide ingress firewall for pods. True by default.")
 	fs.BoolVar(&s.RunRouter, "run-router", s.RunRouter, "If true each node advertise routes the rest of the nodes and learn the routes for the pods. True by default.")
