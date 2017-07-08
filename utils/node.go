@@ -1,12 +1,12 @@
 package utils
 
 import (
-	"os"
 	"fmt"
+	"os"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func GetNodeObject(clientset *kubernetes.Clientset, hostnameOverride string) (*apiv1.Node, error) {

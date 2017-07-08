@@ -13,7 +13,7 @@ import (
 
 type NodeUpdate struct {
 	Node *api.Node
-	Op  Operation
+	Op   Operation
 }
 
 var (
@@ -21,10 +21,10 @@ var (
 )
 
 type nodeWatcher struct {
-	clientset     *kubernetes.Clientset
+	clientset      *kubernetes.Clientset
 	nodeController cache.Controller
 	nodeLister     cache.Indexer
-	broadcaster   *utils.Broadcaster
+	broadcaster    *utils.Broadcaster
 }
 
 type NodeUpdatesHandler interface {

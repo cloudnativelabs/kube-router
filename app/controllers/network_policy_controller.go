@@ -222,7 +222,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 		if destPodIpSet.Flush() != nil {
 			return nil, fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
 		}
-		for k, _ := range policy.destPods {
+		for k := range policy.destPods {
 			// TODO restrict ipset to ip's of pods running on the node
 			destPodIpSet.Add(k, 0)
 		}
