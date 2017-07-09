@@ -2,21 +2,46 @@ services:
   - docker
 
 language: go
-go: 
+go:
   - 1.7.x
 
 env:
-  - REPO=cloudnativelabs/kube-router
-after_success:
-    - docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
-    - export TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo "master"; else echo $TRAVIS_BRANCH ; fi`
-    - docker build -f Dockerfile -t "$REPO":"$TRAVIS_COMMIT" .
-    - docker tag "$REPO":"$TRAVIS_COMMIT" "$REPO":"$TAG"
-    - if [ ! -z ${TRAVIS_TAG+x} ]; then
-          docker tag "$REPO":"$TRAVIS_COMMIT" "$REPO":"$TRAVIS_TAG";
-          docker tag "$REPO":"$TRAVIS_COMMIT" "$REPO":"latest";
-      fi
-    - docker push "$REPO"
- 
+  global:
+    - IMG_FQDN=quay.io
+    - REPO=cloudnativelabs/kube-router
+    - REPO_PATH=$HOME/gopath/src/github.com/$REPO
+
 script:
- - make all 
+  - make all
+
+after_success:
+  # All successfully built commits get an image placed in the kube-router-git
+  # image repo and tagged with the commit hash.
+  - make push
+
+deploy:
+  # Images from Pull Requests get tagged with the PR number.
+  - provider: script
+    on:
+      condition: $TRAVIS_PULL_REQUEST != "false"
+    skip_cleanup: true
+    script:
+      - make push IMG_PREFIX=PR$TRAVIS_PULL_REQUEST-
+
+  # Images from tagged commits get released.
+  - provider: script
+    on:
+      tags: true
+      # condition: $TRAVIS_PULL_REQUEST == "false"
+    skip_cleanup: true
+    script:
+      - unset IMG_FQDN # Use DockerHub for releases
+      - make release
+
+# This fixes issues when a contributor uses their own Travis CI account to test
+# code/CI changes.
+before_install:
+  - mkdir -p $REPO_PATH
+  - rsync -az ${TRAVIS_BUILD_DIR}/ $REPO_PATH
+  - export TRAVIS_BUILD_DIR=$REPO_PATH
+  - cd $REPO_PATH

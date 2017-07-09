@@ -11,11 +11,13 @@ Please read [users guide](./Documentation/README.md#user-guide) and [developers 
 
 If you have a question about Kube-router or have a problem using it, please start with contacting us on [community forum](https://gitter.im/kube-router/Lobby) for quick help. If that doesn't answer your questions, or if you think you found a bug, please [file an issue](https://github.com/cloudnativelabs/kube-router/issues).
 
-## Submit PR
+## Contributing Changes
 
 ### Fork the code
 
-Navigate to: [https://github.com/cloudnativelabs/kube-router](https://github.com/cloudnativelabs/kube-router) fork the repository.
+Navigate to:
+[https://github.com/cloudnativelabs/kube-router](https://github.com/cloudnativelabs/kube-router)
+and fork the repository.
 
 Follow these steps to setup a local repository for working on Kube-router:
 
@@ -28,7 +30,7 @@ $ git fetch upstream
 $ git rebase upstream/master
 ```
 
-### Making changes and raising PR
+### Creating A Feature Branch
 
 Create a new branch to make changes on and that branch.
 
@@ -50,6 +52,8 @@ $ git rebase master
 ```
 
 Now your `feature_x` branch is up-to-date with all the code in `upstream/master`, so push to your fork
+
+### Performing A Pull Request
 
 ``` bash
 $ git push origin master

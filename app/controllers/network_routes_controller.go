@@ -287,7 +287,7 @@ func (nrc *NetworkRoutingController) syncPeers() {
 
 	// find the list of the node removed, from the last known list of active nodes
 	removedNodes := make([]string, 0)
-	for ip, _ := range activeNodes {
+	for ip := range activeNodes {
 		stillActive := false
 		for _, node := range currentNodes {
 			if ip == node {
