@@ -176,13 +176,6 @@ To enable hairpin traffic for Service `my-service`:
 kubectl annotate service my-service 'kube-router.io/hairpin-mode='
 ```
 
-## Develope Guide
-
-**Go version 1.7 or above is required to build kube-router**
-
-All the dependencies are vendored already, so just run  *make build* or *go build -o kube-router kube-router.go* to build
-
-Alternatively you can download the prebuilt binary from https://github.com/cloudnativelabs/kube-router/releases
 
 ## BGP configuration
 
