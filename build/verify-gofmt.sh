@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -22,4 +21,6 @@ if [[ -n "${bad_files}" ]]; then
   echo "or"
   echo "Run \"${GOFMT} -w\" on each file."
   exit 1
+else
+  echo 'Everything is gofmt approved!'
 fi
