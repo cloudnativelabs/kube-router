@@ -3,8 +3,8 @@ DEV_SUFFIX?=-git
 LOCAL_PACKAGES?=app app/controllers app/options app/watchers
 IMG_NAMESPACE?=cloudnativelabs
 GIT_COMMIT=$(shell git describe --tags --dirty)
-IMG_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)
-# GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
+GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
+IMG_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(GIT_BRANCH)-latest
 RELEASE_TAG?=$(shell build/get-git-tag.sh)
 REGISTRY?=$(if $(IMG_FQDN),$(IMG_FQDN)/$(IMG_NAMESPACE)/$(NAME),$(IMG_NAMESPACE)/$(NAME))
 REGISTRY_DEV?=$(REGISTRY)$(DEV_SUFFIX)
@@ -29,6 +29,9 @@ run: kube-router ## Runs "kube-router --help".
 container: kube-router ## Builds a Docker container image.
 	@echo Starting kube-router container image build.
 	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" .
+	@if [ "$(GIT_BRANCH)" = "master" ]; then \
+	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV):latest"; \
+	fi
 	@echo Finished kube-router container image build.
 
 docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSWORD} variables.
