@@ -19,6 +19,8 @@ We have Kube-proxy which provides service proxy and load balancer. We have sever
 
 - Kube-router builds on standard Linux technologies, so you can verify the configuration and troubleshoot with standard Linux networking tools (ipvsadm, ip route, iptables, ipset, traceroute, tcpdump etc).
 
+- Kube-router is a solution purpose built for Kubernetes. So it does not carry the burden of functionality to support other container orchestration and infrastrcutre orchestration platforms. Code base is extremely small for the functionality it provides and easy to hack up and customize.
+
 ## See it in action
 
 <a href="https://asciinema.org/a/118056" target="_blank"><img src="https://asciinema.org/a/118056.png" /></a>
