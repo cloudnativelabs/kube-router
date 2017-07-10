@@ -2,8 +2,9 @@ NAME?=kube-router
 DEV_SUFFIX?=-git
 LOCAL_PACKAGES?=app app/controllers app/options app/watchers
 IMG_NAMESPACE?=cloudnativelabs
-IMG_TAG?=$(shell git describe --tags --dirty)
-GIT_BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
+GIT_COMMIT=$(shell git describe --tags --dirty)
+IMG_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)
+# GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 RELEASE_TAG?=$(shell build/get-git-tag.sh)
 REGISTRY?=$(if $(IMG_FQDN),$(IMG_FQDN)/$(IMG_NAMESPACE)/$(NAME),$(IMG_NAMESPACE)/$(NAME))
 REGISTRY_DEV?=$(REGISTRY)$(DEV_SUFFIX)
@@ -16,7 +17,9 @@ UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 all: test kube-router container ## Default target. Runs tests, builds binaries and images.
 
 kube-router: $(shell find . -name \*.go) ## Builds kube-router.
+	@echo Starting kube-router binary build.
 	CGO_ENABLED=0 go build -o kube-router kube-router.go
+	@echo Finished kube-router binary build.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 
@@ -24,33 +27,47 @@ run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
 container: kube-router ## Builds a Docker container image.
-	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_PREFIX)$(IMG_TAG)" .
+	@echo Starting kube-router container image build.
+	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" .
+	@echo Finished kube-router container image build.
 
-docker-login:
-	@if [ -z "$(NO_DOCKER_LOGIN)" ]; then \
+docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSWORD} variables.
+	@echo Starting docker login target.
+	@if [ -n "$(DOCKER_USERNAME)" ] && [ -n "$(DOCKER_PASSWORD)" ]; then \
+	    echo Starting DockerHub registry login.; \
 	    $(DOCKER) login -u="$(value DOCKER_USERNAME)" -p="$(value DOCKER_PASSWORD)"; \
+	    echo Finished DockerHub registry login.; \
 	fi
 
-	@if [ -z "$(NO_QUAY_LOGIN)" ]; then \
+	@if [ -n "$(QUAY_USERNAME)" ] && [ -n "$(QUAY_PASSWORD)" ]; then \
+	    echo Starting quay.io registry login.; \
 	    $(DOCKER) login -u="$(value QUAY_USERNAME)" -p="$(value QUAY_PASSWORD)" quay.io; \
+	    echo Finished quay.io registry login.; \
 	fi
+	@echo Finished docker login target.
 
 push: container docker-login ## Pushes a Docker container image to a registry.
-	$(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV):$(GIT_BRANCH)-latest"
+	@echo Starting kube-router container image push.
 	$(DOCKER) push "$(REGISTRY_DEV)"
+	@echo Finished kube-router container image push.
 
 push-release: push
+	@echo Starting kube-router release container image push.
 	@test -n "$(RELEASE_TAG)"
 	$(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY):$(RELEASE_TAG)"
 	$(DOCKER) tag "$(REGISTRY):$(RELEASE_TAG)" "$(REGISTRY):latest"
 	$(DOCKER) push "$(REGISTRY)"
+	@echo Finished kube-router release container image push.
 
 github-release: kube-router
+	@echo Starting kube-router GitHub release creation.
 	@[ -n "$(value GITHUB_TOKEN)" ] && \
 	  GITHUB_TOKEN=$(value GITHUB_TOKEN); \
 	  curl -sL https://git.io/goreleaser | bash
+	@echo Finished kube-router GitHub release creation.
 
 release: push-release github-release ## Pushes a release to DockerHub and GitHub
+	@echo Finished kube-router release target.
 
 clean: ## Removes the kube-router binary and Docker images
 	rm -f kube-router
