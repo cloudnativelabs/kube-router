@@ -9,6 +9,7 @@ COPY build/image-assets/motd-kube-router.sh /etc/motd-kube-router.sh
 RUN apk add --no-cache \
       iptables \
       ipset \
+      iproute2 \
       ipvsadm \
       curl \
       bash && \
