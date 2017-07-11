@@ -18,7 +18,7 @@ Project is in alpha stage. We are working towards beta release [milestone](https
 
 With all features enabled, kube-router is a lean yet powerful alternative to
 several software components used in typical Kubernetes clusters. All this from a
-single DaemonSet manifest. It doesn't get any easier.
+single DaemonSet/Binary. It doesn't get any easier.
 
 ### Alternative to kube-proxy
 
@@ -49,6 +49,9 @@ Read more about the advantages and potential provided by BGP Kubernetes:
 Enabling Kubernetes Network Policies is easy with kube-router -- just add a flag
 to kube-router. It uses ipsets with iptables to ensure your firewall rules have
 as little performance impact on your cluster as possible.
+
+Read more about kube-router's approach to Kubernetes Network Policies:
+- https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/
 
 ## Additional Features
 
