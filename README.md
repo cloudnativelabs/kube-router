@@ -4,9 +4,11 @@ kube-router
 [![Build Status](https://travis-ci.org/cloudnativelabs/kube-router.svg?branch=master)](https://travis-ci.org/cloudnativelabs/kube-router)
 [![Gitter chat](http://badges.gitter.im/kube-router/Lobby.svg)](https://gitter.im/kube-router/Lobby)
 
-Kube-router is a distributed load balancer, firewall and router for Kubernetes
-clusters. It gives your cluster a unified control plane for features
-that would typically be provided by two or three separate software projects.
+Kube-router is a distributed load balancer, firewall and router for Kubernetes. Kube-router can be configured to provide on each cluster node:
+
+- a IPVS/LVS based service proxy on each node for *ClusterIP* and *NodePort* service types, providing service discovery and load balancing
+- an ingress firewall for the pods running on the node as per the defined Kubernetes network policies using iptables and ipset
+- a BGP router to advertise and learn the routes to the pod IP's for cross-node pod-to-pod connectivity
 
 ## Project status
 
@@ -25,10 +27,10 @@ activley incorporating users feedback.
 *kube-router does it all.*
 
 With all features enabled, kube-router is a lean yet powerful alternative to
-several software components used in typical Kubernetes clusters. All this from a
+several network components used in typical Kubernetes clusters. All this from a
 single DaemonSet/Binary. It doesn't get any easier.
 
-### Alternative to kube-proxy | `--run-service-proxy`
+### IPVS/LVS based service proxy | `--run-service-proxy`
 
 kube-router uses the Linux kernel's IPVS features to implement its K8s Services
 Proxy. This feature has been requested for some time in kube-proxy, but you can
