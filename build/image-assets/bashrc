@@ -1,0 +1,51 @@
+# print motd
+/etc/motd-kube-router.sh
+
+# append to the history file, don't overwrite it
+shopt -s histappend
+
+# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
+HISTSIZE=1000
+HISTFILESIZE=2000
+
+# check the window size after each command and, if necessary,
+# update the values of LINES and COLUMNS.
+shopt -s checkwinsize
+
+# colour Definitions for .bashrc
+COL_YEL="\[\e[1;33m\]"
+COL_GRA="\[\e[0;37m\]"
+COL_WHI="\[\e[1;37m\]"
+COL_GRE="\[\e[1;32m\]"
+COL_RED="\[\e[1;31m\]"
+COL_BLU="\[\e[1;34m\]"
+
+# Bash Prompt
+if test "$UID" -eq 0 ; then
+	_COL_USER=$COL_RED
+	_p=" #"
+else
+	_COL_USER=$COL_GRE
+	_p=">"
+fi
+
+# Bash Prompt
+if test "$UID" -eq 0 ; then
+	_COL_USER=$COL_RED
+	_p=" #"
+else
+	_COL_USER=$COL_GRE
+	_p=">"
+fi
+
+COLORIZED_PROMPT="${_COL_USER}\u${COL_WHI}@${COL_YEL}\h${COL_WHI}:${COL_BLU}\w${_p}\[\e[m\]"
+
+case $TERM in
+	*term | rxvt | screen | linux )
+		PS1="${COLORIZED_PROMPT}" ;;
+	* )
+		PS1="\u@\h:\w${_p} " ;;
+esac
+
+source /usr/local/share/bash-completion/bash-completion
+source /var/lib/gobgp/gobgp-completion.bash
