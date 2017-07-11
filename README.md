@@ -44,7 +44,7 @@ need -- and chances are you already have it in your CNI binary directory!
 Read more about the advantages and potential provided by BGP Kubernetes:
 - https://cloudnativelabs.github.io/post/2017-05-22-kube-pod-networking/
 
-### (Insert Network Policy Controller Here)
+### Network Policy Controller
 
 Enabling Kubernetes Network Policies is easy with kube-router -- just add a flag
 to kube-router. It uses ipsets with iptables to ensure your firewall rules have
@@ -89,7 +89,7 @@ Use below guides to get started.
 
 - [Architecture](./Documentation/README.md#architecture)
 - [Users Guide](./Documentation/README.md#user-guide)
-- [Developers Guide](./Documentation/README.md#develope-guide)
+- [Developers Guide](./Documentation/developing.md)
 
 ## Contributing
 
