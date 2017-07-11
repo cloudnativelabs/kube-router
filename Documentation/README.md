@@ -12,7 +12,7 @@ Kube-router consists of 3 core controllers and multiple watchers as depicted in 
 
 Network services controller is responsible for reading the services and endpoints information from Kubernetes API server and configure IPVS on each cluster node accordingly.
 
-Please read blog for design details and pros and cons compared to iptables based Kube-proxy
+Please our read blog for design details and pros and cons compared to iptables based Kube-proxy
 https://cloudnativelabs.github.io/post/2017-05-10-kube-network-service-proxy/
 
 Demo of Kube-router's IPVS based Kubernetes network service proxy
