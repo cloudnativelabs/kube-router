@@ -118,7 +118,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		if nrc.advertiseClusterIp {
 			glog.Infof("Advertising cluster ips")
 			for _, svc := range watchers.ServiceWatcher.List() {
-				if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
+				if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
 
 					// skip headless services
 					if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
