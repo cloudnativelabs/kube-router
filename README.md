@@ -20,6 +20,10 @@ activley incorporating users feedback.
 - [Developer Guide](./Documentation/developing.md)
 - [Architecture](./Documentation/README.md#architecture)
 
+## See it in action
+
+<a href="https://asciinema.org/a/118056" target="_blank"><img src="https://asciinema.org/a/118056.png" /></a>
+
 ## Primary Features
 
 *kube-router does it all.*
@@ -28,10 +32,10 @@ With all features enabled, kube-router is a lean yet powerful alternative to
 several software components used in typical Kubernetes clusters. All this from a
 single DaemonSet/Binary. It doesn't get any easier.
 
-### Alternative to kube-proxy | `--run-service-proxy`
+### Service Load Balancer And Proxy| `--run-service-proxy`
 
 kube-router uses the Linux kernel's IPVS features to implement its K8s Services
-Proxy. This feature has been requested for some time in kube-proxy, but you can
+Proxy. This feature has been requested for some time in Kubernetes, and you can
 have it right now with kube-router.
 
 Read more about the advantages of IPVS for container load balancing:
@@ -102,10 +106,6 @@ If you experience any problems please reach us on our gitter
 [community forum](https://gitter.im/kube-router/Lobby)
 for quick help. Feel free to leave feedback or raise questions at any time by
 opening an issue [here](https://github.com/cloudnativelabs/kube-router/issues).
-
-## See it in action
-
-<a href="https://asciinema.org/a/118056" target="_blank"><img src="https://asciinema.org/a/118056.png" /></a>
 
 
 ## Theory of Operation
