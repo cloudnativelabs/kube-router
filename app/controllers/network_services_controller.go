@@ -34,7 +34,7 @@ var (
 )
 
 // Network services controller enables local node as network service proxy through IPVS/LVS.
-// Support only Kuberntes network services of type NodePort, ClusterIP. For each service a
+// Support only Kubernetes network services of type NodePort, ClusterIP, and LoadBalancer. For each service a
 // IPVS service is created and for each service endpoint a server is added to the IPVS service.
 // As services and endpoints are updated, network service controller gets the updates from
 // the kubernetes api server and syncs the ipvs configuration to reflect state of services
@@ -317,7 +317,7 @@ func buildServicesInfo() serviceInfoMap {
 			continue
 		}
 
-		if svc.Spec.Type == "LoadBalancer" || svc.Spec.Type == "ExternalName" {
+		if svc.Spec.Type == "ExternalName" {
 			glog.Infof("Skipping service name:%s namespace:%s due to service Type=%s", svc.Name, svc.Namespace, svc.Spec.Type)
 			continue
 		}
