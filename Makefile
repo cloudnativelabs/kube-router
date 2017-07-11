@@ -26,7 +26,7 @@ test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
-container: kube-router ## Builds a Docker container image.
+container: kube-router gobgp ## Builds a Docker container image.
 	@echo Starting kube-router container image build.
 	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
@@ -118,6 +118,13 @@ else
 	@echo 'Success! Please use $(UPSTREAM_IMPORT_PATH)'
 	@echo
 endif
+
+gobgp:
+	$(DOCKER) run -v $(PWD):/pwd golang:alpine \
+	    sh -c ' \
+	    apk add -U git && \
+	    CGO_ENABLED=0 go get github.com/osrg/gobgp/gobgp && \
+	    cp /go/bin/gobgp /pwd'
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
