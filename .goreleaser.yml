@@ -1,3 +1,5 @@
+release:
+  draft: true
 builds:
 - goos:
   - linux
