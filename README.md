@@ -6,7 +6,7 @@ kube-router
 
 Kube-router is a distributed load balancer, firewall and router for Kubernetes. Kube-router can be configured to provide on each cluster node:
 
-- a IPVS/LVS based service proxy on each node for *ClusterIP* and *NodePort* service types, providing service discovery and load balancing
+- a IPVS/LVS based service proxy on each node for *ClusterIP*, *NodePort* and *LoadBalancer* service types, providing service discovery and load balancing
 - an ingress firewall for the pods running on the node as per the defined Kubernetes network policies using iptables and ipset
 - a BGP router to advertise and learn the routes to the pod IP's for cross-node pod-to-pod connectivity
 
