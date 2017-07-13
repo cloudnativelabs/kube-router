@@ -24,10 +24,10 @@ import (
 	"sort"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -258,7 +258,7 @@ func UpdatePathAttrs(global *config.Global, peer *config.Neighbor, info *PeerInf
 	} else {
 		log.WithFields(log.Fields{
 			"Topic": "Peer",
-			"Key":   peer.Config.NeighborAddress,
+			"Key":   peer.State.NeighborAddress,
 		}).Warnf("invalid peer type: %d", peer.State.PeerType)
 	}
 	return path
@@ -971,6 +971,7 @@ func (path *Path) MarshalJSON() ([]byte, error) {
 		Stale      bool                         `json:"stale,omitempty"`
 		Filtered   bool                         `json:"filtered,omitempty"`
 		UUID       string                       `json:"uuid,omitempty"`
+		ID         uint32                       `json:"id,omitempty"`
 	}{
 		Nlri:       path.GetNlri(),
 		PathAttrs:  path.GetPathAttrs(),
@@ -982,6 +983,7 @@ func (path *Path) MarshalJSON() ([]byte, error) {
 		Stale:      path.IsStale(),
 		Filtered:   path.Filtered("") > POLICY_DIRECTION_NONE,
 		UUID:       path.UUID().String(),
+		ID:         path.GetNlri().PathIdentifier(),
 	})
 }
 

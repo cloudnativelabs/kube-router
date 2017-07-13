@@ -69,11 +69,18 @@ func (c AfiSafis) ToRfList() ([]bgp.RouteFamily, error) {
 	return rfs, nil
 }
 
-func CreateRfMap(p *Neighbor) map[bgp.RouteFamily]bool {
+func CreateRfMap(p *Neighbor) map[bgp.RouteFamily]bgp.BGPAddPathMode {
 	rfs, _ := AfiSafis(p.AfiSafis).ToRfList()
-	rfMap := make(map[bgp.RouteFamily]bool)
+	mode := bgp.BGP_ADD_PATH_NONE
+	if p.AddPaths.Config.Receive {
+		mode |= bgp.BGP_ADD_PATH_RECEIVE
+	}
+	if p.AddPaths.Config.SendMax > 0 {
+		mode |= bgp.BGP_ADD_PATH_SEND
+	}
+	rfMap := make(map[bgp.RouteFamily]bgp.BGPAddPathMode)
 	for _, rf := range rfs {
-		rfMap[rf] = true
+		rfMap[rf] = mode
 	}
 	return rfMap
 }
@@ -139,4 +146,15 @@ func ParseMaskLength(prefix, mask string) (int, int, error) {
 		}
 	}
 	return min, max, nil
+}
+
+func ExtractNeighborAddress(c *Neighbor) (string, error) {
+	addr := c.State.NeighborAddress
+	if addr == "" {
+		addr = c.Config.NeighborAddress
+		if addr == "" {
+			return "", fmt.Errorf("NeighborAddress is not configured")
+		}
+	}
+	return addr, nil
 }

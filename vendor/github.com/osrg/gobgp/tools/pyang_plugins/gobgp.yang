@@ -180,6 +180,18 @@ module gobgp {
         error condition has occurred exchanged.";
     }
 
+    leaf WITHDRAW-UPDATE {
+      type uint32;
+      description
+        "Number of updates subjected to treat-as-withdraw treatment.";
+    }
+
+    leaf WITHDRAW-PREFIX {
+      type uint32;
+      description
+        "Number of prefixes subjected to treat-as-withdraw treatment.";
+    }
+
     leaf DISCARDED {
       type uint64;
       description
@@ -194,7 +206,6 @@ module gobgp {
         error condition has occurred exchanged.";
     }
   }
-
 
   grouping gobgp-adjacent-table {
     container adj-table {
@@ -548,19 +559,29 @@ module gobgp {
         "Reference to the address of the BMP server used as
          a key in the BMP server list";
     }
+
     leaf port {
       type uint32;
       description
         "Reference to the port of the BMP server";
     }
+
     leaf route-monitoring-policy {
       type bmp-route-monitoring-policy-type;
       default PRE-POLICY;
     }
+
     leaf statistics-timeout {
       type uint16;
       description
         "Interval seconds of statistics messages sent to BMP server";
+    }
+
+    leaf route-mirroring-enabled {
+      type boolean;
+      description
+        "Enable feature for mirroring of received BGP messages
+         mainly for debugging purpose";
     }
   }
 
@@ -630,6 +651,47 @@ module gobgp {
 	      }
 	  }
       }
+  }
+
+  grouping gobgp-ttl-security-config {
+    description
+      "Configuration parameters for TTL Security";
+
+    leaf enabled {
+      type boolean;
+      default "false";
+      description
+        "Enable features for TTL Security";
+    }
+
+    leaf ttl-min {
+      type uint8;
+      description
+        "Reference to the port of the BMP server";
+    }
+  }
+
+  grouping gobgp-ttl-security-config-set {
+    description
+      "set of configurations for Generalized TTL Security Mechanism (GTSM)";
+
+    container ttl-security {
+      description
+        "Configure TTL Security feature";
+
+      container config {
+        description
+          "Configuration parameters for TTL Security";
+        uses gobgp-ttl-security-config;
+      }
+
+      container state {
+        config false;
+        description
+          "State information for TTL Security";
+        uses gobgp-ttl-security-config;
+      }
+    }
   }
 
   // augment statements
@@ -745,6 +807,11 @@ module gobgp {
     leaf remote-port {
       type inet:port-number;
     }
+
+    leaf ttl {
+      description "TTL value for BGP packets";
+      type uint8;
+    }
   }
 
   augment "/bgp:bgp/bgp:neighbors/bgp:neighbor/bgp:timers/bgp:config" {
@@ -803,6 +870,16 @@ module gobgp {
     description "route server configuration for neighbor";
     uses gobgp-route-server-config-set;
   }
+
+  augment "/bgp:bgp/bgp:peer-groups/bgp:peer-group" {
+    description "TTL Security configuration for peer-group";
+    uses gobgp-ttl-security-config-set;
+  }
+
+  augment "/bgp:bgp/bgp:neighbors/bgp:neighbor" {
+    description "TTL Security configuration for neighbor";
+    uses gobgp-ttl-security-config-set;
+   }
 
   augment "/bgp:bgp/bgp:global/bgp:apply-policy/bgp:config" {
     description "addtional policy";
@@ -1103,6 +1180,45 @@ module gobgp {
 
   augment "/bgp:bgp/bgp:global/bgp:state" {
       uses listen-config;
+  }
+
+  grouping dynamic-neighbors {
+    container dynamic-neighbors {
+      list dynamic-neighbor {
+        key "prefix";
+
+        leaf prefix {
+          type leafref {
+            path "../config/prefix";
+          }
+        }
+
+        container config {
+          uses bgp-global-dynamic-neighbor-config;
+        }
+
+        container state {
+          config false;
+          uses bgp-global-dynamic-neighbor-config;
+        }
+      }
+    }
+  }
+
+  grouping bgp-global-dynamic-neighbor-config {
+    description "A dynamic neighbor belongs to a peer group.
+     This configuration structure was taken from the latest openconfig.";
+
+    leaf prefix {
+      type string;
+    }
+    leaf peer-group {
+      type string;
+    }
+  }
+
+  augment "/bgp:bgp" {
+    uses dynamic-neighbors;
   }
 
   augment "/bgp:bgp/bgp:global/bgp:afi-safis/bgp:afi-safi" {

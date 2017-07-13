@@ -52,6 +52,8 @@
         # override global.config.as value
         local-as = 1000
         remove-private-as = "all"
+        # To enable peer group setting, uncomment the following
+        #peer-group = "my-peer-group"
     [neighbors.as-path-options.config]
         allow-own-as = 1
         replace-peer-as = true
@@ -63,12 +65,15 @@
         passive-mode = true
         local-address = "192.168.10.1"
         remote-port = 2016
+        ttl = 64  # default value on Linux
     [neighbors.ebgp-multihop.config]
         enabled = true
         multihop-ttl = 100
     [neighbors.route-reflector.config]
         route-reflector-client = true
         route-reflector-cluster-id = "192.168.0.1"
+    [neighbors.add-paths.config]
+        receive = true
     [neighbors.graceful-restart.config]
         enabled = true
         notification-enabled = true
@@ -120,6 +125,8 @@
     [[neighbors.afi-safis]]
         [neighbors.afi-safis.config]
         afi-safi-name = "ipv6-flowspec"
+    [[neighbors.afi-safis]]
+        afi-safi-name = "opaque"
     [neighbors.apply-policy.config]
         import-policy-list = ["policy1"]
         default-import-policy = "reject-route"
@@ -129,6 +136,25 @@
         default-in-policy = "reject-route"
     [neighbors.route-server.config]
         route-server-client = true
+    # To enable TTL Security, uncomment the following.
+    # Please note that this feature is mututally exclusive with
+    # "neighbors.ebgp-multihop.config".
+    #[neighbors.ttl-security.config]
+    #    enabled = true
+    #    ttl-min = 255  # 255 means directly connected
+
+[[peer-groups]]
+  [peer-groups.config]
+    peer-group-name = "my-peer-group"
+    peer-as = 65000
+  [[peer-groups.afi-safis]]
+    [peer-groups.afi-safis.config]
+      afi-safi-name = "ipv4-unicast"
+
+[[dynamic-neighbors]]
+  [dynamic-neighbors.config]
+    prefix = "20.0.0.0/24"
+    peer-group = "my-peer-group"
 
 [[defined-sets.prefix-sets]]
     prefix-set-name = "ps0"
