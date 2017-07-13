@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"flag"
+
 	"github.com/cloudnativelabs/kube-router/app"
 	"github.com/cloudnativelabs/kube-router/app/options"
 	"github.com/spf13/pflag"
@@ -14,6 +16,10 @@ func main() {
 	config := options.NewKubeRouterConfig()
 	config.AddFlags(pflag.CommandLine)
 	pflag.Parse()
+
+	// Workaround for this issue:
+	// https://github.com/kubernetes/kubernetes/issues/17162
+	flag.CommandLine.Parse([]string{})
 
 	pflag.Set("logtostderr", "true")
 
