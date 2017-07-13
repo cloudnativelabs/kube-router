@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
@@ -16,7 +15,7 @@ func main() {
 	config.AddFlags(pflag.CommandLine)
 	pflag.Parse()
 
-	flag.Set("logtostderr", "true")
+	pflag.Set("logtostderr", "true")
 
 	if config.HelpRequested {
 		pflag.Usage()
