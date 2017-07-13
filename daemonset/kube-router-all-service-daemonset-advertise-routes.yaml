@@ -11,11 +11,10 @@ spec:
       labels:
         k8s-app: kube-router
     spec:
-      hostNetwork: true
       containers:
       - name: kube-router
         image: cloudnativelabs/kube-router
-        args: 
+        args:
           - "--run-router=true"
           - "--run-firewall=true"
           - "--run-service-proxy=true"
@@ -39,6 +38,13 @@ spec:
             name: cni-conf-dir
           - mountPath: /var/lib/kube-router/kubeconfig
             name: kubeconfig
+      hostNetwork: true
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
       volumes:
         - name: lib-modules
           hostPath:
