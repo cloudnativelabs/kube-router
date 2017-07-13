@@ -21,7 +21,7 @@ func main() {
 	// https://github.com/kubernetes/kubernetes/issues/17162
 	flag.CommandLine.Parse([]string{})
 
-	pflag.Set("logtostderr", "true")
+	flag.Set("logtostderr", "true")
 
 	if config.HelpRequested {
 		pflag.Usage()
