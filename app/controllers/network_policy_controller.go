@@ -689,9 +689,6 @@ func getNodeIP(node *apiv1.Node) (net.IP, error) {
 	if addresses, ok := addressMap[apiv1.NodeExternalIP]; ok {
 		return net.ParseIP(addresses[0].Address), nil
 	}
-	if addresses, ok := addressMap[apiv1.NodeLegacyHostIP]; ok {
-		return net.ParseIP(addresses[0].Address), nil
-	}
 	return nil, errors.New("host IP unknown")
 }
 
