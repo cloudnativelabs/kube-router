@@ -3,7 +3,9 @@ package influxql
 import (
 	"errors"
 	"fmt"
+	"os"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,10 +38,15 @@ var (
 
 // Statistics for the QueryExecutor
 const (
-	statQueriesActive          = "queriesActive"   // Number of queries currently being executed
+	statQueriesActive          = "queriesActive"   // Number of queries currently being executed.
 	statQueriesExecuted        = "queriesExecuted" // Number of queries that have been executed (started).
 	statQueriesFinished        = "queriesFinished" // Number of queries that have finished.
-	statQueryExecutionDuration = "queryDurationNs" // Total (wall) time spent executing queries
+	statQueryExecutionDuration = "queryDurationNs" // Total (wall) time spent executing queries.
+	statRecoveredPanics        = "recoveredPanics" // Number of panics recovered by Query Executor.
+
+	// PanicCrashEnv is the environment variable that, when set, will prevent
+	// the handler from recovering any panics.
+	PanicCrashEnv = "INFLUXDB_PANIC_CRASH"
 )
 
 // ErrDatabaseNotFound returns a database not found error for the given database name.
@@ -60,6 +67,15 @@ func ErrMaxConcurrentQueriesLimitExceeded(n, limit int) error {
 type Authorizer interface {
 	// AuthorizeDatabase indicates whether the given Privilege is authorized on the database with the given name.
 	AuthorizeDatabase(p Privilege, name string) bool
+
+	// AuthorizeQuery returns an error if the query cannot be executed
+	AuthorizeQuery(database string, query *Query) error
+
+	// AuthorizeSeriesRead determines if a series is authorized for reading
+	AuthorizeSeriesRead(database string, measurement []byte, tags models.Tags) bool
+
+	// AuthorizeSeriesWrite determines if a series is authorized for writing
+	AuthorizeSeriesWrite(database string, measurement []byte, tags models.Tags) bool
 }
 
 // OpenAuthorizer is the Authorizer used when authorization is disabled.
@@ -69,7 +85,17 @@ type OpenAuthorizer struct{}
 var _ Authorizer = OpenAuthorizer{}
 
 // AuthorizeDatabase returns true to allow any operation on a database.
-func (OpenAuthorizer) AuthorizeDatabase(Privilege, string) bool { return true }
+func (_ OpenAuthorizer) AuthorizeDatabase(Privilege, string) bool { return true }
+
+func (_ OpenAuthorizer) AuthorizeSeriesRead(database string, measurement []byte, tags models.Tags) bool {
+	return true
+}
+
+func (_ OpenAuthorizer) AuthorizeSeriesWrite(database string, measurement []byte, tags models.Tags) bool {
+	return true
+}
+
+func (_ OpenAuthorizer) AuthorizeQuery(_ string, _ *Query) error { return nil }
 
 // ExecutionOptions contains the options for executing a query.
 type ExecutionOptions struct {
@@ -189,6 +215,7 @@ type QueryStatistics struct {
 	ExecutedQueries        int64
 	FinishedQueries        int64
 	QueryExecutionDuration int64
+	RecoveredPanics        int64
 }
 
 // Statistics returns statistics for periodic monitoring.
@@ -201,6 +228,7 @@ func (e *QueryExecutor) Statistics(tags map[string]string) []models.Statistic {
 			statQueriesExecuted:        atomic.LoadInt64(&e.stats.ExecutedQueries),
 			statQueriesFinished:        atomic.LoadInt64(&e.stats.FinishedQueries),
 			statQueryExecutionDuration: atomic.LoadInt64(&e.stats.QueryExecutionDuration),
+			statRecoveredPanics:        atomic.LoadInt64(&e.stats.RecoveredPanics),
 		},
 	}}
 }
@@ -373,12 +401,31 @@ LOOP:
 	}
 }
 
+// Determines if the QueryExecutor will recover any panics or let them crash
+// the server.
+var willCrash bool
+
+func init() {
+	var err error
+	if willCrash, err = strconv.ParseBool(os.Getenv(PanicCrashEnv)); err != nil {
+		willCrash = false
+	}
+}
+
 func (e *QueryExecutor) recover(query *Query, results chan *Result) {
 	if err := recover(); err != nil {
+		atomic.AddInt64(&e.stats.RecoveredPanics, 1) // Capture the panic in _internal stats.
 		e.Logger.Error(fmt.Sprintf("%s [panic:%s] %s", query.String(), err, debug.Stack()))
 		results <- &Result{
 			StatementID: -1,
 			Err:         fmt.Errorf("%s [panic:%s]", query.String(), err),
+		}
+
+		if willCrash {
+			e.Logger.Error(fmt.Sprintf("\n\n=====\nAll goroutines now follow:"))
+			buf := debug.Stack()
+			e.Logger.Error(fmt.Sprintf("%s", buf))
+			os.Exit(1)
 		}
 	}
 }

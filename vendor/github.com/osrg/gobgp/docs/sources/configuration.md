@@ -30,6 +30,8 @@
     [bmp-servers.config]
         address = "127.0.0.1"
         port = 11019
+        route-monitoring-policy = "pre-policy"
+        statistics-timeout = 3600
 
 [[mrt-dump]]
     dump-type = "updates"
@@ -49,6 +51,12 @@
         neighbor-address = "192.168.10.2"
         # override global.config.as value
         local-as = 1000
+        remove-private-as = "all"
+        # To enable peer group setting, uncomment the following
+        #peer-group = "my-peer-group"
+    [neighbors.as-path-options.config]
+        allow-own-as = 1
+        replace-peer-as = true
     [neighbors.timers.config]
         connect-retry = 5
         hold-time = 9
@@ -57,6 +65,7 @@
         passive-mode = true
         local-address = "192.168.10.1"
         remote-port = 2016
+        ttl = 64  # default value on Linux
     [neighbors.ebgp-multihop.config]
         enabled = true
         multihop-ttl = 100
@@ -123,6 +132,25 @@
         default-in-policy = "reject-route"
     [neighbors.route-server.config]
         route-server-client = true
+    # To enable TTL Security, uncomment the following.
+    # Please note that this feature is mututally exclusive with
+    # "neighbors.ebgp-multihop.config".
+    #[neighbors.ttl-security.config]
+    #    enabled = true
+    #    ttl-min = 255  # 255 means directly connected
+
+[[peer-groups]]
+  [peer-groups.config]
+    peer-group-name = "my-peer-group"
+    peer-as = 65000
+  [[peer-groups.afi-safis]]
+    [peer-groups.afi-safis.config]
+      afi-safi-name = "ipv4-unicast"
+
+[[dynamic-neighbors]]
+  [dynamic-neighbors.config]
+    prefix = "20.0.0.0/24"
+    peer-group = "my-peer-group"
 
 [[defined-sets.prefix-sets]]
     prefix-set-name = "ps0"

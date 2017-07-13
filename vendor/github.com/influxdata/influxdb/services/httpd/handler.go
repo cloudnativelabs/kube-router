@@ -10,12 +10,10 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,6 +36,10 @@ const (
 	//
 	// This has no relation to the number of bytes that are returned.
 	DefaultChunkSize = 10000
+
+	DefaultDebugRequestsInterval = 10 * time.Second
+
+	MaxDebugRequestsInterval = 6 * time.Hour
 )
 
 // AuthenticationMethod defines the type of authentication used.
@@ -66,18 +68,20 @@ type Route struct {
 
 // Handler represents an HTTP handler for the InfluxDB server.
 type Handler struct {
-	mux     *pat.PatternServeMux
-	Version string
+	mux       *pat.PatternServeMux
+	Version   string
+	BuildType string
 
 	MetaClient interface {
 		Database(name string) *meta.DatabaseInfo
-		Authenticate(username, password string) (ui *meta.UserInfo, err error)
-		User(username string) (*meta.UserInfo, error)
+		Databases() []meta.DatabaseInfo
+		Authenticate(username, password string) (ui meta.User, err error)
+		User(username string) (meta.User, error)
 		AdminUserExists() bool
 	}
 
 	QueryAuthorizer interface {
-		AuthorizeQuery(u *meta.UserInfo, query *influxql.Query, database string) error
+		AuthorizeQuery(u meta.User, query *influxql.Query, database string) error
 	}
 
 	WriteAuthorizer interface {
@@ -92,23 +96,26 @@ type Handler struct {
 	}
 
 	PointsWriter interface {
-		WritePoints(database, retentionPolicy string, consistencyLevel models.ConsistencyLevel, points []models.Point) error
+		WritePoints(database, retentionPolicy string, consistencyLevel models.ConsistencyLevel, user meta.User, points []models.Point) error
 	}
 
 	Config    *Config
 	Logger    zap.Logger
 	CLFLogger *log.Logger
 	stats     *Statistics
+
+	requestTracker *RequestTracker
 }
 
 // NewHandler returns a new instance of handler with routes.
 func NewHandler(c Config) *Handler {
 	h := &Handler{
-		mux:       pat.New(),
-		Config:    &c,
-		Logger:    zap.New(zap.NullEncoder()),
-		CLFLogger: log.New(os.Stderr, "[httpd] ", 0),
-		stats:     &Statistics{},
+		mux:            pat.New(),
+		Config:         &c,
+		Logger:         zap.New(zap.NullEncoder()),
+		CLFLogger:      log.New(os.Stderr, "[httpd] ", 0),
+		stats:          &Statistics{},
+		requestTracker: NewRequestTracker(),
 	}
 
 	h.AddRoutes([]Route{
@@ -174,6 +181,7 @@ type Statistics struct {
 	ActiveWriteRequests          int64
 	ClientErrors                 int64
 	ServerErrors                 int64
+	RecoveredPanics              int64
 }
 
 // Statistics returns statistics for periodic monitoring.
@@ -200,6 +208,7 @@ func (h *Handler) Statistics(tags map[string]string) []models.Statistic {
 			statWriteRequestsActive:          atomic.LoadInt64(&h.stats.ActiveWriteRequests),
 			statClientError:                  atomic.LoadInt64(&h.stats.ClientErrors),
 			statServerError:                  atomic.LoadInt64(&h.stats.ServerErrors),
+			statRecoveredPanics:              atomic.LoadInt64(&h.stats.RecoveredPanics),
 		},
 	}}
 }
@@ -210,7 +219,7 @@ func (h *Handler) AddRoutes(routes ...Route) {
 		var handler http.Handler
 
 		// If it's a handler func that requires authorization, wrap it in authentication
-		if hf, ok := r.HandlerFunc.(func(http.ResponseWriter, *http.Request, *meta.UserInfo)); ok {
+		if hf, ok := r.HandlerFunc.(func(http.ResponseWriter, *http.Request, meta.User)); ok {
 			handler = authenticate(hf, h, h.Config.AuthEnabled)
 		}
 
@@ -241,22 +250,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer atomic.AddInt64(&h.stats.ActiveRequests, -1)
 	start := time.Now()
 
-	// Add version header to all InfluxDB requests.
+	// Add version and build header to all InfluxDB requests.
 	w.Header().Add("X-Influxdb-Version", h.Version)
+	w.Header().Add("X-Influxdb-Build", h.BuildType)
 
 	if strings.HasPrefix(r.URL.Path, "/debug/pprof") && h.Config.PprofEnabled {
-		switch r.URL.Path {
-		case "/debug/pprof/cmdline":
-			pprof.Cmdline(w, r)
-		case "/debug/pprof/profile":
-			pprof.Profile(w, r)
-		case "/debug/pprof/symbol":
-			pprof.Symbol(w, r)
-		default:
-			pprof.Index(w, r)
-		}
+		h.handleProfiles(w, r)
 	} else if strings.HasPrefix(r.URL.Path, "/debug/vars") {
 		h.serveExpvar(w, r)
+	} else if strings.HasPrefix(r.URL.Path, "/debug/requests") {
+		h.serveDebugRequests(w, r)
 	} else {
 		h.mux.ServeHTTP(w, r)
 	}
@@ -277,11 +280,12 @@ func (h *Handler) writeHeader(w http.ResponseWriter, code int) {
 }
 
 // serveQuery parses an incoming query and, if valid, executes the query.
-func (h *Handler) serveQuery(w http.ResponseWriter, r *http.Request, user *meta.UserInfo) {
+func (h *Handler) serveQuery(w http.ResponseWriter, r *http.Request, user meta.User) {
 	atomic.AddInt64(&h.stats.QueryRequests, 1)
 	defer func(start time.Time) {
 		atomic.AddInt64(&h.stats.QueryRequestDuration, time.Since(start).Nanoseconds())
 	}(time.Now())
+	h.requestTracker.Add(r, user)
 
 	// Retrieve the underlying ResponseWriter or initialize our own.
 	rw, ok := w.(ResponseWriter)
@@ -577,13 +581,14 @@ func (h *Handler) async(query *influxql.Query, results <-chan *influxql.Result) 
 }
 
 // serveWrite receives incoming series data in line protocol format and writes it to the database.
-func (h *Handler) serveWrite(w http.ResponseWriter, r *http.Request, user *meta.UserInfo) {
+func (h *Handler) serveWrite(w http.ResponseWriter, r *http.Request, user meta.User) {
 	atomic.AddInt64(&h.stats.WriteRequests, 1)
 	atomic.AddInt64(&h.stats.ActiveWriteRequests, 1)
 	defer func(start time.Time) {
 		atomic.AddInt64(&h.stats.ActiveWriteRequests, -1)
 		atomic.AddInt64(&h.stats.WriteRequestDuration, time.Since(start).Nanoseconds())
 	}(time.Now())
+	h.requestTracker.Add(r, user)
 
 	database := r.URL.Query().Get("db")
 	if database == "" {
@@ -596,20 +601,24 @@ func (h *Handler) serveWrite(w http.ResponseWriter, r *http.Request, user *meta.
 		return
 	}
 
-	if h.Config.AuthEnabled && user == nil {
-		h.httpError(w, fmt.Sprintf("user is required to write to database %q", database), http.StatusForbidden)
-		return
-	}
-
 	if h.Config.AuthEnabled {
-		if err := h.WriteAuthorizer.AuthorizeWrite(user.Name, database); err != nil {
-			h.httpError(w, fmt.Sprintf("%q user is not authorized to write to database %q", user.Name, database), http.StatusForbidden)
+		if user == nil {
+			h.httpError(w, fmt.Sprintf("user is required to write to database %q", database), http.StatusForbidden)
+			return
+		}
+
+		if err := h.WriteAuthorizer.AuthorizeWrite(user.ID(), database); err != nil {
+			h.httpError(w, fmt.Sprintf("%q user is not authorized to write to database %q", user.ID(), database), http.StatusForbidden)
 			return
 		}
 	}
 
-	// Handle gzip decoding of the body
 	body := r.Body
+	if h.Config.MaxBodySize > 0 {
+		body = truncateReader(body, int64(h.Config.MaxBodySize))
+	}
+
+	// Handle gzip decoding of the body
 	if r.Header.Get("Content-Encoding") == "gzip" {
 		b, err := gzip.NewReader(r.Body)
 		if err != nil {
@@ -621,17 +630,25 @@ func (h *Handler) serveWrite(w http.ResponseWriter, r *http.Request, user *meta.
 	}
 
 	var bs []byte
-	if clStr := r.Header.Get("Content-Length"); clStr != "" {
-		if length, err := strconv.Atoi(clStr); err == nil {
-			// This will just be an initial hint for the gzip reader, as the
-			// bytes.Buffer will grow as needed when ReadFrom is called
-			bs = make([]byte, 0, length)
+	if r.ContentLength > 0 {
+		if h.Config.MaxBodySize > 0 && r.ContentLength > int64(h.Config.MaxBodySize) {
+			h.httpError(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			return
 		}
+
+		// This will just be an initial hint for the gzip reader, as the
+		// bytes.Buffer will grow as needed when ReadFrom is called
+		bs = make([]byte, 0, r.ContentLength)
 	}
 	buf := bytes.NewBuffer(bs)
 
 	_, err := buf.ReadFrom(body)
 	if err != nil {
+		if err == errTruncated {
+			h.httpError(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			return
+		}
+
 		if h.Config.WriteTracing {
 			h.Logger.Info("Write handler unable to read bytes from request body")
 		}
@@ -668,14 +685,18 @@ func (h *Handler) serveWrite(w http.ResponseWriter, r *http.Request, user *meta.
 	}
 
 	// Write points.
-	if err := h.PointsWriter.WritePoints(database, r.URL.Query().Get("rp"), consistency, points); influxdb.IsClientError(err) {
+	if err := h.PointsWriter.WritePoints(database, r.URL.Query().Get("rp"), consistency, user, points); influxdb.IsClientError(err) {
 		atomic.AddInt64(&h.stats.PointsWrittenFail, int64(len(points)))
 		h.httpError(w, err.Error(), http.StatusBadRequest)
+		return
+	} else if influxdb.IsAuthorizationError(err) {
+		atomic.AddInt64(&h.stats.PointsWrittenFail, int64(len(points)))
+		h.httpError(w, err.Error(), http.StatusForbidden)
 		return
 	} else if werr, ok := err.(tsdb.PartialWriteError); ok {
 		atomic.AddInt64(&h.stats.PointsWrittenOK, int64(len(points)-werr.Dropped))
 		atomic.AddInt64(&h.stats.PointsWrittenDropped, int64(werr.Dropped))
-		h.httpError(w, fmt.Sprintf("partial write: %v", werr), http.StatusBadRequest)
+		h.httpError(w, werr.Error(), http.StatusBadRequest)
 		return
 	} else if err != nil {
 		atomic.AddInt64(&h.stats.PointsWrittenFail, int64(len(points)))
@@ -686,7 +707,7 @@ func (h *Handler) serveWrite(w http.ResponseWriter, r *http.Request, user *meta.
 		atomic.AddInt64(&h.stats.PointsWrittenOK, int64(len(points)))
 		// The other points failed to parse which means the client sent invalid line protocol.  We return a 400
 		// response code as well as the lines that failed to parse.
-		h.httpError(w, fmt.Sprintf("partial write:\n%v", parseError), http.StatusBadRequest)
+		h.httpError(w, tsdb.PartialWriteError{Reason: parseError.Error()}.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -834,6 +855,64 @@ func (h *Handler) serveExpvar(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "\n}")
 }
 
+// serveDebugRequests will track requests for a period of time.
+func (h *Handler) serveDebugRequests(w http.ResponseWriter, r *http.Request) {
+	var d time.Duration
+	if s := r.URL.Query().Get("seconds"); s == "" {
+		d = DefaultDebugRequestsInterval
+	} else if seconds, err := strconv.ParseInt(s, 10, 64); err != nil {
+		h.httpError(w, err.Error(), http.StatusBadRequest)
+		return
+	} else {
+		d = time.Duration(seconds) * time.Second
+		if d > MaxDebugRequestsInterval {
+			h.httpError(w, fmt.Sprintf("exceeded maximum interval time: %s > %s",
+				influxql.FormatDuration(d),
+				influxql.FormatDuration(MaxDebugRequestsInterval)),
+				http.StatusBadRequest)
+			return
+		}
+	}
+
+	var closing <-chan bool
+	if notifier, ok := w.(http.CloseNotifier); ok {
+		closing = notifier.CloseNotify()
+	}
+
+	profile := h.requestTracker.TrackRequests()
+
+	timer := time.NewTimer(d)
+	select {
+	case <-timer.C:
+		profile.Stop()
+	case <-closing:
+		// Connection was closed early.
+		profile.Stop()
+		timer.Stop()
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Add("Connection", "close")
+
+	fmt.Fprintln(w, "{")
+	first := true
+	for req, st := range profile.Requests {
+		val, err := json.Marshal(st)
+		if err != nil {
+			continue
+		}
+
+		if !first {
+			fmt.Fprintln(w, ",")
+		}
+		first = false
+		fmt.Fprintf(w, "%q: ", req.String())
+		w.Write(bytes.TrimSpace(val))
+	}
+	fmt.Fprintln(w, "\n}")
+}
+
 // parseSystemDiagnostics converts the system diagnostics into an appropriate
 // format for marshaling to JSON in the /debug/vars format.
 func parseSystemDiagnostics(d *diagnostics.Diagnostics) (map[string]interface{}, error) {
@@ -917,6 +996,15 @@ type credentials struct {
 func parseCredentials(r *http.Request) (*credentials, error) {
 	q := r.URL.Query()
 
+	// Check for username and password in URL params.
+	if u, p := q.Get("u"), q.Get("p"); u != "" && p != "" {
+		return &credentials{
+			Method:   UserAuthentication,
+			Username: u,
+			Password: p,
+		}, nil
+	}
+
 	// Check for the HTTP Authorization header.
 	if s := r.Header.Get("Authorization"); s != "" {
 		// Check for Bearer token.
@@ -938,15 +1026,6 @@ func parseCredentials(r *http.Request) (*credentials, error) {
 		}
 	}
 
-	// Check for username and password in URL params.
-	if u, p := q.Get("u"), q.Get("p"); u != "" && p != "" {
-		return &credentials{
-			Method:   UserAuthentication,
-			Username: u,
-			Password: p,
-		}, nil
-	}
-
 	return nil, fmt.Errorf("unable to parse authentication credentials")
 }
 
@@ -955,14 +1034,14 @@ func parseCredentials(r *http.Request) (*credentials, error) {
 //
 // There is one exception: if there are no users in the system, authentication is not required. This
 // is to facilitate bootstrapping of a system with authentication enabled.
-func authenticate(inner func(http.ResponseWriter, *http.Request, *meta.UserInfo), h *Handler, requireAuthentication bool) http.Handler {
+func authenticate(inner func(http.ResponseWriter, *http.Request, meta.User), h *Handler, requireAuthentication bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return early if we are not authenticating
 		if !requireAuthentication {
 			inner(w, r, nil)
 			return
 		}
-		var user *meta.UserInfo
+		var user meta.User
 
 		// TODO corylanou: never allow this in the future without users
 		if requireAuthentication && h.MetaClient.AdminUserExists() {
@@ -1046,68 +1125,6 @@ func authenticate(inner func(http.ResponseWriter, *http.Request, *meta.UserInfo)
 	})
 }
 
-type gzipResponseWriter struct {
-	io.Writer
-	http.ResponseWriter
-}
-
-// WriteHeader sets the provided code as the response status. If the
-// specified status is 204 No Content, then the Content-Encoding header
-// is removed from the response, to prevent clients expecting gzipped
-// encoded bodies from trying to deflate an empty response.
-func (w gzipResponseWriter) WriteHeader(code int) {
-	if code != http.StatusNoContent {
-		w.Header().Set("Content-Encoding", "gzip")
-	}
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
-}
-
-func (w gzipResponseWriter) Flush() {
-	w.Writer.(*gzip.Writer).Flush()
-	if w, ok := w.ResponseWriter.(http.Flusher); ok {
-		w.Flush()
-	}
-}
-
-func (w gzipResponseWriter) CloseNotify() <-chan bool {
-	return w.ResponseWriter.(http.CloseNotifier).CloseNotify()
-}
-
-// gzipFilter determines if the client can accept compressed responses, and encodes accordingly.
-func gzipFilter(inner http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			inner.ServeHTTP(w, r)
-			return
-		}
-		gz := getGzipWriter(w)
-		defer putGzipWriter(gz)
-		gzw := gzipResponseWriter{Writer: gz, ResponseWriter: w}
-		inner.ServeHTTP(gzw, r)
-	})
-}
-
-var gzipWriterPool = sync.Pool{
-	New: func() interface{} {
-		return gzip.NewWriter(nil)
-	},
-}
-
-func getGzipWriter(w io.Writer) *gzip.Writer {
-	gz := gzipWriterPool.Get().(*gzip.Writer)
-	gz.Reset(w)
-	return gz
-}
-
-func putGzipWriter(gz *gzip.Writer) {
-	gz.Close()
-	gzipWriterPool.Put(gz)
-}
-
 // cors responds to incoming requests and adds the appropriate cors headers
 // TODO: corylanou: add the ability to configure this in our config
 func cors(inner http.Handler) http.Handler {
@@ -1135,6 +1152,7 @@ func cors(inner http.Handler) http.Handler {
 			w.Header().Set(`Access-Control-Expose-Headers`, strings.Join([]string{
 				`Date`,
 				`X-InfluxDB-Version`,
+				`X-InfluxDB-Build`,
 			}, ", "))
 		}
 
@@ -1172,6 +1190,17 @@ func (h *Handler) responseWriter(inner http.Handler) http.Handler {
 	})
 }
 
+// if the env var is set, and the value is truthy, then we will *not*
+// recover from a panic.
+var willCrash bool
+
+func init() {
+	var err error
+	if willCrash, err = strconv.ParseBool(os.Getenv(influxql.PanicCrashEnv)); err != nil {
+		willCrash = false
+	}
+}
+
 func (h *Handler) recovery(inner http.Handler, name string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -1182,6 +1211,15 @@ func (h *Handler) recovery(inner http.Handler, name string) http.Handler {
 				logLine := buildLogLine(l, r, start)
 				logLine = fmt.Sprintf("%s [panic:%s] %s", logLine, err, debug.Stack())
 				h.CLFLogger.Println(logLine)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), 500)
+				atomic.AddInt64(&h.stats.RecoveredPanics, 1) // Capture the panic in _internal stats.
+
+				if willCrash {
+					h.CLFLogger.Println("\n\n=====\nAll goroutines now follow:")
+					buf := debug.Stack()
+					h.CLFLogger.Printf("%s\n", buf)
+					os.Exit(1) // If we panic then the Go server will recover.
+				}
 			}
 		}()
 

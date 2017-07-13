@@ -17,11 +17,11 @@ package server
 
 import (
 	"fmt"
-	log "github.com/Sirupsen/logrus"
 	"github.com/eapache/channels"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/table"
+	log "github.com/sirupsen/logrus"
 	"net"
 	"time"
 )
@@ -30,6 +30,65 @@ const (
 	FLOP_THRESHOLD    = time.Second * 30
 	MIN_CONNECT_RETRY = 10
 )
+
+type PeerGroup struct {
+	Conf             *config.PeerGroup
+	members          map[string]config.Neighbor
+	dynamicNeighbors map[string]*config.DynamicNeighbor
+}
+
+func NewPeerGroup(c *config.PeerGroup) *PeerGroup {
+	return &PeerGroup{
+		Conf:             c,
+		members:          make(map[string]config.Neighbor, 0),
+		dynamicNeighbors: make(map[string]*config.DynamicNeighbor, 0),
+	}
+}
+
+func (pg *PeerGroup) AddMember(c config.Neighbor) {
+	pg.members[c.State.NeighborAddress] = c
+}
+
+func (pg *PeerGroup) DeleteMember(c config.Neighbor) {
+	delete(pg.members, c.State.NeighborAddress)
+}
+
+func (pg *PeerGroup) AddDynamicNeighbor(c *config.DynamicNeighbor) {
+	pg.dynamicNeighbors[c.Config.Prefix] = c
+}
+
+func newDynamicPeer(g *config.Global, neighborAddress string, pg *config.PeerGroup, loc *table.TableManager, policy *table.RoutingPolicy) *Peer {
+	conf := config.Neighbor{
+		Config: config.NeighborConfig{
+			PeerGroup: pg.Config.PeerGroupName,
+		},
+		State: config.NeighborState{
+			NeighborAddress: neighborAddress,
+		},
+		Transport: config.Transport{
+			Config: config.TransportConfig{
+				PassiveMode: true,
+			},
+		},
+	}
+	if err := config.OverwriteNeighborConfigWithPeerGroup(&conf, pg); err != nil {
+		log.WithFields(log.Fields{
+			"Topic": "Peer",
+			"Key":   neighborAddress,
+		}).Debugf("Can't overwrite neighbor config: %s", err)
+		return nil
+	}
+	if err := config.SetDefaultNeighborConfigValues(&conf, g.Config.As); err != nil {
+		log.WithFields(log.Fields{
+			"Topic": "Peer",
+			"Key":   neighborAddress,
+		}).Debugf("Can't set default config: %s", err)
+		return nil
+	}
+	peer := NewPeer(g, &conf, loc, policy)
+	peer.fsm.state = bgp.BGP_FSM_ACTIVE
+	return peer
+}
 
 type Peer struct {
 	tableId           string
@@ -51,7 +110,7 @@ func NewPeer(g *config.Global, conf *config.Neighbor, loc *table.TableManager, p
 		prefixLimitWarned: make(map[bgp.RouteFamily]bool),
 	}
 	if peer.isRouteServerClient() {
-		peer.tableId = conf.Config.NeighborAddress
+		peer.tableId = conf.State.NeighborAddress
 	} else {
 		peer.tableId = table.GLOBAL_RIB_NAME
 	}
@@ -61,7 +120,7 @@ func NewPeer(g *config.Global, conf *config.Neighbor, loc *table.TableManager, p
 }
 
 func (peer *Peer) ID() string {
-	return peer.fsm.pConf.Config.NeighborAddress
+	return peer.fsm.pConf.State.NeighborAddress
 }
 
 func (peer *Peer) TableID() string {
@@ -82,6 +141,10 @@ func (peer *Peer) isRouteReflectorClient() bool {
 
 func (peer *Peer) isGracefulRestartEnabled() bool {
 	return peer.fsm.pConf.GracefulRestart.State.Enabled
+}
+
+func (peer *Peer) isDynamicNeighbor() bool {
+	return peer.fsm.pConf.Config.NeighborAddress == "" && peer.fsm.pConf.Config.NeighborInterface == ""
 }
 
 func (peer *Peer) recvedAllEOR() bool {
@@ -267,17 +330,29 @@ func (peer *Peer) filterpath(path, old *table.Path) *table.Path {
 		}
 	}
 
+	// replace-peer-as handling
+	if path != nil && !path.IsWithdraw && peer.fsm.pConf.AsPathOptions.State.ReplacePeerAs {
+		path = path.ReplaceAS(peer.fsm.pConf.Config.LocalAs, peer.fsm.pConf.Config.PeerAs)
+	}
+
 	if path = filterpath(peer, path, old); path == nil {
 		return nil
 	}
 
-	path = path.Clone(path.IsWithdraw)
-	path.UpdatePathAttrs(peer.fsm.gConf, peer.fsm.pConf, peer.fsm.peerInfo)
+	path = table.UpdatePathAttrs(peer.fsm.gConf, peer.fsm.pConf, peer.fsm.peerInfo, path)
 
 	options := &table.PolicyOptions{
 		Info: peer.fsm.peerInfo,
 	}
 	path = peer.policy.ApplyPolicy(peer.TableID(), table.POLICY_DIRECTION_EXPORT, path, options)
+	// When 'path' is filetered (path == nil), check 'old' has been sent to this peer.
+	// If it has, send withdrawal to the peer.
+	if path == nil && old != nil {
+		o := peer.policy.ApplyPolicy(peer.TableID(), table.POLICY_DIRECTION_EXPORT, old, options)
+		if o != nil {
+			path = old.Clone(true)
+		}
+	}
 
 	// draft-uttaro-idr-bgp-persistence-02
 	// 4.3.  Processing LLGR_STALE Routes
@@ -328,7 +403,7 @@ func (peer *Peer) processOutgoingPaths(paths, olds []*table.Path) []*table.Path 
 	if peer.fsm.pConf.GracefulRestart.State.LocalRestarting {
 		log.WithFields(log.Fields{
 			"Topic": "Peer",
-			"Key":   peer.fsm.pConf.Config.NeighborAddress,
+			"Key":   peer.fsm.pConf.State.NeighborAddress,
 		}).Debug("now syncing, suppress sending updates")
 		return nil
 	}
@@ -446,7 +521,7 @@ func (peer *Peer) handleUpdate(e *FsmMsg) ([]*table.Path, []bgp.RouteFamily, *bg
 	update := m.Body.(*bgp.BGPUpdate)
 	log.WithFields(log.Fields{
 		"Topic":       "Peer",
-		"Key":         peer.fsm.pConf.Config.NeighborAddress,
+		"Key":         peer.fsm.pConf.State.NeighborAddress,
 		"nlri":        update.NLRI,
 		"withdrawals": update.WithdrawnRoutes,
 		"attributes":  update.PathAttributes,
@@ -525,15 +600,15 @@ func (peer *Peer) ToConfig(getAdvertised bool) *config.Neighbor {
 	conf.State.RemoteCapabilityList = remoteCap
 	conf.State.LocalCapabilityList = capabilitiesFromConfig(peer.fsm.pConf)
 
-	conf.State.RemoteRouterId = peer.fsm.peerInfo.ID.To4().String()
 	conf.State.SessionState = config.IntToSessionStateMap[int(peer.fsm.state)]
 	conf.State.AdminState = config.IntToAdminStateMap[int(peer.fsm.adminState)]
 
 	if peer.fsm.state == bgp.BGP_FSM_ESTABLISHED {
 		rfList := peer.configuredRFlist()
 		if getAdvertised {
-			pathList, _ := peer.getBestFromLocal(rfList)
+			pathList, filtered := peer.getBestFromLocal(rfList)
 			conf.State.AdjTable.Advertised = uint32(len(pathList))
+			conf.State.AdjTable.Filtered = uint32(len(filtered))
 		} else {
 			conf.State.AdjTable.Advertised = 0
 		}
@@ -545,10 +620,50 @@ func (peer *Peer) ToConfig(getAdvertised bool) *config.Neighbor {
 		buf, _ := peer.fsm.recvOpen.Serialize()
 		// need to copy all values here
 		conf.State.ReceivedOpenMessage, _ = bgp.ParseBGPMessage(buf)
+		conf.State.RemoteRouterId = peer.fsm.peerInfo.ID.To4().String()
 	}
 	return &conf
 }
 
 func (peer *Peer) DropAll(rfList []bgp.RouteFamily) {
 	peer.adjRibIn.Drop(rfList)
+}
+
+func (peer *Peer) stopFSM() error {
+	failed := false
+	addr := peer.fsm.pConf.State.NeighborAddress
+	t1 := time.AfterFunc(time.Minute*5, func() {
+		log.WithFields(log.Fields{
+			"Topic": "Peer",
+		}).Warnf("Failed to free the fsm.h.t for %s", addr)
+		failed = true
+	})
+	peer.fsm.h.t.Kill(nil)
+	peer.fsm.h.t.Wait()
+	t1.Stop()
+	if !failed {
+		log.WithFields(log.Fields{
+			"Topic": "Peer",
+			"Key":   addr,
+		}).Debug("freed fsm.h.t")
+		cleanInfiniteChannel(peer.outgoing)
+	}
+	failed = false
+	t2 := time.AfterFunc(time.Minute*5, func() {
+		log.WithFields(log.Fields{
+			"Topic": "Peer",
+		}).Warnf("Failed to free the fsm.t for %s", addr)
+		failed = true
+	})
+	peer.fsm.t.Kill(nil)
+	peer.fsm.t.Wait()
+	t2.Stop()
+	if !failed {
+		log.WithFields(log.Fields{
+			"Topic": "Peer",
+			"Key":   addr,
+		}).Debug("freed fsm.t")
+		return nil
+	}
+	return fmt.Errorf("Failed to free FSM for %s", addr)
 }

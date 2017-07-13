@@ -26,11 +26,11 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/server"
 	"github.com/osrg/gobgp/table"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -88,47 +88,138 @@ func (s *Server) Serve() error {
 	return nil
 }
 
+func NewMpGracefulRestartFromConfigStruct(c *config.MpGracefulRestart) *MpGracefulRestart {
+	return &MpGracefulRestart{
+		Config: &MpGracefulRestartConfig{
+			Enabled: c.Config.Enabled,
+		},
+	}
+}
+
+func NewAfiSafiConfigFromConfigStruct(c *config.AfiSafiConfig) *AfiSafiConfig {
+	return &AfiSafiConfig{
+		Family:  uint32(bgp.AddressFamilyValueMap[string(c.AfiSafiName)]),
+		Enabled: c.Enabled,
+	}
+}
+
+func NewApplyPolicyFromConfigStruct(c *config.ApplyPolicy) *ApplyPolicy {
+	applyPolicy := &ApplyPolicy{
+		ImportPolicy: &PolicyAssignment{
+			Type:    PolicyType_IMPORT,
+			Default: RouteAction(c.Config.DefaultImportPolicy.ToInt()),
+		},
+		ExportPolicy: &PolicyAssignment{
+			Type:    PolicyType_EXPORT,
+			Default: RouteAction(c.Config.DefaultExportPolicy.ToInt()),
+		},
+		InPolicy: &PolicyAssignment{
+			Type:    PolicyType_IN,
+			Default: RouteAction(c.Config.DefaultInPolicy.ToInt()),
+		},
+	}
+
+	for _, pname := range c.Config.ImportPolicyList {
+		applyPolicy.ImportPolicy.Policies = append(applyPolicy.ImportPolicy.Policies, &Policy{Name: pname})
+	}
+	for _, pname := range c.Config.ExportPolicyList {
+		applyPolicy.ExportPolicy.Policies = append(applyPolicy.ExportPolicy.Policies, &Policy{Name: pname})
+	}
+	for _, pname := range c.Config.InPolicyList {
+		applyPolicy.InPolicy.Policies = append(applyPolicy.InPolicy.Policies, &Policy{Name: pname})
+	}
+
+	return applyPolicy
+}
+
+func NewRouteSelectionOptionsFromConfigStruct(c *config.RouteSelectionOptions) *RouteSelectionOptions {
+	return &RouteSelectionOptions{
+		Config: &RouteSelectionOptionsConfig{
+			AlwaysCompareMed:        c.Config.AlwaysCompareMed,
+			IgnoreAsPathLength:      c.Config.IgnoreAsPathLength,
+			ExternalCompareRouterId: c.Config.ExternalCompareRouterId,
+			AdvertiseInactiveRoutes: c.Config.AdvertiseInactiveRoutes,
+			EnableAigp:              c.Config.EnableAigp,
+			IgnoreNextHopIgpMetric:  c.Config.IgnoreNextHopIgpMetric,
+		},
+	}
+}
+
+func NewUseMultiplePathsFromConfigStruct(c *config.UseMultiplePaths) *UseMultiplePaths {
+	return &UseMultiplePaths{
+		Config: &UseMultiplePathsConfig{
+			Enabled: c.Config.Enabled,
+		},
+		Ebgp: &Ebgp{
+			Config: &EbgpConfig{
+				AllowMultipleAs: c.Ebgp.Config.AllowMultipleAs,
+				MaximumPaths:    c.Ebgp.Config.MaximumPaths,
+			},
+		},
+		Ibgp: &Ibgp{
+			Config: &IbgpConfig{
+				MaximumPaths: c.Ibgp.Config.MaximumPaths,
+			},
+		},
+	}
+}
+
+func NewPrefixLimitFromConfigStruct(c *config.AfiSafi) *PrefixLimit {
+	family, err := bgp.GetRouteFamily(string(c.Config.AfiSafiName))
+	if err != nil || c.PrefixLimit.Config.MaxPrefixes == 0 {
+		return nil
+	}
+
+	return &PrefixLimit{
+		Family:               uint32(family),
+		MaxPrefixes:          c.PrefixLimit.Config.MaxPrefixes,
+		ShutdownThresholdPct: uint32(c.PrefixLimit.Config.ShutdownThresholdPct),
+	}
+}
+
+func NewRouteTargetMembershipFromConfigStruct(c *config.RouteTargetMembership) *RouteTargetMembership {
+	return &RouteTargetMembership{
+		Config: &RouteTargetMembershipConfig{
+			DeferralTime: uint32(c.Config.DeferralTime),
+		},
+	}
+}
+
+func NewLongLivedGracefulRestartFromConfigStruct(c *config.LongLivedGracefulRestart) *LongLivedGracefulRestart {
+	return &LongLivedGracefulRestart{
+		Config: &LongLivedGracefulRestartConfig{
+			Enabled:     c.Config.Enabled,
+			RestartTime: c.Config.RestartTime,
+		},
+	}
+}
+
+func NewAfiSafiFromConfigStruct(c *config.AfiSafi) *AfiSafi {
+	return &AfiSafi{
+		MpGracefulRestart:        NewMpGracefulRestartFromConfigStruct(&c.MpGracefulRestart),
+		Config:                   NewAfiSafiConfigFromConfigStruct(&c.Config),
+		ApplyPolicy:              NewApplyPolicyFromConfigStruct(&c.ApplyPolicy),
+		RouteSelectionOptions:    NewRouteSelectionOptionsFromConfigStruct(&c.RouteSelectionOptions),
+		UseMultiplePaths:         NewUseMultiplePathsFromConfigStruct(&c.UseMultiplePaths),
+		PrefixLimits:             NewPrefixLimitFromConfigStruct(c),
+		RouteTargetMembership:    NewRouteTargetMembershipFromConfigStruct(&c.RouteTargetMembership),
+		LongLivedGracefulRestart: NewLongLivedGracefulRestartFromConfigStruct(&c.LongLivedGracefulRestart),
+	}
+}
+
 func NewPeerFromConfigStruct(pconf *config.Neighbor) *Peer {
-	var families []uint32
+	families := make([]uint32, 0, len(pconf.AfiSafis))
+	prefixLimits := make([]*PrefixLimit, 0, len(pconf.AfiSafis))
+	afiSafis := make([]*AfiSafi, 0, len(pconf.AfiSafis))
 	for _, f := range pconf.AfiSafis {
 		if family, ok := bgp.AddressFamilyValueMap[string(f.Config.AfiSafiName)]; ok {
 			families = append(families, uint32(family))
 		}
-	}
-	applyPolicy := &ApplyPolicy{}
-	if len(pconf.ApplyPolicy.Config.ImportPolicyList) != 0 {
-		applyPolicy.ImportPolicy = &PolicyAssignment{
-			Type: PolicyType_IMPORT,
+		if prefixLimit := NewPrefixLimitFromConfigStruct(&f); prefixLimit != nil {
+			prefixLimits = append(prefixLimits, prefixLimit)
 		}
-		for _, pname := range pconf.ApplyPolicy.Config.ImportPolicyList {
-			applyPolicy.ImportPolicy.Policies = append(applyPolicy.ImportPolicy.Policies, &Policy{Name: pname})
-		}
-	}
-	if len(pconf.ApplyPolicy.Config.ExportPolicyList) != 0 {
-		applyPolicy.ExportPolicy = &PolicyAssignment{
-			Type: PolicyType_EXPORT,
-		}
-		for _, pname := range pconf.ApplyPolicy.Config.ExportPolicyList {
-			applyPolicy.ExportPolicy.Policies = append(applyPolicy.ExportPolicy.Policies, &Policy{Name: pname})
-		}
-	}
-	if len(pconf.ApplyPolicy.Config.InPolicyList) != 0 {
-		applyPolicy.InPolicy = &PolicyAssignment{
-			Type: PolicyType_IN,
-		}
-		for _, pname := range pconf.ApplyPolicy.Config.InPolicyList {
-			applyPolicy.InPolicy.Policies = append(applyPolicy.InPolicy.Policies, &Policy{Name: pname})
-		}
-	}
-	prefixLimits := make([]*PrefixLimit, 0, len(pconf.AfiSafis))
-	for _, family := range pconf.AfiSafis {
-		if c := family.PrefixLimit.Config; c.MaxPrefixes > 0 {
-			k, _ := bgp.GetRouteFamily(string(family.Config.AfiSafiName))
-			prefixLimits = append(prefixLimits, &PrefixLimit{
-				Family:               uint32(k),
-				MaxPrefixes:          c.MaxPrefixes,
-				ShutdownThresholdPct: uint32(c.ShutdownThresholdPct),
-			})
+		if afiSafi := NewAfiSafiFromConfigStruct(&f); afiSafi != nil {
+			afiSafis = append(afiSafis, afiSafi)
 		}
 	}
 
@@ -139,17 +230,24 @@ func NewPeerFromConfigStruct(pconf *config.Neighbor) *Peer {
 		localAddress = pconf.Transport.State.LocalAddress
 	}
 	var remoteCap, localCap [][]byte
-	for _, cap := range pconf.State.RemoteCapabilityList {
-		c, _ := cap.Serialize()
-		remoteCap = append(remoteCap, c)
+	for _, c := range pconf.State.RemoteCapabilityList {
+		cBuf, _ := c.Serialize()
+		remoteCap = append(remoteCap, cBuf)
 	}
-	for _, cap := range pconf.State.LocalCapabilityList {
-		c, _ := cap.Serialize()
-		localCap = append(localCap, c)
+	for _, c := range pconf.State.LocalCapabilityList {
+		cBuf, _ := c.Serialize()
+		localCap = append(localCap, cBuf)
+	}
+	var removePrivateAs PeerConf_RemovePrivateAs
+	switch pconf.Config.RemovePrivateAs {
+	case config.REMOVE_PRIVATE_AS_OPTION_ALL:
+		removePrivateAs = PeerConf_ALL
+	case config.REMOVE_PRIVATE_AS_OPTION_REPLACE:
+		removePrivateAs = PeerConf_REPLACE
 	}
 	return &Peer{
 		Families:    families,
-		ApplyPolicy: applyPolicy,
+		ApplyPolicy: NewApplyPolicyFromConfigStruct(&pconf.ApplyPolicy),
 		Conf: &PeerConf{
 			NeighborAddress:   pconf.Config.NeighborAddress,
 			Id:                s.RemoteRouterId,
@@ -157,9 +255,7 @@ func NewPeerFromConfigStruct(pconf *config.Neighbor) *Peer {
 			LocalAs:           pconf.Config.LocalAs,
 			PeerType:          uint32(pconf.Config.PeerType.ToInt()),
 			AuthPassword:      pconf.Config.AuthPassword,
-			RemovePrivateAs:   uint32(pconf.Config.RemovePrivateAs.ToInt()),
 			RouteFlapDamping:  pconf.Config.RouteFlapDamping,
-			SendCommunity:     uint32(pconf.Config.SendCommunity.ToInt()),
 			Description:       pconf.Config.Description,
 			PeerGroup:         pconf.Config.PeerGroup,
 			RemoteCap:         remoteCap,
@@ -168,6 +264,9 @@ func NewPeerFromConfigStruct(pconf *config.Neighbor) *Peer {
 			LocalAddress:      localAddress,
 			NeighborInterface: pconf.Config.NeighborInterface,
 			Vrf:               pconf.Config.Vrf,
+			AllowOwnAs:        uint32(pconf.AsPathOptions.Config.AllowOwnAs),
+			RemovePrivateAs:   removePrivateAs,
+			ReplacePeerAs:     pconf.AsPathOptions.Config.ReplacePeerAs,
 		},
 		Info: &PeerState{
 			BgpState:   string(s.SessionState),
@@ -192,11 +291,12 @@ func NewPeerFromConfigStruct(pconf *config.Neighbor) *Peer {
 					TOTAL:        s.Messages.Sent.Total,
 				},
 			},
-			Received:   s.AdjTable.Received,
-			Accepted:   s.AdjTable.Accepted,
-			Advertised: s.AdjTable.Advertised,
-			PeerAs:     s.PeerAs,
-			PeerType:   uint32(s.PeerType.ToInt()),
+			Received:        s.AdjTable.Received,
+			Accepted:        s.AdjTable.Accepted,
+			Advertised:      s.AdjTable.Advertised,
+			PeerAs:          s.PeerAs,
+			PeerType:        uint32(s.PeerType.ToInt()),
+			NeighborAddress: pconf.State.NeighborAddress,
 		},
 		Timers: &Timers{
 			Config: &TimersConfig{
@@ -218,10 +318,19 @@ func NewPeerFromConfigStruct(pconf *config.Neighbor) *Peer {
 		RouteServer: &RouteServer{
 			RouteServerClient: pconf.RouteServer.Config.RouteServerClient,
 		},
+		GracefulRestart: &GracefulRestart{
+			Enabled:             pconf.GracefulRestart.Config.Enabled,
+			RestartTime:         uint32(pconf.GracefulRestart.Config.RestartTime),
+			HelperOnly:          pconf.GracefulRestart.Config.HelperOnly,
+			DeferralTime:        uint32(pconf.GracefulRestart.Config.DeferralTime),
+			NotificationEnabled: pconf.GracefulRestart.Config.NotificationEnabled,
+			LonglivedEnabled:    pconf.GracefulRestart.Config.LongLivedEnabled,
+		},
 		Transport: &Transport{
 			RemotePort:   uint32(pconf.Transport.Config.RemotePort),
 			LocalAddress: pconf.Transport.Config.LocalAddress,
 		},
+		AfiSafis: afiSafis,
 	}
 }
 
@@ -230,7 +339,7 @@ func (s *Server) GetNeighbor(ctx context.Context, arg *GetNeighborRequest) (*Get
 		return nil, fmt.Errorf("invalid request")
 	}
 	p := []*Peer{}
-	for _, e := range s.bgpServer.GetNeighbor(arg.EnableAdvertised) {
+	for _, e := range s.bgpServer.GetNeighbor(arg.Address, arg.EnableAdvertised) {
 		p = append(p, NewPeerFromConfigStruct(e))
 	}
 	return &GetNeighborResponse{Peers: p}, nil
@@ -568,7 +677,7 @@ func (s *Server) api2PathList(resource Resource, ApiPathList []*Path) ([]*table.
 			return nil, fmt.Errorf("not found nlri or nexthop")
 		}
 
-		if resource != Resource_VRF && bgp.RouteFamily(path.Family) == bgp.RF_IPv4_UC {
+		if resource != Resource_VRF && bgp.RouteFamily(path.Family) == bgp.RF_IPv4_UC && net.ParseIP(nexthop).To4() != nil {
 			pattr = append(pattr, bgp.NewPathAttributeNextHop(nexthop))
 		} else {
 			pattr = append(pattr, bgp.NewPathAttributeMpReachNLRI(nexthop, []bgp.AddrPrefixInterface{nlri}))
@@ -846,30 +955,141 @@ func (s *Server) DeleteVrf(ctx context.Context, arg *DeleteVrfRequest) (*DeleteV
 	return &DeleteVrfResponse{}, s.bgpServer.DeleteVrf(arg.Vrf.Name)
 }
 
+func ReadMpGracefulRestartFromAPIStruct(c *config.MpGracefulRestart, a *MpGracefulRestart) {
+	if c == nil || a == nil {
+		return
+	}
+	if a.Config != nil {
+		c.Config.Enabled = a.Config.Enabled
+	}
+}
+
+func ReadAfiSafiConfigFromAPIStruct(c *config.AfiSafiConfig, a *AfiSafiConfig) {
+	if c == nil || a == nil {
+		return
+	}
+	c.Enabled = a.Enabled
+}
+
+func ReadPrefixLimitFromAPIStruct(c *config.PrefixLimit, a *PrefixLimit) {
+	if c == nil || a == nil {
+		return
+	}
+	c.Config.MaxPrefixes = a.MaxPrefixes
+	c.Config.ShutdownThresholdPct = config.Percentage(a.ShutdownThresholdPct)
+}
+
+func ReadApplyPolicyFromAPIStruct(c *config.ApplyPolicy, a *ApplyPolicy) {
+	if c == nil || a == nil {
+		return
+	}
+	if a.ImportPolicy != nil {
+		c.Config.DefaultImportPolicy = config.IntToDefaultPolicyTypeMap[int(a.ImportPolicy.Default)]
+		for _, p := range a.ImportPolicy.Policies {
+			c.Config.ImportPolicyList = append(c.Config.ImportPolicyList, p.Name)
+		}
+	}
+	if a.ExportPolicy != nil {
+		c.Config.DefaultExportPolicy = config.IntToDefaultPolicyTypeMap[int(a.ExportPolicy.Default)]
+		for _, p := range a.ExportPolicy.Policies {
+			c.Config.ExportPolicyList = append(c.Config.ExportPolicyList, p.Name)
+		}
+	}
+	if a.InPolicy != nil {
+		c.Config.DefaultInPolicy = config.IntToDefaultPolicyTypeMap[int(a.InPolicy.Default)]
+		for _, p := range a.InPolicy.Policies {
+			c.Config.InPolicyList = append(c.Config.InPolicyList, p.Name)
+		}
+	}
+}
+
+func ReadRouteSelectionOptionsFromAPIStruct(c *config.RouteSelectionOptions, a *RouteSelectionOptions) {
+	if c == nil || a == nil {
+		return
+	}
+	if a.Config != nil {
+		c.Config.AlwaysCompareMed = a.Config.AlwaysCompareMed
+		c.Config.IgnoreAsPathLength = a.Config.IgnoreAsPathLength
+		c.Config.ExternalCompareRouterId = a.Config.ExternalCompareRouterId
+		c.Config.AdvertiseInactiveRoutes = a.Config.AdvertiseInactiveRoutes
+		c.Config.EnableAigp = a.Config.EnableAigp
+		c.Config.IgnoreNextHopIgpMetric = a.Config.IgnoreNextHopIgpMetric
+	}
+}
+
+func ReadUseMultiplePathsFromAPIStruct(c *config.UseMultiplePaths, a *UseMultiplePaths) {
+	if c == nil || a == nil {
+		return
+	}
+	if a.Config != nil {
+		c.Config.Enabled = a.Config.Enabled
+	}
+	if a.Ebgp != nil && a.Ebgp.Config != nil {
+		c.Ebgp = config.Ebgp{
+			Config: config.EbgpConfig{
+				AllowMultipleAs: a.Ebgp.Config.AllowMultipleAs,
+				MaximumPaths:    a.Ebgp.Config.MaximumPaths,
+			},
+		}
+	}
+	if a.Ibgp != nil && a.Ibgp.Config != nil {
+		c.Ibgp = config.Ibgp{
+			Config: config.IbgpConfig{
+				MaximumPaths: a.Ibgp.Config.MaximumPaths,
+			},
+		}
+	}
+}
+
+func ReadRouteTargetMembershipFromAPIStruct(c *config.RouteTargetMembership, a *RouteTargetMembership) {
+	if c == nil || a == nil {
+		return
+	}
+	if a.Config != nil {
+		c.Config.DeferralTime = uint16(a.Config.DeferralTime)
+	}
+}
+
+func ReadLongLivedGracefulRestartFromAPIStruct(c *config.LongLivedGracefulRestart, a *LongLivedGracefulRestart) {
+	if c == nil || a == nil {
+		return
+	}
+	if a.Config != nil {
+		c.Config.Enabled = a.Config.Enabled
+		c.Config.RestartTime = a.Config.RestartTime
+	}
+}
+
 func NewNeighborFromAPIStruct(a *Peer) (*config.Neighbor, error) {
 	pconf := &config.Neighbor{}
 	if a.Conf != nil {
-		pconf.Config.NeighborAddress = a.Conf.NeighborAddress
 		pconf.Config.PeerAs = a.Conf.PeerAs
 		pconf.Config.LocalAs = a.Conf.LocalAs
 		pconf.Config.AuthPassword = a.Conf.AuthPassword
-		pconf.Config.RemovePrivateAs = config.RemovePrivateAsOption(a.Conf.RemovePrivateAs)
 		pconf.Config.RouteFlapDamping = a.Conf.RouteFlapDamping
-		pconf.Config.SendCommunity = config.CommunityType(a.Conf.SendCommunity)
 		pconf.Config.Description = a.Conf.Description
 		pconf.Config.PeerGroup = a.Conf.PeerGroup
 		pconf.Config.NeighborAddress = a.Conf.NeighborAddress
 		pconf.Config.NeighborInterface = a.Conf.NeighborInterface
 		pconf.Config.Vrf = a.Conf.Vrf
+		pconf.AsPathOptions.Config.AllowOwnAs = uint8(a.Conf.AllowOwnAs)
+		pconf.AsPathOptions.Config.ReplacePeerAs = a.Conf.ReplacePeerAs
+
+		switch a.Conf.RemovePrivateAs {
+		case PeerConf_ALL:
+			pconf.Config.RemovePrivateAs = config.REMOVE_PRIVATE_AS_OPTION_ALL
+		case PeerConf_REPLACE:
+			pconf.Config.RemovePrivateAs = config.REMOVE_PRIVATE_AS_OPTION_REPLACE
+		}
 
 		f := func(bufs [][]byte) ([]bgp.ParameterCapabilityInterface, error) {
 			var caps []bgp.ParameterCapabilityInterface
 			for _, buf := range bufs {
-				cap, err := bgp.DecodeCapability(buf)
+				c, err := bgp.DecodeCapability(buf)
 				if err != nil {
 					return nil, err
 				}
-				caps = append(caps, cap)
+				caps = append(caps, c)
 			}
 			return caps, nil
 		}
@@ -887,23 +1107,31 @@ func NewNeighborFromAPIStruct(a *Peer) (*config.Neighbor, error) {
 
 		pconf.State.RemoteRouterId = a.Conf.Id
 
-		for _, f := range a.Families {
-			family := bgp.RouteFamily(f)
-			pconf.AfiSafis = append(pconf.AfiSafis, config.AfiSafi{
+		for _, family := range a.Families {
+			afiSafi := config.AfiSafi{
 				Config: config.AfiSafiConfig{
-					AfiSafiName: config.AfiSafiType(family.String()),
+					AfiSafiName: config.AfiSafiType(bgp.RouteFamily(family).String()),
 					Enabled:     true,
 				},
-			})
-		}
-
-		for _, pl := range a.Conf.PrefixLimits {
-			for _, f := range pconf.AfiSafis {
-				if f.Config.AfiSafiName == config.AfiSafiType(bgp.RouteFamily(pl.Family).String()) {
-					f.PrefixLimit.Config.MaxPrefixes = pl.MaxPrefixes
-					f.PrefixLimit.Config.ShutdownThresholdPct = config.Percentage(pl.ShutdownThresholdPct)
+			}
+			for _, pl := range a.Conf.PrefixLimits {
+				if family == pl.Family {
+					ReadPrefixLimitFromAPIStruct(&afiSafi.PrefixLimit, pl)
 				}
 			}
+			for _, a := range a.AfiSafis {
+				if a.Config != nil && family == a.Config.Family {
+					ReadMpGracefulRestartFromAPIStruct(&afiSafi.MpGracefulRestart, a.MpGracefulRestart)
+					ReadAfiSafiConfigFromAPIStruct(&afiSafi.Config, a.Config)
+					ReadApplyPolicyFromAPIStruct(&afiSafi.ApplyPolicy, a.ApplyPolicy)
+					ReadRouteSelectionOptionsFromAPIStruct(&afiSafi.RouteSelectionOptions, a.RouteSelectionOptions)
+					ReadUseMultiplePathsFromAPIStruct(&afiSafi.UseMultiplePaths, a.UseMultiplePaths)
+					ReadPrefixLimitFromAPIStruct(&afiSafi.PrefixLimit, a.PrefixLimits)
+					ReadRouteTargetMembershipFromAPIStruct(&afiSafi.RouteTargetMembership, a.RouteTargetMembership)
+					ReadLongLivedGracefulRestartFromAPIStruct(&afiSafi.LongLivedGracefulRestart, a.LongLivedGracefulRestart)
+				}
+			}
+			pconf.AfiSafis = append(pconf.AfiSafis, afiSafi)
 		}
 	}
 
@@ -928,26 +1156,15 @@ func NewNeighborFromAPIStruct(a *Peer) (*config.Neighbor, error) {
 	if a.RouteServer != nil {
 		pconf.RouteServer.Config.RouteServerClient = a.RouteServer.RouteServerClient
 	}
-	if a.ApplyPolicy != nil {
-		if a.ApplyPolicy.ImportPolicy != nil {
-			pconf.ApplyPolicy.Config.DefaultImportPolicy = config.DefaultPolicyType(a.ApplyPolicy.ImportPolicy.Default)
-			for _, p := range a.ApplyPolicy.ImportPolicy.Policies {
-				pconf.ApplyPolicy.Config.ImportPolicyList = append(pconf.ApplyPolicy.Config.ImportPolicyList, p.Name)
-			}
-		}
-		if a.ApplyPolicy.ExportPolicy != nil {
-			pconf.ApplyPolicy.Config.DefaultExportPolicy = config.DefaultPolicyType(a.ApplyPolicy.ExportPolicy.Default)
-			for _, p := range a.ApplyPolicy.ExportPolicy.Policies {
-				pconf.ApplyPolicy.Config.ExportPolicyList = append(pconf.ApplyPolicy.Config.ExportPolicyList, p.Name)
-			}
-		}
-		if a.ApplyPolicy.InPolicy != nil {
-			pconf.ApplyPolicy.Config.DefaultInPolicy = config.DefaultPolicyType(a.ApplyPolicy.InPolicy.Default)
-			for _, p := range a.ApplyPolicy.InPolicy.Policies {
-				pconf.ApplyPolicy.Config.InPolicyList = append(pconf.ApplyPolicy.Config.InPolicyList, p.Name)
-			}
-		}
+	if a.GracefulRestart != nil {
+		pconf.GracefulRestart.Config.Enabled = a.GracefulRestart.Enabled
+		pconf.GracefulRestart.Config.RestartTime = uint16(a.GracefulRestart.RestartTime)
+		pconf.GracefulRestart.Config.HelperOnly = a.GracefulRestart.HelperOnly
+		pconf.GracefulRestart.Config.DeferralTime = uint16(a.GracefulRestart.DeferralTime)
+		pconf.GracefulRestart.Config.NotificationEnabled = a.GracefulRestart.NotificationEnabled
+		pconf.GracefulRestart.Config.LongLivedEnabled = a.GracefulRestart.LonglivedEnabled
 	}
+	ReadApplyPolicyFromAPIStruct(&pconf.ApplyPolicy, a.ApplyPolicy)
 	if a.Transport != nil {
 		pconf.Transport.Config.LocalAddress = a.Transport.LocalAddress
 		pconf.Transport.Config.PassiveMode = a.Transport.PassiveMode
@@ -966,6 +1183,7 @@ func NewNeighborFromAPIStruct(a *Peer) (*config.Neighbor, error) {
 		pconf.State.AdjTable.Advertised = a.Info.Advertised
 		pconf.State.PeerAs = a.Info.PeerAs
 		pconf.State.PeerType = config.IntToPeerTypeMap[int(a.Info.PeerType)]
+		pconf.State.NeighborAddress = a.Info.NeighborAddress
 
 		if a.Info.Messages != nil {
 			if a.Info.Messages.Sent != nil {
@@ -1137,7 +1355,7 @@ func NewDefinedSetFromApiStruct(a *DefinedSet) (table.DefinedSet, error) {
 }
 
 func (s *Server) GetDefinedSet(ctx context.Context, arg *GetDefinedSetRequest) (*GetDefinedSetResponse, error) {
-	cd, err := s.bgpServer.GetDefinedSet(table.DefinedType(arg.Type))
+	cd, err := s.bgpServer.GetDefinedSet(table.DefinedType(arg.Type), arg.Name)
 	if err != nil {
 		return nil, err
 	}

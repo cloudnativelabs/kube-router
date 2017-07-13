@@ -17,6 +17,7 @@ import (
 
 	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
+	"github.com/influxdata/influxdb/pkg/bloom"
 	"github.com/influxdata/influxdb/pkg/estimator"
 	"github.com/influxdata/influxdb/pkg/mmap"
 )
@@ -38,6 +39,7 @@ const (
 type LogFile struct {
 	mu   sync.RWMutex
 	wg   sync.WaitGroup // ref count
+	id   int            // file sequence identifier
 	data []byte         // mmap
 	file *os.File       // writer
 	w    *bufio.Writer  // buffered writer
@@ -78,6 +80,8 @@ func (f *LogFile) Open() error {
 }
 
 func (f *LogFile) open() error {
+	f.id, _ = ParseFilename(f.path)
+
 	// Open file for appending.
 	file, err := os.OpenFile(f.Path(), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 	if err != nil {
@@ -162,11 +166,20 @@ func (f *LogFile) Flush() error {
 	return nil
 }
 
+// ID returns the file sequence identifier.
+func (f *LogFile) ID() int { return f.id }
+
 // Path returns the file path.
 func (f *LogFile) Path() string { return f.path }
 
 // SetPath sets the log file's path.
 func (f *LogFile) SetPath(path string) { f.path = path }
+
+// Level returns the log level of the file.
+func (f *LogFile) Level() int { return 0 }
+
+// Filter returns the bloom filter for the file.
+func (f *LogFile) Filter() *bloom.Filter { return nil }
 
 // Retain adds a reference count to the file.
 func (f *LogFile) Retain() { f.wg.Add(1) }
@@ -372,6 +385,35 @@ func (f *LogFile) TagValueSeriesIterator(name, key, value []byte) SeriesIterator
 	return newLogSeriesIterator(tv.series)
 }
 
+// MeasurementN returns the total number of measurements.
+func (f *LogFile) MeasurementN() (n uint64) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return uint64(len(f.mms))
+}
+
+// TagKeyN returns the total number of keys.
+func (f *LogFile) TagKeyN() (n uint64) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	for _, mm := range f.mms {
+		n += uint64(len(mm.tagSet))
+	}
+	return n
+}
+
+// TagValueN returns the total number of values.
+func (f *LogFile) TagValueN() (n uint64) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	for _, mm := range f.mms {
+		for _, k := range mm.tagSet {
+			n += uint64(len(k.tagValues))
+		}
+	}
+	return n
+}
+
 // DeleteTagValue adds a tombstone for a tag value to the log file.
 func (f *LogFile) DeleteTagValue(name, key, value []byte) error {
 	f.mu.Lock()
@@ -449,6 +491,35 @@ func (f *LogFile) HasSeries(name []byte, tags models.Tags, buf []byte) (exists, 
 		return false, false
 	}
 	return true, e.Deleted()
+}
+
+// FilterNamesTags filters out any series which already exist. It modifies the
+// provided slices of names and tags.
+func (f *LogFile) FilterNamesTags(names [][]byte, tagsSlice []models.Tags) ([][]byte, []models.Tags) {
+	buf := make([]byte, 1024)
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	newNames, newTagsSlice := names[:0], tagsSlice[:0]
+	for i := 0; i < len(names); i++ {
+		name := names[i]
+		tags := tagsSlice[i]
+
+		mm := f.mms[string(name)]
+		if mm == nil {
+			newNames = append(newNames, name)
+			newTagsSlice = append(newTagsSlice, tags)
+			continue
+		}
+
+		key := AppendSeriesKey(buf[:0], name, tags)
+		s := mm.series[string(key)]
+		if s == nil || s.Deleted() {
+			newNames = append(newNames, name)
+			newTagsSlice = append(newTagsSlice, tags)
+		}
+	}
+	return newNames, newTagsSlice
 }
 
 // Series returns a series by name/tags.
@@ -684,8 +755,8 @@ func (f *LogFile) MeasurementSeriesIterator(name []byte) SeriesIterator {
 	return newLogSeriesIterator(mm.series)
 }
 
-// WriteTo compacts the log file and writes it to w.
-func (f *LogFile) WriteTo(w io.Writer) (n int64, err error) {
+// CompactTo compacts the log file and writes it to w.
+func (f *LogFile) CompactTo(w io.Writer, m, k uint64) (n int64, err error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
@@ -706,7 +777,7 @@ func (f *LogFile) WriteTo(w io.Writer) (n int64, err error) {
 
 	// Write series list.
 	t.SeriesBlock.Offset = n
-	if err := f.writeSeriesBlockTo(bw, names, info, &n); err != nil {
+	if err := f.writeSeriesBlockTo(bw, names, m, k, info, &n); err != nil {
 		return n, err
 	}
 	t.SeriesBlock.Size = n - t.SeriesBlock.Offset
@@ -749,9 +820,15 @@ func (f *LogFile) WriteTo(w io.Writer) (n int64, err error) {
 	return n, nil
 }
 
-func (f *LogFile) writeSeriesBlockTo(w io.Writer, names []string, info *logFileCompactInfo, n *int64) error {
+func (f *LogFile) writeSeriesBlockTo(w io.Writer, names []string, m, k uint64, info *logFileCompactInfo, n *int64) error {
+	// Determine series count.
+	var seriesN uint32
+	for _, mm := range f.mms {
+		seriesN += uint32(len(mm.series))
+	}
+
 	// Write all series.
-	enc := NewSeriesBlockEncoder(w)
+	enc := NewSeriesBlockEncoder(w, seriesN, m, k)
 
 	// Add series from measurements.
 	for _, name := range names {
@@ -774,7 +851,7 @@ func (f *LogFile) writeSeriesBlockTo(w io.Writer, names []string, info *logFileC
 
 	// Close and flush series block.
 	err := enc.Close()
-	*n += enc.N()
+	*n += int64(enc.N())
 	if err != nil {
 		return err
 	}
@@ -797,7 +874,7 @@ func (f *LogFile) updateSeriesOffsets(w io.Writer, names []string, info *logFile
 	for _, name := range names {
 		mm := f.mms[name]
 		mmInfo := info.createMeasurementInfoIfNotExists(name)
-		mmInfo.seriesIDs = make([]uint64, 0, len(mm.series))
+		mmInfo.seriesIDs = make([]uint32, 0, len(mm.series))
 
 		for _, serie := range mm.series {
 			// Lookup series offset.
@@ -853,7 +930,7 @@ func (f *LogFile) writeTagsetTo(w io.Writer, name string, info *logFileCompactIn
 		// Add each value.
 		for v, value := range tag.tagValues {
 			tagValueInfo := tagSetInfo.tagValues[v]
-			sort.Sort(uint64Slice(tagValueInfo.seriesIDs))
+			sort.Sort(uint32Slice(tagValueInfo.seriesIDs))
 
 			if err := enc.EncodeValue(value.name, value.deleted, tagValueInfo.seriesIDs); err != nil {
 				return err
@@ -886,7 +963,7 @@ func (f *LogFile) writeMeasurementBlockTo(w io.Writer, names []string, info *log
 		mmInfo := info.mms[name]
 		assert(mmInfo != nil, "measurement info not found")
 
-		sort.Sort(uint64Slice(mmInfo.seriesIDs))
+		sort.Sort(uint32Slice(mmInfo.seriesIDs))
 		mw.Add(mm.name, mm.deleted, mmInfo.offset, mmInfo.size, mmInfo.seriesIDs)
 	}
 
@@ -922,7 +999,7 @@ func (info *logFileCompactInfo) createMeasurementInfoIfNotExists(name string) *l
 type logFileMeasurementCompactInfo struct {
 	offset    int64
 	size      int64
-	seriesIDs []uint64
+	seriesIDs []uint32
 
 	tagSet map[string]*logFileTagSetCompactInfo
 }
@@ -950,7 +1027,7 @@ func (info *logFileTagSetCompactInfo) createTagValueInfoIfNotExists(value []byte
 }
 
 type logFileTagValueCompactInfo struct {
-	seriesIDs []uint64
+	seriesIDs []uint32
 }
 
 // MergeSeriesSketches merges the series sketches belonging to this LogFile
@@ -1336,6 +1413,6 @@ func (itr *logSeriesIterator) Next() (e SeriesElem) {
 }
 
 // FormatLogFileName generates a log filename for the given index.
-func FormatLogFileName(i int) string {
-	return fmt.Sprintf("%08d%s", i, LogFileExt)
+func FormatLogFileName(id int) string {
+	return fmt.Sprintf("L0-%08d%s", id, LogFileExt)
 }

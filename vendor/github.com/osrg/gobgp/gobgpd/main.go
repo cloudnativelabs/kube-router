@@ -16,14 +16,6 @@
 package main
 
 import (
-	log "github.com/Sirupsen/logrus"
-	"github.com/jessevdk/go-flags"
-	p "github.com/kr/pretty"
-	api "github.com/osrg/gobgp/api"
-	"github.com/osrg/gobgp/config"
-	"github.com/osrg/gobgp/packet/bgp"
-	"github.com/osrg/gobgp/server"
-	"github.com/osrg/gobgp/table"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
@@ -31,6 +23,17 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+
+	"github.com/jessevdk/go-flags"
+	p "github.com/kr/pretty"
+	api "github.com/osrg/gobgp/api"
+	"github.com/osrg/gobgp/config"
+	"github.com/osrg/gobgp/packet/bgp"
+	"github.com/osrg/gobgp/server"
+	"github.com/osrg/gobgp/table"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -51,6 +54,9 @@ func main() {
 		Dry             bool   `short:"d" long:"dry-run" description:"check configuration"`
 		PProfHost       string `long:"pprof-host" description:"specify the host that gobgpd listens on for pprof" default:"localhost:6060"`
 		PProfDisable    bool   `long:"pprof-disable" description:"disable pprof profiling"`
+		TLS             bool   `long:"tls" description:"enable TLS authentication for gRPC API"`
+		TLSCertFile     string `long:"tls-cert-file" description:"The TLS cert file"`
+		TLSKeyFile      string `long:"tls-key-file" description:"The TLS key file"`
 	}
 	_, err := flags.Parse(&opts)
 	if err != nil {
@@ -118,10 +124,18 @@ func main() {
 	bgpServer := server.NewBgpServer()
 	go bgpServer.Serve()
 
+	var grpcOpts []grpc.ServerOption
+	if opts.TLS {
+		creds, err := credentials.NewServerTLSFromFile(opts.TLSCertFile, opts.TLSKeyFile)
+		if err != nil {
+			log.Fatalf("Failed to generate credentials: %v", err)
+		}
+		grpcOpts = []grpc.ServerOption{grpc.Creds(creds)}
+	}
 	// start grpc Server
-	grpcServer := api.NewGrpcServer(bgpServer, opts.GrpcHosts)
+	apiServer := api.NewServer(bgpServer, grpc.NewServer(grpcOpts...), opts.GrpcHosts)
 	go func() {
-		if err := grpcServer.Serve(); err != nil {
+		if err := apiServer.Serve(); err != nil {
 			log.Fatalf("failed to listen grpc port: %s", err)
 		}
 	}()
@@ -135,6 +149,7 @@ func main() {
 		select {
 		case newConfig := <-configCh:
 			var added, deleted, updated []config.Neighbor
+			var addedPg, deletedPg, updatedPg []config.PeerGroup
 			var updatePolicy bool
 
 			if c == nil {
@@ -176,6 +191,7 @@ func main() {
 				}
 
 				added = newConfig.Neighbors
+				addedPg = newConfig.PeerGroups
 				if opts.GracefulRestart {
 					for i, n := range added {
 						if n.GracefulRestart.Config.Enabled {
@@ -185,7 +201,10 @@ func main() {
 				}
 
 			} else {
-				added, deleted, updated, updatePolicy = config.UpdateConfig(c, newConfig)
+				addedPg, deletedPg, updatedPg = config.UpdatePeerGroupConfig(c, newConfig)
+				added, deleted, updated = config.UpdateNeighborConfig(c, newConfig)
+				updatePolicy = config.CheckPolicyDifference(config.ConfigSetToRoutingPolicy(c), config.ConfigSetToRoutingPolicy(newConfig))
+
 				if updatePolicy {
 					log.Info("Policy config is updated")
 					p := config.ConfigSetToRoutingPolicy(newConfig)
@@ -227,21 +246,46 @@ func main() {
 				}
 				c = newConfig
 			}
-
+			for i, pg := range addedPg {
+				log.Infof("PeerGroup %s is added", pg.Config.PeerGroupName)
+				if err := bgpServer.AddPeerGroup(&addedPg[i]); err != nil {
+					log.Warn(err)
+				}
+			}
+			for i, pg := range deletedPg {
+				log.Infof("PeerGroup %s is deleted", pg.Config.PeerGroupName)
+				if err := bgpServer.DeletePeerGroup(&deletedPg[i]); err != nil {
+					log.Warn(err)
+				}
+			}
+			for i, pg := range updatedPg {
+				log.Infof("PeerGroup %s is updated", pg.Config.PeerGroupName)
+				u, err := bgpServer.UpdatePeerGroup(&updatedPg[i])
+				if err != nil {
+					log.Warn(err)
+				}
+				updatePolicy = updatePolicy || u
+			}
+			for _, dn := range newConfig.DynamicNeighbors {
+				log.Infof("Dynamic Neighbor %s is added to PeerGroup %s", dn.Config.Prefix, dn.Config.PeerGroup)
+				if err := bgpServer.AddDynamicNeighbor(&dn); err != nil {
+					log.Warn(err)
+				}
+			}
 			for i, p := range added {
-				log.Infof("Peer %v is added", p.Config.NeighborAddress)
+				log.Infof("Peer %v is added", p.State.NeighborAddress)
 				if err := bgpServer.AddNeighbor(&added[i]); err != nil {
 					log.Warn(err)
 				}
 			}
 			for i, p := range deleted {
-				log.Infof("Peer %v is deleted", p.Config.NeighborAddress)
+				log.Infof("Peer %v is deleted", p.State.NeighborAddress)
 				if err := bgpServer.DeleteNeighbor(&deleted[i]); err != nil {
 					log.Warn(err)
 				}
 			}
 			for i, p := range updated {
-				log.Infof("Peer %v is updated", p.Config.NeighborAddress)
+				log.Infof("Peer %v is updated", p.State.NeighborAddress)
 				u, err := bgpServer.UpdateNeighbor(&updated[i])
 				if err != nil {
 					log.Warn(err)

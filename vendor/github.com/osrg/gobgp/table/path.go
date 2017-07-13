@@ -24,10 +24,10 @@ import (
 	"sort"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -163,10 +163,11 @@ func cloneAsPath(asAttr *bgp.PathAttributeAsPath) *bgp.PathAttributeAsPath {
 	return bgp.NewPathAttributeAsPath(newASparams)
 }
 
-func (path *Path) UpdatePathAttrs(global *config.Global, peer *config.Neighbor, info *PeerInfo) {
+func UpdatePathAttrs(global *config.Global, peer *config.Neighbor, info *PeerInfo, original *Path) *Path {
 	if peer.RouteServer.Config.RouteServerClient {
-		return
+		return original
 	}
+	path := original.Clone(original.IsWithdraw)
 
 	for _, a := range path.GetPathAttrs() {
 		if _, y := bgp.PathAttrFlags[a.GetType()]; !y {
@@ -186,6 +187,9 @@ func (path *Path) UpdatePathAttrs(global *config.Global, peer *config.Neighbor, 
 		if !path.IsLocal() || isZero(nexthop) {
 			path.SetNexthop(localAddress)
 		}
+
+		// remove-private-as handling
+		path.RemovePrivateAS(peer.Config.LocalAs, peer.State.RemovePrivateAs)
 
 		// AS_PATH handling
 		path.PrependAsn(peer.Config.LocalAs, 1)
@@ -214,7 +218,7 @@ func (path *Path) UpdatePathAttrs(global *config.Global, peer *config.Neighbor, 
 		// For iBGP peers we are required to send local-pref attribute
 		// for connected or local prefixes.
 		// We set default local-pref 100.
-		if pref := path.getPathAttr(bgp.BGP_ATTR_TYPE_LOCAL_PREF); pref == nil || !path.IsLocal() {
+		if pref := path.getPathAttr(bgp.BGP_ATTR_TYPE_LOCAL_PREF); pref == nil {
 			path.setPathAttr(bgp.NewPathAttributeLocalPref(DEFAULT_LOCAL_PREF))
 		}
 
@@ -254,9 +258,10 @@ func (path *Path) UpdatePathAttrs(global *config.Global, peer *config.Neighbor, 
 	} else {
 		log.WithFields(log.Fields{
 			"Topic": "Peer",
-			"Key":   peer.Config.NeighborAddress,
+			"Key":   peer.State.NeighborAddress,
 		}).Warnf("invalid peer type: %d", peer.State.PeerType)
 	}
+	return path
 }
 
 func (path *Path) GetTimestamp() time.Time {
@@ -675,6 +680,65 @@ func (path *Path) PrependAsn(asn uint32, repeat uint8) {
 	path.setPathAttr(asPath)
 }
 
+func isPrivateAS(as uint32) bool {
+	return (64512 <= as && as <= 65534) || (4200000000 <= as && as <= 4294967294)
+}
+
+func (path *Path) RemovePrivateAS(localAS uint32, option config.RemovePrivateAsOption) {
+	original := path.GetAsPath()
+	if original == nil {
+		return
+	}
+	switch option {
+	case config.REMOVE_PRIVATE_AS_OPTION_ALL, config.REMOVE_PRIVATE_AS_OPTION_REPLACE:
+		newASParams := make([]bgp.AsPathParamInterface, 0, len(original.Value))
+		for _, param := range original.Value {
+			asParam := param.(*bgp.As4PathParam)
+			newASParam := make([]uint32, 0, len(asParam.AS))
+			for _, as := range asParam.AS {
+				if isPrivateAS(as) {
+					if option == config.REMOVE_PRIVATE_AS_OPTION_REPLACE {
+						newASParam = append(newASParam, localAS)
+					}
+				} else {
+					newASParam = append(newASParam, as)
+				}
+			}
+			if len(newASParam) > 0 {
+				newASParams = append(newASParams, bgp.NewAs4PathParam(asParam.Type, newASParam))
+			}
+		}
+		path.setPathAttr(bgp.NewPathAttributeAsPath(newASParams))
+	}
+	return
+}
+
+func (path *Path) ReplaceAS(localAS, peerAS uint32) *Path {
+	original := path.GetAsPath()
+	if original == nil {
+		return path
+	}
+	newASParams := make([]bgp.AsPathParamInterface, 0, len(original.Value))
+	changed := false
+	for _, param := range original.Value {
+		asParam := param.(*bgp.As4PathParam)
+		newASParam := make([]uint32, 0, len(asParam.AS))
+		for _, as := range asParam.AS {
+			if as == peerAS {
+				as = localAS
+				changed = true
+			}
+			newASParam = append(newASParam, as)
+		}
+		newASParams = append(newASParams, bgp.NewAs4PathParam(asParam.Type, newASParam))
+	}
+	if changed {
+		path = path.Clone(path.IsWithdraw)
+		path.setPathAttr(bgp.NewPathAttributeAsPath(newASParams))
+	}
+	return path
+}
+
 func (path *Path) GetCommunities() []uint32 {
 	communityList := []uint32{}
 	if attr := path.getPathAttr(bgp.BGP_ATTR_TYPE_COMMUNITIES); attr != nil {
@@ -1041,12 +1105,13 @@ func (p *Path) ToLocal() *Path {
 		n := nlri.(*bgp.LabeledVPNIPv6AddrPrefix)
 		_, c, _ := net.ParseCIDR(n.IPPrefix())
 		ones, _ := c.Mask.Size()
-		nlri = bgp.NewIPAddrPrefix(uint8(ones), c.IP.String())
+		nlri = bgp.NewIPv6AddrPrefix(uint8(ones), c.IP.String())
 	default:
 		return p
 	}
 	path := NewPath(p.OriginInfo().source, nlri, p.IsWithdraw, p.GetPathAttrs(), p.OriginInfo().timestamp, false)
 	path.delPathAttr(bgp.BGP_ATTR_TYPE_EXTENDED_COMMUNITIES)
+
 	if f == bgp.RF_IPv4_VPN {
 		nh := path.GetNexthop()
 		path.delPathAttr(bgp.BGP_ATTR_TYPE_MP_REACH_NLRI)

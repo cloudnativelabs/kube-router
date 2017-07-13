@@ -1,7 +1,78 @@
-## v1.3.0 [unreleased]
+## v1.4.0 [unreleased]
+
+### Configuration Changes
+
+#### `[collectd]` Section
+
+* `parse-multivalue-plugin` was added with a default of `split`.  When set to `split`, multivalue plugin data (e.g. df free:5000,used:1000) will be split into separate measurements (e.g., (df_free, value=5000) (df_used, value=1000)).  When set to `join`, multivalue plugin will be stored as a single multi-value measurement (e.g., (df, free=5000,used=1000)).
 
 ### Features
 
+- [#8574](https://github.com/influxdata/influxdb/pull/8574): Add 'X-Influxdb-Build' to http response headers so users can identify if a response is from an OSS or Enterprise service.
+- [#8426](https://github.com/influxdata/influxdb/issues/8426): Add `parse-multivalue-plugin` to allow users to choose how multivalue plugins should be handled by the collectd service.
+- [#8548](https://github.com/influxdata/influxdb/issues/8548): Allow panic recovery to be disabled when investigating server issues.
+
+### Bugfixes
+
+- [#8480](https://github.com/influxdata/influxdb/pull/8480): Change the default stats interval to 1 second instead of 10 seconds.
+- [#8466](https://github.com/influxdata/influxdb/issues/8466): illumos build broken on syscall.Mmap
+- [#8124](https://github.com/influxdata/influxdb/issues/8124): Prevent privileges on non-existent databases from being set.
+- [#8558](https://github.com/influxdata/influxdb/issues/8558): Dropping measurement used several GB disk space
+
+## v1.3.1 [unreleased]
+
+### Bugfixes
+
+- [#8559](https://github.com/influxdata/influxdb/issues/8559): Ensure temporary TSM files get cleaned up when compaction aborted.
+- [#8500](https://github.com/influxdata/influxdb/issues/8500): InfluxDB goes unresponsive
+- [#8531](https://github.com/influxdata/influxdb/issues/8531): Duplicate points generated via INSERT after DELETE
+
+
+## v1.3.0 [2017-06-21]
+
+### Release Notes
+
+#### Continuous Query Statistics
+
+When enabled, each time a continuous query is completed, a number of details regarding the execution are written to the `cq_query` measurement of the internal monitor database (`_internal` by default). The tags and fields of interest are
+
+| tag / field       | description                                        |
+|:----------------- |:-------------------------------------------------- |
+| `db`              | name of database                                   |
+| `cq`              | name of continuous query                           |
+| `durationNS`      | query execution time in nanoseconds                |
+| `startTime`       | lower bound of time range                          |
+| `endTime`         | upper bound of time range                          |
+| `pointsWrittenOK` | number of points written to the target measurement |
+
+
+* `startTime` and `endTime` are UNIX timestamps, in nanoseconds.
+* The number of points written is also included in CQ log messages.
+
+### Removals
+
+The admin UI is removed and unusable in this release. The `[admin]` configuration section will be ignored.
+
+### Configuration Changes
+
+* The top-level config `bind-address` now defaults to `localhost:8088`.
+  The previous default was just `:8088`, causing the backup and restore port to be bound on all available interfaces (i.e. including interfaces on the public internet).
+
+The following new configuration options are available.
+
+#### `[http]` Section
+
+* `max-body-size` was added with a default of 25,000,000, but can be disabled by setting it to 0.
+  Specifies the maximum size (in bytes) of a client request body. When a client sends data that exceeds
+  the configured maximum size, a `413 Request Entity Too Large` HTTP response is returned.
+
+#### `[continuous_queries]` Section
+
+* `query-stats-enabled` was added with a default of `false`. When set to `true`, continuous query execution statistics are written to the default monitor store.
+
+### Features
+
+- [#8512](https://github.com/influxdata/influxdb/pull/8512): Switch to LogLog-Beta Cardinality estimation 
 - [#8143](https://github.com/influxdata/influxdb/pull/8143): Add WAL sync delay
 - [#7977](https://github.com/influxdata/influxdb/issues/7977): Add chunked request processing back into the Go client v2
 - [#7974](https://github.com/influxdata/influxdb/pull/7974): Allow non-admin users to execute SHOW DATABASES.
@@ -15,9 +86,22 @@
 - [#8194](https://github.com/influxdata/influxdb/pull/8194): Add "integral" function to InfluxQL.
 - [#7393](https://github.com/influxdata/influxdb/issues/7393): Add "non_negative_difference" function to InfluxQL.
 - [#8042](https://github.com/influxdata/influxdb/issues/8042): Add bitwise AND, OR and XOR operators to the query language.
+- [#8302](https://github.com/influxdata/influxdb/pull/8302): Write throughput/concurrency improvements
+- [#8273](https://github.com/influxdata/influxdb/issues/8273): Remove the admin UI.
+- [#8327](https://github.com/influxdata/influxdb/pull/8327): Update to go1.8.1
+- [#8348](https://github.com/influxdata/influxdb/pull/8348): Add max concurrent compaction limits
+- [#8366](https://github.com/influxdata/influxdb/pull/8366): Add TSI support tooling.
+- [#8350](https://github.com/influxdata/influxdb/pull/8350): Track HTTP client requests for /write and /query with /debug/requests.
+- [#8384](https://github.com/influxdata/influxdb/pull/8384): Write and compaction stability
+- [#7862](https://github.com/influxdata/influxdb/pull/7861): Add new profile endpoint for gathering all debug profiles and querues in single archive.
+- [#8390](https://github.com/influxdata/influxdb/issues/8390): Add nanosecond duration literal support.
+- [#8394](https://github.com/influxdata/influxdb/pull/8394): Optimize top() and bottom() using an incremental aggregator.
+- [#7129](https://github.com/influxdata/influxdb/issues/7129): Maintain the tags of points selected by top() or bottom() when writing the results.
+- [#8188](https://github.com/influxdata/influxdb/issues/8188): Write CQ stats to _internal
 
 ### Bugfixes
 
+- [#8187](https://github.com/influxdata/influxdb/pull/8187): Several statements were missing the DefaultDatabase method
 - [#8231](https://github.com/influxdata/influxdb/pull/8231): Fix spelling mistake in HTTP section of config -- shared-sercret
 - [#8190](https://github.com/influxdata/influxdb/issues/8190): History file should redact passwords before saving to history.
 - [#8122](https://github.com/influxdata/influxdb/pull/8122): Suppress headers in output for influx cli when they are the same.
@@ -26,6 +110,7 @@
 - [#8064](https://github.com/influxdata/influxdb/issues/8064): Forbid wildcards in binary expressions.
 - [#8148](https://github.com/influxdata/influxdb/issues/8148): Fix fill(linear) when multiple series exist and there are null values.
 - [#7995](https://github.com/influxdata/influxdb/issues/7995): Update liner dependency to handle docker exec.
+- [#7835](https://github.com/influxdata/influxdb/pull/7835): Bind backup and restore port to localhost by default
 - [#7811](https://github.com/influxdata/influxdb/issues/7811): Kill query not killing query
 - [#7457](https://github.com/influxdata/influxdb/issues/7457): KILL QUERY should work during all phases of a query
 - [#8155](https://github.com/influxdata/influxdb/pull/8155): Simplify admin user check.
@@ -39,15 +124,45 @@
 - [#8177](https://github.com/influxdata/influxdb/issues/8177): Fix racy integration test.
 - [#8230](https://github.com/influxdata/influxdb/issues/8230): Prevent overflowing or underflowing during window computation.
 - [#8058](https://github.com/influxdata/influxdb/pull/8058): Enabled golint for admin, httpd, subscriber, udp. @karlding
-
-## v1.2.3 [unreleased]
+- [#8252](https://github.com/influxdata/influxdb/issues/8252): Implicitly cast null to false in binary expressions with a boolean.
+- [#8067](https://github.com/influxdata/influxdb/issues/8067): Restrict fill(none) and fill(linear) to be usable only with aggregate queries.
+- [#8065](https://github.com/influxdata/influxdb/issues/8065): Restrict top() and bottom() selectors to be used with no other functions.
+- [#8266](https://github.com/influxdata/influxdb/issues/8266): top() and bottom() now returns the time for every point.
+- [#8315](https://github.com/influxdata/influxdb/issues/8315): Remove default upper time bound on DELETE queries.
+- [#8066](https://github.com/influxdata/influxdb/issues/8066): Fix LIMIT and OFFSET for certain aggregate queries.
+- [#8045](https://github.com/influxdata/influxdb/issues/8045): Refactor the subquery code and fix outer condition queries.
+- [#7425](https://github.com/influxdata/influxdb/issues/7425): Fix compaction aborted log messages
+- [#8123](https://github.com/influxdata/influxdb/issues/8123): TSM compaction does not remove .tmp on error
+- [#8343](https://github.com/influxdata/influxdb/issues/8343): Set the CSV output to an empty string for null values.
+- [#8368](https://github.com/influxdata/influxdb/issues/8368): Compaction exhausting disk resources in InfluxDB
+- [#8358](https://github.com/influxdata/influxdb/issues/8358): Small edits to the etc/config.sample.toml file.
+- [#8392](https://github.com/influxdata/influxdb/issues/8393): Points beyond retention policy scope are dropped silently
+- [#8387](https://github.com/influxdata/influxdb/issues/8387): Fix TSM tmp file leaked on disk
+- [#8417](https://github.com/influxdata/influxdb/issues/8417): Fix large field keys preventing snapshot compactions
+- [#7957](https://github.com/influxdata/influxdb/issues/7957): URL query parameter credentials take priority over Authentication header.
+- [#8443](https://github.com/influxdata/influxdb/issues/8443): TSI branch has duplicate tag values.
+- [#8299](https://github.com/influxdata/influxdb/issues/8299): Out of memory when using HTTP API
+- [#8455](https://github.com/influxdata/influxdb/pull/8455): Check file count before attempting a TSI level compaction.
+- [#8470](https://github.com/influxdata/influxdb/issues/8470): index file fd leak in tsi branch
+- [#8468](https://github.com/influxdata/influxdb/pull/8468): Fix TSI non-contiguous compaction panic.
+- [#8500](https://github.com/influxdata/influxdb/issues/8500): InfluxDB goes unresponsive
+## v1.2.4 [2017-05-08]
 
 ### Bugfixes
 
+- [#8338](https://github.com/influxdata/influxdb/pull/8338): Prefix partial write errors with `partial write:` to generalize identification in other subsystems
+
+## v1.2.3 [2017-04-17]
+
+### Bugfixes
+
+- [#8190](https://github.com/influxdata/influxdb/issues/8190): History file should redact passwords before saving to history.
+- [#8187](https://github.com/influxdata/influxdb/pull/8187): Several statements were missing the DefaultDatabase method
 - [#8022](https://github.com/influxdata/influxdb/issues/8022): Segment violation in models.Tags.Get
 - [#8155](https://github.com/influxdata/influxdb/pull/8155): Simplify admin user check.
 - [#8167](https://github.com/influxdata/influxdb/issues/8167): Fix a regression when math was used with selectors.
 - [#8175](https://github.com/influxdata/influxdb/issues/8175): Ensure the input for certain functions in the query engine are ordered.
+- [#8254](https://github.com/influxdata/influxdb/pull/8254): Fix delete time fields creating unparseable points
 
 ## v1.2.2 [2017-03-14]
 
@@ -131,7 +246,6 @@ The stress tool `influx_stress` will be removed in a subsequent release. We reco
 
 ### Bugfixes
 
-
 - [#7845](https://github.com/influxdata/influxdb/issues/7845): Fix race in storage engine.
 - [#7838](https://github.com/influxdata/influxdb/issues/7838): Ensure Subscriber service can be disabled.
 - [#7822](https://github.com/influxdata/influxdb/issues/7822): Drop database will delete /influxdb/data directory
@@ -153,6 +267,15 @@ The stress tool `influx_stress` will be removed in a subsequent release. We reco
 - [#7563](https://github.com/influxdata/influxdb/issues/7563): RP should not allow `INF` or `0` as a shard duration.
 - [#7396](https://github.com/influxdata/influxdb/issues/7396): CLI should use spaces for alignment, not tabs.
 - [#6527](https://github.com/influxdata/influxdb/issues/6527): 0.12.2 Influx CLI client PRECISION returns "Unknown precision....
+
+
+## v1.1.5 [2017-04-28]
+
+### Bugfixes
+
+- [#8190](https://github.com/influxdata/influxdb/issues/8190): History file should redact passwords before saving to history.
+- [#8187](https://github.com/influxdata/influxdb/pull/8187): Several statements were missing the DefaultDatabase method
+
 ## v1.1.4 [2017-02-27]
 
 ### Bugfixes

@@ -594,6 +594,11 @@ func (s *DropRetentionPolicyStatement) RequiredPrivileges() (ExecutionPrivileges
 	return ExecutionPrivileges{{Admin: false, Name: s.Database, Privilege: WritePrivilege}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *DropRetentionPolicyStatement) DefaultDatabase() string {
+	return s.Database
+}
+
 // CreateUserStatement represents a command for creating a new user.
 type CreateUserStatement struct {
 	// Name of the user to be created.
@@ -704,6 +709,11 @@ func (s *GrantStatement) RequiredPrivileges() (ExecutionPrivileges, error) {
 	return ExecutionPrivileges{{Admin: true, Name: "", Privilege: AllPrivileges}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *GrantStatement) DefaultDatabase() string {
+	return s.On
+}
+
 // GrantAdminStatement represents a command for granting admin privilege.
 type GrantAdminStatement struct {
 	// Who to grant the privilege to.
@@ -802,6 +812,11 @@ func (s *RevokeStatement) RequiredPrivileges() (ExecutionPrivileges, error) {
 	return ExecutionPrivileges{{Admin: true, Name: "", Privilege: AllPrivileges}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *RevokeStatement) DefaultDatabase() string {
+	return s.On
+}
+
 // RevokeAdminStatement represents a command to revoke admin privilege from a user.
 type RevokeAdminStatement struct {
 	// Who to revoke admin privilege from.
@@ -868,6 +883,11 @@ func (s *CreateRetentionPolicyStatement) RequiredPrivileges() (ExecutionPrivileg
 	return ExecutionPrivileges{{Admin: true, Name: "", Privilege: AllPrivileges}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *CreateRetentionPolicyStatement) DefaultDatabase() string {
+	return s.Database
+}
+
 // AlterRetentionPolicyStatement represents a command to alter an existing retention policy.
 type AlterRetentionPolicyStatement struct {
 	// Name of policy to alter.
@@ -922,6 +942,11 @@ func (s *AlterRetentionPolicyStatement) String() string {
 // RequiredPrivileges returns the privilege required to execute an AlterRetentionPolicyStatement.
 func (s *AlterRetentionPolicyStatement) RequiredPrivileges() (ExecutionPrivileges, error) {
 	return ExecutionPrivileges{{Admin: true, Name: "", Privilege: AllPrivileges}}, nil
+}
+
+// DefaultDatabase returns the default database from the statement.
+func (s *AlterRetentionPolicyStatement) DefaultDatabase() string {
+	return s.Database
 }
 
 // FillOption represents different options for filling aggregate windows.
@@ -1494,7 +1519,7 @@ func (s *SelectStatement) ColumnNames() []string {
 
 		switch f := field.Expr.(type) {
 		case *Call:
-			if f.Name == "top" || f.Name == "bottom" {
+			if s.Target == nil && (f.Name == "top" || f.Name == "bottom") {
 				for _, arg := range f.Args[1:] {
 					ref, ok := arg.(*VarRef)
 					if ok {
@@ -1736,7 +1761,15 @@ func (s *SelectStatement) validate(tr targetRequirement) error {
 		return err
 	}
 
+	if err := s.validateTopBottom(); err != nil {
+		return err
+	}
+
 	if err := s.validateAggregates(tr); err != nil {
+		return err
+	}
+
+	if err := s.validateFill(); err != nil {
 		return err
 	}
 
@@ -2112,6 +2145,20 @@ func (s *SelectStatement) validateAggregates(tr targetRequirement) error {
 	return nil
 }
 
+// validateFill ensures that the fill option matches the query type.
+func (s *SelectStatement) validateFill() error {
+	info := newSelectInfo(s)
+	if len(info.calls) == 0 {
+		switch s.Fill {
+		case NoFill:
+			return errors.New("fill(none) must be used with a function")
+		case LinearFill:
+			return errors.New("fill(linear) must be used with a function")
+		}
+	}
+	return nil
+}
+
 // validateTimeExpression ensures that any select statements that have a group
 // by interval either have a time expression limiting the time range or have a
 // parent query that does that.
@@ -2204,7 +2251,7 @@ func (s *SelectStatement) validateDistinct() error {
 	}
 
 	if len(s.Fields) > 1 {
-		return fmt.Errorf("aggregate function distinct() can not be combined with other functions or fields")
+		return fmt.Errorf("aggregate function distinct() cannot be combined with other functions or fields")
 	}
 
 	switch c := s.Fields[0].Expr.(type) {
@@ -2215,6 +2262,19 @@ func (s *SelectStatement) validateDistinct() error {
 
 		if len(c.Args) != 1 {
 			return fmt.Errorf("distinct function can only have one argument")
+		}
+	}
+	return nil
+}
+
+func (s *SelectStatement) validateTopBottom() error {
+	// Ensure there are not multiple calls if top/bottom is present.
+	info := newSelectInfo(s)
+	if len(info.calls) > 1 {
+		for call := range info.calls {
+			if call.Name == "top" || call.Name == "bottom" {
+				return fmt.Errorf("selector function %s() cannot be combined with other functions", call.Name)
+			}
 		}
 	}
 	return nil
@@ -2540,6 +2600,14 @@ func (s *DeleteStatement) RequiredPrivileges() (ExecutionPrivileges, error) {
 	return ExecutionPrivileges{{Admin: false, Name: "", Privilege: WritePrivilege}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *DeleteStatement) DefaultDatabase() string {
+	if m, ok := s.Source.(*Measurement); ok {
+		return m.Database
+	}
+	return ""
+}
+
 // ShowSeriesStatement represents a command for listing series in the database.
 type ShowSeriesStatement struct {
 	// Database to query. If blank, use the default database.
@@ -2599,6 +2667,11 @@ func (s *ShowSeriesStatement) String() string {
 // RequiredPrivileges returns the privilege required to execute a ShowSeriesStatement.
 func (s *ShowSeriesStatement) RequiredPrivileges() (ExecutionPrivileges, error) {
 	return ExecutionPrivileges{{Admin: false, Name: "", Privilege: ReadPrivilege}}, nil
+}
+
+// DefaultDatabase returns the default database from the statement.
+func (s *ShowSeriesStatement) DefaultDatabase() string {
+	return s.Database
 }
 
 // DropSeriesStatement represents a command for removing a series from the database.
@@ -2824,6 +2897,11 @@ func (s *DropContinuousQueryStatement) RequiredPrivileges() (ExecutionPrivileges
 	return ExecutionPrivileges{{Admin: false, Name: "", Privilege: WritePrivilege}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *DropContinuousQueryStatement) DefaultDatabase() string {
+	return s.Database
+}
+
 // ShowMeasurementsStatement represents a command for listing measurements.
 type ShowMeasurementsStatement struct {
 	// Database to query. If blank, use the default database.
@@ -2888,6 +2966,11 @@ func (s *ShowMeasurementsStatement) RequiredPrivileges() (ExecutionPrivileges, e
 	return ExecutionPrivileges{{Admin: false, Name: "", Privilege: ReadPrivilege}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *ShowMeasurementsStatement) DefaultDatabase() string {
+	return s.Database
+}
+
 // DropMeasurementStatement represents a command to drop a measurement.
 type DropMeasurementStatement struct {
 	// Name of the measurement to be dropped.
@@ -2940,6 +3023,11 @@ func (s *ShowRetentionPoliciesStatement) String() string {
 // RequiredPrivileges returns the privilege(s) required to execute a ShowRetentionPoliciesStatement
 func (s *ShowRetentionPoliciesStatement) RequiredPrivileges() (ExecutionPrivileges, error) {
 	return ExecutionPrivileges{{Admin: false, Name: "", Privilege: ReadPrivilege}}, nil
+}
+
+// DefaultDatabase returns the default database from the statement.
+func (s *ShowRetentionPoliciesStatement) DefaultDatabase() string {
+	return s.Database
 }
 
 // ShowStatsStatement displays statistics for a given module.
@@ -3043,6 +3131,11 @@ func (s *CreateSubscriptionStatement) RequiredPrivileges() (ExecutionPrivileges,
 	return ExecutionPrivileges{{Admin: true, Name: "", Privilege: AllPrivileges}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *CreateSubscriptionStatement) DefaultDatabase() string {
+	return s.Database
+}
+
 // DropSubscriptionStatement represents a command to drop a subscription to the incoming data stream.
 type DropSubscriptionStatement struct {
 	Name            string
@@ -3058,6 +3151,11 @@ func (s *DropSubscriptionStatement) String() string {
 // RequiredPrivileges returns the privilege required to execute a DropSubscriptionStatement
 func (s *DropSubscriptionStatement) RequiredPrivileges() (ExecutionPrivileges, error) {
 	return ExecutionPrivileges{{Admin: true, Name: "", Privilege: AllPrivileges}}, nil
+}
+
+// DefaultDatabase returns the default database from the statement.
+func (s *DropSubscriptionStatement) DefaultDatabase() string {
+	return s.Database
 }
 
 // ShowSubscriptionsStatement represents a command to show a list of subscriptions.
@@ -3147,6 +3245,11 @@ func (s *ShowTagKeysStatement) RequiredPrivileges() (ExecutionPrivileges, error)
 	return ExecutionPrivileges{{Admin: false, Name: "", Privilege: ReadPrivilege}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *ShowTagKeysStatement) DefaultDatabase() string {
+	return s.Database
+}
+
 // ShowTagValuesStatement represents a command for listing tag values.
 type ShowTagValuesStatement struct {
 	// Database to query. If blank, use the default database.
@@ -3221,6 +3324,11 @@ func (s *ShowTagValuesStatement) RequiredPrivileges() (ExecutionPrivileges, erro
 	return ExecutionPrivileges{{Admin: false, Name: "", Privilege: ReadPrivilege}}, nil
 }
 
+// DefaultDatabase returns the default database from the statement.
+func (s *ShowTagValuesStatement) DefaultDatabase() string {
+	return s.Database
+}
+
 // ShowUsersStatement represents a command for listing users.
 type ShowUsersStatement struct{}
 
@@ -3285,6 +3393,11 @@ func (s *ShowFieldKeysStatement) String() string {
 // RequiredPrivileges returns the privilege(s) required to execute a ShowFieldKeysStatement.
 func (s *ShowFieldKeysStatement) RequiredPrivileges() (ExecutionPrivileges, error) {
 	return ExecutionPrivileges{{Admin: false, Name: "", Privilege: ReadPrivilege}}, nil
+}
+
+// DefaultDatabase returns the default database from the statement.
+func (s *ShowFieldKeysStatement) DefaultDatabase() string {
+	return s.Database
 }
 
 // Fields represents a list of fields.
@@ -3988,7 +4101,7 @@ func TimeRange(expr Expr) (min, max time.Time, err error) {
 
 // TimeRangeAsEpochNano returns the minimum and maximum times, as epoch nano, specified by
 // an expression. If there is no lower bound, the minimum time is returned
-// for minimum. If there is no higher bound, now is returned for maximum.
+// for minimum. If there is no higher bound, the maximum time is returned.
 func TimeRangeAsEpochNano(expr Expr) (min, max int64, err error) {
 	tmin, tmax, err := TimeRange(expr)
 	if err != nil {
@@ -4001,7 +4114,7 @@ func TimeRangeAsEpochNano(expr Expr) (min, max int64, err error) {
 		min = tmin.UnixNano()
 	}
 	if tmax.IsZero() {
-		max = time.Now().UnixNano()
+		max = time.Unix(0, MaxTime).UnixNano()
 	} else {
 		max = tmax.UnixNano()
 	}
@@ -4187,7 +4300,15 @@ func Rewrite(r Rewriter, node Node) Node {
 		n.Fields = Rewrite(r, n.Fields).(Fields)
 		n.Dimensions = Rewrite(r, n.Dimensions).(Dimensions)
 		n.Sources = Rewrite(r, n.Sources).(Sources)
-		n.Condition = Rewrite(r, n.Condition).(Expr)
+
+		// Rewrite may return nil. Nil does not satisfy the Expr
+		// interface. We only assert the rewritten result to be an
+		// Expr if it is not nil:
+		if cond := Rewrite(r, n.Condition); cond != nil {
+			n.Condition = cond.(Expr)
+		} else {
+			n.Condition = nil
+		}
 
 	case *SubQuery:
 		n.Statement = Rewrite(r, n.Statement).(*SelectStatement)
@@ -4294,6 +4415,18 @@ func Eval(expr Expr, m map[string]interface{}) interface{} {
 func evalBinaryExpr(expr *BinaryExpr, m map[string]interface{}) interface{} {
 	lhs := Eval(expr.LHS, m)
 	rhs := Eval(expr.RHS, m)
+	if lhs == nil && rhs != nil {
+		// When the LHS is nil and the RHS is a boolean, implicitly cast the
+		// nil to false.
+		if _, ok := rhs.(bool); ok {
+			lhs = false
+		}
+	} else if lhs != nil && rhs == nil {
+		// Implicit cast of the RHS nil to false when the LHS is a boolean.
+		if _, ok := lhs.(bool); ok {
+			rhs = false
+		}
+	}
 
 	// Evaluate if both sides are simple types.
 	switch lhs := lhs.(type) {
@@ -4465,16 +4598,28 @@ func evalBinaryExpr(expr *BinaryExpr, m map[string]interface{}) interface{} {
 		switch expr.Op {
 		case EQ:
 			rhs, ok := rhs.(string)
-			return ok && lhs == rhs
+			if !ok {
+				return nil
+			}
+			return lhs == rhs
 		case NEQ:
 			rhs, ok := rhs.(string)
-			return ok && lhs != rhs
+			if !ok {
+				return nil
+			}
+			return lhs != rhs
 		case EQREGEX:
 			rhs, ok := rhs.(*regexp.Regexp)
-			return ok && rhs.MatchString(lhs)
+			if !ok {
+				return nil
+			}
+			return rhs.MatchString(lhs)
 		case NEQREGEX:
 			rhs, ok := rhs.(*regexp.Regexp)
-			return ok && !rhs.MatchString(lhs)
+			if !ok {
+				return nil
+			}
+			return !rhs.MatchString(lhs)
 		}
 	}
 	return nil

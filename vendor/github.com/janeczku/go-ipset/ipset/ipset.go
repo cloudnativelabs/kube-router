@@ -25,8 +25,8 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/go-semver/semver"
+	log "github.com/sirupsen/logrus"
 )
 
 const minIpsetVersion = "6.0.0"

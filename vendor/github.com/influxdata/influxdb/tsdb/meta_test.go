@@ -3,184 +3,12 @@ package tsdb_test
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"testing"
 
-	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/tsdb"
+	"github.com/influxdata/influxdb/tsdb/index/inmem"
 )
-
-// Test comparing SeriesIDs for equality.
-func TestSeriesIDs_Equals(t *testing.T) {
-	ids1 := tsdb.SeriesIDs([]uint64{1, 2, 3})
-	ids2 := tsdb.SeriesIDs([]uint64{1, 2, 3})
-	ids3 := tsdb.SeriesIDs([]uint64{4, 5, 6})
-
-	if !ids1.Equals(ids2) {
-		t.Fatal("expected ids1 == ids2")
-	} else if ids1.Equals(ids3) {
-		t.Fatal("expected ids1 != ids3")
-	}
-}
-
-// Test intersecting sets of SeriesIDs.
-func TestSeriesIDs_Intersect(t *testing.T) {
-	// Test swaping l & r, all branches of if-else, and exit loop when 'j < len(r)'
-	ids1 := tsdb.SeriesIDs([]uint64{1, 3, 4, 5, 6})
-	ids2 := tsdb.SeriesIDs([]uint64{1, 2, 3, 7})
-	exp := tsdb.SeriesIDs([]uint64{1, 3})
-	got := ids1.Intersect(ids2)
-
-	if !exp.Equals(got) {
-		t.Fatalf("exp=%v, got=%v", exp, got)
-	}
-
-	// Test exit for loop when 'i < len(l)'
-	ids1 = tsdb.SeriesIDs([]uint64{1})
-	ids2 = tsdb.SeriesIDs([]uint64{1, 2})
-	exp = tsdb.SeriesIDs([]uint64{1})
-	got = ids1.Intersect(ids2)
-
-	if !exp.Equals(got) {
-		t.Fatalf("exp=%v, got=%v", exp, got)
-	}
-}
-
-// Test union sets of SeriesIDs.
-func TestSeriesIDs_Union(t *testing.T) {
-	// Test all branches of if-else, exit loop because of 'j < len(r)', and append remainder from left.
-	ids1 := tsdb.SeriesIDs([]uint64{1, 2, 3, 7})
-	ids2 := tsdb.SeriesIDs([]uint64{1, 3, 4, 5, 6})
-	exp := tsdb.SeriesIDs([]uint64{1, 2, 3, 4, 5, 6, 7})
-	got := ids1.Union(ids2)
-
-	if !exp.Equals(got) {
-		t.Fatalf("exp=%v, got=%v", exp, got)
-	}
-
-	// Test exit because of 'i < len(l)' and append remainder from right.
-	ids1 = tsdb.SeriesIDs([]uint64{1})
-	ids2 = tsdb.SeriesIDs([]uint64{1, 2})
-	exp = tsdb.SeriesIDs([]uint64{1, 2})
-	got = ids1.Union(ids2)
-
-	if !exp.Equals(got) {
-		t.Fatalf("exp=%v, got=%v", exp, got)
-	}
-}
-
-// Test removing one set of SeriesIDs from another.
-func TestSeriesIDs_Reject(t *testing.T) {
-	// Test all branches of if-else, exit loop because of 'j < len(r)', and append remainder from left.
-	ids1 := tsdb.SeriesIDs([]uint64{1, 2, 3, 7})
-	ids2 := tsdb.SeriesIDs([]uint64{1, 3, 4, 5, 6})
-	exp := tsdb.SeriesIDs([]uint64{2, 7})
-	got := ids1.Reject(ids2)
-
-	if !exp.Equals(got) {
-		t.Fatalf("exp=%v, got=%v", exp, got)
-	}
-
-	// Test exit because of 'i < len(l)'.
-	ids1 = tsdb.SeriesIDs([]uint64{1})
-	ids2 = tsdb.SeriesIDs([]uint64{1, 2})
-	exp = tsdb.SeriesIDs{}
-	got = ids1.Reject(ids2)
-
-	if !exp.Equals(got) {
-		t.Fatalf("exp=%v, got=%v", exp, got)
-	}
-}
-
-func TestMeasurement_AppendSeriesKeysByID_Missing(t *testing.T) {
-	m := tsdb.NewMeasurement("cpu")
-	var dst []string
-	dst = m.AppendSeriesKeysByID(dst, []uint64{1})
-	if exp, got := 0, len(dst); exp != got {
-		t.Fatalf("series len mismatch: exp %v, got %v", exp, got)
-	}
-}
-
-func TestMeasurement_AppendSeriesKeysByID_Exists(t *testing.T) {
-	m := tsdb.NewMeasurement("cpu")
-	s := tsdb.NewSeries([]byte("cpu,host=foo"), models.Tags{models.NewTag([]byte("host"), []byte("foo"))})
-	s.ID = 1
-	m.AddSeries(s)
-
-	var dst []string
-	dst = m.AppendSeriesKeysByID(dst, []uint64{1})
-	if exp, got := 1, len(dst); exp != got {
-		t.Fatalf("series len mismatch: exp %v, got %v", exp, got)
-	}
-
-	if exp, got := "cpu,host=foo", dst[0]; exp != got {
-		t.Fatalf("series mismatch: exp %v, got %v", exp, got)
-	}
-}
-
-func BenchmarkMeasurement_SeriesIDForExp_EQRegex(b *testing.B) {
-	m := tsdb.NewMeasurement("cpu")
-	for i := 0; i < 100000; i++ {
-		s := tsdb.NewSeries([]byte("cpu"), models.Tags{models.NewTag(
-			[]byte("host"),
-			[]byte(fmt.Sprintf("host%d", i)))})
-		s.ID = uint64(i)
-		m.AddSeries(s)
-	}
-
-	if exp, got := 100000, len(m.SeriesKeys()); exp != got {
-		b.Fatalf("series count mismatch: exp %v got %v", exp, got)
-	}
-
-	stmt, err := influxql.NewParser(strings.NewReader(`SELECT * FROM cpu WHERE host =~ /host\d+/`)).ParseStatement()
-	if err != nil {
-		b.Fatalf("invalid statement: %s", err)
-	}
-
-	selectStmt := stmt.(*influxql.SelectStatement)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		ids := m.IDsForExpr(selectStmt.Condition.(*influxql.BinaryExpr))
-		if exp, got := 100000, len(ids); exp != got {
-			b.Fatalf("series count mismatch: exp %v got %v", exp, got)
-		}
-
-	}
-}
-
-func BenchmarkMeasurement_SeriesIDForExp_NERegex(b *testing.B) {
-	m := tsdb.NewMeasurement("cpu")
-	for i := 0; i < 100000; i++ {
-		s := tsdb.NewSeries([]byte("cpu"), models.Tags{models.Tag{
-			Key:   []byte("host"),
-			Value: []byte(fmt.Sprintf("host%d", i))}})
-		s.ID = uint64(i)
-		m.AddSeries(s)
-	}
-
-	if exp, got := 100000, len(m.SeriesKeys()); exp != got {
-		b.Fatalf("series count mismatch: exp %v got %v", exp, got)
-	}
-
-	stmt, err := influxql.NewParser(strings.NewReader(`SELECT * FROM cpu WHERE host !~ /foo\d+/`)).ParseStatement()
-	if err != nil {
-		b.Fatalf("invalid statement: %s", err)
-	}
-
-	selectStmt := stmt.(*influxql.SelectStatement)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		ids := m.IDsForExpr(selectStmt.Condition.(*influxql.BinaryExpr))
-		if exp, got := 100000, len(ids); exp != got {
-			b.Fatalf("series count mismatch: exp %v got %v", exp, got)
-		}
-
-	}
-
-}
 
 // Ensure tags can be marshaled into a byte slice.
 func TestMarshalTags(t *testing.T) {
@@ -233,42 +61,88 @@ func benchmarkMarshalTags(b *testing.B, keyN int) {
 	}
 }
 
-/*
-func BenchmarkCreateSeriesIndex_1K(b *testing.B) {
-	benchmarkCreateSeriesIndex(b, genTestSeries(38, 3, 3))
+// Ensure tags can be marshaled into a byte slice.
+func TestMakeTagsKey(t *testing.T) {
+	for i, tt := range []struct {
+		keys   []string
+		tags   models.Tags
+		result []byte
+	}{
+		{
+			keys:   nil,
+			tags:   nil,
+			result: nil,
+		},
+		{
+			keys:   []string{"foo"},
+			tags:   models.NewTags(map[string]string{"foo": "bar"}),
+			result: []byte(`foo|bar`),
+		},
+		{
+			keys:   []string{"foo"},
+			tags:   models.NewTags(map[string]string{"baz": "battttt"}),
+			result: []byte(``),
+		},
+		{
+			keys:   []string{"baz", "foo"},
+			tags:   models.NewTags(map[string]string{"baz": "battttt"}),
+			result: []byte(`baz|battttt`),
+		},
+		{
+			keys:   []string{"baz", "foo", "zzz"},
+			tags:   models.NewTags(map[string]string{"foo": "bar"}),
+			result: []byte(`foo|bar`),
+		},
+		{
+			keys:   []string{"baz", "foo"},
+			tags:   models.NewTags(map[string]string{"foo": "bar", "baz": "battttt"}),
+			result: []byte(`baz|foo|battttt|bar`),
+		},
+		{
+			keys:   []string{"baz"},
+			tags:   models.NewTags(map[string]string{"baz": "battttt", "foo": "bar"}),
+			result: []byte(`baz|battttt`),
+		},
+	} {
+		result := tsdb.MakeTagsKey(tt.keys, tt.tags)
+		if !bytes.Equal(result, tt.result) {
+			t.Fatalf("%d. unexpected result: exp=%s, got=%s", i, tt.result, result)
+		}
+	}
 }
 
-func BenchmarkCreateSeriesIndex_100K(b *testing.B) {
-	benchmarkCreateSeriesIndex(b, genTestSeries(32, 5, 5))
+func BenchmarkMakeTagsKey_KeyN1(b *testing.B)  { benchmarkMakeTagsKey(b, 1) }
+func BenchmarkMakeTagsKey_KeyN3(b *testing.B)  { benchmarkMakeTagsKey(b, 3) }
+func BenchmarkMakeTagsKey_KeyN5(b *testing.B)  { benchmarkMakeTagsKey(b, 5) }
+func BenchmarkMakeTagsKey_KeyN10(b *testing.B) { benchmarkMakeTagsKey(b, 10) }
+
+func makeTagsAndKeys(keyN int) ([]string, models.Tags) {
+	const keySize, valueSize = 8, 15
+
+	// Generate tag map.
+	keys := make([]string, keyN)
+	tags := make(map[string]string)
+	for i := 0; i < keyN; i++ {
+		keys[i] = fmt.Sprintf("%0*d", keySize, i)
+		tags[keys[i]] = fmt.Sprintf("%0*d", valueSize, i)
+	}
+
+	return keys, models.NewTags(tags)
 }
 
-func BenchmarkCreateSeriesIndex_1M(b *testing.B) {
-	benchmarkCreateSeriesIndex(b, genTestSeries(330, 5, 5))
-}
+func benchmarkMakeTagsKey(b *testing.B, keyN int) {
+	keys, tags := makeTagsAndKeys(keyN)
 
-func benchmarkCreateSeriesIndex(b *testing.B, series []*TestSeries) {
-	idxs := make([]*tsdb.DatabaseIndex, 0, b.N)
+	// Unmarshal map into byte slice.
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		index, err := tsdb.NewDatabaseIndex(fmt.Sprintf("db%d", i))
-		if err != nil {
-			b.Fatal(err)
-		}
-		idxs = append(idxs, index)
-	}
-
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		idx := idxs[n]
-		for _, s := range series {
-			idx.CreateSeriesIndexIfNotExists(s.Measurement, s.Series, false)
-		}
+		tsdb.MakeTagsKey(keys, tags)
 	}
 }
-*/
 
 type TestSeries struct {
 	Measurement string
-	Series      *tsdb.Series
+	Series      *inmem.Series
 }
 
 func genTestSeries(mCnt, tCnt, vCnt int) []*TestSeries {
@@ -279,7 +153,7 @@ func genTestSeries(mCnt, tCnt, vCnt int) []*TestSeries {
 		for _, ts := range tagSets {
 			series = append(series, &TestSeries{
 				Measurement: m,
-				Series:      tsdb.NewSeries([]byte(fmt.Sprintf("%s:%s", m, string(tsdb.MarshalTags(ts)))), models.NewTags(ts)),
+				Series:      inmem.NewSeries([]byte(fmt.Sprintf("%s:%s", m, string(tsdb.MarshalTags(ts)))), models.NewTags(ts)),
 			})
 		}
 	}

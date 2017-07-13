@@ -1,8 +1,6 @@
 package influxql
 
 import (
-	"bytes"
-	"container/heap"
 	"fmt"
 	"math"
 	"sort"
@@ -783,290 +781,50 @@ func IntegerSpreadReduceSlice(a []IntegerPoint) []IntegerPoint {
 	return []IntegerPoint{{Time: ZeroTime, Value: max - min}}
 }
 
-func newTopIterator(input Iterator, opt IteratorOptions, n *IntegerLiteral, tags []int) (Iterator, error) {
+func newTopIterator(input Iterator, opt IteratorOptions, n int, keepTags bool) (Iterator, error) {
 	switch input := input.(type) {
 	case FloatIterator:
-		aggregateFn := NewFloatTopReduceSliceFunc(int(n.Val), tags, opt.Interval)
 		createFn := func() (FloatPointAggregator, FloatPointEmitter) {
-			fn := NewFloatSliceFuncReducer(aggregateFn)
+			fn := NewFloatTopReducer(n)
 			return fn, fn
 		}
-		return newFloatReduceFloatIterator(input, opt, createFn), nil
+		itr := newFloatReduceFloatIterator(input, opt, createFn)
+		itr.keepTags = keepTags
+		return itr, nil
 	case IntegerIterator:
-		aggregateFn := NewIntegerTopReduceSliceFunc(int(n.Val), tags, opt.Interval)
 		createFn := func() (IntegerPointAggregator, IntegerPointEmitter) {
-			fn := NewIntegerSliceFuncReducer(aggregateFn)
+			fn := NewIntegerTopReducer(n)
 			return fn, fn
 		}
-		return newIntegerReduceIntegerIterator(input, opt, createFn), nil
+		itr := newIntegerReduceIntegerIterator(input, opt, createFn)
+		itr.keepTags = keepTags
+		return itr, nil
 	default:
 		return nil, fmt.Errorf("unsupported top iterator type: %T", input)
 	}
 }
 
-// NewFloatTopReduceSliceFunc returns the top values within a window.
-func NewFloatTopReduceSliceFunc(n int, tags []int, interval Interval) FloatReduceSliceFunc {
-	return func(a []FloatPoint) []FloatPoint {
-		// Filter by tags if they exist.
-		if len(tags) > 0 {
-			a = filterFloatByUniqueTags(a, tags, func(cur, p *FloatPoint) bool {
-				return p.Value > cur.Value || (p.Value == cur.Value && p.Time < cur.Time)
-			})
-		}
-
-		// If we ask for more elements than exist, restrict n to be the length of the array.
-		size := n
-		if size > len(a) {
-			size = len(a)
-		}
-
-		// Construct a heap preferring higher values and breaking ties
-		// based on the earliest time for a point.
-		h := floatPointsSortBy(a, func(a, b *FloatPoint) bool {
-			if a.Value != b.Value {
-				return a.Value > b.Value
-			}
-			return a.Time < b.Time
-		})
-		heap.Init(h)
-
-		// Pop the first n elements and then sort by time.
-		points := make([]FloatPoint, 0, size)
-		for i := 0; i < size; i++ {
-			p := heap.Pop(h).(FloatPoint)
-			points = append(points, p)
-		}
-
-		// Either zero out all values or sort the points by time
-		// depending on if a time interval was given or not.
-		if !interval.IsZero() {
-			for i := range points {
-				points[i].Time = ZeroTime
-			}
-		} else {
-			sort.Stable(floatPointsByTime(points))
-		}
-		return points
-	}
-}
-
-// NewIntegerTopReduceSliceFunc returns the top values within a window.
-func NewIntegerTopReduceSliceFunc(n int, tags []int, interval Interval) IntegerReduceSliceFunc {
-	return func(a []IntegerPoint) []IntegerPoint {
-		// Filter by tags if they exist.
-		if len(tags) > 0 {
-			a = filterIntegerByUniqueTags(a, tags, func(cur, p *IntegerPoint) bool {
-				return p.Value > cur.Value || (p.Value == cur.Value && p.Time < cur.Time)
-			})
-		}
-
-		// If we ask for more elements than exist, restrict n to be the length of the array.
-		size := n
-		if size > len(a) {
-			size = len(a)
-		}
-
-		// Construct a heap preferring higher values and breaking ties
-		// based on the earliest time for a point.
-		h := integerPointsSortBy(a, func(a, b *IntegerPoint) bool {
-			if a.Value != b.Value {
-				return a.Value > b.Value
-			}
-			return a.Time < b.Time
-		})
-		heap.Init(h)
-
-		// Pop the first n elements and then sort by time.
-		points := make([]IntegerPoint, 0, size)
-		for i := 0; i < size; i++ {
-			p := heap.Pop(h).(IntegerPoint)
-			points = append(points, p)
-		}
-
-		// Either zero out all values or sort the points by time
-		// depending on if a time interval was given or not.
-		if !interval.IsZero() {
-			for i := range points {
-				points[i].Time = ZeroTime
-			}
-		} else {
-			sort.Stable(integerPointsByTime(points))
-		}
-		return points
-	}
-}
-
-func newBottomIterator(input Iterator, opt IteratorOptions, n *IntegerLiteral, tags []int) (Iterator, error) {
+func newBottomIterator(input Iterator, opt IteratorOptions, n int, keepTags bool) (Iterator, error) {
 	switch input := input.(type) {
 	case FloatIterator:
-		aggregateFn := NewFloatBottomReduceSliceFunc(int(n.Val), tags, opt.Interval)
 		createFn := func() (FloatPointAggregator, FloatPointEmitter) {
-			fn := NewFloatSliceFuncReducer(aggregateFn)
+			fn := NewFloatBottomReducer(n)
 			return fn, fn
 		}
-		return newFloatReduceFloatIterator(input, opt, createFn), nil
+		itr := newFloatReduceFloatIterator(input, opt, createFn)
+		itr.keepTags = keepTags
+		return itr, nil
 	case IntegerIterator:
-		aggregateFn := NewIntegerBottomReduceSliceFunc(int(n.Val), tags, opt.Interval)
 		createFn := func() (IntegerPointAggregator, IntegerPointEmitter) {
-			fn := NewIntegerSliceFuncReducer(aggregateFn)
+			fn := NewIntegerBottomReducer(n)
 			return fn, fn
 		}
-		return newIntegerReduceIntegerIterator(input, opt, createFn), nil
+		itr := newIntegerReduceIntegerIterator(input, opt, createFn)
+		itr.keepTags = keepTags
+		return itr, nil
 	default:
 		return nil, fmt.Errorf("unsupported bottom iterator type: %T", input)
 	}
-}
-
-// NewFloatBottomReduceSliceFunc returns the bottom values within a window.
-func NewFloatBottomReduceSliceFunc(n int, tags []int, interval Interval) FloatReduceSliceFunc {
-	return func(a []FloatPoint) []FloatPoint {
-		// Filter by tags if they exist.
-		if len(tags) > 0 {
-			a = filterFloatByUniqueTags(a, tags, func(cur, p *FloatPoint) bool {
-				return p.Value < cur.Value || (p.Value == cur.Value && p.Time < cur.Time)
-			})
-		}
-
-		// If we ask for more elements than exist, restrict n to be the length of the array.
-		size := n
-		if size > len(a) {
-			size = len(a)
-		}
-
-		// Construct a heap preferring lower values and breaking ties
-		// based on the earliest time for a point.
-		h := floatPointsSortBy(a, func(a, b *FloatPoint) bool {
-			if a.Value != b.Value {
-				return a.Value < b.Value
-			}
-			return a.Time < b.Time
-		})
-		heap.Init(h)
-
-		// Pop the first n elements and then sort by time.
-		points := make([]FloatPoint, 0, size)
-		for i := 0; i < size; i++ {
-			p := heap.Pop(h).(FloatPoint)
-			points = append(points, p)
-		}
-
-		// Either zero out all values or sort the points by time
-		// depending on if a time interval was given or not.
-		if !interval.IsZero() {
-			for i := range points {
-				points[i].Time = ZeroTime
-			}
-		} else {
-			sort.Stable(floatPointsByTime(points))
-		}
-		return points
-	}
-}
-
-// NewIntegerBottomReduceSliceFunc returns the bottom values within a window.
-func NewIntegerBottomReduceSliceFunc(n int, tags []int, interval Interval) IntegerReduceSliceFunc {
-	return func(a []IntegerPoint) []IntegerPoint {
-		// Filter by tags if they exist.
-		if len(tags) > 0 {
-			a = filterIntegerByUniqueTags(a, tags, func(cur, p *IntegerPoint) bool {
-				return p.Value < cur.Value || (p.Value == cur.Value && p.Time < cur.Time)
-			})
-		}
-
-		// If we ask for more elements than exist, restrict n to be the length of the array.
-		size := n
-		if size > len(a) {
-			size = len(a)
-		}
-
-		// Construct a heap preferring lower values and breaking ties
-		// based on the earliest time for a point.
-		h := integerPointsSortBy(a, func(a, b *IntegerPoint) bool {
-			if a.Value != b.Value {
-				return a.Value < b.Value
-			}
-			return a.Time < b.Time
-		})
-		heap.Init(h)
-
-		// Pop the first n elements and then sort by time.
-		points := make([]IntegerPoint, 0, size)
-		for i := 0; i < size; i++ {
-			p := heap.Pop(h).(IntegerPoint)
-			points = append(points, p)
-		}
-
-		// Either zero out all values or sort the points by time
-		// depending on if a time interval was given or not.
-		if !interval.IsZero() {
-			for i := range points {
-				points[i].Time = ZeroTime
-			}
-		} else {
-			sort.Stable(integerPointsByTime(points))
-		}
-		return points
-	}
-}
-
-func filterFloatByUniqueTags(a []FloatPoint, tags []int, cmpFunc func(cur, p *FloatPoint) bool) []FloatPoint {
-	pointMap := make(map[string]FloatPoint)
-	for _, p := range a {
-		keyBuf := bytes.NewBuffer(nil)
-		for i, index := range tags {
-			if i > 0 {
-				keyBuf.WriteString(",")
-			}
-			fmt.Fprintf(keyBuf, "%s", p.Aux[index])
-		}
-		key := keyBuf.String()
-
-		cur, ok := pointMap[key]
-		if ok {
-			if cmpFunc(&cur, &p) {
-				pointMap[key] = p
-			}
-		} else {
-			pointMap[key] = p
-		}
-	}
-
-	// Recreate the original array with our new filtered list.
-	points := make([]FloatPoint, 0, len(pointMap))
-	for _, p := range pointMap {
-		points = append(points, p)
-	}
-	return points
-}
-
-func filterIntegerByUniqueTags(a []IntegerPoint, tags []int, cmpFunc func(cur, p *IntegerPoint) bool) []IntegerPoint {
-	pointMap := make(map[string]IntegerPoint)
-	for _, p := range a {
-		keyBuf := bytes.NewBuffer(nil)
-		for i, index := range tags {
-			if i > 0 {
-				keyBuf.WriteString(",")
-			}
-			fmt.Fprintf(keyBuf, "%s", p.Aux[index])
-		}
-		key := keyBuf.String()
-
-		cur, ok := pointMap[key]
-		if ok {
-			if cmpFunc(&cur, &p) {
-				pointMap[key] = p
-			}
-		} else {
-			pointMap[key] = p
-		}
-	}
-
-	// Recreate the original array with our new filtered list.
-	points := make([]IntegerPoint, 0, len(pointMap))
-	for _, p := range pointMap {
-		points = append(points, p)
-	}
-	return points
 }
 
 // newPercentileIterator returns an iterator for operating on a percentile() call.

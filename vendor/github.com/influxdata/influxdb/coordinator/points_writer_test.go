@@ -12,6 +12,7 @@ import (
 	"github.com/influxdata/influxdb/coordinator"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/services/meta"
+	"github.com/influxdata/influxdb/tsdb"
 )
 
 // TODO(benbjohnson): Rewrite tests to use cluster_test.MetaClient.
@@ -234,8 +235,12 @@ func TestPointsWriter_MapShards_Invalid(t *testing.T) {
 		t.Fatalf("unexpected an error: %v", err)
 	}
 
-	if exp := 0; len(shardMappings.Points) != exp {
-		t.Errorf("MapShards() len mismatch. got %v, exp %v", len(shardMappings.Points), exp)
+	if got, exp := len(shardMappings.Points), 0; got != exp {
+		t.Errorf("MapShards() len mismatch. got %v, exp %v", got, exp)
+	}
+
+	if got, exp := len(shardMappings.Dropped), 1; got != exp {
+		t.Fatalf("MapShard() dropped mismatch: got %v, exp %v", got, exp)
 	}
 }
 
@@ -286,7 +291,7 @@ func TestPointsWriter_WritePoints(t *testing.T) {
 
 		// copy to prevent data race
 		theTest := test
-		sm := coordinator.NewShardMapping()
+		sm := coordinator.NewShardMapping(16)
 		sm.MapPoint(
 			&meta.ShardInfo{ID: uint64(1), Owners: []meta.ShardOwner{
 				{NodeID: 1},
@@ -335,33 +340,91 @@ func TestPointsWriter_WritePoints(t *testing.T) {
 		c := coordinator.NewPointsWriter()
 		c.MetaClient = ms
 		c.TSDBStore = store
-		c.Subscriber = sub
+		c.AddWriteSubscriber(sub.Points())
 		c.Node = &influxdb.Node{ID: 1}
 
 		c.Open()
 		defer c.Close()
 
-		err := c.WritePoints(pr.Database, pr.RetentionPolicy, models.ConsistencyLevelOne, pr.Points)
+		err := c.WritePointsPrivileged(pr.Database, pr.RetentionPolicy, models.ConsistencyLevelOne, pr.Points)
 		if err == nil && test.expErr != nil {
-			t.Errorf("PointsWriter.WritePoints(): '%s' error: got %v, exp %v", test.name, err, test.expErr)
+			t.Errorf("PointsWriter.WritePointsPrivileged(): '%s' error: got %v, exp %v", test.name, err, test.expErr)
 		}
 
 		if err != nil && test.expErr == nil {
-			t.Errorf("PointsWriter.WritePoints(): '%s' error: got %v, exp %v", test.name, err, test.expErr)
+			t.Errorf("PointsWriter.WritePointsPrivileged(): '%s' error: got %v, exp %v", test.name, err, test.expErr)
 		}
 		if err != nil && test.expErr != nil && err.Error() != test.expErr.Error() {
-			t.Errorf("PointsWriter.WritePoints(): '%s' error: got %v, exp %v", test.name, err, test.expErr)
+			t.Errorf("PointsWriter.WritePointsPrivileged(): '%s' error: got %v, exp %v", test.name, err, test.expErr)
 		}
 		if test.expErr == nil {
 			select {
 			case p := <-subPoints:
 				if !reflect.DeepEqual(p, pr) {
-					t.Errorf("PointsWriter.WritePoints(): '%s' error: unexpected WritePointsRequest got %v, exp %v", test.name, p, pr)
+					t.Errorf("PointsWriter.WritePointsPrivileged(): '%s' error: unexpected WritePointsRequest got %v, exp %v", test.name, p, pr)
 				}
 			default:
-				t.Errorf("PointsWriter.WritePoints(): '%s' error: Subscriber.Points not called", test.name)
+				t.Errorf("PointsWriter.WritePointsPrivileged(): '%s' error: Subscriber.Points not called", test.name)
 			}
 		}
+	}
+}
+
+func TestPointsWriter_WritePoints_Dropped(t *testing.T) {
+	pr := &coordinator.WritePointsRequest{
+		Database:        "mydb",
+		RetentionPolicy: "myrp",
+	}
+
+	// Ensure that the test shard groups are created before the points
+	// are created.
+	ms := NewPointsWriterMetaClient()
+
+	// Three points that range over the shardGroup duration (1h) and should map to two
+	// distinct shards
+	pr.AddPoint("cpu", 1.0, time.Now().Add(-24*time.Hour), nil)
+
+	// copy to prevent data race
+	sm := coordinator.NewShardMapping(16)
+
+	// ShardMapper dropped this point
+	sm.Dropped = append(sm.Dropped, pr.Points[0])
+
+	// Local coordinator.Node ShardWriter
+	// lock on the write increment since these functions get called in parallel
+	var mu sync.Mutex
+
+	store := &fakeStore{
+		WriteFn: func(shardID uint64, points []models.Point) error {
+			mu.Lock()
+			defer mu.Unlock()
+			return nil
+		},
+	}
+
+	ms.DatabaseFn = func(database string) *meta.DatabaseInfo {
+		return nil
+	}
+	ms.NodeIDFn = func() uint64 { return 1 }
+
+	subPoints := make(chan *coordinator.WritePointsRequest, 1)
+	sub := Subscriber{}
+	sub.PointsFn = func() chan<- *coordinator.WritePointsRequest {
+		return subPoints
+	}
+
+	c := coordinator.NewPointsWriter()
+	c.MetaClient = ms
+	c.TSDBStore = store
+	c.AddWriteSubscriber(sub.Points())
+	c.Node = &influxdb.Node{ID: 1}
+
+	c.Open()
+	defer c.Close()
+
+	err := c.WritePointsPrivileged(pr.Database, pr.RetentionPolicy, models.ConsistencyLevelOne, pr.Points)
+	if _, ok := err.(tsdb.PartialWriteError); !ok {
+		t.Errorf("PointsWriter.WritePoints(): got %v, exp %v", err, tsdb.PartialWriteError{})
 	}
 }
 

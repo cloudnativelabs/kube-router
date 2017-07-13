@@ -16,10 +16,6 @@ matrix:
   allow_failures:
     - go: tip
   include:
-    - go: 1.6
-      before_install: true
-      install: go get -t ./...
-      script: go test ./...
     - go: 1.7
       before_install: true
       install: go get -t ./...
@@ -169,6 +165,11 @@ matrix:
         - docker
     - env:
         - TEST=bgp_unnumbered_test.py
+      sudo: required
+      services:
+        - docker
+    - env:
+        - TEST=aspath_test.py
       sudo: required
       services:
         - docker

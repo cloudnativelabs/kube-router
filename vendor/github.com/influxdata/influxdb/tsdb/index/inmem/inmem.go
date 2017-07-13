@@ -26,16 +26,17 @@ import (
 	"github.com/influxdata/influxdb/pkg/estimator"
 	"github.com/influxdata/influxdb/pkg/estimator/hll"
 	"github.com/influxdata/influxdb/tsdb"
+	"github.com/uber-go/zap"
 )
 
 // IndexName is the name of this index.
 const IndexName = "inmem"
 
 func init() {
-	tsdb.NewInmemIndex = func(name string) (interface{}, error) { return NewIndex(), nil }
+	tsdb.NewInmemIndex = func(name string) (interface{}, error) { return NewIndex(name), nil }
 
-	tsdb.RegisterIndex(IndexName, func(id uint64, path string, opt tsdb.EngineOptions) tsdb.Index {
-		return NewShardIndex(id, path, opt)
+	tsdb.RegisterIndex(IndexName, func(id uint64, database, path string, opt tsdb.EngineOptions) tsdb.Index {
+		return NewShardIndex(id, database, path, opt)
 	})
 }
 
@@ -45,20 +46,23 @@ func init() {
 type Index struct {
 	mu sync.RWMutex
 
+	database string
+
 	// In-memory metadata index, built on load and updated when new series come in
-	measurements map[string]*tsdb.Measurement // measurement name to object and index
-	series       map[string]*tsdb.Series      // map series key to the Series object
-	lastID       uint64                       // last used series ID. They're in memory only for this shard
+	measurements map[string]*Measurement // measurement name to object and index
+	series       map[string]*Series      // map series key to the Series object
+	lastID       uint64                  // last used series ID. They're in memory only for this shard
 
 	seriesSketch, seriesTSSketch             *hll.Plus
 	measurementsSketch, measurementsTSSketch *hll.Plus
 }
 
 // NewIndex returns a new initialized Index.
-func NewIndex() *Index {
+func NewIndex(database string) *Index {
 	index := &Index{
-		measurements: make(map[string]*tsdb.Measurement),
-		series:       make(map[string]*tsdb.Series),
+		database:     database,
+		measurements: make(map[string]*Measurement),
+		series:       make(map[string]*Series),
 	}
 
 	index.seriesSketch = hll.NewDefaultPlus()
@@ -73,8 +77,10 @@ func (i *Index) Type() string      { return IndexName }
 func (i *Index) Open() (err error) { return nil }
 func (i *Index) Close() error      { return nil }
 
+func (i *Index) WithLogger(zap.Logger) {}
+
 // Series returns a series by key.
-func (i *Index) Series(key []byte) (*tsdb.Series, error) {
+func (i *Index) Series(key []byte) (*Series, error) {
 	i.mu.RLock()
 	s := i.series[string(key)]
 	i.mu.RUnlock()
@@ -92,11 +98,14 @@ func (i *Index) SeriesSketches() (estimator.Sketch, estimator.Sketch, error) {
 // Since indexes are not shared across shards, the count returned by SeriesN
 // cannot be combined with other shards' counts.
 func (i *Index) SeriesN() int64 {
-	return int64(len(i.series))
+	i.mu.RLock()
+	n := int64(len(i.series))
+	i.mu.RUnlock()
+	return n
 }
 
 // Measurement returns the measurement object from the index by the name
-func (i *Index) Measurement(name []byte) (*tsdb.Measurement, error) {
+func (i *Index) Measurement(name []byte) (*Measurement, error) {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	return i.measurements[string(name)], nil
@@ -117,11 +126,11 @@ func (i *Index) MeasurementsSketches() (estimator.Sketch, estimator.Sketch, erro
 }
 
 // MeasurementsByName returns a list of measurements.
-func (i *Index) MeasurementsByName(names [][]byte) ([]*tsdb.Measurement, error) {
+func (i *Index) MeasurementsByName(names [][]byte) ([]*Measurement, error) {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	a := make([]*tsdb.Measurement, 0, len(names))
+	a := make([]*Measurement, 0, len(names))
 	for _, name := range names {
 		if m := i.measurements[string(name)]; m != nil {
 			a = append(a, m)
@@ -136,36 +145,36 @@ func (i *Index) CreateSeriesIfNotExists(shardID uint64, key, name []byte, tags m
 	i.mu.RLock()
 	// if there is a series for this id, it's already been added
 	ss := i.series[string(key)]
-	if ss != nil {
-		ss.AssignShard(shardID)
-		i.mu.RUnlock()
-		return nil
-	}
 	i.mu.RUnlock()
 
+	if ss != nil {
+		ss.AssignShard(shardID)
+		return nil
+	}
+
 	// get or create the measurement index
-	m := i.CreateMeasurementIndexIfNotExists(string(name))
+	m := i.CreateMeasurementIndexIfNotExists(name)
 
 	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	// Check for the series again under a write lock
 	ss = i.series[string(key)]
 	if ss != nil {
 		ss.AssignShard(shardID)
-		i.mu.Unlock()
 		return nil
 	}
 
 	// Verify that the series will not exceed limit.
 	if !ignoreLimits {
 		if max := opt.Config.MaxSeriesPerDatabase; max > 0 && len(i.series)+1 > max {
-			i.mu.Unlock()
 			return errMaxSeriesPerDatabaseExceeded
 		}
 	}
 
 	// set the in memory ID for query processing on this shard
 	// The series key and tags are clone to prevent a memory leak
-	series := tsdb.NewSeries([]byte(string(key)), tags.Clone())
+	series := NewSeries([]byte(string(key)), tags.Clone())
 	series.ID = i.lastID + 1
 	i.lastID++
 
@@ -177,19 +186,18 @@ func (i *Index) CreateSeriesIfNotExists(shardID uint64, key, name []byte, tags m
 
 	// Add the series to the series sketch.
 	i.seriesSketch.Add(key)
-	i.mu.Unlock()
 
 	return nil
 }
 
 // CreateMeasurementIndexIfNotExists creates or retrieves an in memory index
 // object for the measurement
-func (i *Index) CreateMeasurementIndexIfNotExists(name string) *tsdb.Measurement {
-	name = escape.UnescapeString(name)
+func (i *Index) CreateMeasurementIndexIfNotExists(name []byte) *Measurement {
+	name = escape.Unescape(name)
 
 	// See if the measurement exists using a read-lock
 	i.mu.RLock()
-	m := i.measurements[name]
+	m := i.measurements[string(name)]
 	if m != nil {
 		i.mu.RUnlock()
 		return m
@@ -202,10 +210,10 @@ func (i *Index) CreateMeasurementIndexIfNotExists(name string) *tsdb.Measurement
 
 	// Make sure it was created in between the time we released our read-lock
 	// and acquire the write lock
-	m = i.measurements[name]
+	m = i.measurements[string(name)]
 	if m == nil {
-		m = tsdb.NewMeasurement(name)
-		i.measurements[name] = m
+		m = NewMeasurement(i.database, string(name))
+		i.measurements[string(name)] = m
 
 		// Add the measurement to the measurements sketch.
 		i.measurementsSketch.Add([]byte(name))
@@ -216,9 +224,9 @@ func (i *Index) CreateMeasurementIndexIfNotExists(name string) *tsdb.Measurement
 // HasTagKey returns true if tag key exists.
 func (i *Index) HasTagKey(name, key []byte) (bool, error) {
 	i.mu.RLock()
-	defer i.mu.RUnlock()
-
 	mm := i.measurements[string(name)]
+	i.mu.RUnlock()
+
 	if mm == nil {
 		return false, nil
 	}
@@ -228,9 +236,9 @@ func (i *Index) HasTagKey(name, key []byte) (bool, error) {
 // HasTagValue returns true if tag value exists.
 func (i *Index) HasTagValue(name, key, value []byte) bool {
 	i.mu.RLock()
-	defer i.mu.RUnlock()
-
 	mm := i.measurements[string(name)]
+	i.mu.RUnlock()
+
 	if mm == nil {
 		return false
 	}
@@ -240,9 +248,9 @@ func (i *Index) HasTagValue(name, key, value []byte) bool {
 // TagValueN returns the cardinality of a tag value.
 func (i *Index) TagValueN(name, key []byte) int {
 	i.mu.RLock()
-	defer i.mu.RUnlock()
-
 	mm := i.measurements[string(name)]
+	i.mu.RUnlock()
+
 	if mm == nil {
 		return 0
 	}
@@ -252,9 +260,9 @@ func (i *Index) TagValueN(name, key []byte) int {
 // MeasurementTagKeysByExpr returns an ordered set of tag keys filtered by an expression.
 func (i *Index) MeasurementTagKeysByExpr(name []byte, expr influxql.Expr) (map[string]struct{}, error) {
 	i.mu.RLock()
-	defer i.mu.RUnlock()
-
 	mm := i.measurements[string(name)]
+	i.mu.RUnlock()
+
 	if mm == nil {
 		return nil, nil
 	}
@@ -263,10 +271,13 @@ func (i *Index) MeasurementTagKeysByExpr(name []byte, expr influxql.Expr) (map[s
 
 // ForEachMeasurementTagKey iterates over all tag keys for a measurement.
 func (i *Index) ForEachMeasurementTagKey(name []byte, fn func(key []byte) error) error {
+	// Ensure we do not hold a lock on the index while fn executes in case fn tries
+	// to acquire a lock on the index again.  If another goroutine has Lock, this will
+	// deadlock.
 	i.mu.RLock()
-	defer i.mu.RUnlock()
-
 	mm := i.measurements[string(name)]
+	i.mu.RUnlock()
+
 	if mm == nil {
 		return nil
 	}
@@ -283,9 +294,9 @@ func (i *Index) ForEachMeasurementTagKey(name []byte, fn func(key []byte) error)
 // TagKeyCardinality returns the number of values for a measurement/tag key.
 func (i *Index) TagKeyCardinality(name, key []byte) int {
 	i.mu.RLock()
-	defer i.mu.RUnlock()
-
 	mm := i.measurements[string(name)]
+	i.mu.RUnlock()
+
 	if mm == nil {
 		return 0
 	}
@@ -295,9 +306,9 @@ func (i *Index) TagKeyCardinality(name, key []byte) int {
 // TagsForSeries returns the tag map for the passed in series
 func (i *Index) TagsForSeries(key string) (models.Tags, error) {
 	i.mu.RLock()
-	defer i.mu.RUnlock()
-
 	ss := i.series[key]
+	i.mu.RUnlock()
+
 	if ss == nil {
 		return nil, nil
 	}
@@ -337,7 +348,7 @@ func (i *Index) measurementNamesByExpr(expr influxql.Expr) ([][]byte, error) {
 				return nil, fmt.Errorf("left side of '%s' must be a tag key", e.Op.String())
 			}
 
-			tf := &tsdb.TagFilter{
+			tf := &TagFilter{
 				Op:  e.Op,
 				Key: tag.Val,
 			}
@@ -414,7 +425,7 @@ func (i *Index) measurementNamesByNameFilter(op influxql.Token, val string, rege
 }
 
 // measurementNamesByTagFilters returns the sorted measurements matching the filters on tag values.
-func (i *Index) measurementNamesByTagFilters(filter *tsdb.TagFilter) [][]byte {
+func (i *Index) measurementNamesByTagFilters(filter *TagFilter) [][]byte {
 	// Build a list of measurements matching the filters.
 	var names [][]byte
 	var tagMatch bool
@@ -509,10 +520,11 @@ func (i *Index) DropSeries(key []byte) error {
 	}
 
 	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	k := string(key)
 	series := i.series[k]
 	if series == nil {
-		i.mu.Unlock()
 		return nil
 	}
 
@@ -529,7 +541,6 @@ func (i *Index) DropSeries(key []byte) error {
 	if !series.Measurement().HasSeries() {
 		i.dropMeasurement(series.Measurement().Name)
 	}
-	i.mu.Unlock()
 
 	return nil
 }
@@ -537,9 +548,9 @@ func (i *Index) DropSeries(key []byte) error {
 // ForEachMeasurementSeriesByExpr iterates over all series in a measurement filtered by an expression.
 func (i *Index) ForEachMeasurementSeriesByExpr(name []byte, expr influxql.Expr, fn func(tags models.Tags) error) error {
 	i.mu.RLock()
-	defer i.mu.RUnlock()
-
 	mm := i.measurements[string(name)]
+	i.mu.RUnlock()
+
 	if mm == nil {
 		return nil
 	}
@@ -583,7 +594,7 @@ func (i *Index) SeriesKeys() []string {
 func (i *Index) SetFieldSet(*tsdb.MeasurementFieldSet) {}
 
 // SetFieldName adds a field name to a measurement.
-func (i *Index) SetFieldName(measurement, name string) {
+func (i *Index) SetFieldName(measurement []byte, name string) {
 	m := i.CreateMeasurementIndexIfNotExists(measurement)
 	m.SetFieldName(name)
 }
@@ -593,7 +604,7 @@ func (i *Index) ForEachMeasurementName(fn func(name []byte) error) error {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	mms := make(tsdb.Measurements, 0, len(i.measurements))
+	mms := make(Measurements, 0, len(i.measurements))
 	for _, m := range i.measurements {
 		mms = append(mms, m)
 	}
@@ -643,7 +654,7 @@ func (i *Index) MeasurementSeriesKeysByExpr(name []byte, condition influxql.Expr
 // SeriesPointIterator returns an influxql iterator over all series.
 func (i *Index) SeriesPointIterator(opt influxql.IteratorOptions) (influxql.Iterator, error) {
 	// Read and sort all measurements.
-	mms := make(tsdb.Measurements, 0, len(i.measurements))
+	mms := make(Measurements, 0, len(i.measurements))
 	for _, mm := range i.measurements {
 		mms = append(mms, mm)
 	}
@@ -697,6 +708,25 @@ func (i *Index) RemoveShard(shardID uint64) {
 	}
 }
 
+// assignExistingSeries assigns the existings series to shardID and returns the series, names and tags that
+// do not exists yet.
+func (i *Index) assignExistingSeries(shardID uint64, keys, names [][]byte, tagsSlice []models.Tags) ([][]byte, [][]byte, []models.Tags) {
+	i.mu.RLock()
+	var n int
+	for j, key := range keys {
+		if ss, ok := i.series[string(key)]; !ok {
+			keys[n] = keys[j]
+			names[n] = names[j]
+			tagsSlice[n] = tagsSlice[j]
+			n++
+		} else {
+			ss.AssignShard(shardID)
+		}
+	}
+	i.mu.RUnlock()
+	return keys[:n], names[:n], tagsSlice[:n]
+}
+
 // Ensure index implements interface.
 var _ tsdb.Index = &ShardIndex{}
 
@@ -712,6 +742,11 @@ type ShardIndex struct {
 
 // CreateSeriesListIfNotExists creates a list of series if they doesn't exist in bulk.
 func (idx *ShardIndex) CreateSeriesListIfNotExists(keys, names [][]byte, tagsSlice []models.Tags) error {
+	keys, names, tagsSlice = idx.assignExistingSeries(idx.id, keys, names, tagsSlice)
+	if len(keys) == 0 {
+		return nil
+	}
+
 	var reason string
 	var dropped int
 	var droppedKeys map[string]struct{}
@@ -798,7 +833,7 @@ func (i *ShardIndex) TagSets(name []byte, opt influxql.IteratorOptions) ([]*infl
 }
 
 // NewShardIndex returns a new index for a shard.
-func NewShardIndex(id uint64, path string, opt tsdb.EngineOptions) tsdb.Index {
+func NewShardIndex(id uint64, database, path string, opt tsdb.EngineOptions) tsdb.Index {
 	return &ShardIndex{
 		Index: opt.InmemIndex.(*Index),
 		id:    id,
@@ -808,7 +843,7 @@ func NewShardIndex(id uint64, path string, opt tsdb.EngineOptions) tsdb.Index {
 
 // seriesPointIterator emits series as influxql points.
 type seriesPointIterator struct {
-	mms  tsdb.Measurements
+	mms  Measurements
 	keys struct {
 		buf []string
 		i   int

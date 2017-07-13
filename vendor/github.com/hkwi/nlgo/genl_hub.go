@@ -305,11 +305,14 @@ func (self *GenlHub) Family(name string) GenlFamily {
 	self.Add("nlctrl", "notify", cap)
 	defer self.Remove("nlctrl", "notify", cap)
 
+	self.lock.Lock()
 	for _, f := range self.familyIds {
 		if f.Name == name {
+			self.lock.Unlock()
 			return f
 		}
 	}
+	self.lock.Unlock()
 	if err := self.Async(GenlFamilyCtrl.DumpRequest(CTRL_CMD_GETFAMILY), cap); err != nil {
 		log.Print(err)
 	} else {

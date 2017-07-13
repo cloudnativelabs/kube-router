@@ -61,12 +61,18 @@ type MRTSubTyper interface {
 type MRTSubTypeTableDumpv2 uint16
 
 const (
-	PEER_INDEX_TABLE   MRTSubTypeTableDumpv2 = 1
-	RIB_IPV4_UNICAST   MRTSubTypeTableDumpv2 = 2
-	RIB_IPV4_MULTICAST MRTSubTypeTableDumpv2 = 3
-	RIB_IPV6_UNICAST   MRTSubTypeTableDumpv2 = 4
-	RIB_IPV6_MULTICAST MRTSubTypeTableDumpv2 = 5
-	RIB_GENERIC        MRTSubTypeTableDumpv2 = 6
+	PEER_INDEX_TABLE           MRTSubTypeTableDumpv2 = 1
+	RIB_IPV4_UNICAST           MRTSubTypeTableDumpv2 = 2
+	RIB_IPV4_MULTICAST         MRTSubTypeTableDumpv2 = 3
+	RIB_IPV6_UNICAST           MRTSubTypeTableDumpv2 = 4
+	RIB_IPV6_MULTICAST         MRTSubTypeTableDumpv2 = 5
+	RIB_GENERIC                MRTSubTypeTableDumpv2 = 6
+	GEO_PEER_TABLE             MRTSubTypeTableDumpv2 = 7  // RFC6397
+	RIB_IPV4_UNICAST_ADDPATH   MRTSubTypeTableDumpv2 = 8  // RFC8050
+	RIB_IPV4_MULTICAST_ADDPATH MRTSubTypeTableDumpv2 = 9  // RFC8050
+	RIB_IPV6_UNICAST_ADDPATH   MRTSubTypeTableDumpv2 = 10 // RFC8050
+	RIB_IPV6_MULTICAST_ADDPATH MRTSubTypeTableDumpv2 = 11 // RFC8050
+	RIB_GENERIC_ADDPATH        MRTSubTypeTableDumpv2 = 12 // RFC8050
 )
 
 func (t MRTSubTypeTableDumpv2) ToUint16() uint16 {
@@ -76,12 +82,16 @@ func (t MRTSubTypeTableDumpv2) ToUint16() uint16 {
 type MRTSubTypeBGP4MP uint16
 
 const (
-	STATE_CHANGE      MRTSubTypeBGP4MP = 0
-	MESSAGE           MRTSubTypeBGP4MP = 1
-	MESSAGE_AS4       MRTSubTypeBGP4MP = 4
-	STATE_CHANGE_AS4  MRTSubTypeBGP4MP = 5
-	MESSAGE_LOCAL     MRTSubTypeBGP4MP = 6
-	MESSAGE_AS4_LOCAL MRTSubTypeBGP4MP = 7
+	STATE_CHANGE              MRTSubTypeBGP4MP = 0
+	MESSAGE                   MRTSubTypeBGP4MP = 1
+	MESSAGE_AS4               MRTSubTypeBGP4MP = 4
+	STATE_CHANGE_AS4          MRTSubTypeBGP4MP = 5
+	MESSAGE_LOCAL             MRTSubTypeBGP4MP = 6
+	MESSAGE_AS4_LOCAL         MRTSubTypeBGP4MP = 7
+	MESSAGE_ADDPATH           MRTSubTypeBGP4MP = 8  // RFC8050
+	MESSAGE_AS4_ADDPATH       MRTSubTypeBGP4MP = 9  // RFC8050
+	MESSAGE_LOCAL_ADDPATH     MRTSubTypeBGP4MP = 10 // RFC8050
+	MESSAGE_AS4_LOCAL_ADDPATH MRTSubTypeBGP4MP = 11 // RFC8050
 )
 
 func (t MRTSubTypeBGP4MP) ToUint16() uint16 {
@@ -344,7 +354,9 @@ func (t *PeerIndexTable) String() string {
 type RibEntry struct {
 	PeerIndex      uint16
 	OriginatedTime uint32
+	PathIdentifier uint32
 	PathAttributes []bgp.PathAttributeInterface
+	isAddPath      bool
 }
 
 func (e *RibEntry) DecodeFromBytes(data []byte) ([]byte, error) {
@@ -354,8 +366,14 @@ func (e *RibEntry) DecodeFromBytes(data []byte) ([]byte, error) {
 	}
 	e.PeerIndex = binary.BigEndian.Uint16(data[:2])
 	e.OriginatedTime = binary.BigEndian.Uint32(data[2:6])
-	totalLen := binary.BigEndian.Uint16(data[6:8])
-	data = data[8:]
+	if e.isAddPath {
+		e.PathIdentifier = binary.BigEndian.Uint32(data[6:10])
+		data = data[10:]
+	} else {
+		data = data[6:]
+	}
+	totalLen := binary.BigEndian.Uint16(data[:2])
+	data = data[2:]
 	for attrLen := totalLen; attrLen > 0; {
 		p, err := bgp.GetPathAttribute(data)
 		if err != nil {
@@ -376,11 +394,8 @@ func (e *RibEntry) DecodeFromBytes(data []byte) ([]byte, error) {
 }
 
 func (e *RibEntry) Serialize() ([]byte, error) {
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint16(buf, e.PeerIndex)
-	binary.BigEndian.PutUint32(buf[2:], e.OriginatedTime)
+	pbuf := make([]byte, 0)
 	totalLen := 0
-	binary.BigEndian.PutUint16(buf[6:], uint16(totalLen))
 	for _, pattr := range e.PathAttributes {
 		// TODO special modification is needed for MP_REACH_NLRI
 		// but also Quagga doesn't implement this.
@@ -392,27 +407,47 @@ func (e *RibEntry) Serialize() ([]byte, error) {
 		// in the RIB Entry Header or RIB_GENERIC Entry Header,
 		// only the Next Hop Address Length and Next Hop Address fields are included.
 
-		bbuf, err := pattr.Serialize()
+		pb, err := pattr.Serialize()
 		if err != nil {
 			return nil, err
 		}
-		buf = append(buf, bbuf...)
-		totalLen += len(bbuf)
+		pbuf = append(pbuf, pb...)
+		totalLen += len(pb)
 	}
-	binary.BigEndian.PutUint16(buf[6:], uint16(totalLen))
+	var buf []byte
+	if e.isAddPath {
+		buf = make([]byte, 12)
+		binary.BigEndian.PutUint16(buf, e.PeerIndex)
+		binary.BigEndian.PutUint32(buf[2:], e.OriginatedTime)
+		binary.BigEndian.PutUint32(buf[6:], e.PathIdentifier)
+		binary.BigEndian.PutUint16(buf[10:], uint16(totalLen))
+	} else {
+		buf = make([]byte, 8)
+		binary.BigEndian.PutUint16(buf, e.PeerIndex)
+		binary.BigEndian.PutUint32(buf[2:], e.OriginatedTime)
+		binary.BigEndian.PutUint16(buf[6:], uint16(totalLen))
+	}
+	buf = append(buf, pbuf...)
 	return buf, nil
 }
 
-func NewRibEntry(index uint16, time uint32, pathattrs []bgp.PathAttributeInterface) *RibEntry {
+func NewRibEntry(index uint16, time uint32, pathid uint32, pathattrs []bgp.PathAttributeInterface) *RibEntry {
 	return &RibEntry{
 		PeerIndex:      index,
 		OriginatedTime: time,
+		PathIdentifier: pathid,
 		PathAttributes: pathattrs,
+		isAddPath:      pathid != 0,
 	}
 }
 
 func (e *RibEntry) String() string {
-	return fmt.Sprintf("RIB_ENTRY: PeerIndex [%d] OriginatedTime [%d] PathAttrs [%v]", e.PeerIndex, e.OriginatedTime, e.PathAttributes)
+	if e.isAddPath {
+		return fmt.Sprintf("RIB_ENTRY: PeerIndex [%d] OriginatedTime [%d] PathIdentifier[%d] PathAttrs [%v]", e.PeerIndex, e.OriginatedTime, e.PathIdentifier, e.PathAttributes)
+	} else {
+		return fmt.Sprintf("RIB_ENTRY: PeerIndex [%d] OriginatedTime [%d] PathAttrs [%v]", e.PeerIndex, e.OriginatedTime, e.PathAttributes)
+	}
+
 }
 
 type Rib struct {
@@ -420,6 +455,7 @@ type Rib struct {
 	Prefix         bgp.AddrPrefixInterface
 	Entries        []*RibEntry
 	RouteFamily    bgp.RouteFamily
+	isAddPath      bool
 }
 
 func (u *Rib) DecodeFromBytes(data []byte) error {
@@ -448,7 +484,9 @@ func (u *Rib) DecodeFromBytes(data []byte) error {
 	data = data[2:]
 	u.Entries = make([]*RibEntry, 0, entryNum)
 	for i := 0; i < int(entryNum); i++ {
-		e := &RibEntry{}
+		e := &RibEntry{
+			isAddPath: u.isAddPath,
+		}
 		data, err = e.DecodeFromBytes(data)
 		if err != nil {
 			return err
@@ -465,7 +503,7 @@ func (u *Rib) Serialize() ([]byte, error) {
 	switch rf {
 	case bgp.RF_IPv4_UC, bgp.RF_IPv4_MC, bgp.RF_IPv6_UC, bgp.RF_IPv6_MC:
 	default:
-		bbuf := make([]byte, 0, 2)
+		bbuf := make([]byte, 2)
 		binary.BigEndian.PutUint16(bbuf, u.Prefix.AFI())
 		buf = append(buf, bbuf...)
 		buf = append(buf, u.Prefix.SAFI())
@@ -497,11 +535,121 @@ func NewRib(seq uint32, prefix bgp.AddrPrefixInterface, entries []*RibEntry) *Ri
 		Prefix:         prefix,
 		Entries:        entries,
 		RouteFamily:    rf,
+		isAddPath:      entries[0].isAddPath,
 	}
 }
 
 func (u *Rib) String() string {
 	return fmt.Sprintf("RIB: Seq [%d] Prefix [%s] Entries [%s]", u.SequenceNumber, u.Prefix, u.Entries)
+}
+
+type GeoPeer struct {
+	Type      uint8
+	BgpId     net.IP
+	Latitude  float32
+	Longitude float32
+}
+
+func (p *GeoPeer) DecodeFromBytes(data []byte) ([]byte, error) {
+	if len(data) < 13 {
+		return nil, fmt.Errorf("not all GeoPeer bytes are available")
+	}
+	// Peer IP Address and Peer AS should not be included
+	p.Type = uint8(data[0])
+	if p.Type != uint8(0) {
+		return nil, fmt.Errorf("unsupported peer type for GeoPeer: %d", p.Type)
+	}
+	p.BgpId = net.IP(data[1:5])
+	p.Latitude = math.Float32frombits(binary.BigEndian.Uint32(data[5:9]))
+	p.Longitude = math.Float32frombits(binary.BigEndian.Uint32(data[9:13]))
+	return data[13:], nil
+}
+
+func (p *GeoPeer) Serialize() ([]byte, error) {
+	buf := make([]byte, 13)
+	buf[0] = uint8(0) // Peer IP Address and Peer AS should not be included
+	bgpId := p.BgpId.To4()
+	if bgpId == nil {
+		return nil, fmt.Errorf("invalid BgpId: %s", p.BgpId)
+	}
+	copy(buf[1:5], bgpId)
+	binary.BigEndian.PutUint32(buf[5:9], math.Float32bits(p.Latitude))
+	binary.BigEndian.PutUint32(buf[9:13], math.Float32bits(p.Longitude))
+	return buf, nil
+}
+
+func NewGeoPeer(bgpid string, latitude float32, longitude float32) *GeoPeer {
+	return &GeoPeer{
+		Type:      0, // Peer IP Address and Peer AS should not be included
+		BgpId:     net.ParseIP(bgpid).To4(),
+		Latitude:  latitude,
+		Longitude: longitude,
+	}
+}
+
+func (p *GeoPeer) String() string {
+	return fmt.Sprintf("PEER ENTRY: ID [%s] Latitude [%f] Longitude [%f]", p.BgpId, p.Latitude, p.Longitude)
+}
+
+type GeoPeerTable struct {
+	CollectorBgpId     net.IP
+	CollectorLatitude  float32
+	CollectorLongitude float32
+	Peers              []*GeoPeer
+}
+
+func (t *GeoPeerTable) DecodeFromBytes(data []byte) error {
+	if len(data) < 14 {
+		return fmt.Errorf("not all GeoPeerTable bytes are available")
+	}
+	t.CollectorBgpId = net.IP(data[0:4])
+	t.CollectorLatitude = math.Float32frombits(binary.BigEndian.Uint32(data[4:8]))
+	t.CollectorLongitude = math.Float32frombits(binary.BigEndian.Uint32(data[8:12]))
+	peerCount := binary.BigEndian.Uint16(data[12:14])
+	data = data[14:]
+	t.Peers = make([]*GeoPeer, 0, peerCount)
+	var err error
+	for i := 0; i < int(peerCount); i++ {
+		p := &GeoPeer{}
+		if data, err = p.DecodeFromBytes(data); err != nil {
+			return err
+		}
+		t.Peers = append(t.Peers, p)
+	}
+	return nil
+}
+
+func (t *GeoPeerTable) Serialize() ([]byte, error) {
+	buf := make([]byte, 14)
+	collectorBgpId := t.CollectorBgpId.To4()
+	if collectorBgpId == nil {
+		return nil, fmt.Errorf("invalid CollectorBgpId: %s", t.CollectorBgpId)
+	}
+	copy(buf[0:4], collectorBgpId)
+	binary.BigEndian.PutUint32(buf[4:8], math.Float32bits(t.CollectorLatitude))
+	binary.BigEndian.PutUint32(buf[8:12], math.Float32bits(t.CollectorLongitude))
+	binary.BigEndian.PutUint16(buf[12:14], uint16(len(t.Peers)))
+	for _, peer := range t.Peers {
+		pbuf, err := peer.Serialize()
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, pbuf...)
+	}
+	return buf, nil
+}
+
+func NewGeoPeerTable(bgpid string, latitude float32, longitude float32, peers []*GeoPeer) *GeoPeerTable {
+	return &GeoPeerTable{
+		CollectorBgpId:     net.ParseIP(bgpid).To4(),
+		CollectorLatitude:  latitude,
+		CollectorLongitude: longitude,
+		Peers:              peers,
+	}
+}
+
+func (t *GeoPeerTable) String() string {
+	return fmt.Sprintf("GEO_PEER_TABLE: CollectorBgpId [%s] CollectorLatitude [%f] CollectorLongitude [%f] Peers [%s]", t.CollectorBgpId, t.CollectorLatitude, t.CollectorLongitude, t.Peers)
 }
 
 type BGP4MPHeader struct {
@@ -645,6 +793,7 @@ type BGP4MPMessage struct {
 	BGPMessage        *bgp.BGPMessage
 	BGPMessagePayload []byte
 	isLocal           bool
+	isAddPath         bool
 }
 
 func (m *BGP4MPMessage) DecodeFromBytes(data []byte) error {
@@ -697,6 +846,25 @@ func NewBGP4MPMessageLocal(peeras, localas uint32, intfindex uint16, peerip, loc
 	}
 }
 
+func NewBGP4MPMessageAddPath(peeras, localas uint32, intfindex uint16, peerip, localip string, isAS4 bool, msg *bgp.BGPMessage) *BGP4MPMessage {
+	header, _ := newBGP4MPHeader(peeras, localas, intfindex, peerip, localip, isAS4)
+	return &BGP4MPMessage{
+		BGP4MPHeader: header,
+		BGPMessage:   msg,
+		isAddPath:    true,
+	}
+}
+
+func NewBGP4MPMessageLocalAddPath(peeras, localas uint32, intfindex uint16, peerip, localip string, isAS4 bool, msg *bgp.BGPMessage) *BGP4MPMessage {
+	header, _ := newBGP4MPHeader(peeras, localas, intfindex, peerip, localip, isAS4)
+	return &BGP4MPMessage{
+		BGP4MPHeader: header,
+		BGPMessage:   msg,
+		isLocal:      true,
+		isAddPath:    true,
+	}
+}
+
 func (m *BGP4MPMessage) String() string {
 	title := "BGP4MP_MSG"
 	if m.isAS4 {
@@ -704,6 +872,9 @@ func (m *BGP4MPMessage) String() string {
 	}
 	if m.isLocal {
 		title += "_LOCAL"
+	}
+	if m.isAddPath {
+		title += "_ADDPATH"
 	}
 	return fmt.Sprintf("%s: PeerAS [%d] LocalAS [%d] InterfaceIndex [%d] PeerIP [%s] LocalIP [%s] BGPMessage [%v]", title, m.PeerAS, m.LocalAS, m.InterfaceIndex, m.PeerIpAddress, m.LocalIpAddress, m.BGPMessage)
 }
@@ -738,6 +909,7 @@ func ParseMRTBody(h *MRTHeader, data []byte) (*MRTMessage, error) {
 	case TABLE_DUMPv2:
 		subType := MRTSubTypeTableDumpv2(h.SubType)
 		rf := bgp.RouteFamily(0)
+		isAddPath := false
 		switch subType {
 		case PEER_INDEX_TABLE:
 			msg.Body = &PeerIndexTable{}
@@ -750,13 +922,30 @@ func ParseMRTBody(h *MRTHeader, data []byte) (*MRTMessage, error) {
 		case RIB_IPV6_MULTICAST:
 			rf = bgp.RF_IPv6_MC
 		case RIB_GENERIC:
+		case GEO_PEER_TABLE:
+			msg.Body = &GeoPeerTable{}
+		case RIB_IPV4_UNICAST_ADDPATH:
+			rf = bgp.RF_IPv4_UC
+			isAddPath = true
+		case RIB_IPV4_MULTICAST_ADDPATH:
+			rf = bgp.RF_IPv4_MC
+			isAddPath = true
+		case RIB_IPV6_UNICAST_ADDPATH:
+			rf = bgp.RF_IPv6_UC
+			isAddPath = true
+		case RIB_IPV6_MULTICAST_ADDPATH:
+			rf = bgp.RF_IPv6_MC
+			isAddPath = true
+		case RIB_GENERIC_ADDPATH:
+			isAddPath = true
 		default:
 			return nil, fmt.Errorf("unsupported table dumpv2 subtype: %v\n", subType)
 		}
 
-		if subType != PEER_INDEX_TABLE {
+		if msg.Body == nil {
 			msg.Body = &Rib{
 				RouteFamily: rf,
+				isAddPath:   isAddPath,
 			}
 		}
 	case BGP4MP:
@@ -784,6 +973,23 @@ func ParseMRTBody(h *MRTHeader, data []byte) (*MRTMessage, error) {
 			msg.Body = &BGP4MPMessage{
 				BGP4MPHeader: &BGP4MPHeader{isAS4: isAS4},
 				isLocal:      true,
+			}
+		case MESSAGE_ADDPATH:
+			isAS4 = false
+			fallthrough
+		case MESSAGE_AS4_ADDPATH:
+			msg.Body = &BGP4MPMessage{
+				BGP4MPHeader: &BGP4MPHeader{isAS4: isAS4},
+				isAddPath:    true,
+			}
+		case MESSAGE_LOCAL_ADDPATH:
+			isAS4 = false
+			fallthrough
+		case MESSAGE_AS4_LOCAL_ADDPATH:
+			msg.Body = &BGP4MPMessage{
+				BGP4MPHeader: &BGP4MPHeader{isAS4: isAS4},
+				isLocal:      true,
+				isAddPath:    true,
 			}
 		default:
 			return nil, fmt.Errorf("unsupported bgp4mp subtype: %v\n", subType)

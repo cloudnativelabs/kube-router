@@ -23,6 +23,7 @@ import (
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/pkg/bytesutil"
 	"github.com/influxdata/influxdb/pkg/estimator"
+	"github.com/influxdata/influxdb/pkg/limiter"
 	"github.com/influxdata/influxdb/tsdb"
 	_ "github.com/influxdata/influxdb/tsdb/index"
 	"github.com/uber-go/zap"
@@ -37,8 +38,13 @@ func init() {
 	tsdb.RegisterEngine("tsm1", NewEngine)
 }
 
-// Ensure Engine implements the interface.
-var _ tsdb.Engine = &Engine{}
+var (
+	// Ensure Engine implements the interface.
+	_ tsdb.Engine = &Engine{}
+	// Static objects to prevent small allocs.
+	timeBytes              = []byte("time")
+	keyFieldSeparatorBytes = []byte(keyFieldSeparator)
+)
 
 const (
 	// keyFieldSeparator separates the series key from the field name in the composite key
@@ -99,6 +105,7 @@ type Engine struct {
 	snapWG   sync.WaitGroup // waitgroup for running snapshot compactions
 
 	id           uint64
+	database     string
 	path         string
 	logger       zap.Logger // Logger to be used for important messages
 	traceLogger  zap.Logger // Logger to be used when trace-logging is on.
@@ -128,10 +135,13 @@ type Engine struct {
 	enableCompactionsOnOpen bool
 
 	stats *EngineStatistics
+
+	// The limiter for concurrent compactions
+	compactionLimiter limiter.Fixed
 }
 
 // NewEngine returns a new instance of Engine.
-func NewEngine(id uint64, idx tsdb.Index, path string, walPath string, opt tsdb.EngineOptions) tsdb.Engine {
+func NewEngine(id uint64, idx tsdb.Index, database, path string, walPath string, opt tsdb.EngineOptions) tsdb.Engine {
 	w := NewWAL(walPath)
 	w.syncDelay = time.Duration(opt.Config.WALFsyncDelay)
 
@@ -146,6 +156,7 @@ func NewEngine(id uint64, idx tsdb.Index, path string, walPath string, opt tsdb.
 	logger := zap.New(zap.NullEncoder())
 	e := &Engine{
 		id:           id,
+		database:     database,
 		path:         path,
 		index:        idx,
 		logger:       logger,
@@ -157,18 +168,18 @@ func NewEngine(id uint64, idx tsdb.Index, path string, walPath string, opt tsdb.
 		WAL:   w,
 		Cache: cache,
 
-		FileStore: fs,
-		Compactor: c,
-		CompactionPlan: &DefaultPlanner{
-			FileStore:                    fs,
-			CompactFullWriteColdDuration: time.Duration(opt.Config.CompactFullWriteColdDuration),
-		},
+		FileStore:      fs,
+		Compactor:      c,
+		CompactionPlan: NewDefaultPlanner(fs, time.Duration(opt.Config.CompactFullWriteColdDuration)),
 
 		CacheFlushMemorySizeThreshold: opt.Config.CacheSnapshotMemorySize,
 		CacheFlushWriteColdDuration:   time.Duration(opt.Config.CacheSnapshotWriteColdDuration),
 		enableCompactionsOnOpen:       true,
-		stats: &EngineStatistics{},
+		stats:             &EngineStatistics{},
+		compactionLimiter: opt.CompactionLimiter,
 	}
+
+	fs.OnReplace = e.onFileStoreReplace
 
 	// Attach fieldset to index.
 	e.index.SetFieldSet(e.fieldset)
@@ -204,6 +215,16 @@ func (e *Engine) SetCompactionsEnabled(enabled bool) {
 // 'wait' signifies that a corresponding call to disableLevelCompactions(true) was made at some
 // point, and the associated task that required disabled compactions is now complete
 func (e *Engine) enableLevelCompactions(wait bool) {
+	// If we don't need to wait, see if we're already enabled
+	if !wait {
+		e.mu.RLock()
+		if e.done != nil {
+			e.mu.RUnlock()
+			return
+		}
+		e.mu.RUnlock()
+	}
+
 	e.mu.Lock()
 	if wait {
 		e.levelWorkers -= 1
@@ -246,26 +267,29 @@ func (e *Engine) disableLevelCompactions(wait bool) {
 		// Stop all background compaction goroutines
 		close(e.done)
 		e.done = nil
+
 	}
 
 	e.mu.Unlock()
 	e.wg.Wait()
-
-	if old == 0 { // first to disable should cleanup
-		if err := e.cleanup(); err != nil {
-			e.logger.Info(fmt.Sprintf("error cleaning up temp file: %v", err))
-		}
-	}
 }
 
 func (e *Engine) enableSnapshotCompactions() {
+	// Check if already enabled under read lock
+	e.mu.RLock()
+	if e.snapDone != nil {
+		e.mu.RUnlock()
+		return
+	}
+	e.mu.RUnlock()
+
+	// Check again under write lock
 	e.mu.Lock()
 	if e.snapDone != nil {
 		e.mu.Unlock()
 		return
 	}
 
-	e.Compactor.EnableSnapshots()
 	quit := make(chan struct{})
 	e.snapDone = quit
 	e.snapWG.Add(1)
@@ -278,7 +302,6 @@ func (e *Engine) disableSnapshotCompactions() {
 	e.mu.Lock()
 
 	if e.snapDone != nil {
-		e.Compactor.DisableSnapshots()
 		close(e.snapDone)
 		e.snapDone = nil
 	}
@@ -290,7 +313,7 @@ func (e *Engine) disableSnapshotCompactions() {
 // Path returns the path the engine was opened with.
 func (e *Engine) Path() string { return e.path }
 
-func (e *Engine) SetFieldName(measurement, name string) {
+func (e *Engine) SetFieldName(measurement []byte, name string) {
 	e.index.SetFieldName(measurement, name)
 }
 
@@ -307,7 +330,7 @@ func (e *Engine) MeasurementNamesByRegex(re *regexp.Regexp) ([][]byte, error) {
 }
 
 // MeasurementFields returns the measurement fields for a measurement.
-func (e *Engine) MeasurementFields(measurement string) *tsdb.MeasurementFields {
+func (e *Engine) MeasurementFields(measurement []byte) *tsdb.MeasurementFields {
 	return e.fieldset.CreateFieldsIfNotExists(measurement)
 }
 
@@ -424,6 +447,11 @@ func (e *Engine) Statistics(tags map[string]string) []models.Statistic {
 	return statistics
 }
 
+// DiskSize returns the total size in bytes of all TSM and WAL segments on disk.
+func (e *Engine) DiskSize() int64 {
+	return e.FileStore.DiskSizeBytes() + e.WAL.DiskSizeBytes()
+}
+
 // Open opens and initializes the engine.
 func (e *Engine) Open() error {
 	if err := os.MkdirAll(e.path, 0777); err != nil {
@@ -495,7 +523,7 @@ func (e *Engine) LoadMetadataIndex(shardID uint64, index tsdb.Index) error {
 			return err
 		}
 
-		if err := e.addToIndexFromKey(key, fieldType, index); err != nil {
+		if err := e.addToIndexFromKey(key, fieldType); err != nil {
 			return err
 		}
 		return nil
@@ -510,7 +538,7 @@ func (e *Engine) LoadMetadataIndex(shardID uint64, index tsdb.Index) error {
 			e.logger.Info(fmt.Sprintf("error getting the data type of values for key %s: %s", key, err.Error()))
 		}
 
-		if err := e.addToIndexFromKey([]byte(key), fieldType, index); err != nil {
+		if err := e.addToIndexFromKey([]byte(key), fieldType); err != nil {
 			return err
 		}
 		return nil
@@ -520,6 +548,21 @@ func (e *Engine) LoadMetadataIndex(shardID uint64, index tsdb.Index) error {
 
 	e.traceLogger.Info(fmt.Sprintf("Meta data index for shard %d loaded in %v", shardID, time.Since(now)))
 	return nil
+}
+
+// IsIdle returns true if the cache is empty, there are no running compactions and the
+// shard is fully compacted.
+func (e *Engine) IsIdle() bool {
+	cacheEmpty := e.Cache.Size() == 0
+
+	runningCompactions := atomic.LoadInt64(&e.stats.CacheCompactionsActive)
+	runningCompactions += atomic.LoadInt64(&e.stats.TSMCompactionsActive[0])
+	runningCompactions += atomic.LoadInt64(&e.stats.TSMCompactionsActive[1])
+	runningCompactions += atomic.LoadInt64(&e.stats.TSMCompactionsActive[2])
+	runningCompactions += atomic.LoadInt64(&e.stats.TSMFullCompactionsActive)
+	runningCompactions += atomic.LoadInt64(&e.stats.TSMOptimizeCompactionsActive)
+
+	return cacheEmpty && runningCompactions == 0 && e.CompactionPlan.FullyCompacted()
 }
 
 // Backup writes a tar archive of any TSM files modified since the passed
@@ -608,80 +651,153 @@ func (e *Engine) writeFileToBackup(name string, shardRelativePath, fullPath stri
 // Only files that match basePath will be copied into the directory. This obtains
 // a write lock so no operations can be performed while restoring.
 func (e *Engine) Restore(r io.Reader, basePath string) error {
+	return e.overlay(r, basePath, false)
+}
+
+// Import reads a tar archive generated by Backup() and adds each
+// file matching basePath as a new TSM file.  This obtains
+// a write lock so no operations can be performed while Importing.
+func (e *Engine) Import(r io.Reader, basePath string) error {
+	return e.overlay(r, basePath, true)
+}
+
+// overlay reads a tar archive generated by Backup() and adds each file
+// from the archive matching basePath to the shard.
+// If asNew is true, each file will be installed as a new TSM file even if an
+// existing file with the same name in the backup exists.
+func (e *Engine) overlay(r io.Reader, basePath string, asNew bool) error {
 	// Copy files from archive while under lock to prevent reopening.
-	if err := func() error {
+	newFiles, err := func() ([]string, error) {
 		e.mu.Lock()
 		defer e.mu.Unlock()
 
+		var newFiles []string
 		tr := tar.NewReader(r)
 		for {
-			if err := e.readFileFromBackup(tr, basePath); err == io.EOF {
+			if fileName, err := e.readFileFromBackup(tr, basePath, asNew); err == io.EOF {
 				break
 			} else if err != nil {
-				return err
+				return nil, err
+			} else if fileName != "" {
+				newFiles = append(newFiles, fileName)
 			}
 		}
 
-		return syncDir(e.path)
-	}(); err != nil {
+		if err := syncDir(e.path); err != nil {
+			return nil, err
+		}
+
+		if err := e.FileStore.Replace(nil, newFiles); err != nil {
+			return nil, err
+		}
+		return newFiles, nil
+	}()
+
+	if err != nil {
 		return err
 	}
 
+	// Load any new series keys to the index
+	readers := make([]chan seriesKey, 0, len(newFiles))
+	for _, f := range newFiles {
+		ch := make(chan seriesKey, 1)
+		readers = append(readers, ch)
+
+		// If asNew is true, the files created from readFileFromBackup will be new ones
+		// having a temp extension.
+		f = strings.TrimSuffix(f, ".tmp")
+
+		fd, err := os.Open(f)
+		if err != nil {
+			return err
+		}
+
+		r, err := NewTSMReader(fd)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+
+		go func(c chan seriesKey, r *TSMReader) {
+			n := r.KeyCount()
+			for i := 0; i < n; i++ {
+				key, typ := r.KeyAt(i)
+				c <- seriesKey{key, typ}
+			}
+			close(c)
+		}(ch, r)
+	}
+
+	// Merge and dedup all the series keys across each reader to reduce
+	// lock contention on the index.
+	merged := merge(readers...)
+	for v := range merged {
+		fieldType, err := tsmFieldTypeToInfluxQLDataType(v.typ)
+		if err != nil {
+			return err
+		}
+
+		if err := e.addToIndexFromKey(v.key, fieldType); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // readFileFromBackup copies the next file from the archive into the shard.
 // The file is skipped if it does not have a matching shardRelativePath prefix.
-func (e *Engine) readFileFromBackup(tr *tar.Reader, shardRelativePath string) error {
+// If asNew is true, each file will be installed as a new TSM file even if an
+// existing file with the same name in the backup exists.
+func (e *Engine) readFileFromBackup(tr *tar.Reader, shardRelativePath string, asNew bool) (string, error) {
 	// Read next archive file.
 	hdr, err := tr.Next()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	nativeFileName := filepath.FromSlash(hdr.Name)
 
 	// Skip file if it does not have a matching prefix.
 	if !filepath.HasPrefix(nativeFileName, shardRelativePath) {
-		return nil
+		return "", nil
 	}
-	path, err := filepath.Rel(shardRelativePath, nativeFileName)
+	filename, err := filepath.Rel(shardRelativePath, nativeFileName)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	destPath := filepath.Join(e.path, path)
+	if asNew {
+		filename = fmt.Sprintf("%09d-%09d.%s", e.FileStore.NextGeneration(), 1, TSMFileExtension)
+	}
+
+	destPath := filepath.Join(e.path, filename)
 	tmp := destPath + ".tmp"
 
 	// Create new file on disk.
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer f.Close()
 
 	// Copy from archive to the file.
 	if _, err := io.CopyN(f, tr, hdr.Size); err != nil {
-		return err
+		return "", err
 	}
 
 	// Sync to disk & close.
 	if err := f.Sync(); err != nil {
-		return err
+		return "", err
 	}
 
-	if err := f.Close(); err != nil {
-		return err
-	}
-
-	return renameFile(tmp, destPath)
+	return tmp, nil
 }
 
 // addToIndexFromKey will pull the measurement name, series key, and field name from a composite key and add it to the
 // database index and measurement fields
-func (e *Engine) addToIndexFromKey(key []byte, fieldType influxql.DataType, index tsdb.Index) error {
+func (e *Engine) addToIndexFromKey(key []byte, fieldType influxql.DataType) error {
 	seriesKey, field := SeriesAndFieldFromCompositeKey(key)
-	name := tsdb.MeasurementFromSeriesKey(string(seriesKey))
+	name := tsdb.MeasurementFromSeriesKey(seriesKey)
 
 	mf := e.fieldset.CreateFieldsIfNotExists(name)
 	if err := mf.CreateFieldIfNotExists(field, fieldType, false); err != nil {
@@ -690,8 +806,8 @@ func (e *Engine) addToIndexFromKey(key []byte, fieldType influxql.DataType, inde
 
 	// Build in-memory index, if necessary.
 	if e.index.Type() == inmem.IndexName {
-		_, tags, _ := models.ParseKey(seriesKey)
-		if err := e.index.InitializeSeries(seriesKey, []byte(name), tags); err != nil {
+		tags, _ := models.ParseTags(seriesKey)
+		if err := e.index.InitializeSeries(seriesKey, name, tags); err != nil {
 			return err
 		}
 	}
@@ -712,6 +828,11 @@ func (e *Engine) WritePoints(points []models.Point) error {
 		iter := p.FieldIterator()
 		t := p.Time().UnixNano()
 		for iter.Next() {
+			// Skip fields name "time", they are illegal
+			if bytes.Equal(iter.FieldKey(), timeBytes) {
+				continue
+			}
+
 			keyBuf = append(keyBuf[:baseLen], iter.FieldKey()...)
 			var v Value
 			switch iter.Type() {
@@ -751,7 +872,7 @@ func (e *Engine) WritePoints(points []models.Point) error {
 		return err
 	}
 
-	_, err = e.WAL.WritePoints(values)
+	_, err = e.WAL.WriteMulti(values)
 	return err
 }
 
@@ -1084,7 +1205,10 @@ func (e *Engine) compactTSMLevel(fast bool, level int, quit <-chan struct{}) {
 			s := e.levelCompactionStrategy(fast, level)
 			if s != nil {
 				s.Apply()
+				// Release the files in the compaction plan
+				e.CompactionPlan.Release(s.compactionGroups)
 			}
+
 		}
 	}
 }
@@ -1102,16 +1226,72 @@ func (e *Engine) compactTSMFull(quit <-chan struct{}) {
 			s := e.fullCompactionStrategy()
 			if s != nil {
 				s.Apply()
+				// Release the files in the compaction plan
+				e.CompactionPlan.Release(s.compactionGroups)
 			}
-
 		}
 	}
+}
+
+// onFileStoreReplace is callback handler invoked when the FileStore
+// has replaced one set of TSM files with a new set.
+func (e *Engine) onFileStoreReplace(newFiles []TSMFile) {
+	// Load any new series keys to the index
+	readers := make([]chan seriesKey, 0, len(newFiles))
+	for _, r := range newFiles {
+		ch := make(chan seriesKey, 1)
+		readers = append(readers, ch)
+
+		go func(c chan seriesKey, r TSMFile) {
+			n := r.KeyCount()
+			for i := 0; i < n; i++ {
+				key, typ := r.KeyAt(i)
+				c <- seriesKey{key, typ}
+			}
+			close(c)
+		}(ch, r)
+	}
+
+	// Merge and dedup all the series keys across each reader to reduce
+	// lock contention on the index.
+	merged := merge(readers...)
+	for v := range merged {
+		fieldType, err := tsmFieldTypeToInfluxQLDataType(v.typ)
+		if err != nil {
+			e.logger.Error(fmt.Sprintf("refresh index (1): %v", err))
+			continue
+		}
+
+		if err := e.addToIndexFromKey(v.key, fieldType); err != nil {
+			e.logger.Error(fmt.Sprintf("refresh index (2): %v", err))
+			continue
+		}
+	}
+
+	// load metadata from the Cache
+	e.Cache.ApplyEntryFn(func(key string, entry *entry) error {
+		fieldType, err := entry.values.InfluxQLType()
+		if err != nil {
+			e.logger.Error(fmt.Sprintf("refresh index (3): %v", err))
+			return nil
+		}
+
+		if err := e.addToIndexFromKey([]byte(key), fieldType); err != nil {
+			e.logger.Error(fmt.Sprintf("refresh index (4): %v", err))
+			return nil
+		}
+		return nil
+	})
 }
 
 // compactionStrategy holds the details of what to do in a compaction.
 type compactionStrategy struct {
 	compactionGroups []CompactionGroup
 
+	// concurrency determines how many compactions groups will be started
+	// concurrently.  These groups may be limited by the global limiter if
+	// enabled.
+	concurrency int
 	fast        bool
 	description string
 
@@ -1123,17 +1303,30 @@ type compactionStrategy struct {
 	logger    zap.Logger
 	compactor *Compactor
 	fileStore *FileStore
+	limiter   limiter.Fixed
 }
 
 // Apply concurrently compacts all the groups in a compaction strategy.
 func (s *compactionStrategy) Apply() {
 	start := time.Now()
 
+	// cap concurrent compaction groups to no more than 4 at a time.
+	concurrency := s.concurrency
+	if concurrency == 0 {
+		concurrency = 4
+	}
+
+	throttle := limiter.NewFixed(concurrency)
 	var wg sync.WaitGroup
 	for i := range s.compactionGroups {
 		wg.Add(1)
 		go func(groupNum int) {
 			defer wg.Done()
+
+			// limit concurrent compaction groups
+			throttle.Take()
+			defer throttle.Release()
+
 			s.compactGroup(groupNum)
 		}(i)
 	}
@@ -1144,6 +1337,12 @@ func (s *compactionStrategy) Apply() {
 
 // compactGroup executes the compaction strategy against a single CompactionGroup.
 func (s *compactionStrategy) compactGroup(groupNum int) {
+	// Limit concurrent compactions if we have a limiter
+	if cap(s.limiter) > 0 {
+		s.limiter.Take()
+		defer s.limiter.Release()
+	}
+
 	group := s.compactionGroups[groupNum]
 	start := time.Now()
 	s.logger.Info(fmt.Sprintf("beginning %s compaction of group %d, %d TSM files", s.description, groupNum, len(group)))
@@ -1164,10 +1363,11 @@ func (s *compactionStrategy) compactGroup(groupNum int) {
 	}()
 
 	if err != nil {
-		if err == errCompactionsDisabled || err == errCompactionInProgress {
+		_, inProgress := err.(errCompactionInProgress)
+		if err == errCompactionsDisabled || inProgress {
 			s.logger.Info(fmt.Sprintf("aborted %s compaction group (%d). %v", s.description, groupNum, err))
 
-			if err == errCompactionInProgress {
+			if _, ok := err.(errCompactionInProgress); ok {
 				time.Sleep(time.Second)
 			}
 			return
@@ -1203,11 +1403,13 @@ func (e *Engine) levelCompactionStrategy(fast bool, level int) *compactionStrate
 	}
 
 	return &compactionStrategy{
+		concurrency:      4,
 		compactionGroups: compactionGroups,
 		logger:           e.logger,
 		fileStore:        e.FileStore,
 		compactor:        e.Compactor,
 		fast:             fast,
+		limiter:          e.compactionLimiter,
 
 		description:  fmt.Sprintf("level %d", level),
 		activeStat:   &e.stats.TSMCompactionsActive[level-1],
@@ -1233,11 +1435,13 @@ func (e *Engine) fullCompactionStrategy() *compactionStrategy {
 	}
 
 	s := &compactionStrategy{
+		concurrency:      1,
 		compactionGroups: compactionGroups,
 		logger:           e.logger,
 		fileStore:        e.FileStore,
 		compactor:        e.Compactor,
 		fast:             optimize,
+		limiter:          e.compactionLimiter,
 	}
 
 	if optimize {
@@ -1283,6 +1487,8 @@ func (e *Engine) reloadCache() error {
 	return nil
 }
 
+// cleanup removes all temp files and dirs that exist on disk.  This is should only be run at startup to avoid
+// removing tmp files that are still in use.
 func (e *Engine) cleanup() error {
 	allfiles, err := ioutil.ReadDir(e.path)
 	if os.IsNotExist(err) {
@@ -1614,7 +1820,7 @@ func (e *Engine) createTagSetGroupIterators(ref *influxql.VarRef, name string, s
 
 // createVarRefSeriesIterator creates an iterator for a variable reference for a series.
 func (e *Engine) createVarRefSeriesIterator(ref *influxql.VarRef, name string, seriesKey string, t *influxql.TagSet, filter influxql.Expr, conditionFields []influxql.VarRef, opt influxql.IteratorOptions) (influxql.Iterator, error) {
-	_, tfs, _ := models.ParseKey([]byte(seriesKey))
+	_, tfs := models.ParseKey([]byte(seriesKey))
 	tags := influxql.NewTags(tfs.Map())
 
 	// Create options specific for this series.
@@ -1837,13 +2043,13 @@ func tsmFieldTypeToInfluxQLDataType(typ byte) (influxql.DataType, error) {
 }
 
 // SeriesAndFieldFromCompositeKey returns the series key and the field key extracted from the composite key.
-func SeriesAndFieldFromCompositeKey(key []byte) ([]byte, string) {
-	sep := bytes.Index(key, []byte(keyFieldSeparator))
+func SeriesAndFieldFromCompositeKey(key []byte) ([]byte, []byte) {
+	sep := bytes.Index(key, keyFieldSeparatorBytes)
 	if sep == -1 {
 		// No field???
-		return key, ""
+		return key, nil
 	}
-	return key[:sep], string(key[sep+len(keyFieldSeparator):])
+	return key[:sep], key[sep+len(keyFieldSeparator):]
 }
 
 // readDir recursively reads all files from a path.

@@ -1,7 +1,7 @@
 package config
 
 import (
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"os"
 	"os/signal"
@@ -19,6 +19,7 @@ type BgpConfigSet struct {
 	Collector         Collector          `mapstructure:"collector"`
 	DefinedSets       DefinedSets        `mapstructure:"defined-sets"`
 	PolicyDefinitions []PolicyDefinition `mapstructure:"policy-definitions"`
+	DynamicNeighbors  []DynamicNeighbor  `mapstructure:"dynamic-neighbors"`
 }
 
 func ReadConfigfileServe(path, format string, configCh chan *BgpConfigSet) {
@@ -76,7 +77,16 @@ func ReadConfigfileServe(path, format string, configCh chan *BgpConfigSet) {
 
 func inSlice(n Neighbor, b []Neighbor) int {
 	for i, nb := range b {
-		if nb.Config.NeighborAddress == n.Config.NeighborAddress {
+		if nb.State.NeighborAddress == n.State.NeighborAddress {
+			return i
+		}
+	}
+	return -1
+}
+
+func existPeerGroup(n string, b []PeerGroup) int {
+	for i, nb := range b {
+		if nb.Config.PeerGroupName == n {
 			return i
 		}
 	}
@@ -90,8 +100,34 @@ func ConfigSetToRoutingPolicy(c *BgpConfigSet) *RoutingPolicy {
 	}
 }
 
-func UpdateConfig(curC, newC *BgpConfigSet) ([]Neighbor, []Neighbor, []Neighbor, bool) {
+func UpdatePeerGroupConfig(curC, newC *BgpConfigSet) ([]PeerGroup, []PeerGroup, []PeerGroup) {
+	addedPg := []PeerGroup{}
+	deletedPg := []PeerGroup{}
+	updatedPg := []PeerGroup{}
 
+	for _, n := range newC.PeerGroups {
+		if idx := existPeerGroup(n.Config.PeerGroupName, curC.PeerGroups); idx < 0 {
+			addedPg = append(addedPg, n)
+		} else if !n.Equal(&curC.PeerGroups[idx]) {
+			log.WithFields(log.Fields{
+				"Topic": "Config",
+			}).Debugf("Current peer-group config:%s", curC.PeerGroups[idx])
+			log.WithFields(log.Fields{
+				"Topic": "Config",
+			}).Debugf("New peer-group config:%s", n)
+			updatedPg = append(updatedPg, n)
+		}
+	}
+
+	for _, n := range curC.PeerGroups {
+		if existPeerGroup(n.Config.PeerGroupName, newC.PeerGroups) < 0 {
+			deletedPg = append(deletedPg, n)
+		}
+	}
+	return addedPg, deletedPg, updatedPg
+}
+
+func UpdateNeighborConfig(curC, newC *BgpConfigSet) ([]Neighbor, []Neighbor, []Neighbor) {
 	added := []Neighbor{}
 	deleted := []Neighbor{}
 	updated := []Neighbor{}
@@ -115,8 +151,7 @@ func UpdateConfig(curC, newC *BgpConfigSet) ([]Neighbor, []Neighbor, []Neighbor,
 			deleted = append(deleted, n)
 		}
 	}
-
-	return added, deleted, updated, CheckPolicyDifference(ConfigSetToRoutingPolicy(curC), ConfigSetToRoutingPolicy(newC))
+	return added, deleted, updated
 }
 
 func CheckPolicyDifference(currentPolicy *RoutingPolicy, newPolicy *RoutingPolicy) bool {

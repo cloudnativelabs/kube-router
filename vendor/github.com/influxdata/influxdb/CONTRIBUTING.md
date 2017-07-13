@@ -32,7 +32,7 @@ curl -G http://localhost:8086/query  --data-urlencode 'db=mydb' --data-urlencode
 ```
 **If you don't include a clear test case like this, your issue may not be investigated, and may even be closed**. If writing the data is too difficult, please zip up your data directory and include a link to it in your bug report.
 
-Please note that issues are *not the place to file general questions* such as "how do I use collectd with InfluxDB?" Questions of this nature should be sent to the [Google Group](https://groups.google.com/forum/#!forum/influxdb), not filed as issues. Issues like this will be closed.
+Please note that issues are *not the place to file general questions* such as "how do I use collectd with InfluxDB?" Questions of this nature should be sent to the [InfluxData Community](https://community.influxdata.com/), not filed as issues. Issues like this will be closed.
 
 Feature requests
 ---------------
@@ -69,7 +69,7 @@ second to sign our CLA, which can be found
 
 Installing Go
 -------------
-InfluxDB requires Go 1.7.4.
+InfluxDB requires Go 1.8.3
 
 At InfluxDB we find gvm, a Go version manager, useful for installing Go. For instructions
 on how to install it see [the gvm page on github](https://github.com/moovweb/gvm).
@@ -77,8 +77,8 @@ on how to install it see [the gvm page on github](https://github.com/moovweb/gvm
 After installing gvm you can install and set the default go version by
 running the following:
 
-    gvm install go1.7.4
-    gvm use go1.7.4 --default
+    gvm install go1.8.3
+    gvm use go1.8.3 --default
 
 Installing GDM
 -------------
