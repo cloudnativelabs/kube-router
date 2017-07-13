@@ -114,13 +114,42 @@ func TestMrtRibEntry(t *testing.T) {
 		bgp.NewPathAttributeLocalPref(1 << 22),
 	}
 
-	e1 := NewRibEntry(1, uint32(time.Now().Unix()), p)
+	e1 := NewRibEntry(1, uint32(time.Now().Unix()), 0, p)
 	b1, err := e1.Serialize()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	e2 := &RibEntry{}
+	rest, err := e2.DecodeFromBytes(b1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, len(rest), 0)
+	assert.Equal(t, reflect.DeepEqual(e1, e2), true)
+}
+
+func TestMrtRibEntryWithAddPath(t *testing.T) {
+	aspath1 := []bgp.AsPathParamInterface{
+		bgp.NewAsPathParam(2, []uint16{1000}),
+		bgp.NewAsPathParam(1, []uint16{1001, 1002}),
+		bgp.NewAsPathParam(2, []uint16{1003, 1004}),
+	}
+
+	p := []bgp.PathAttributeInterface{
+		bgp.NewPathAttributeOrigin(3),
+		bgp.NewPathAttributeAsPath(aspath1),
+		bgp.NewPathAttributeNextHop("129.1.1.2"),
+		bgp.NewPathAttributeMultiExitDisc(1 << 20),
+		bgp.NewPathAttributeLocalPref(1 << 22),
+	}
+	e1 := NewRibEntry(1, uint32(time.Now().Unix()), 200, p)
+	b1, err := e1.Serialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e2 := &RibEntry{isAddPath: true}
 	rest, err := e2.DecodeFromBytes(b1)
 	if err != nil {
 		t.Fatal(err)
@@ -144,9 +173,9 @@ func TestMrtRib(t *testing.T) {
 		bgp.NewPathAttributeLocalPref(1 << 22),
 	}
 
-	e1 := NewRibEntry(1, uint32(time.Now().Unix()), p)
-	e2 := NewRibEntry(2, uint32(time.Now().Unix()), p)
-	e3 := NewRibEntry(3, uint32(time.Now().Unix()), p)
+	e1 := NewRibEntry(1, uint32(time.Now().Unix()), 0, p)
+	e2 := NewRibEntry(2, uint32(time.Now().Unix()), 0, p)
+	e3 := NewRibEntry(3, uint32(time.Now().Unix()), 0, p)
 
 	r1 := NewRib(1, bgp.NewIPAddrPrefix(24, "192.168.0.0"), []*RibEntry{e1, e2, e3})
 	b1, err := r1.Serialize()
@@ -161,6 +190,57 @@ func TestMrtRib(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert.Equal(t, reflect.DeepEqual(r1, r2), true)
+}
+
+func TestMrtRibWithAddPath(t *testing.T) {
+	aspath1 := []bgp.AsPathParamInterface{
+		bgp.NewAsPathParam(2, []uint16{1000}),
+		bgp.NewAsPathParam(1, []uint16{1001, 1002}),
+		bgp.NewAsPathParam(2, []uint16{1003, 1004}),
+	}
+
+	p := []bgp.PathAttributeInterface{
+		bgp.NewPathAttributeOrigin(3),
+		bgp.NewPathAttributeAsPath(aspath1),
+		bgp.NewPathAttributeNextHop("129.1.1.2"),
+		bgp.NewPathAttributeMultiExitDisc(1 << 20),
+		bgp.NewPathAttributeLocalPref(1 << 22),
+	}
+
+	e1 := NewRibEntry(1, uint32(time.Now().Unix()), 100, p)
+	e2 := NewRibEntry(2, uint32(time.Now().Unix()), 200, p)
+	e3 := NewRibEntry(3, uint32(time.Now().Unix()), 300, p)
+
+	r1 := NewRib(1, bgp.NewIPAddrPrefix(24, "192.168.0.0"), []*RibEntry{e1, e2, e3})
+	b1, err := r1.Serialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2 := &Rib{
+		RouteFamily: bgp.RF_IPv4_UC,
+		isAddPath:   true,
+	}
+	err = r2.DecodeFromBytes(b1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, reflect.DeepEqual(r1, r2), true)
+}
+
+func TestMrtGeoPeerTable(t *testing.T) {
+	p1 := NewGeoPeer("192.168.0.1", 28.031157, 86.899684)
+	p2 := NewGeoPeer("192.168.0.1", 35.360556, 138.727778)
+	pt1 := NewGeoPeerTable("192.168.0.1", 12.345678, 98.765432, []*GeoPeer{p1, p2})
+	b1, err := pt1.Serialize()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pt2 := &GeoPeerTable{}
+	err = pt2.DecodeFromBytes(b1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, reflect.DeepEqual(pt1, pt2), true)
 }
 
 func TestMrtBgp4mpStateChange(t *testing.T) {

@@ -46,7 +46,7 @@ const (
 // Point defines the values that will be written to the database.
 type Point interface {
 	// Name return the measurement name for the point.
-	Name() string
+	Name() []byte
 
 	// SetName updates the measurement name for the point.
 	SetName(string)
@@ -59,6 +59,9 @@ type Point interface {
 
 	// SetTags replaces the tags for the point.
 	SetTags(tags Tags)
+
+	// HasTag returns true if the tag exists for the point.
+	HasTag(tag []byte) bool
 
 	// Fields returns the fields for the point.
 	Fields() (Fields, error)
@@ -159,9 +162,6 @@ type FieldIterator interface {
 	// FloatValue returns the float value of the current field.
 	FloatValue() (float64, error)
 
-	// Delete deletes the current field.
-	Delete()
-
 	// Reset resets the iterator to its initial state.
 	Reset()
 }
@@ -237,7 +237,7 @@ func ParsePointsString(buf string) ([]Point, error) {
 //
 // NOTE: to minimize heap allocations, the returned Tags will refer to subslices of buf.
 // This can have the unintended effect preventing buf from being garbage collected.
-func ParseKey(buf []byte) (string, Tags, error) {
+func ParseKey(buf []byte) (string, Tags) {
 	// Ignore the error because scanMeasurement returns "missing fields" which we ignore
 	// when just parsing a key
 	state, i, _ := scanMeasurement(buf, 0)
@@ -246,9 +246,23 @@ func ParseKey(buf []byte) (string, Tags, error) {
 	if state == tagKeyState {
 		tags = parseTags(buf)
 		// scanMeasurement returns the location of the comma if there are tags, strip that off
-		return string(buf[:i-1]), tags, nil
+		return string(buf[:i-1]), tags
 	}
-	return string(buf[:i]), tags, nil
+	return string(buf[:i]), tags
+}
+
+func ParseTags(buf []byte) (Tags, error) {
+	return parseTags(buf), nil
+}
+
+func ParseName(buf []byte) ([]byte, error) {
+	// Ignore the error because scanMeasurement returns "missing fields" which we ignore
+	// when just parsing a key
+	state, i, _ := scanMeasurement(buf, 0)
+	if state == tagKeyState {
+		return buf[:i-1], nil
+	}
+	return buf[:i], nil
 }
 
 // ParsePointsWithPrecision is similar to ParsePoints, but allows the
@@ -328,6 +342,19 @@ func parsePoint(buf []byte, defaultTime time.Time, precision string) (Point, err
 	// at least one field is required
 	if len(fields) == 0 {
 		return nil, fmt.Errorf("missing fields")
+	}
+
+	var maxKeyErr error
+	walkFields(fields, func(k, v []byte) bool {
+		if sz := seriesKeySize(key, k); sz > MaxKeyLength {
+			maxKeyErr = fmt.Errorf("max key length exceeded: %v > %v", sz, MaxKeyLength)
+			return false
+		}
+		return true
+	})
+
+	if maxKeyErr != nil {
+		return nil, maxKeyErr
 	}
 
 	// scan the last block which is an optional integer timestamp
@@ -1245,11 +1272,20 @@ func pointKey(measurement string, tags Tags, fields Fields, t time.Time) ([]byte
 	}
 
 	key := MakeKey([]byte(measurement), tags)
-	if len(key) > MaxKeyLength {
-		return nil, fmt.Errorf("max key length exceeded: %v > %v", len(key), MaxKeyLength)
+	for field := range fields {
+		sz := seriesKeySize(key, []byte(field))
+		if sz > MaxKeyLength {
+			return nil, fmt.Errorf("max key length exceeded: %v > %v", sz, MaxKeyLength)
+		}
 	}
 
 	return key, nil
+}
+
+func seriesKeySize(key, field []byte) int {
+	// 4 is the length of the tsm1.fieldKeySeparator constant.  It's inlined here to avoid a circular
+	// dependency.
+	return len(key) + 4 + len(field)
 }
 
 // NewPointFromBytes returns a new Point from a marshalled Point.
@@ -1316,13 +1352,8 @@ func (p *point) name() []byte {
 	return name
 }
 
-// Name return the measurement name for the point.
-func (p *point) Name() string {
-	if p.cachedName != "" {
-		return p.cachedName
-	}
-	p.cachedName = string(escape.Unescape(p.name()))
-	return p.cachedName
+func (p *point) Name() []byte {
+	return escape.Unescape(p.name())
 }
 
 // SetName updates the measurement name for the point.
@@ -1355,21 +1386,36 @@ func (p *point) Tags() Tags {
 	return p.cachedTags
 }
 
-func parseTags(buf []byte) Tags {
+func (p *point) HasTag(tag []byte) bool {
+	if len(p.key) == 0 {
+		return false
+	}
+
+	var exists bool
+	walkTags(p.key, func(key, value []byte) bool {
+		if bytes.Equal(tag, key) {
+			exists = true
+			return false
+		}
+		return true
+	})
+
+	return exists
+}
+
+func walkTags(buf []byte, fn func(key, value []byte) bool) {
 	if len(buf) == 0 {
-		return nil
+		return
 	}
 
 	pos, name := scanTo(buf, 0, ',')
 
 	// it's an empty key, so there are no tags
 	if len(name) == 0 {
-		return nil
+		return
 	}
 
-	tags := make(Tags, 0, bytes.Count(buf, []byte(",")))
 	hasEscape := bytes.IndexByte(buf, '\\') != -1
-
 	i := pos + 1
 	var key, value []byte
 	for {
@@ -1384,14 +1430,50 @@ func parseTags(buf []byte) Tags {
 		}
 
 		if hasEscape {
-			tags = append(tags, NewTag(unescapeTag(key), unescapeTag(value)))
+			if !fn(unescapeTag(key), unescapeTag(value)) {
+				return
+			}
 		} else {
-			tags = append(tags, NewTag(key, value))
+			if !fn(key, value) {
+				return
+			}
 		}
 
 		i++
 	}
+}
 
+// walkFields walks each field key and value via fn.  If fn returns false, the iteration
+// is stopped.  The values are the raw byte slices and not the converted types.
+func walkFields(buf []byte, fn func(key, value []byte) bool) {
+	var i int
+	var key, val []byte
+	for len(buf) > 0 {
+		i, key = scanTo(buf, 0, '=')
+		buf = buf[i+1:]
+		i, val = scanFieldValue(buf, 0)
+		buf = buf[i:]
+		if !fn(key, val) {
+			break
+		}
+
+		// slice off comma
+		if len(buf) > 0 {
+			buf = buf[1:]
+		}
+	}
+}
+
+func parseTags(buf []byte) Tags {
+	if len(buf) == 0 {
+		return nil
+	}
+
+	tags := make(Tags, 0, bytes.Count(buf, []byte(",")))
+	walkTags(buf, func(key, value []byte) bool {
+		tags = append(tags, NewTag(key, value))
+		return true
+	})
 	return tags
 }
 
@@ -1404,7 +1486,7 @@ func MakeKey(name []byte, tags Tags) []byte {
 
 // SetTags replaces the tags for the point.
 func (p *point) SetTags(tags Tags) {
-	p.key = MakeKey([]byte(p.Name()), tags)
+	p.key = MakeKey(p.Name(), tags)
 	p.cachedTags = tags
 }
 
@@ -1414,7 +1496,7 @@ func (p *point) AddTag(key, value string) {
 	tags = append(tags, Tag{Key: []byte(key), Value: []byte(value)})
 	sort.Sort(tags)
 	p.cachedTags = tags
-	p.key = MakeKey([]byte(p.Name()), tags)
+	p.key = MakeKey(p.Name(), tags)
 }
 
 // Fields returns the fields for the point.
@@ -1626,7 +1708,7 @@ func (p *point) UnixNano() int64 {
 // string representations are no longer than size. Points with a single field or
 // a point without a timestamp may exceed the requested size.
 func (p *point) Split(size int) []Point {
-	if p.time.IsZero() || len(p.String()) <= size {
+	if p.time.IsZero() || p.StringSize() <= size {
 		return []Point{p}
 	}
 
@@ -1879,40 +1961,35 @@ func (a Tags) HashKey() []byte {
 		return nil
 	}
 
+	// Type invariant: Tags are sorted
+
 	escaped := make(Tags, 0, len(a))
+	sz := 0
 	for _, t := range a {
 		ek := escapeTag(t.Key)
 		ev := escapeTag(t.Value)
 
 		if len(ev) > 0 {
 			escaped = append(escaped, Tag{Key: ek, Value: ev})
+			sz += len(ek) + len(ev)
 		}
 	}
 
-	// Extract keys and determine final size.
-	sz := len(escaped) + (len(escaped) * 2) // separators
-	keys := make([][]byte, len(escaped)+1)
-	for i, t := range escaped {
-		keys[i] = t.Key
-		sz += len(t.Key) + len(t.Value)
-	}
-	keys = keys[:len(escaped)]
-	sort.Sort(byteSlices(keys))
+	sz += len(escaped) + (len(escaped) * 2) // separators
 
 	// Generate marshaled bytes.
 	b := make([]byte, sz)
 	buf := b
 	idx := 0
-	for i, k := range keys {
+	for _, k := range escaped {
 		buf[idx] = ','
 		idx++
-		copy(buf[idx:idx+len(k)], k)
-		idx += len(k)
+		copy(buf[idx:idx+len(k.Key)], k.Key)
+		idx += len(k.Key)
 		buf[idx] = '='
 		idx++
-		v := escaped[i].Value
-		copy(buf[idx:idx+len(v)], v)
-		idx += len(v)
+		copy(buf[idx:idx+len(k.Value)], k.Value)
+		idx += len(k.Value)
 	}
 	return b[:idx]
 }
@@ -2049,26 +2126,6 @@ func (p *point) FloatValue() (float64, error) {
 		return 0, fmt.Errorf("unable to parse floating point value %q: %v", p.it.valueBuf, err)
 	}
 	return f, nil
-}
-
-// Delete deletes the current field.
-func (p *point) Delete() {
-	switch {
-	case p.it.end == p.it.start:
-	case p.it.end >= len(p.fields):
-		// Remove the trailing comma if there are more than one fields
-		p.fields = bytes.TrimSuffix(p.fields[:p.it.start], []byte(","))
-
-	case p.it.start == 0:
-		p.fields = p.fields[p.it.end:]
-	default:
-		p.fields = append(p.fields[:p.it.start], p.fields[p.it.end:]...)
-	}
-
-	p.it.end = p.it.start
-	p.it.key = nil
-	p.it.valueBuf = nil
-	p.it.fieldType = Empty
 }
 
 // Reset resets the iterator to its initial state.

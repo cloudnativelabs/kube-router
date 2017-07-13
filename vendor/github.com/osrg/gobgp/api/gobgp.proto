@@ -75,6 +75,7 @@ service GobgpApi {
 
 message GetNeighborRequest {
   bool enableAdvertised = 1;
+  string address        = 2;
 }
 
 message GetNeighborResponse {
@@ -334,6 +335,7 @@ message DeleteVrfResponse {
 
 message GetDefinedSetRequest {
   DefinedType type = 1;
+  string name = 2;
 }
 
 message GetDefinedSetResponse {
@@ -551,6 +553,8 @@ message Peer {
   Timers timers = 7;
   Transport transport = 8;
   RouteServer route_server = 9;
+  GracefulRestart graceful_restart = 10;
+  repeated AfiSafi afi_safis = 11;
 }
 
 message ApplyPolicy {
@@ -573,16 +577,26 @@ message PeerConf {
   uint32 peer_as = 5;
   string peer_group = 6;
   uint32 peer_type = 7;
-  uint32 remove_private_as = 8;
+  enum RemovePrivateAs {
+      NONE = 0;
+      ALL = 1;
+      REPLACE = 2;
+  }
+  RemovePrivateAs remove_private_as = 8;
   bool route_flap_damping = 9;
   uint32 send_community = 10;
   repeated bytes remote_cap = 11;
   repeated bytes local_cap = 12;
   string id = 13;
+  // Note: Regarding to the consistency with OpenConfig mode, list of
+  // PrefixLimit should be removed from here, and list of PrefixLimit in
+  // AfiSafi should be used instead.
   repeated PrefixLimit prefix_limits = 14;
   string local_address = 15;
   string neighbor_interface = 16;
   string vrf = 17;
+  uint32 allow_own_as = 18;
+  bool replace_peer_as = 19;
 }
 
 message EbgpMultihop {
@@ -678,6 +692,163 @@ message Transport {
 
 message RouteServer {
   bool route_server_client = 1;
+}
+
+message GracefulRestart {
+  bool enabled = 1;
+  uint32 restart_time = 2;
+  bool helper_only = 3;
+  uint32 deferral_time = 4;
+  bool notification_enabled = 5;
+  bool longlived_enabled = 6;
+}
+
+message MpGracefulRestartConfig {
+  bool enabled = 1;
+}
+
+message MpGracefulRestartState {
+  bool enabled = 1;
+  bool received = 2;
+  bool advertised = 3;
+  bool end_of_rib_received = 4;
+  bool end_of_rib_sent = 5;
+}
+message MpGracefulRestart {
+  MpGracefulRestartConfig config = 1;
+  MpGracefulRestartState state = 2;
+}
+
+message AfiSafiConfig {
+  uint32 family = 1;
+  bool enabled = 2;
+}
+
+message AfiSafiState {
+  uint32 family = 1;
+  bool enabled = 2;
+  uint32 total_paths = 3;
+  uint32 total_prefixes = 4;
+}
+
+message RouteSelectionOptionsConfig {
+  bool always_compare_med = 1;
+  bool ignore_as_path_length = 2;
+  bool external_compare_router_id = 3;
+  bool advertise_inactive_routes = 4;
+  bool enable_aigp = 5;
+  bool ignore_next_hop_igp_metric = 6;
+}
+
+message RouteSelectionOptionsState {
+  bool always_compare_med = 1;
+  bool ignore_as_path_length = 2;
+  bool external_compare_router_id = 3;
+  bool advertise_inactive_routes = 4;
+  bool enable_aigp = 5;
+  bool ignore_next_hop_igp_metric = 6;
+}
+
+message RouteSelectionOptions {
+  RouteSelectionOptionsConfig config = 1;
+  RouteSelectionOptionsState state = 2;
+}
+
+message UseMultiplePathsConfig {
+  bool enabled = 1;
+}
+
+message UseMultiplePathsState {
+  bool enabled = 1;
+}
+
+message EbgpConfig {
+  bool allow_multiple_as = 1;
+  uint32 maximum_paths = 2;
+}
+
+message EbgpState {
+  bool allow_multiple_as = 1;
+  uint32 maximum_paths = 2;
+}
+
+message Ebgp {
+  EbgpConfig config = 1;
+  EbgpState state = 2;
+}
+
+message IbgpConfig {
+  uint32 maximum_paths = 1;
+}
+
+message IbgpState {
+  uint32 maximum_paths = 1;
+}
+
+message Ibgp {
+  IbgpConfig config = 1;
+  IbgpState state = 2;
+}
+
+message UseMultiplePaths {
+  UseMultiplePathsConfig config = 1;
+  UseMultiplePathsState state = 2;
+  Ebgp ebgp = 3;
+  Ibgp ibgp = 4;
+}
+
+message RouteTargetMembershipConfig {
+  uint32 deferral_time = 1;
+}
+
+message RouteTargetMembershipState {
+  uint32 deferral_time = 1;
+}
+
+message RouteTargetMembership {
+  RouteTargetMembershipConfig config = 1;
+  RouteTargetMembershipState state = 2;
+}
+
+message LongLivedGracefulRestartConfig {
+  bool enabled = 1;
+  uint32 restart_time = 2;
+}
+
+message LongLivedGracefulRestartState {
+  bool enabled = 1;
+  bool received = 2;
+  bool advertised = 3;
+  uint32 peer_restart_time = 4;
+  bool peer_restart_timer_expired = 5;
+}
+
+message LongLivedGracefulRestart {
+  LongLivedGracefulRestartConfig config = 1;
+  LongLivedGracefulRestartState state = 2;
+}
+
+message AfiSafi {
+  MpGracefulRestart mp_graceful_restart = 1;
+  AfiSafiConfig config = 2;
+  ApplyPolicy apply_policy = 3;
+  // TODO:
+  // Support the following structures:
+  // - Ipv4Unicast
+  // - Ipv6Unicast
+  // - Ipv4LabelledUnicast
+  // - Ipv6LabelledUnicast
+  // - L3vpnIpv4Unicast
+  // - L3vpnIpv6Unicast
+  // - L3vpnIpv4Multicast
+  // - L3vpnIpv6Multicast
+  // - L2vpnVpls
+  // - L2vpnEvpn
+  RouteSelectionOptions route_selection_options = 4;
+  UseMultiplePaths use_multiple_paths = 5;
+  PrefixLimit prefix_limits = 6;
+  RouteTargetMembership route_target_membership = 7;
+  LongLivedGracefulRestart long_lived_graceful_restart = 8;
 }
 
 message Prefix {

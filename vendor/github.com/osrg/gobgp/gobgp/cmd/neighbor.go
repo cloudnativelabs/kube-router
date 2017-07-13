@@ -50,6 +50,9 @@ func getNeighbors(vrf string) (neighbors, error) {
 }
 
 func getNeighbor(name string, enableAdvertised bool) (*config.Neighbor, error) {
+	if net.ParseIP(name) == nil {
+		name = ""
+	}
 	return client.GetNeighbor(name, enableAdvertised)
 }
 
@@ -74,7 +77,7 @@ func showNeighbors(vrf string) error {
 
 	if globalOpts.Quiet {
 		for _, p := range m {
-			fmt.Println(p.Config.NeighborAddress)
+			fmt.Println(p.State.NeighborAddress)
 		}
 		return nil
 	}
@@ -89,7 +92,7 @@ func showNeighbors(vrf string) error {
 	for _, n := range m {
 		if i := len(n.Config.NeighborInterface); i > maxaddrlen {
 			maxaddrlen = i
-		} else if j := len(n.Config.NeighborAddress); j > maxaddrlen {
+		} else if j := len(n.State.NeighborAddress); j > maxaddrlen {
 			maxaddrlen = j
 		}
 		if l := len(getASN(n)); l > maxaslen {
@@ -139,7 +142,7 @@ func showNeighbors(vrf string) error {
 	}
 
 	for i, n := range m {
-		neigh := n.Config.NeighborAddress
+		neigh := n.State.NeighborAddress
 		if n.Config.NeighborInterface != "" {
 			neigh = n.Config.NeighborInterface
 		}
@@ -160,7 +163,7 @@ func showNeighbor(args []string) error {
 		return nil
 	}
 
-	fmt.Printf("BGP neighbor is %s, remote AS %s", p.Config.NeighborAddress, getASN(p))
+	fmt.Printf("BGP neighbor is %s, remote AS %s", p.State.NeighborAddress, getASN(p))
 
 	if p.RouteReflector.Config.RouteReflectorClient {
 		fmt.Printf(", route-reflector-client\n")
@@ -179,6 +182,22 @@ func showNeighbor(args []string) error {
 	fmt.Printf("  BGP OutQ = %d, Flops = %d\n", p.State.Queues.Output, p.State.Flops)
 	fmt.Printf("  Hold time is %d, keepalive interval is %d seconds\n", int(p.Timers.State.NegotiatedHoldTime), int(p.Timers.State.KeepaliveInterval))
 	fmt.Printf("  Configured hold time is %d, keepalive interval is %d seconds\n", int(p.Timers.Config.HoldTime), int(p.Timers.Config.KeepaliveInterval))
+
+	elems := make([]string, 0, 3)
+	if as := p.AsPathOptions.Config.AllowOwnAs; as > 0 {
+		elems = append(elems, fmt.Sprintf("Allow Own AS: %d\n", as))
+	}
+	switch p.Config.RemovePrivateAs {
+	case config.REMOVE_PRIVATE_AS_OPTION_ALL:
+		elems = append(elems, "Remove private AS: all")
+	case config.REMOVE_PRIVATE_AS_OPTION_REPLACE:
+		elems = append(elems, "Remove private AS: replace")
+	}
+	if p.AsPathOptions.Config.ReplacePeerAs {
+		elems = append(elems, "Replace peer AS: enabled")
+	}
+
+	fmt.Println("  %s", strings.Join(elems, ", "))
 
 	fmt.Printf("  Neighbor capabilities:\n")
 	caps := capabilities{}
@@ -269,7 +288,7 @@ func showNeighbor(args []string) error {
 					fmt.Printf("        Local: %s", s)
 				}
 			}
-			if m := lookup(c, p.State.LocalCapabilityList); m != nil {
+			if m := lookup(c, p.State.RemoteCapabilityList); m != nil {
 				g := m.(*bgp.CapGracefulRestart)
 				if s := grStr(g); len(s) > 0 {
 					fmt.Printf("        Remote: %s", s)
@@ -294,7 +313,7 @@ func showNeighbor(args []string) error {
 					fmt.Printf("        Local:\n%s", s)
 				}
 			}
-			if m := lookup(c, p.State.LocalCapabilityList); m != nil {
+			if m := lookup(c, p.State.RemoteCapabilityList); m != nil {
 				g := m.(*bgp.CapLongLivedGracefulRestart)
 				if s := grStr(g); len(s) > 0 {
 					fmt.Printf("        Remote:\n%s", s)
@@ -325,7 +344,7 @@ func showNeighbor(args []string) error {
 					fmt.Printf("        Local:  %s\n", s)
 				}
 			}
-			if m := lookup(c, p.State.LocalCapabilityList); m != nil {
+			if m := lookup(c, p.State.RemoteCapabilityList); m != nil {
 				e := m.(*bgp.CapExtendedNexthop)
 				if s := exnhStr(e); len(s) > 0 {
 					fmt.Printf("        Remote: %s\n", s)
@@ -341,7 +360,7 @@ func showNeighbor(args []string) error {
 	fmt.Printf("    Notifications: %10d %10d\n", p.State.Messages.Sent.Notification, p.State.Messages.Received.Notification)
 	fmt.Printf("    Updates:       %10d %10d\n", p.State.Messages.Sent.Update, p.State.Messages.Received.Update)
 	fmt.Printf("    Keepalives:    %10d %10d\n", p.State.Messages.Sent.Keepalive, p.State.Messages.Received.Keepalive)
-	fmt.Printf("    Route Refesh:  %10d %10d\n", p.State.Messages.Sent.Refresh, p.State.Messages.Received.Refresh)
+	fmt.Printf("    Route Refresh: %10d %10d\n", p.State.Messages.Sent.Refresh, p.State.Messages.Received.Refresh)
 	fmt.Printf("    Discarded:     %10d %10d\n", p.State.Messages.Sent.Discarded, p.State.Messages.Received.Discarded)
 	fmt.Printf("    Total:         %10d %10d\n", p.State.Messages.Sent.Total, p.State.Messages.Received.Total)
 	fmt.Print("  Route statistics:\n")
@@ -809,13 +828,13 @@ func modNeighborPolicy(remoteIP, policyType, cmdType string, args []string) erro
 }
 
 func modNeighbor(cmdType string, args []string) error {
-	m := extractReserved(args, []string{"interface", "as", "vrf", "route-reflector-client", "route-server-client"})
+	m := extractReserved(args, []string{"interface", "as", "vrf", "route-reflector-client", "route-server-client", "allow-own-as", "remove-private-as", "replace-peer-as"})
 	usage := fmt.Sprintf("usage: gobgp neighbor %s [<neighbor-address>| interface <neighbor-interface>]", cmdType)
 	if cmdType == CMD_ADD {
-		usage += " as <VALUE> [ vrf <vrf-name> | route-reflector-client [<cluster-id>] | route-server-client ]"
+		usage += " as <VALUE> [ vrf <vrf-name> | route-reflector-client [<cluster-id>] | route-server-client | allow-own-as <num> | remove-private-as (all|replace) | replace-peer-as ]"
 	}
 
-	if (len(m[""]) != 1 && len(m["interface"]) != 1) || len(m["as"]) > 1 || len(m["vrf"]) > 1 || len(m["route-reflector-client"]) > 1 {
+	if (len(m[""]) != 1 && len(m["interface"]) != 1) || len(m["as"]) > 1 || len(m["vrf"]) > 1 || len(m["route-reflector-client"]) > 1 || len(m["allow-own-as"]) > 1 || len(m["remove-private-as"]) > 1 {
 		return fmt.Errorf("%s", usage)
 	}
 	unnumbered := len(m["interface"]) > 0
@@ -825,7 +844,7 @@ func modNeighbor(cmdType string, args []string) error {
 		}
 	}
 
-	getConf := func(asn int) *config.Neighbor {
+	getConf := func(asn int) (*config.Neighbor, error) {
 		peer := &config.Neighbor{
 			Config: config.NeighborConfig{
 				PeerAs: uint32(asn),
@@ -835,6 +854,7 @@ func modNeighbor(cmdType string, args []string) error {
 			peer.Config.NeighborInterface = m["interface"][0]
 		} else {
 			peer.Config.NeighborAddress = m[""][0]
+			peer.State.NeighborAddress = m[""][0]
 		}
 		if len(m["vrf"]) == 1 {
 			peer.Config.Vrf = m["vrf"][0]
@@ -852,26 +872,53 @@ func modNeighbor(cmdType string, args []string) error {
 				RouteServerClient: true,
 			}
 		}
-		return peer
+		if option, ok := m["allow-own-as"]; ok {
+			as, err := strconv.Atoi(option[0])
+			if err != nil {
+				return nil, err
+			}
+			peer.AsPathOptions.Config.AllowOwnAs = uint8(as)
+		}
+		if option, ok := m["remove-private-as"]; ok {
+			switch option[0] {
+			case "all":
+				peer.Config.RemovePrivateAs = config.REMOVE_PRIVATE_AS_OPTION_ALL
+			case "replace":
+				peer.Config.RemovePrivateAs = config.REMOVE_PRIVATE_AS_OPTION_REPLACE
+			default:
+				return nil, fmt.Errorf("invalid remove-private-as value: all or replace")
+			}
+		}
+		if _, ok := m["replace-peer-as"]; ok {
+			peer.AsPathOptions.Config.ReplacePeerAs = true
+		}
+		return peer, nil
 	}
-	var err error
+
+	var as int
+	if len(m["as"]) > 0 {
+		var err error
+		as, err = strconv.Atoi(m["as"][0])
+		if err != nil {
+			return err
+		}
+	}
+
+	n, err := getConf(as)
+	if err != nil {
+		return err
+	}
+
 	switch cmdType {
 	case CMD_ADD:
 		if len(m[""]) > 0 && len(m["as"]) != 1 {
 			return fmt.Errorf("%s", usage)
 		}
-		var as int
-		if len(m["as"]) > 0 {
-			as, err = strconv.Atoi(m["as"][0])
-			if err != nil {
-				return err
-			}
-		}
-		err = client.AddNeighbor(getConf(as))
+		return client.AddNeighbor(n)
 	case CMD_DEL:
-		err = client.DeleteNeighbor(getConf(0))
+		return client.DeleteNeighbor(n)
 	}
-	return err
+	return nil
 }
 
 func NewNeighborCmd() *cobra.Command {
@@ -906,7 +953,7 @@ func NewNeighborCmd() *cobra.Command {
 						if err != nil {
 							exitWithError(err)
 						}
-						addr = peer.Config.NeighborAddress
+						addr = peer.State.NeighborAddress
 					}
 					err := f(cmd.Use, addr, args[:len(args)-1])
 					if err != nil {
@@ -937,7 +984,7 @@ func NewNeighborCmd() *cobra.Command {
 			if err != nil {
 				exitWithError(err)
 			}
-			remoteIP := peer.Config.NeighborAddress
+			remoteIP := peer.State.NeighborAddress
 			for _, v := range []string{CMD_IN, CMD_IMPORT, CMD_EXPORT} {
 				if err := showNeighborPolicy(remoteIP, v, 4); err != nil {
 					exitWithError(err)
@@ -954,7 +1001,7 @@ func NewNeighborCmd() *cobra.Command {
 				if err != nil {
 					exitWithError(err)
 				}
-				remoteIP := peer.Config.NeighborAddress
+				remoteIP := peer.State.NeighborAddress
 				err = showNeighborPolicy(remoteIP, cmd.Use, 0)
 				if err != nil {
 					exitWithError(err)
@@ -970,7 +1017,7 @@ func NewNeighborCmd() *cobra.Command {
 					if err != nil {
 						exitWithError(err)
 					}
-					remoteIP := peer.Config.NeighborAddress
+					remoteIP := peer.State.NeighborAddress
 					args = args[:len(args)-1]
 					if err = modNeighborPolicy(remoteIP, cmd.Use, subcmd.Use, args); err != nil {
 						exitWithError(err)

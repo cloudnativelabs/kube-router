@@ -24,11 +24,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	cli "github.com/osrg/gobgp/client"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/table"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -175,8 +178,8 @@ func (n neighbors) Swap(i, j int) {
 }
 
 func (n neighbors) Less(i, j int) bool {
-	p1 := n[i].Config.NeighborAddress
-	p2 := n[j].Config.NeighborAddress
+	p1 := n[i].State.NeighborAddress
+	p2 := n[j].State.NeighborAddress
 	p1Isv4 := !strings.Contains(p1, ":")
 	p2Isv4 := !strings.Contains(p2, ":")
 	if p1Isv4 != p2Isv4 {
@@ -223,8 +226,26 @@ func (v vrfs) Less(i, j int) bool {
 }
 
 func newClient() *cli.Client {
+	var grpcOpts []grpc.DialOption
+	if globalOpts.TLS {
+		var creds credentials.TransportCredentials
+		if globalOpts.CaFile == "" {
+			creds = credentials.NewClientTLSFromCert(nil, "")
+		} else {
+			var err error
+			creds, err = credentials.NewClientTLSFromFile(globalOpts.CaFile, "")
+			if err != nil {
+				exitWithError(err)
+			}
+		}
+		grpcOpts = []grpc.DialOption{
+			grpc.WithTimeout(time.Second),
+			grpc.WithBlock(),
+			grpc.WithTransportCredentials(creds),
+		}
+	}
 	target := net.JoinHostPort(globalOpts.Host, strconv.Itoa(globalOpts.Port))
-	client, err := cli.New(target)
+	client, err := cli.New(target, grpcOpts...)
 	if err != nil {
 		exitWithError(err)
 	}

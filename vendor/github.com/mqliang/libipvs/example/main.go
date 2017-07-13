@@ -48,8 +48,9 @@ func main() {
 	fmt.Printf("%#v\n", svcs)
 
 	dst := libipvs.Destination{
-		Address: net.ParseIP("172.192.100.1"),
-		Port:    80,
+		Address:       net.ParseIP("172.192.100.1"),
+		AddressFamily: syscall.AF_INET,
+		Port:          80,
 	}
 
 	if err := h.NewDestination(&svc, &dst); err != nil {

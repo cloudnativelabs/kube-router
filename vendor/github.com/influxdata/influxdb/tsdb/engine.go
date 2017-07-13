@@ -12,6 +12,7 @@ import (
 	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/pkg/estimator"
+	"github.com/influxdata/influxdb/pkg/limiter"
 	"github.com/uber-go/zap"
 )
 
@@ -30,6 +31,8 @@ type Engine interface {
 	Open() error
 	Close() error
 	SetEnabled(enabled bool)
+	SetCompactionsEnabled(enabled bool)
+
 	WithLogger(zap.Logger)
 
 	LoadMetadataIndex(shardID uint64, index Index) error
@@ -37,6 +40,7 @@ type Engine interface {
 	CreateSnapshot() (string, error)
 	Backup(w io.Writer, basePath string, since time.Time) error
 	Restore(r io.Reader, basePath string) error
+	Import(r io.Reader, basePath string) error
 
 	CreateIterator(measurement string, opt influxql.IteratorOptions) (influxql.Iterator, error)
 	WritePoints(points []models.Point) error
@@ -52,7 +56,7 @@ type Engine interface {
 	MeasurementExists(name []byte) (bool, error)
 	MeasurementNamesByExpr(expr influxql.Expr) ([][]byte, error)
 	MeasurementNamesByRegex(re *regexp.Regexp) ([][]byte, error)
-	MeasurementFields(measurement string) *MeasurementFields
+	MeasurementFields(measurement []byte) *MeasurementFields
 	ForEachMeasurementName(fn func(name []byte) error) error
 	DeleteMeasurement(name []byte) error
 
@@ -70,6 +74,8 @@ type Engine interface {
 	// Statistics will return statistics relevant to this engine.
 	Statistics(tags map[string]string) []models.Statistic
 	LastModified() time.Time
+	DiskSize() int64
+	IsIdle() bool
 
 	io.WriterTo
 }
@@ -83,7 +89,7 @@ const (
 )
 
 // NewEngineFunc creates a new engine.
-type NewEngineFunc func(id uint64, i Index, path string, walPath string, options EngineOptions) Engine
+type NewEngineFunc func(id uint64, i Index, database, path string, walPath string, options EngineOptions) Engine
 
 // newEngineFuncs is a lookup of engine constructors by name.
 var newEngineFuncs = make(map[string]NewEngineFunc)
@@ -108,10 +114,10 @@ func RegisteredEngines() []string {
 
 // NewEngine returns an instance of an engine based on its format.
 // If the path does not exist then the DefaultFormat is used.
-func NewEngine(id uint64, i Index, path string, walPath string, options EngineOptions) (Engine, error) {
+func NewEngine(id uint64, i Index, database, path string, walPath string, options EngineOptions) (Engine, error) {
 	// Create a new engine
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return newEngineFuncs[options.EngineVersion](id, i, path, walPath, options), nil
+		return newEngineFuncs[options.EngineVersion](id, i, database, path, walPath, options), nil
 	}
 
 	// If it's a dir then it's a tsm1 engine
@@ -130,15 +136,16 @@ func NewEngine(id uint64, i Index, path string, walPath string, options EngineOp
 		return nil, fmt.Errorf("invalid engine format: %q", format)
 	}
 
-	return fn(id, i, path, walPath, options), nil
+	return fn(id, i, database, path, walPath, options), nil
 }
 
 // EngineOptions represents the options used to initialize the engine.
 type EngineOptions struct {
-	EngineVersion string
-	IndexVersion  string
-	ShardID       uint64
-	InmemIndex    interface{} // shared in-memory index
+	EngineVersion     string
+	IndexVersion      string
+	ShardID           uint64
+	InmemIndex        interface{} // shared in-memory index
+	CompactionLimiter limiter.Fixed
 
 	Config Config
 }

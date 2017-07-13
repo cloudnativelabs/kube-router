@@ -134,6 +134,9 @@ type TSMWriter interface {
 	// WriteIndex finishes the TSM write streams and writes the index.
 	WriteIndex() error
 
+	// Flushes flushes all pending changes to the underlying file resources.
+	Flush() error
+
 	// Close closes any underlying file resources.
 	Close() error
 
@@ -434,7 +437,7 @@ func NewTSMWriter(w io.Writer) (TSMWriter, error) {
 		blocks: map[string]*indexEntries{},
 	}
 
-	return &tsmWriter{wrapped: w, w: bufio.NewWriterSize(w, 4*1024*1024), index: index}, nil
+	return &tsmWriter{wrapped: w, w: bufio.NewWriterSize(w, 1024*1024), index: index}, nil
 }
 
 func (t *tsmWriter) writeHeader() error {
@@ -452,13 +455,13 @@ func (t *tsmWriter) writeHeader() error {
 
 // Write writes a new block containing key and values.
 func (t *tsmWriter) Write(key string, values Values) error {
+	if len(key) > maxKeyLength {
+		return ErrMaxKeyLengthExceeded
+	}
+
 	// Nothing to write
 	if len(values) == 0 {
 		return nil
-	}
-
-	if len(key) > maxKeyLength {
-		return ErrMaxKeyLengthExceeded
 	}
 
 	// Write header only after we have some data to write.
@@ -504,6 +507,10 @@ func (t *tsmWriter) Write(key string, values Values) error {
 // exceeds max entries for a given key, ErrMaxBlocksExceeded is returned.  This indicates
 // that the index is now full for this key and no future writes to this key will succeed.
 func (t *tsmWriter) WriteBlock(key string, minTime, maxTime int64, block []byte) error {
+	if len(key) > maxKeyLength {
+		return ErrMaxKeyLengthExceeded
+	}
+
 	// Nothing to write
 	if len(block) == 0 {
 		return nil
@@ -570,7 +577,7 @@ func (t *tsmWriter) WriteIndex() error {
 	return err
 }
 
-func (t *tsmWriter) Close() error {
+func (t *tsmWriter) Flush() error {
 	if err := t.w.Flush(); err != nil {
 		return err
 	}
@@ -579,6 +586,13 @@ func (t *tsmWriter) Close() error {
 		if err := f.Sync(); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (t *tsmWriter) Close() error {
+	if err := t.Flush(); err != nil {
+		return err
 	}
 
 	if c, ok := t.wrapped.(io.Closer); ok {

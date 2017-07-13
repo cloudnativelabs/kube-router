@@ -14,7 +14,7 @@ import (
 )
 
 // DefaultStatsInterval is the default value for IteratorEncoder.StatsInterval.
-const DefaultStatsInterval = 10 * time.Second
+const DefaultStatsInterval = time.Second
 
 {{with $types := .}}{{range $k := $types}}
 
@@ -1017,6 +1017,7 @@ type {{$k.name}}Reduce{{$v.Name}}Iterator struct {
 	dims     []string
 	opt      IteratorOptions
 	points   []{{$v.Name}}Point
+	keepTags bool
 }
 
 func new{{$k.Name}}Reduce{{$v.Name}}Iterator(input {{$k.Name}}Iterator, opt IteratorOptions, createFn func() ({{$k.Name}}PointAggregator, {{$v.Name}}PointEmitter)) *{{$k.name}}Reduce{{$v.Name}}Iterator {
@@ -1063,7 +1064,13 @@ type {{$k.name}}Reduce{{$v.Name}}Point struct {
 // The previous value for the dimension is passed to fn.
 func (itr *{{$k.name}}Reduce{{$v.Name}}Iterator) reduce() ([]{{$v.Name}}Point, error) {
 	// Calculate next window.
-	var startTime, endTime int64
+	var (
+		startTime, endTime int64
+		window             struct {
+			name string
+			tags string
+		}
+	)
 	for {
 		p, err := itr.input.Next()
 		if err != nil || p == nil {
@@ -1075,6 +1082,7 @@ func (itr *{{$k.name}}Reduce{{$v.Name}}Iterator) reduce() ([]{{$v.Name}}Point, e
 		// Unread the point so it can be processed.
 		itr.input.unread(p)
 		startTime, endTime = itr.opt.Window(p.Time)
+		window.name, window.tags = p.Name, p.Tags.Subset(itr.opt.Dimensions).ID()
 		break
 	}
 
@@ -1089,13 +1097,24 @@ func (itr *{{$k.name}}Reduce{{$v.Name}}Iterator) reduce() ([]{{$v.Name}}Point, e
 			break
 		} else if curr.Nil {
 			continue
+		} else if curr.Name != window.name {
+			itr.input.unread(curr)
+			break
 		}
-		tags := curr.Tags.Subset(itr.dims)
 
-		id := curr.Name
-		if len(tags.m) > 0 {
-			id += "\x00" + tags.ID()
+		// Ensure this point is within the same final window.
+		if curr.Name != window.name {
+			itr.input.unread(curr)
+			break
+		} else if tags := curr.Tags.Subset(itr.opt.Dimensions); tags.ID() != window.tags {
+			itr.input.unread(curr)
+			break
 		}
+
+		// Retrieve the tags on this point for this level of the query.
+		// This may be different than the bucket dimensions.
+		tags := curr.Tags.Subset(itr.dims)
+		id := tags.ID()
 
 		// Retrieve the aggregator for this name/tag combination or create one.
 		rp := m[id]
@@ -1112,24 +1131,27 @@ func (itr *{{$k.name}}Reduce{{$v.Name}}Iterator) reduce() ([]{{$v.Name}}Point, e
 		rp.Aggregator.Aggregate{{$k.Name}}(curr)
 	}
 
-	// Reverse sort points by name & tag.
+	// Reverse sort points by name & tag if our output is supposed to be ordered.
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
-	if len(keys) > 1 {
+	if len(keys) > 1 && itr.opt.Ordered {
 		sort.Sort(reverseStringSlice(keys))
 	}
 
 	// Assume the points are already sorted until proven otherwise.
 	sortedByTime := true
+	// Emit the points for each name & tag combination.
 	a := make([]{{$v.Name}}Point, 0, len(m))
 	for _, k := range keys {
 		rp := m[k]
 		points := rp.Emitter.Emit()
 		for i := len(points)-1; i >= 0; i-- {
 			points[i].Name = rp.Name
-			points[i].Tags = rp.Tags
+			if !itr.keepTags {
+				points[i].Tags = rp.Tags
+			}
 			// Set the points time to the interval time if the reducer didn't provide one.
 			if points[i].Time == ZeroTime {
 				points[i].Time = startTime
@@ -1482,6 +1504,70 @@ type {{$k.name}}BoolTransformFunc func(p *{{$k.Name}}Point) *BooleanPoint
 type {{$k.name}}DedupeIterator struct {
 	input {{$k.Name}}Iterator
 	m     map[string]struct{} // lookup of points already sent
+}
+
+type {{$k.name}}IteratorMapper struct {
+	e         *Emitter
+	buf       []interface{}
+	driver    IteratorMap   // which iterator to use for the primary value, can be nil
+	fields    []IteratorMap // which iterator to use for an aux field
+	point     {{$k.Name}}Point
+}
+
+func new{{$k.Name}}IteratorMapper(itrs []Iterator, driver IteratorMap, fields []IteratorMap, opt IteratorOptions) *{{$k.name}}IteratorMapper {
+	e := NewEmitter(itrs, opt.Ascending, 0)
+	e.OmitTime = true
+	return &{{$k.name}}IteratorMapper{
+		e:         e,
+		buf:       make([]interface{}, len(itrs)),
+		driver:    driver,
+		fields:    fields,
+		point:  {{$k.Name}}Point{
+			Aux: make([]interface{}, len(fields)),
+		},
+	}
+}
+
+func (itr *{{$k.name}}IteratorMapper) Next() (*{{$k.Name}}Point, error) {
+	t, name, tags, err := itr.e.loadBuf()
+	if err != nil || t == ZeroTime {
+		return nil, err
+	}
+	itr.point.Time = t
+	itr.point.Name = name
+	itr.point.Tags = tags
+
+	itr.e.readInto(t, name, tags, itr.buf)
+	if itr.driver != nil {
+	if v := itr.driver.Value(tags, itr.buf); v != nil {
+			if v, ok := v.({{$k.Type}}); ok {
+				itr.point.Value = v
+				itr.point.Nil = false
+			} else {
+				itr.point.Value = {{$k.Nil}}
+				itr.point.Nil = true
+			}
+		} else {
+			itr.point.Value = {{$k.Nil}}
+			itr.point.Nil = true
+		}
+	}
+	for i, f := range itr.fields {
+		itr.point.Aux[i] = f.Value(tags, itr.buf)
+	}
+	return &itr.point, nil
+}
+
+func (itr *{{$k.name}}IteratorMapper) Stats() IteratorStats {
+	stats := IteratorStats{}
+	for _, itr := range itr.e.itrs {
+		stats.Add(itr.Stats())
+	}
+	return stats
+}
+
+func (itr *{{$k.name}}IteratorMapper) Close() error {
+	return itr.e.Close()
 }
 
 type {{$k.name}}FilterIterator struct {

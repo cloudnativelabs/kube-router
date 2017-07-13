@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -15,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"path"
 
 	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
@@ -158,12 +161,13 @@ func TestEngine_Backup(t *testing.T) {
 	p3 := MustParsePointString("cpu,host=C value=1.3 3000000000")
 
 	// Write those points to the engine.
+	db := path.Base(f.Name())
 	opt := tsdb.NewEngineOptions()
-	opt.InmemIndex = inmem.NewIndex()
-	idx := tsdb.MustOpenIndex(1, filepath.Join(f.Name(), "index"), opt)
+	opt.InmemIndex = inmem.NewIndex(db)
+	idx := tsdb.MustOpenIndex(1, db, filepath.Join(f.Name(), "index"), opt)
 	defer idx.Close()
 
-	e := tsm1.NewEngine(1, idx, f.Name(), walPath, opt).(*tsm1.Engine)
+	e := tsm1.NewEngine(1, idx, db, f.Name(), walPath, opt).(*tsm1.Engine)
 
 	// mock the planner so compactions don't run during the test
 	e.CompactionPlan = &mockPlanner{}
@@ -193,14 +197,30 @@ func TestEngine_Backup(t *testing.T) {
 		t.Fatalf("file count wrong: exp: %d, got: %d", 2, len(e.FileStore.Files()))
 	}
 
+	fileNames := map[string]bool{}
 	for _, f := range e.FileStore.Files() {
-		th, err := tr.Next()
-		if err != nil {
-			t.Fatalf("failed reading header: %s", err.Error())
+		fileNames[filepath.Base(f.Path())] = true
+	}
+
+	th, err := tr.Next()
+	for err == nil {
+		if !fileNames[th.Name] {
+			t.Errorf("Extra file in backup: %q", th.Name)
 		}
-		if !strings.Contains(f.Path(), th.Name) || th.Name == "" {
-			t.Fatalf("file name doesn't match:\n\tgot: %s\n\texp: %s", th.Name, f.Path())
-		}
+		delete(fileNames, th.Name)
+		th, err = tr.Next()
+	}
+
+	if err != nil && err != io.EOF {
+		t.Fatalf("Problem reading tar header: %s", err)
+	}
+
+	for f := range fileNames {
+		t.Errorf("File missing from backup: %s", f)
+	}
+
+	if t.Failed() {
+		t.FailNow()
 	}
 
 	lastBackup := time.Now()
@@ -219,7 +239,7 @@ func TestEngine_Backup(t *testing.T) {
 	}
 
 	tr = tar.NewReader(b)
-	th, err := tr.Next()
+	th, err = tr.Next()
 	if err != nil {
 		t.Fatalf("error getting next tar header: %s", err.Error())
 	}
@@ -238,7 +258,7 @@ func TestEngine_CreateIterator_Cache_Ascending(t *testing.T) {
 	defer e.Close()
 
 	// e.CreateMeasurement("cpu")
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
 	e.CreateSeriesIfNotExists([]byte("cpu,host=A"), []byte("cpu"), models.NewTags(map[string]string{"host": "A"}))
 
 	if err := e.WritePointsString(
@@ -290,7 +310,7 @@ func TestEngine_CreateIterator_Cache_Descending(t *testing.T) {
 	e := MustOpenEngine()
 	defer e.Close()
 
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
 	e.CreateSeriesIfNotExists([]byte("cpu,host=A"), []byte("cpu"), models.NewTags(map[string]string{"host": "A"}))
 
 	if err := e.WritePointsString(
@@ -342,7 +362,7 @@ func TestEngine_CreateIterator_TSM_Ascending(t *testing.T) {
 	e := MustOpenEngine()
 	defer e.Close()
 
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
 	e.CreateSeriesIfNotExists([]byte("cpu,host=A"), []byte("cpu"), models.NewTags(map[string]string{"host": "A"}))
 
 	if err := e.WritePointsString(
@@ -395,7 +415,7 @@ func TestEngine_CreateIterator_TSM_Descending(t *testing.T) {
 	e := MustOpenEngine()
 	defer e.Close()
 
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
 	e.CreateSeriesIfNotExists([]byte("cpu,host=A"), []byte("cpu"), models.NewTags(map[string]string{"host": "A"}))
 
 	if err := e.WritePointsString(
@@ -448,8 +468,8 @@ func TestEngine_CreateIterator_Aux(t *testing.T) {
 	e := MustOpenEngine()
 	defer e.Close()
 
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("F", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("F"), influxql.Float, false)
 	e.CreateSeriesIfNotExists([]byte("cpu,host=A"), []byte("cpu"), models.NewTags(map[string]string{"host": "A"}))
 
 	if err := e.WritePointsString(
@@ -504,12 +524,12 @@ func TestEngine_CreateIterator_Condition(t *testing.T) {
 	e := MustOpenEngine()
 	defer e.Close()
 
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("X", influxql.Float, false)
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("Y", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("X"), influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("Y"), influxql.Float, false)
 	e.CreateSeriesIfNotExists([]byte("cpu,host=A"), []byte("cpu"), models.NewTags(map[string]string{"host": "A"}))
-	e.SetFieldName("cpu", "X")
-	e.SetFieldName("cpu", "Y")
+	e.SetFieldName([]byte("cpu"), "X")
+	e.SetFieldName([]byte("cpu"), "Y")
 
 	if err := e.WritePointsString(
 		`cpu,host=A value=1.1 1000000000`,
@@ -572,11 +592,12 @@ func TestEngine_DeleteSeries(t *testing.T) {
 	p3 := MustParsePointString("cpu,host=A sum=1.3 3000000000")
 
 	// Write those points to the engine.
+	db := path.Base(f.Name())
 	opt := tsdb.NewEngineOptions()
-	opt.InmemIndex = inmem.NewIndex()
-	idx := tsdb.MustOpenIndex(1, filepath.Join(f.Name(), "index"), opt)
+	opt.InmemIndex = inmem.NewIndex(db)
+	idx := tsdb.MustOpenIndex(1, db, filepath.Join(f.Name(), "index"), opt)
 	defer idx.Close()
-	e := tsm1.NewEngine(1, idx, f.Name(), walPath, opt).(*tsm1.Engine)
+	e := tsm1.NewEngine(1, idx, db, f.Name(), walPath, opt).(*tsm1.Engine)
 	// e.LoadMetadataIndex(1, MustNewDatabaseIndex("db0")) // Initialise an index
 
 	// mock the planner so compactions don't run during the test
@@ -627,12 +648,13 @@ func TestEngine_LastModified(t *testing.T) {
 	p3 := MustParsePointString("cpu,host=A sum=1.3 3000000000")
 
 	// Write those points to the engine.
+	db := path.Base(dir)
 	opt := tsdb.NewEngineOptions()
-	opt.InmemIndex = inmem.NewIndex()
-	idx := tsdb.MustOpenIndex(1, filepath.Join(dir, "index"), opt)
+	opt.InmemIndex = inmem.NewIndex(db)
+	idx := tsdb.MustOpenIndex(1, db, filepath.Join(dir, "index"), opt)
 	defer idx.Close()
 
-	e := tsm1.NewEngine(1, idx, dir, walPath, opt).(*tsm1.Engine)
+	e := tsm1.NewEngine(1, idx, db, dir, walPath, opt).(*tsm1.Engine)
 
 	// mock the planner so compactions don't run during the test
 	e.CompactionPlan = &mockPlanner{}
@@ -765,7 +787,7 @@ func benchmarkEngine_WritePoints(b *testing.B, batchSize int) {
 	e := MustOpenEngine()
 	defer e.Close()
 
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
 
 	pp := make([]models.Point, 0, batchSize)
 	for i := 0; i < batchSize; i++ {
@@ -820,7 +842,7 @@ func benchmarkEngine_WritePoints_Parallel(b *testing.B, batchSize int) {
 	defer e.Close()
 
 	// e.Index().CreateMeasurementIndexIfNotExists("cpu")
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -917,7 +939,7 @@ func MustInitBenchmarkEngine(pointN int) *Engine {
 	e := MustOpenEngine()
 
 	// Initialize metadata.
-	e.MeasurementFields("cpu").CreateFieldIfNotExists("value", influxql.Float, false)
+	e.MeasurementFields([]byte("cpu")).CreateFieldIfNotExists([]byte("value"), influxql.Float, false)
 	e.CreateSeriesIfNotExists([]byte("cpu,host=A"), []byte("cpu"), models.NewTags(map[string]string{"host": "A"}))
 
 	// Generate time ascending points with jitterred time & value.
@@ -968,14 +990,16 @@ func NewEngine() *Engine {
 		panic(err)
 	}
 
+	db := path.Base(root)
 	opt := tsdb.NewEngineOptions()
-	opt.InmemIndex = inmem.NewIndex()
+	opt.InmemIndex = inmem.NewIndex(db)
 
-	idx := tsdb.MustOpenIndex(1, filepath.Join(root, "data", "index"), opt)
+	idx := tsdb.MustOpenIndex(1, db, filepath.Join(root, "data", "index"), opt)
 
 	return &Engine{
 		Engine: tsm1.NewEngine(1,
 			idx,
+			db,
 			filepath.Join(root, "data"),
 			filepath.Join(root, "wal"),
 			opt).(*tsm1.Engine),
@@ -1013,13 +1037,15 @@ func (e *Engine) Reopen() error {
 		return err
 	}
 
+	db := path.Base(e.root)
 	opt := tsdb.NewEngineOptions()
-	opt.InmemIndex = inmem.NewIndex()
+	opt.InmemIndex = inmem.NewIndex(db)
 
-	e.index = tsdb.MustOpenIndex(1, filepath.Join(e.root, "data", "index"), opt)
+	e.index = tsdb.MustOpenIndex(1, db, filepath.Join(e.root, "data", "index"), opt)
 
 	e.Engine = tsm1.NewEngine(1,
 		e.index,
+		db,
 		filepath.Join(e.root, "data"),
 		filepath.Join(e.root, "wal"),
 		opt).(*tsm1.Engine)
@@ -1059,6 +1085,8 @@ type mockPlanner struct{}
 func (m *mockPlanner) Plan(lastWrite time.Time) []tsm1.CompactionGroup { return nil }
 func (m *mockPlanner) PlanLevel(level int) []tsm1.CompactionGroup      { return nil }
 func (m *mockPlanner) PlanOptimize() []tsm1.CompactionGroup            { return nil }
+func (m *mockPlanner) Release(groups []tsm1.CompactionGroup)           {}
+func (m *mockPlanner) FullyCompacted() bool                            { return false }
 
 // ParseTags returns an instance of Tags for a comma-delimited list of key/values.
 func ParseTags(s string) influxql.Tags {

@@ -130,7 +130,7 @@ func unpackService(attrs nlgo.AttrMap) (Service, error) {
 	return service, nil
 }
 
-func unpackDest(attrs nlgo.AttrMap) (Destination, error) {
+func unpackDest(attrs nlgo.AttrMap, serverAddressFamily AddressFamily) (Destination, error) {
 	var dest Destination
 	var addr []byte
 
@@ -159,6 +159,12 @@ func unpackDest(attrs nlgo.AttrMap) (Destination, error) {
 		case IPVS_DEST_ATTR_STATS:
 			dest.Stats = unpackStats(attr)
 		}
+	}
+	// Linux kernel prior v3.18-rc1 does not have the af (address family) field
+	// in ip_vs_dest_user_kern, so use the address family in ip_vs_service_user_kern.
+	// https://github.com/torvalds/linux/commit/6cff339bbd5f9eda7a5e8a521f91a88d046e6d0c
+	if dest.AddressFamily == 0 {
+		dest.AddressFamily = serverAddressFamily
 	}
 
 	if addrIP, err := unpackAddr(addr, dest.AddressFamily); err != nil {

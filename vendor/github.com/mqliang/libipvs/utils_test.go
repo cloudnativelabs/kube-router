@@ -138,6 +138,7 @@ func testDestEquals(t *testing.T, testDest Destination, dest Destination) {
 }
 
 func TestDest(t *testing.T) {
+	serverAddressFamily := AddressFamily(syscall.AF_INET6)
 	testDest := Destination{
 		AddressFamily: syscall.AF_INET6,
 		Address:       net.ParseIP("2001:db8:6b:6b::0"),
@@ -158,20 +159,45 @@ func TestDest(t *testing.T) {
 		nlattr(IPVS_DEST_ATTR_L_THRESH, nlgo.U32(0)),
 	}
 
-	// pack
-	packAttrs := testDest.attrs(true)
-	packBytes := packAttrs.Bytes()
+	t.Run("with AddressFamily", func(t *testing.T) {
+		// pack
+		packAttrs := testDest.attrs(true)
+		packBytes := packAttrs.Bytes()
 
-	if !bytes.Equal(packBytes, testAttrs.Bytes()) {
-		t.Errorf("fail Dest.attrs(): \n%s", hex.Dump(packBytes))
-	}
+		if !bytes.Equal(packBytes, testAttrs.Bytes()) {
+			t.Errorf("fail Dest.attrs(): \n%s", hex.Dump(packBytes))
+		}
 
-	// unpack
-	if unpackedAttrs, err := ipvs_dest_policy.Parse(packBytes); err != nil {
-		t.Fatalf("error ipvs_dest_policy.Parse: %s", err)
-	} else if unpackedDest, err := unpackDest(unpackedAttrs.(nlgo.AttrMap)); err != nil {
-		t.Fatalf("error unpackDest: %s", err)
-	} else {
-		testDestEquals(t, testDest, unpackedDest)
-	}
+		// unpack
+		if unpackedAttrs, err := ipvs_dest_policy.Parse(packBytes); err != nil {
+			t.Fatalf("error ipvs_dest_policy.Parse: %s", err)
+		} else if unpackedDest, err := unpackDest(unpackedAttrs.(nlgo.AttrMap), serverAddressFamily); err != nil {
+			t.Fatalf("error unpackDest: %s", err)
+		} else {
+			testDestEquals(t, testDest, unpackedDest)
+		}
+	})
+	t.Run("without AddressFamily", func(t *testing.T) {
+		// pack
+		packAttrs := testDest.attrs(true)
+		packBytes := packAttrs.Bytes()
+
+		if !bytes.Equal(packBytes, testAttrs.Bytes()) {
+			t.Errorf("fail Dest.attrs(): \n%s", hex.Dump(packBytes))
+		}
+
+		// unpack
+		// Tweek dest AddressFamily
+		savedAddressFamily := testDest.AddressFamily
+		testDest.AddressFamily = 0
+		if unpackedAttrs, err := ipvs_dest_policy.Parse(packBytes); err != nil {
+			t.Fatalf("error ipvs_dest_policy.Parse: %s", err)
+		} else if unpackedDest, err := unpackDest(unpackedAttrs.(nlgo.AttrMap), serverAddressFamily); err != nil {
+			t.Fatalf("error unpackDest: %s", err)
+		} else {
+			// Restore testDest AddressFamily before comparison.
+			testDest.AddressFamily = savedAddressFamily
+			testDestEquals(t, testDest, unpackedDest)
+		}
+	})
 }

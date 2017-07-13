@@ -21,11 +21,11 @@ import (
 	"os"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/packet/mrt"
 	"github.com/osrg/gobgp/table"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -109,7 +109,7 @@ func (m *mrtWriter) loop() error {
 				t := uint32(time.Now().Unix())
 				peers := make([]*mrt.Peer, 0, len(m.Neighbor))
 				for _, pconf := range m.Neighbor {
-					peers = append(peers, mrt.NewPeer(pconf.State.RemoteRouterId, pconf.Config.NeighborAddress, pconf.Config.PeerAs, true))
+					peers = append(peers, mrt.NewPeer(pconf.State.RemoteRouterId, pconf.State.NeighborAddress, pconf.Config.PeerAs, true))
 				}
 				if bm, err := mrt.NewMRTMessage(t, mrt.TABLE_DUMPv2, mrt.PEER_INDEX_TABLE, mrt.NewPeerIndexTable(m.RouterId, "", peers)); err != nil {
 					break
@@ -119,7 +119,7 @@ func (m *mrtWriter) loop() error {
 
 				idx := func(p *table.Path) uint16 {
 					for i, pconf := range m.Neighbor {
-						if p.GetSource().Address.String() == pconf.Config.NeighborAddress {
+						if p.GetSource().Address.String() == pconf.State.NeighborAddress {
 							return uint16(i)
 						}
 					}
@@ -147,7 +147,7 @@ func (m *mrtWriter) loop() error {
 						if path.IsLocal() {
 							continue
 						}
-						entries = append(entries, mrt.NewRibEntry(idx(path), uint32(path.GetTimestamp().Unix()), path.GetPathAttrs()))
+						entries = append(entries, mrt.NewRibEntry(idx(path), uint32(path.GetTimestamp().Unix()), 0, path.GetPathAttrs()))
 					}
 					if len(entries) > 0 {
 						bm, _ := mrt.NewMRTMessage(t, mrt.TABLE_DUMPv2, subtype(pathList[0]), mrt.NewRib(seq, pathList[0].GetNlri(), entries))

@@ -75,6 +75,7 @@ type ExtendedCommunityAttrType uint8
 
 const (
 	EC_TYPE_TRANSITIVE_TWO_OCTET_AS_SPECIFIC      ExtendedCommunityAttrType = 0x00
+	EC_TYPE_TRANSITIVE_IP6_SPECIFIC               ExtendedCommunityAttrType = 0x00 // RFC5701
 	EC_TYPE_TRANSITIVE_IP4_SPECIFIC               ExtendedCommunityAttrType = 0x01
 	EC_TYPE_TRANSITIVE_FOUR_OCTET_AS_SPECIFIC     ExtendedCommunityAttrType = 0x02
 	EC_TYPE_TRANSITIVE_OPAQUE                     ExtendedCommunityAttrType = 0x03
@@ -83,6 +84,7 @@ const (
 	EC_TYPE_EVPN                                  ExtendedCommunityAttrType = 0x06
 	EC_TYPE_FLOWSPEC_REDIRECT_MIRROR              ExtendedCommunityAttrType = 0x08
 	EC_TYPE_NON_TRANSITIVE_TWO_OCTET_AS_SPECIFIC  ExtendedCommunityAttrType = 0x40
+	EC_TYPE_NON_TRANSITIVE_IP6_SPECIFIC           ExtendedCommunityAttrType = 0x40 // RFC5701
 	EC_TYPE_NON_TRANSITIVE_IP4_SPECIFIC           ExtendedCommunityAttrType = 0x41
 	EC_TYPE_NON_TRANSITIVE_FOUR_OCTET_AS_SPECIFIC ExtendedCommunityAttrType = 0x42
 	EC_TYPE_NON_TRANSITIVE_OPAQUE                 ExtendedCommunityAttrType = 0x43
@@ -123,6 +125,7 @@ const (
 	EC_SUBTYPE_FLOWSPEC_REDIRECT       ExtendedCommunityAttrSubType = 0x08 // EC_TYPE: 0x80
 	EC_SUBTYPE_FLOWSPEC_TRAFFIC_REMARK ExtendedCommunityAttrSubType = 0x09 // EC_TYPE: 0x80
 	EC_SUBTYPE_L2_INFO                 ExtendedCommunityAttrSubType = 0x0A // EC_TYPE: 0x80
+	EC_SUBTYPE_FLOWSPEC_REDIRECT_IP6   ExtendedCommunityAttrSubType = 0x0B // EC_TYPE: 0x80
 
 	EC_SUBTYPE_MAC_MOBILITY ExtendedCommunityAttrSubType = 0x00 // EC_TYPE: 0x06
 	EC_SUBTYPE_ESI_LABEL    ExtendedCommunityAttrSubType = 0x01 // EC_TYPE: 0x06
@@ -587,10 +590,31 @@ func (m BGPAddPathMode) String() string {
 	}
 }
 
-type CapAddPath struct {
-	DefaultParameterCapability
+type CapAddPathTuple struct {
 	RouteFamily RouteFamily
 	Mode        BGPAddPathMode
+}
+
+func (t *CapAddPathTuple) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		RouteFamily RouteFamily `json:"family"`
+		Mode        uint8       `json:"mode"`
+	}{
+		RouteFamily: t.RouteFamily,
+		Mode:        uint8(t.Mode),
+	})
+}
+
+func NewCapAddPathTuple(family RouteFamily, mode BGPAddPathMode) *CapAddPathTuple {
+	return &CapAddPathTuple{
+		RouteFamily: family,
+		Mode:        mode,
+	}
+}
+
+type CapAddPath struct {
+	DefaultParameterCapability
+	Tuples []*CapAddPathTuple
 }
 
 func (c *CapAddPath) DecodeFromBytes(data []byte) error {
@@ -599,40 +623,46 @@ func (c *CapAddPath) DecodeFromBytes(data []byte) error {
 	if len(data) < 4 {
 		return NewMessageError(BGP_ERROR_OPEN_MESSAGE_ERROR, BGP_ERROR_SUB_UNSUPPORTED_CAPABILITY, nil, "Not all CapabilityAddPath bytes available")
 	}
-	c.RouteFamily = AfiSafiToRouteFamily(binary.BigEndian.Uint16(data[:2]), data[2])
-	c.Mode = BGPAddPathMode(data[3])
+	c.Tuples = []*CapAddPathTuple{}
+	for len(data) >= 4 {
+		t := &CapAddPathTuple{
+			RouteFamily: AfiSafiToRouteFamily(binary.BigEndian.Uint16(data[:2]), data[2]),
+			Mode:        BGPAddPathMode(data[3]),
+		}
+		c.Tuples = append(c.Tuples, t)
+		data = data[4:]
+	}
 	return nil
 }
 
 func (c *CapAddPath) Serialize() ([]byte, error) {
-	buf := make([]byte, 4)
-	afi, safi := RouteFamilyToAfiSafi(c.RouteFamily)
-	binary.BigEndian.PutUint16(buf, afi)
-	buf[2] = safi
-	buf[3] = byte(c.Mode)
+	buf := make([]byte, len(c.Tuples)*4)
+	for i, t := range c.Tuples {
+		afi, safi := RouteFamilyToAfiSafi(t.RouteFamily)
+		binary.BigEndian.PutUint16(buf[i*4:i*4+2], afi)
+		buf[i*4+2] = safi
+		buf[i*4+3] = byte(t.Mode)
+	}
 	c.DefaultParameterCapability.CapValue = buf
 	return c.DefaultParameterCapability.Serialize()
 }
 
 func (c *CapAddPath) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Code  BGPCapabilityCode `json:"code"`
-		Value RouteFamily       `json:"value"`
-		Mode  BGPAddPathMode    `json:"mode"`
+		Code   BGPCapabilityCode  `json:"code"`
+		Tuples []*CapAddPathTuple `json:"tuples"`
 	}{
-		Code:  c.Code(),
-		Value: c.RouteFamily,
-		Mode:  c.Mode,
+		Code:   c.Code(),
+		Tuples: c.Tuples,
 	})
 }
 
-func NewCapAddPath(rf RouteFamily, mode BGPAddPathMode) *CapAddPath {
+func NewCapAddPath(tuples []*CapAddPathTuple) *CapAddPath {
 	return &CapAddPath{
 		DefaultParameterCapability: DefaultParameterCapability{
 			CapCode: BGP_CAP_ADD_PATH,
 		},
-		RouteFamily: rf,
-		Mode:        mode,
+		Tuples: tuples,
 	}
 }
 
@@ -1255,9 +1285,9 @@ func GetRouteDistinguisher(data []byte) RouteDistinguisherInterface {
 }
 
 func parseRdAndRt(input string) ([]string, error) {
-	exp := regexp.MustCompile("^((\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)|((\\d+)\\.)?(\\d+)):(\\d+)$")
+	exp := regexp.MustCompile("^((\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)|((\\d+)\\.)?(\\d+)|([\\w]+:[\\w:]*:[\\w]+)):(\\d+)$")
 	elems := exp.FindStringSubmatch(input)
-	if len(elems) != 10 {
+	if len(elems) != 11 {
 		return nil, fmt.Errorf("failed to parse")
 	}
 	return elems, nil
@@ -1268,7 +1298,7 @@ func ParseRouteDistinguisher(rd string) (RouteDistinguisherInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	assigned, _ := strconv.Atoi(elems[9])
+	assigned, _ := strconv.Atoi(elems[10])
 	ip := net.ParseIP(elems[1])
 	switch {
 	case ip.To4() != nil:
@@ -2738,18 +2768,15 @@ func parseDecValuesCmd(myCmd string, validationFunc func(int) error) ([][2]int, 
 				return nil, err
 			}
 		case DECLogicOpNameMap[DEC_LOGIC_OP_AND], DECLogicOpNameMap[DEC_LOGIC_OP_OR]:
-			if bit := DECLogicOpValueMap[myCmdChar]; bit&DECLogicOp(operatorValue[0]) == 0 {
-				if myCmdChar == DECLogicOpNameMap[DEC_LOGIC_OP_AND] {
-					operatorValue[0] |= int(bit)
-				}
-				decOperatorsAndValues = append(decOperatorsAndValues, operatorValue)
-				operatorValue[0] = 0
-				operatorValue[1] = 0
-				index++
+			bit := DECLogicOpValueMap[myCmdChar]
+			decOperatorsAndValues = append(decOperatorsAndValues, operatorValue)
+			if myCmdChar == DECLogicOpNameMap[DEC_LOGIC_OP_AND] {
+				operatorValue[0] = int(bit)
 			} else {
-				err := fmt.Errorf("AND or OR (space) operator appears multiple time")
-				return nil, err
+				operatorValue[0] = 0
 			}
+			operatorValue[1] = 0
+			index++
 		case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
 			myLoopChar := myCmdChar
 			loopIndex := index
@@ -3289,7 +3316,7 @@ func formatNumeric(op int, value int) string {
 	if DECNumOp(gtlteqOnly) == DECNumOpValueMap[DECNumOpNameMap[DEC_NUM_OP_FALSE]] || DECNumOp(gtlteqOnly) == DECNumOpValueMap[DECNumOpNameMap[DEC_NUM_OP_TRUE]] {
 		return fmt.Sprintf("%s%s", formatNumericOpFrontQty(op), formatNumericOpBackLogic(op))
 	} else {
-		return fmt.Sprintf("%s%d%s", formatNumericOpFrontQty(op), value, formatNumericOpBackLogic(op))
+		return fmt.Sprintf("%s%s%d", formatNumericOpBackLogic(op), formatNumericOpFrontQty(op), value)
 	}
 }
 
@@ -4063,9 +4090,9 @@ const (
 	BGP_ATTR_TYPE_PMSI_TUNNEL // = 22
 	BGP_ATTR_TYPE_TUNNEL_ENCAP
 	_
-	_
-	BGP_ATTR_TYPE_AIGP                        // = 26
-	BGP_ATTR_TYPE_LARGE_COMMUNITY BGPAttrType = 32
+	BGP_ATTR_TYPE_IP6_EXTENDED_COMMUNITIES             // = 25
+	BGP_ATTR_TYPE_AIGP                                 // = 26
+	BGP_ATTR_TYPE_LARGE_COMMUNITY          BGPAttrType = 32
 )
 
 // NOTIFICATION Error Code  RFC 4271 4.5.
@@ -4239,25 +4266,26 @@ func NewNotificationErrorCode(code, subcode uint8) NotificationErrorCode {
 }
 
 var PathAttrFlags map[BGPAttrType]BGPAttrFlag = map[BGPAttrType]BGPAttrFlag{
-	BGP_ATTR_TYPE_ORIGIN:               BGP_ATTR_FLAG_TRANSITIVE,
-	BGP_ATTR_TYPE_AS_PATH:              BGP_ATTR_FLAG_TRANSITIVE,
-	BGP_ATTR_TYPE_NEXT_HOP:             BGP_ATTR_FLAG_TRANSITIVE,
-	BGP_ATTR_TYPE_MULTI_EXIT_DISC:      BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_LOCAL_PREF:           BGP_ATTR_FLAG_TRANSITIVE,
-	BGP_ATTR_TYPE_ATOMIC_AGGREGATE:     BGP_ATTR_FLAG_TRANSITIVE,
-	BGP_ATTR_TYPE_AGGREGATOR:           BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_COMMUNITIES:          BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_ORIGINATOR_ID:        BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_CLUSTER_LIST:         BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_MP_REACH_NLRI:        BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_MP_UNREACH_NLRI:      BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_EXTENDED_COMMUNITIES: BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_AS4_PATH:             BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_AS4_AGGREGATOR:       BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_PMSI_TUNNEL:          BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_TUNNEL_ENCAP:         BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_AIGP:                 BGP_ATTR_FLAG_OPTIONAL,
-	BGP_ATTR_TYPE_LARGE_COMMUNITY:      BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_ORIGIN:                   BGP_ATTR_FLAG_TRANSITIVE,
+	BGP_ATTR_TYPE_AS_PATH:                  BGP_ATTR_FLAG_TRANSITIVE,
+	BGP_ATTR_TYPE_NEXT_HOP:                 BGP_ATTR_FLAG_TRANSITIVE,
+	BGP_ATTR_TYPE_MULTI_EXIT_DISC:          BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_LOCAL_PREF:               BGP_ATTR_FLAG_TRANSITIVE,
+	BGP_ATTR_TYPE_ATOMIC_AGGREGATE:         BGP_ATTR_FLAG_TRANSITIVE,
+	BGP_ATTR_TYPE_AGGREGATOR:               BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_COMMUNITIES:              BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_ORIGINATOR_ID:            BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_CLUSTER_LIST:             BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_MP_REACH_NLRI:            BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_MP_UNREACH_NLRI:          BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_EXTENDED_COMMUNITIES:     BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_AS4_PATH:                 BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_AS4_AGGREGATOR:           BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_PMSI_TUNNEL:              BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_TUNNEL_ENCAP:             BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_IP6_EXTENDED_COMMUNITIES: BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_AIGP:                     BGP_ATTR_FLAG_OPTIONAL,
+	BGP_ATTR_TYPE_LARGE_COMMUNITY:          BGP_ATTR_FLAG_TRANSITIVE | BGP_ATTR_FLAG_OPTIONAL,
 }
 
 type PathAttributeInterface interface {
@@ -5391,22 +5419,22 @@ func (p *PathAttributeMpReachNLRI) String() string {
 
 func NewPathAttributeMpReachNLRI(nexthop string, nlri []AddrPrefixInterface) *PathAttributeMpReachNLRI {
 	t := BGP_ATTR_TYPE_MP_REACH_NLRI
-	ip := net.ParseIP(nexthop)
-	if ip.To4() != nil {
-		ip = ip.To4()
-	}
 	p := &PathAttributeMpReachNLRI{
 		PathAttribute: PathAttribute{
 			Flags: PathAttrFlags[t],
 			Type:  t,
 		},
-		Nexthop: ip,
-		Value:   nlri,
+		Value: nlri,
 	}
 	if len(nlri) > 0 {
 		p.AFI = nlri[0].AFI()
 		p.SAFI = nlri[0].SAFI()
 	}
+	nh := net.ParseIP(nexthop)
+	if nh.To4() != nil && p.AFI != AFI_IP6 {
+		nh = nh.To4()
+	}
+	p.Nexthop = nh
 	return p
 }
 
@@ -5615,6 +5643,64 @@ func NewIPv4AddressSpecificExtended(subtype ExtendedCommunityAttrSubType, ip str
 	}
 }
 
+type IPv6AddressSpecificExtended struct {
+	SubType      ExtendedCommunityAttrSubType
+	IPv6         net.IP
+	LocalAdmin   uint16
+	IsTransitive bool
+}
+
+func (e *IPv6AddressSpecificExtended) Serialize() ([]byte, error) {
+	buf := make([]byte, 20)
+	if e.IsTransitive {
+		buf[0] = byte(EC_TYPE_TRANSITIVE_IP6_SPECIFIC)
+	} else {
+		buf[0] = byte(EC_TYPE_NON_TRANSITIVE_IP6_SPECIFIC)
+	}
+	buf[1] = byte(e.SubType)
+	copy(buf[2:18], e.IPv6)
+	binary.BigEndian.PutUint16(buf[18:], e.LocalAdmin)
+	return buf, nil
+}
+
+func (e *IPv6AddressSpecificExtended) String() string {
+	return fmt.Sprintf("%s:%d", e.IPv6.String(), e.LocalAdmin)
+}
+
+func (e *IPv6AddressSpecificExtended) MarshalJSON() ([]byte, error) {
+	t, s := e.GetTypes()
+	return json.Marshal(struct {
+		Type    ExtendedCommunityAttrType    `json:"type"`
+		Subtype ExtendedCommunityAttrSubType `json:"subtype"`
+		Value   string                       `json:"value"`
+	}{
+		Type:    t,
+		Subtype: s,
+		Value:   e.String(),
+	})
+}
+
+func (e *IPv6AddressSpecificExtended) GetTypes() (ExtendedCommunityAttrType, ExtendedCommunityAttrSubType) {
+	t := EC_TYPE_TRANSITIVE_IP6_SPECIFIC
+	if !e.IsTransitive {
+		t = EC_TYPE_NON_TRANSITIVE_IP6_SPECIFIC
+	}
+	return t, e.SubType
+}
+
+func NewIPv6AddressSpecificExtended(subtype ExtendedCommunityAttrSubType, ip string, localAdmin uint16, isTransitive bool) *IPv6AddressSpecificExtended {
+	ipv6 := net.ParseIP(ip)
+	if ipv6.To16() == nil {
+		return nil
+	}
+	return &IPv6AddressSpecificExtended{
+		SubType:      subtype,
+		IPv6:         ipv6.To16(),
+		LocalAdmin:   localAdmin,
+		IsTransitive: isTransitive,
+	}
+}
+
 type FourOctetAsSpecificExtended struct {
 	SubType      ExtendedCommunityAttrSubType
 	AS           uint32
@@ -5697,12 +5783,14 @@ func ParseExtendedCommunity(subtype ExtendedCommunityAttrSubType, com string) (E
 	if err != nil {
 		return nil, err
 	}
-	localAdmin, _ := strconv.Atoi(elems[9])
+	localAdmin, _ := strconv.Atoi(elems[10])
 	ip := net.ParseIP(elems[1])
 	isTransitive := true
 	switch {
 	case ip.To4() != nil:
 		return NewIPv4AddressSpecificExtended(subtype, elems[1], uint16(localAdmin), isTransitive), nil
+	case ip.To16() != nil:
+		return NewIPv6AddressSpecificExtended(subtype, elems[1], uint16(localAdmin), isTransitive), nil
 	case elems[6] == "" && elems[7] == "":
 		asn, _ := strconv.Atoi(elems[8])
 		return NewTwoOctetAsSpecificExtended(subtype, uint16(asn), uint32(localAdmin), isTransitive), nil
@@ -6255,6 +6343,38 @@ func NewRedirectIPv4AddressSpecificExtended(ipv4 string, localAdmin uint16) *Red
 	return &RedirectIPv4AddressSpecificExtended{*NewIPv4AddressSpecificExtended(EC_SUBTYPE_ROUTE_TARGET, ipv4, localAdmin, false)}
 }
 
+type RedirectIPv6AddressSpecificExtended struct {
+	IPv6AddressSpecificExtended
+}
+
+func (e *RedirectIPv6AddressSpecificExtended) Serialize() ([]byte, error) {
+	buf, err := e.IPv6AddressSpecificExtended.Serialize()
+	buf[0] = byte(EC_TYPE_GENERIC_TRANSITIVE_EXPERIMENTAL)
+	buf[1] = byte(EC_SUBTYPE_FLOWSPEC_REDIRECT_IP6)
+	return buf, err
+}
+
+func (e *RedirectIPv6AddressSpecificExtended) String() string {
+	return fmt.Sprintf("redirect: %s", e.IPv6AddressSpecificExtended.String())
+}
+
+func (e *RedirectIPv6AddressSpecificExtended) MarshalJSON() ([]byte, error) {
+	t, s := e.GetTypes()
+	return json.Marshal(struct {
+		Type    ExtendedCommunityAttrType    `json:"type"`
+		Subtype ExtendedCommunityAttrSubType `json:"subtype"`
+		Value   string                       `json:"value"`
+	}{t, s, e.IPv6AddressSpecificExtended.String()})
+}
+
+func (e *RedirectIPv6AddressSpecificExtended) GetTypes() (ExtendedCommunityAttrType, ExtendedCommunityAttrSubType) {
+	return EC_TYPE_GENERIC_TRANSITIVE_EXPERIMENTAL, EC_SUBTYPE_FLOWSPEC_REDIRECT_IP6
+}
+
+func NewRedirectIPv6AddressSpecificExtended(ipv6 string, localAdmin uint16) *RedirectIPv6AddressSpecificExtended {
+	return &RedirectIPv6AddressSpecificExtended{*NewIPv6AddressSpecificExtended(EC_SUBTYPE_ROUTE_TARGET, ipv6, localAdmin, false)}
+}
+
 type RedirectFourOctetAsSpecificExtended struct {
 	FourOctetAsSpecificExtended
 }
@@ -6355,10 +6475,36 @@ func parseFlowSpecExtended(data []byte) (ExtendedCommunityInterface, error) {
 	case EC_SUBTYPE_FLOWSPEC_TRAFFIC_REMARK:
 		dscp := data[7]
 		return NewTrafficRemarkExtended(dscp), nil
+	case EC_SUBTYPE_FLOWSPEC_REDIRECT_IP6:
+		ipv6 := net.IP(data[2:18]).String()
+		localAdmin := binary.BigEndian.Uint16(data[18:20])
+		return NewRedirectIPv6AddressSpecificExtended(ipv6, localAdmin), nil
 	}
 	return &UnknownExtended{
 		Type:  ExtendedCommunityAttrType(data[0]),
 		Value: data[1:8],
+	}, nil
+}
+
+func parseIP6FlowSpecExtended(data []byte) (ExtendedCommunityInterface, error) {
+	typ := ExtendedCommunityAttrType(data[0])
+	if typ != EC_TYPE_GENERIC_TRANSITIVE_EXPERIMENTAL && typ != EC_TYPE_GENERIC_TRANSITIVE_EXPERIMENTAL2 && typ != EC_TYPE_GENERIC_TRANSITIVE_EXPERIMENTAL3 {
+		return nil, NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("ext comm type is not EC_TYPE_FLOWSPEC: %d", data[0]))
+	}
+	subType := ExtendedCommunityAttrSubType(data[1])
+	switch subType {
+	case EC_SUBTYPE_FLOWSPEC_REDIRECT_IP6:
+		// RFC7674
+		switch typ {
+		case EC_TYPE_GENERIC_TRANSITIVE_EXPERIMENTAL:
+			ipv6 := net.IP(data[2:18]).String()
+			localAdmin := binary.BigEndian.Uint16(data[18:20])
+			return NewRedirectIPv6AddressSpecificExtended(ipv6, localAdmin), nil
+		}
+	}
+	return &UnknownExtended{
+		Type:  ExtendedCommunityAttrType(data[0]),
+		Value: data[1:20],
 	}, nil
 }
 
@@ -7032,6 +7178,100 @@ func (t *AigpTLVIgpMetric) Type() AigpTLVType {
 	return AIGP_TLV_IGP_METRIC
 }
 
+type PathAttributeIP6ExtendedCommunities struct {
+	PathAttribute
+	Value []ExtendedCommunityInterface
+}
+
+func ParseIP6Extended(data []byte) (ExtendedCommunityInterface, error) {
+	if len(data) < 8 {
+		return nil, NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "not all extended community bytes are available")
+	}
+	attrType := ExtendedCommunityAttrType(data[0])
+	subtype := ExtendedCommunityAttrSubType(data[1])
+	transitive := false
+	switch attrType {
+	case EC_TYPE_TRANSITIVE_IP6_SPECIFIC:
+		transitive = true
+		fallthrough
+	case EC_TYPE_NON_TRANSITIVE_IP6_SPECIFIC:
+		ipv6 := net.IP(data[2:18]).String()
+		localAdmin := binary.BigEndian.Uint16(data[18:20])
+		return NewIPv6AddressSpecificExtended(subtype, ipv6, localAdmin, transitive), nil
+	case EC_TYPE_GENERIC_TRANSITIVE_EXPERIMENTAL:
+		return parseIP6FlowSpecExtended(data)
+	default:
+		return &UnknownExtended{
+			Type:  ExtendedCommunityAttrType(data[0]),
+			Value: data[1:8],
+		}, nil
+	}
+}
+
+func (p *PathAttributeIP6ExtendedCommunities) DecodeFromBytes(data []byte) error {
+	err := p.PathAttribute.DecodeFromBytes(data)
+	if err != nil {
+		return err
+	}
+	if len(p.PathAttribute.Value)%20 != 0 {
+		eCode := uint8(BGP_ERROR_UPDATE_MESSAGE_ERROR)
+		eSubCode := uint8(BGP_ERROR_SUB_ATTRIBUTE_LENGTH_ERROR)
+		return NewMessageError(eCode, eSubCode, nil, "extendedcommunities length isn't correct")
+	}
+	value := p.PathAttribute.Value
+	for len(value) >= 20 {
+		e, err := ParseIP6Extended(value)
+		if err != nil {
+			return err
+		}
+		p.Value = append(p.Value, e)
+		value = value[20:]
+	}
+	return nil
+}
+
+func (p *PathAttributeIP6ExtendedCommunities) Serialize() ([]byte, error) {
+	buf := make([]byte, 0)
+	for _, p := range p.Value {
+		ebuf, err := p.Serialize()
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, ebuf...)
+	}
+	p.PathAttribute.Value = buf
+	return p.PathAttribute.Serialize()
+}
+
+func (p *PathAttributeIP6ExtendedCommunities) String() string {
+	var buf []string
+	for _, v := range p.Value {
+		buf = append(buf, fmt.Sprintf("[%s]", v.String()))
+	}
+	return fmt.Sprintf("{Extcomms: %s}", strings.Join(buf, ","))
+}
+
+func (p *PathAttributeIP6ExtendedCommunities) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Type  BGPAttrType                  `json:"type"`
+		Value []ExtendedCommunityInterface `json:"value"`
+	}{
+		Type:  p.GetType(),
+		Value: p.Value,
+	})
+}
+
+func NewPathAttributeIP6ExtendedCommunities(value []ExtendedCommunityInterface) *PathAttributeIP6ExtendedCommunities {
+	t := BGP_ATTR_TYPE_IP6_EXTENDED_COMMUNITIES
+	return &PathAttributeIP6ExtendedCommunities{
+		PathAttribute: PathAttribute{
+			Flags: PathAttrFlags[t],
+			Type:  t,
+		},
+		Value: value,
+	}
+}
+
 type PathAttributeAigp struct {
 	PathAttribute
 	Values []AigpTLV
@@ -7285,6 +7525,8 @@ func GetPathAttribute(data []byte) (PathAttributeInterface, error) {
 		return &PathAttributeTunnelEncap{}, nil
 	case BGP_ATTR_TYPE_PMSI_TUNNEL:
 		return &PathAttributePmsiTunnel{}, nil
+	case BGP_ATTR_TYPE_IP6_EXTENDED_COMMUNITIES:
+		return &PathAttributeIP6ExtendedCommunities{}, nil
 	case BGP_ATTR_TYPE_AIGP:
 		return &PathAttributeAigp{}, nil
 	case BGP_ATTR_TYPE_LARGE_COMMUNITY:
@@ -7680,6 +7922,10 @@ func (e *IPv4AddressSpecificExtended) Flat() map[string]string {
 	return map[string]string{}
 }
 
+func (e *IPv6AddressSpecificExtended) Flat() map[string]string {
+	return map[string]string{}
+}
+
 func (e *FourOctetAsSpecificExtended) Flat() map[string]string {
 	return map[string]string{}
 }
@@ -7705,6 +7951,10 @@ func (e *TrafficRemarkExtended) Flat() map[string]string {
 }
 
 func (e *RedirectIPv4AddressSpecificExtended) Flat() map[string]string {
+	return map[string]string{}
+}
+
+func (e *RedirectIPv6AddressSpecificExtended) Flat() map[string]string {
 	return map[string]string{}
 }
 

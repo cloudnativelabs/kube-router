@@ -694,10 +694,14 @@ type IteratorOptions struct {
 	// If this channel is set and is closed, the iterator should try to exit
 	// and close as soon as possible.
 	InterruptCh <-chan struct{}
+
+	// Authorizer can limit acccess to data
+	Authorizer Authorizer
 }
 
 // newIteratorOptionsStmt creates the iterator options from stmt.
 func newIteratorOptionsStmt(stmt *SelectStatement, sopt *SelectOptions) (opt IteratorOptions, err error) {
+
 	// Determine time range from the condition.
 	startTime, endTime, err := TimeRange(stmt.Condition)
 	if err != nil {
@@ -740,8 +744,9 @@ func newIteratorOptionsStmt(stmt *SelectStatement, sopt *SelectOptions) (opt Ite
 	}
 	opt.Interval.Duration = interval
 
-	// Determine if the input for this select call must be ordered.
-	opt.Ordered = stmt.IsRawQuery
+	// Always request an ordered output for the top level iterators.
+	// The emitter will always emit points as ordered.
+	opt.Ordered = true
 
 	// Determine dimensions.
 	opt.GroupBy = make(map[string]struct{}, len(opt.Dimensions))
@@ -768,6 +773,7 @@ func newIteratorOptionsStmt(stmt *SelectStatement, sopt *SelectOptions) (opt Ite
 	if sopt != nil {
 		opt.MaxSeriesN = sopt.MaxSeriesN
 		opt.InterruptCh = sopt.InterruptCh
+		opt.Authorizer = sopt.Authorizer
 	}
 
 	return opt, nil
@@ -805,17 +811,15 @@ func newIteratorOptionsSubstatement(stmt *SelectStatement, opt IteratorOptions) 
 		subOpt.Fill = NoFill
 	}
 
-	// Determine if the input to this iterator needs to be ordered so it outputs
-	// the correct order to the outer query.
-	interval, err := stmt.GroupByInterval()
-	if err != nil {
-		return IteratorOptions{}, err
-	}
-	subOpt.Ordered = opt.Ordered && (interval == 0 && stmt.HasSelector())
+	// Inherit the ordering method from the outer query.
+	subOpt.Ordered = opt.Ordered
 
 	// If there is no interval for this subquery, but the outer query has an
 	// interval, inherit the parent interval.
-	if interval == 0 {
+	interval, err := stmt.GroupByInterval()
+	if err != nil {
+		return IteratorOptions{}, err
+	} else if interval == 0 {
 		subOpt.Interval = opt.Interval
 	}
 	return subOpt, nil

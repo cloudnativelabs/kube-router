@@ -858,12 +858,16 @@ const (
 	BMP_ROUTE_MONITORING_POLICY_TYPE_PRE_POLICY  BmpRouteMonitoringPolicyType = "pre-policy"
 	BMP_ROUTE_MONITORING_POLICY_TYPE_POST_POLICY BmpRouteMonitoringPolicyType = "post-policy"
 	BMP_ROUTE_MONITORING_POLICY_TYPE_BOTH        BmpRouteMonitoringPolicyType = "both"
+	BMP_ROUTE_MONITORING_POLICY_TYPE_LOCAL_RIB   BmpRouteMonitoringPolicyType = "local-rib"
+	BMP_ROUTE_MONITORING_POLICY_TYPE_ALL         BmpRouteMonitoringPolicyType = "all"
 )
 
 var BmpRouteMonitoringPolicyTypeToIntMap = map[BmpRouteMonitoringPolicyType]int{
 	BMP_ROUTE_MONITORING_POLICY_TYPE_PRE_POLICY:  0,
 	BMP_ROUTE_MONITORING_POLICY_TYPE_POST_POLICY: 1,
 	BMP_ROUTE_MONITORING_POLICY_TYPE_BOTH:        2,
+	BMP_ROUTE_MONITORING_POLICY_TYPE_LOCAL_RIB:   3,
+	BMP_ROUTE_MONITORING_POLICY_TYPE_ALL:         4,
 }
 
 func (v BmpRouteMonitoringPolicyType) ToInt() int {
@@ -878,6 +882,8 @@ var IntToBmpRouteMonitoringPolicyTypeMap = map[int]BmpRouteMonitoringPolicyType{
 	0: BMP_ROUTE_MONITORING_POLICY_TYPE_PRE_POLICY,
 	1: BMP_ROUTE_MONITORING_POLICY_TYPE_POST_POLICY,
 	2: BMP_ROUTE_MONITORING_POLICY_TYPE_BOTH,
+	3: BMP_ROUTE_MONITORING_POLICY_TYPE_LOCAL_RIB,
+	4: BMP_ROUTE_MONITORING_POLICY_TYPE_ALL,
 }
 
 func (v BmpRouteMonitoringPolicyType) Validate() error {
@@ -957,6 +963,54 @@ func (v RpkiValidationResultType) Validate() error {
 		return fmt.Errorf("invalid RpkiValidationResultType: %s", v)
 	}
 	return nil
+}
+
+//struct for container gobgp:state
+type DynamicNeighborState struct {
+	// original -> gobgp:prefix
+	Prefix string `mapstructure:"prefix" json:"prefix,omitempty"`
+	// original -> gobgp:peer-group
+	PeerGroup string `mapstructure:"peer-group" json:"peer-group,omitempty"`
+}
+
+//struct for container gobgp:config
+type DynamicNeighborConfig struct {
+	// original -> gobgp:prefix
+	Prefix string `mapstructure:"prefix" json:"prefix,omitempty"`
+	// original -> gobgp:peer-group
+	PeerGroup string `mapstructure:"peer-group" json:"peer-group,omitempty"`
+}
+
+func (lhs *DynamicNeighborConfig) Equal(rhs *DynamicNeighborConfig) bool {
+	if lhs == nil || rhs == nil {
+		return false
+	}
+	if lhs.Prefix != rhs.Prefix {
+		return false
+	}
+	if lhs.PeerGroup != rhs.PeerGroup {
+		return false
+	}
+	return true
+}
+
+//struct for container gobgp:dynamic-neighbor
+type DynamicNeighbor struct {
+	// original -> gobgp:prefix
+	// original -> gobgp:dynamic-neighbor-config
+	Config DynamicNeighborConfig `mapstructure:"config" json:"config,omitempty"`
+	// original -> gobgp:dynamic-neighbor-state
+	State DynamicNeighborState `mapstructure:"state" json:"state,omitempty"`
+}
+
+func (lhs *DynamicNeighbor) Equal(rhs *DynamicNeighbor) bool {
+	if lhs == nil || rhs == nil {
+		return false
+	}
+	if !lhs.Config.Equal(&(rhs.Config)) {
+		return false
+	}
+	return true
 }
 
 //struct for container gobgp:state
@@ -1163,6 +1217,11 @@ type BmpServerConfig struct {
 	Port uint32 `mapstructure:"port" json:"port,omitempty"`
 	// original -> gobgp:route-monitoring-policy
 	RouteMonitoringPolicy BmpRouteMonitoringPolicyType `mapstructure:"route-monitoring-policy" json:"route-monitoring-policy,omitempty"`
+	// original -> gobgp:statistics-timeout
+	StatisticsTimeout uint16 `mapstructure:"statistics-timeout" json:"statistics-timeout,omitempty"`
+	// original -> gobgp:route-mirroring-enabled
+	//gobgp:route-mirroring-enabled's original type is boolean
+	RouteMirroringEnabled bool `mapstructure:"route-mirroring-enabled" json:"route-mirroring-enabled,omitempty"`
 }
 
 func (lhs *BmpServerConfig) Equal(rhs *BmpServerConfig) bool {
@@ -1176,6 +1235,12 @@ func (lhs *BmpServerConfig) Equal(rhs *BmpServerConfig) bool {
 		return false
 	}
 	if lhs.RouteMonitoringPolicy != rhs.RouteMonitoringPolicy {
+		return false
+	}
+	if lhs.StatisticsTimeout != rhs.StatisticsTimeout {
+		return false
+	}
+	if lhs.RouteMirroringEnabled != rhs.RouteMirroringEnabled {
 		return false
 	}
 	return true
@@ -1500,6 +1565,8 @@ type PeerGroup struct {
 	UseMultiplePaths UseMultiplePaths `mapstructure:"use-multiple-paths" json:"use-multiple-paths,omitempty"`
 	// original -> gobgp:route-server
 	RouteServer RouteServer `mapstructure:"route-server" json:"route-server,omitempty"`
+	// original -> gobgp:ttl-security
+	TtlSecurity TtlSecurity `mapstructure:"ttl-security" json:"ttl-security,omitempty"`
 }
 
 func (lhs *PeerGroup) Equal(rhs *PeerGroup) bool {
@@ -1559,6 +1626,58 @@ func (lhs *PeerGroup) Equal(rhs *PeerGroup) bool {
 		return false
 	}
 	if !lhs.RouteServer.Equal(&(rhs.RouteServer)) {
+		return false
+	}
+	if !lhs.TtlSecurity.Equal(&(rhs.TtlSecurity)) {
+		return false
+	}
+	return true
+}
+
+//struct for container gobgp:state
+type TtlSecurityState struct {
+	// original -> gobgp:enabled
+	//gobgp:enabled's original type is boolean
+	Enabled bool `mapstructure:"enabled" json:"enabled,omitempty"`
+	// original -> gobgp:ttl-min
+	TtlMin uint8 `mapstructure:"ttl-min" json:"ttl-min,omitempty"`
+}
+
+//struct for container gobgp:config
+type TtlSecurityConfig struct {
+	// original -> gobgp:enabled
+	//gobgp:enabled's original type is boolean
+	Enabled bool `mapstructure:"enabled" json:"enabled,omitempty"`
+	// original -> gobgp:ttl-min
+	TtlMin uint8 `mapstructure:"ttl-min" json:"ttl-min,omitempty"`
+}
+
+func (lhs *TtlSecurityConfig) Equal(rhs *TtlSecurityConfig) bool {
+	if lhs == nil || rhs == nil {
+		return false
+	}
+	if lhs.Enabled != rhs.Enabled {
+		return false
+	}
+	if lhs.TtlMin != rhs.TtlMin {
+		return false
+	}
+	return true
+}
+
+//struct for container gobgp:ttl-security
+type TtlSecurity struct {
+	// original -> gobgp:ttl-security-config
+	Config TtlSecurityConfig `mapstructure:"config" json:"config,omitempty"`
+	// original -> gobgp:ttl-security-state
+	State TtlSecurityState `mapstructure:"state" json:"state,omitempty"`
+}
+
+func (lhs *TtlSecurity) Equal(rhs *TtlSecurity) bool {
+	if lhs == nil || rhs == nil {
+		return false
+	}
+	if !lhs.Config.Equal(&(rhs.Config)) {
 		return false
 	}
 	return true
@@ -1954,6 +2073,8 @@ type TransportConfig struct {
 	// original -> gobgp:remote-port
 	//gobgp:remote-port's original type is inet:port-number
 	RemotePort uint16 `mapstructure:"remote-port" json:"remote-port,omitempty"`
+	// original -> gobgp:ttl
+	Ttl uint8 `mapstructure:"ttl" json:"ttl,omitempty"`
 }
 
 func (lhs *TransportConfig) Equal(rhs *TransportConfig) bool {
@@ -1973,6 +2094,9 @@ func (lhs *TransportConfig) Equal(rhs *TransportConfig) bool {
 		return false
 	}
 	if lhs.RemotePort != rhs.RemotePort {
+		return false
+	}
+	if lhs.Ttl != rhs.Ttl {
 		return false
 	}
 	return true
@@ -2089,6 +2213,8 @@ func (lhs *Timers) Equal(rhs *Timers) bool {
 type AdjTable struct {
 	// original -> gobgp:ADVERTISED
 	Advertised uint32 `mapstructure:"advertised" json:"advertised,omitempty"`
+	// original -> gobgp:FILTERED
+	Filtered uint32 `mapstructure:"filtered" json:"filtered,omitempty"`
 	// original -> gobgp:RECEIVED
 	Received uint32 `mapstructure:"received" json:"received,omitempty"`
 	// original -> gobgp:ACCEPTED
@@ -2100,6 +2226,9 @@ func (lhs *AdjTable) Equal(rhs *AdjTable) bool {
 		return false
 	}
 	if lhs.Advertised != rhs.Advertised {
+		return false
+	}
+	if lhs.Filtered != rhs.Filtered {
 		return false
 	}
 	if lhs.Received != rhs.Received {
@@ -2146,6 +2275,10 @@ type Received struct {
 	Keepalive uint64 `mapstructure:"keepalive" json:"keepalive,omitempty"`
 	// original -> gobgp:DYNAMIC-CAP
 	DynamicCap uint64 `mapstructure:"dynamic-cap" json:"dynamic-cap,omitempty"`
+	// original -> gobgp:WITHDRAW-UPDATE
+	WithdrawUpdate uint32 `mapstructure:"withdraw-update" json:"withdraw-update,omitempty"`
+	// original -> gobgp:WITHDRAW-PREFIX
+	WithdrawPrefix uint32 `mapstructure:"withdraw-prefix" json:"withdraw-prefix,omitempty"`
 	// original -> gobgp:DISCARDED
 	Discarded uint64 `mapstructure:"discarded" json:"discarded,omitempty"`
 	// original -> gobgp:TOTAL
@@ -2174,6 +2307,12 @@ func (lhs *Received) Equal(rhs *Received) bool {
 	if lhs.DynamicCap != rhs.DynamicCap {
 		return false
 	}
+	if lhs.WithdrawUpdate != rhs.WithdrawUpdate {
+		return false
+	}
+	if lhs.WithdrawPrefix != rhs.WithdrawPrefix {
+		return false
+	}
 	if lhs.Discarded != rhs.Discarded {
 		return false
 	}
@@ -2197,6 +2336,10 @@ type Sent struct {
 	Keepalive uint64 `mapstructure:"keepalive" json:"keepalive,omitempty"`
 	// original -> gobgp:DYNAMIC-CAP
 	DynamicCap uint64 `mapstructure:"dynamic-cap" json:"dynamic-cap,omitempty"`
+	// original -> gobgp:WITHDRAW-UPDATE
+	WithdrawUpdate uint32 `mapstructure:"withdraw-update" json:"withdraw-update,omitempty"`
+	// original -> gobgp:WITHDRAW-PREFIX
+	WithdrawPrefix uint32 `mapstructure:"withdraw-prefix" json:"withdraw-prefix,omitempty"`
 	// original -> gobgp:DISCARDED
 	Discarded uint64 `mapstructure:"discarded" json:"discarded,omitempty"`
 	// original -> gobgp:TOTAL
@@ -2223,6 +2366,12 @@ func (lhs *Sent) Equal(rhs *Sent) bool {
 		return false
 	}
 	if lhs.DynamicCap != rhs.DynamicCap {
+		return false
+	}
+	if lhs.WithdrawUpdate != rhs.WithdrawUpdate {
+		return false
+	}
+	if lhs.WithdrawPrefix != rhs.WithdrawPrefix {
 		return false
 	}
 	if lhs.Discarded != rhs.Discarded {
@@ -2431,6 +2580,8 @@ type Neighbor struct {
 	UseMultiplePaths UseMultiplePaths `mapstructure:"use-multiple-paths" json:"use-multiple-paths,omitempty"`
 	// original -> gobgp:route-server
 	RouteServer RouteServer `mapstructure:"route-server" json:"route-server,omitempty"`
+	// original -> gobgp:ttl-security
+	TtlSecurity TtlSecurity `mapstructure:"ttl-security" json:"ttl-security,omitempty"`
 }
 
 func (lhs *Neighbor) Equal(rhs *Neighbor) bool {
@@ -2490,6 +2641,9 @@ func (lhs *Neighbor) Equal(rhs *Neighbor) bool {
 		return false
 	}
 	if !lhs.RouteServer.Equal(&(rhs.RouteServer)) {
+		return false
+	}
+	if !lhs.TtlSecurity.Equal(&(rhs.TtlSecurity)) {
 		return false
 	}
 	return true
@@ -3736,6 +3890,8 @@ type Bgp struct {
 	Zebra Zebra `mapstructure:"zebra" json:"zebra,omitempty"`
 	// original -> gobgp:collector
 	Collector Collector `mapstructure:"collector" json:"collector,omitempty"`
+	// original -> gobgp:dynamic-neighbors
+	DynamicNeighbors []DynamicNeighbor `mapstructure:"dynamic-neighbors" json:"dynamic-neighbors,omitempty"`
 }
 
 func (lhs *Bgp) Equal(rhs *Bgp) bool {
@@ -3830,6 +3986,22 @@ func (lhs *Bgp) Equal(rhs *Bgp) bool {
 	}
 	if !lhs.Collector.Equal(&(rhs.Collector)) {
 		return false
+	}
+	if len(lhs.DynamicNeighbors) != len(rhs.DynamicNeighbors) {
+		return false
+	}
+	{
+		lmap := make(map[string]*DynamicNeighbor)
+		for i, l := range lhs.DynamicNeighbors {
+			lmap[mapkey(i, string(l.Config.Prefix))] = &lhs.DynamicNeighbors[i]
+		}
+		for i, r := range rhs.DynamicNeighbors {
+			if l, y := lmap[mapkey(i, string(r.Config.Prefix))]; !y {
+				return false
+			} else if !r.Equal(l) {
+				return false
+			}
+		}
 	}
 	return true
 }

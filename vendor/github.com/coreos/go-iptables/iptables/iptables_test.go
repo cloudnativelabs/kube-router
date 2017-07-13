@@ -18,6 +18,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -66,8 +67,9 @@ func contains(list []string, value string) bool {
 	return false
 }
 
-// Create an array of IPTables with different hasWait/hasCheck to
-// test different behaviours
+// mustTestableIptables returns a list of ip(6)tables handles with various
+// features enabled & disabled, to test compatability.
+// We used to test noWait as well, but that was removed as of iptables v1.6.0
 func mustTestableIptables() []*IPTables {
 	ipt, err := New()
 	if err != nil {
@@ -78,21 +80,18 @@ func mustTestableIptables() []*IPTables {
 		panic(fmt.Sprintf("NewWithProtocol(ProtocolIPv6) failed: %v", err))
 	}
 	ipts := []*IPTables{ipt, ip6t}
-	// ensure we check one variant without built-in locking
-	if ipt.hasWait {
-		iptNoWait := &IPTables{
-			path:    ipt.path,
-			hasWait: false,
-		}
-		ipts = append(ipts, iptNoWait)
-	}
+
 	// ensure we check one variant without built-in checking
 	if ipt.hasCheck {
-		iptNoCheck := &IPTables{
-			path:     ipt.path,
-			hasCheck: false,
-		}
-		ipts = append(ipts, iptNoCheck)
+		i := *ipt
+		i.hasCheck = false
+		ipts = append(ipts, &i)
+
+		i6 := *ip6t
+		i6.hasCheck = false
+		ipts = append(ipts, &i6)
+	} else {
+		panic("iptables on this machine is too old -- missing -C")
 	}
 	return ipts
 }
@@ -104,7 +103,7 @@ func TestChain(t *testing.T) {
 }
 
 func runChainTests(t *testing.T, ipt *IPTables) {
-	t.Logf("testing %s (hasWait=%t, hasCheck=%t)", getIptablesCommand(ipt.Proto()), ipt.hasWait, ipt.hasCheck)
+	t.Logf("testing %s (hasWait=%t, hasCheck=%t)", ipt.path, ipt.hasWait, ipt.hasCheck)
 
 	chain := randChain(t)
 
@@ -235,6 +234,11 @@ func runRulesTests(t *testing.T, ipt *IPTables) {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
+	err = ipt.Append("filter", chain, "-s", address1, "-d", subnet2, "-j", "ACCEPT")
+	if err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
+
 	rules, err := ipt.List("filter", chain)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
@@ -245,10 +249,49 @@ func runRulesTests(t *testing.T, ipt *IPTables) {
 		"-A " + chain + " -s " + subnet1 + " -d " + address1 + " -j ACCEPT",
 		"-A " + chain + " -s " + subnet2 + " -d " + address2 + " -j ACCEPT",
 		"-A " + chain + " -s " + subnet2 + " -d " + address1 + " -j ACCEPT",
+		"-A " + chain + " -s " + address1 + " -d " + subnet2 + " -j ACCEPT",
 	}
 
 	if !reflect.DeepEqual(rules, expected) {
 		t.Fatalf("List mismatch: \ngot  %#v \nneed %#v", rules, expected)
+	}
+
+	rules, err = ipt.ListWithCounters("filter", chain)
+	if err != nil {
+		t.Fatalf("ListWithCounters failed: %v", err)
+	}
+
+	expected = []string{
+		"-N " + chain,
+		"-A " + chain + " -s " + subnet1 + " -d " + address1 + " -c 0 0 -j ACCEPT",
+		"-A " + chain + " -s " + subnet2 + " -d " + address2 + " -c 0 0 -j ACCEPT",
+		"-A " + chain + " -s " + subnet2 + " -d " + address1 + " -c 0 0 -j ACCEPT",
+		"-A " + chain + " -s " + address1 + " -d " + subnet2 + " -c 0 0 -j ACCEPT",
+	}
+
+	if !reflect.DeepEqual(rules, expected) {
+		t.Fatalf("ListWithCounters mismatch: \ngot  %#v \nneed %#v", rules, expected)
+	}
+
+	stats, err := ipt.Stats("filter", chain)
+	if err != nil {
+		t.Fatalf("Stats failed: %v", err)
+	}
+
+	opt := "--"
+	if ipt.proto == ProtocolIPv6 {
+		opt = "  "
+	}
+
+	expectedStats := [][]string{
+		{"0", "0", "ACCEPT", "all", opt, "*", "*", subnet1, address1, ""},
+		{"0", "0", "ACCEPT", "all", opt, "*", "*", subnet2, address2, ""},
+		{"0", "0", "ACCEPT", "all", opt, "*", "*", subnet2, address1, ""},
+		{"0", "0", "ACCEPT", "all", opt, "*", "*", address1, subnet2, ""},
+	}
+
+	if !reflect.DeepEqual(stats, expectedStats) {
+		t.Fatalf("Stats mismatch: \ngot  %#v \nneed %#v", stats, expectedStats)
 	}
 
 	// Clear the chain that was created.
@@ -261,5 +304,41 @@ func runRulesTests(t *testing.T, ipt *IPTables) {
 	err = ipt.DeleteChain("filter", chain)
 	if err != nil {
 		t.Fatalf("Failed to delete test chain: %v", err)
+	}
+}
+
+// TestError checks that we're OK when iptables fails to execute
+func TestError(t *testing.T) {
+	ipt, err := New()
+	if err != nil {
+		t.Fatalf("failed to init: %v", err)
+	}
+
+	chain := randChain(t)
+	_, err = ipt.List("filter", chain)
+	if err == nil {
+		t.Fatalf("no error with invalid params")
+	}
+	switch e := err.(type) {
+	case *Error:
+		// OK
+	default:
+		t.Fatalf("expected type iptables.Error, got %t", e)
+	}
+
+	// Now set an invalid binary path
+	ipt.path = "/does-not-exist"
+
+	_, err = ipt.ListChains("filter")
+
+	if err == nil {
+		t.Fatalf("no error with invalid ipt binary")
+	}
+
+	switch e := err.(type) {
+	case *os.PathError:
+		// OK
+	default:
+		t.Fatalf("expected type os.PathError, got %t", e)
 	}
 }

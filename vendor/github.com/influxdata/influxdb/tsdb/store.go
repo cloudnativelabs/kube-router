@@ -145,6 +145,8 @@ func (s *Store) Open() error {
 	}
 
 	s.opened = true
+	s.wg.Add(1)
+	go s.monitorShards()
 
 	return nil
 }
@@ -157,6 +159,13 @@ func (s *Store) loadShards() error {
 	}
 
 	t := limiter.NewFixed(runtime.GOMAXPROCS(0))
+
+	// Setup a shared limiter for compactions
+	lim := s.EngineOptions.Config.MaxConcurrentCompactions
+	if lim == 0 {
+		lim = runtime.GOMAXPROCS(0)
+	}
+	s.EngineOptions.CompactionLimiter = limiter.NewFixed(lim)
 
 	resC := make(chan *res)
 	var n int
@@ -224,6 +233,9 @@ func (s *Store) loadShards() error {
 
 					// Open engine.
 					shard := NewShard(shardID, path, walPath, opt)
+
+					// Disable compactions, writes and queries until all shards are loaded
+					shard.EnableOnOpen = false
 					shard.WithLogger(s.baseLogger)
 
 					err = shard.Open()
@@ -251,6 +263,15 @@ func (s *Store) loadShards() error {
 		s.databases[res.s.database] = struct{}{}
 	}
 	close(resC)
+
+	// Enable all shards
+	for _, sh := range s.shards {
+		sh.SetEnabled(true)
+		if sh.IsIdle() {
+			sh.SetCompactionsEnabled(false)
+		}
+	}
+
 	return nil
 }
 
@@ -760,6 +781,24 @@ func (s *Store) RestoreShard(id uint64, r io.Reader) error {
 	return shard.Restore(r, path)
 }
 
+// ImportShard imports the contents of r to a given shard.
+// All files in the backup are added as new files which may
+// cause duplicated data to occur requiring more expensive
+// compactions.
+func (s *Store) ImportShard(id uint64, r io.Reader) error {
+	shard := s.Shard(id)
+	if shard == nil {
+		return fmt.Errorf("shard %d doesn't exist on this server", id)
+	}
+
+	path, err := relativePath(s.path, shard.path)
+	if err != nil {
+		return err
+	}
+
+	return shard.Import(r, path)
+}
+
 // ShardRelativePath will return the relative path to the shard, i.e.,
 // <database>/<retention>/<id>.
 func (s *Store) ShardRelativePath(id uint64) (string, error) {
@@ -909,6 +948,12 @@ type TagValues struct {
 	Values      []KeyValue
 }
 
+type TagValuesSlice []TagValues
+
+func (a TagValuesSlice) Len() int           { return len(a) }
+func (a TagValuesSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a TagValuesSlice) Less(i, j int) bool { return a[i].Measurement < a[j].Measurement }
+
 // TagValues returns the tag keys and values in the given database, matching the condition.
 func (s *Store) TagValues(database string, cond influxql.Expr) ([]TagValues, error) {
 	if cond == nil {
@@ -950,7 +995,7 @@ func (s *Store) TagValues(database string, cond influxql.Expr) ([]TagValues, err
 	shards := s.filterShards(byDatabase(database))
 	s.mu.RUnlock()
 
-	var tagValues []TagValues
+	m := make(map[string]map[KeyValue]struct{})
 	for _, sh := range shards {
 		names, err := sh.MeasurementNamesByExpr(measurementExpr)
 		if err != nil {
@@ -965,51 +1010,109 @@ func (s *Store) TagValues(database string, cond influxql.Expr) ([]TagValues, err
 			}
 
 			// Loop over all keys for each series.
-			m := make(map[KeyValue]struct{})
 			if err := sh.engine.ForEachMeasurementSeriesByExpr(name, filterExpr, func(tags models.Tags) error {
 				for _, t := range tags {
 					if _, ok := keySet[string(t.Key)]; ok {
-						m[KeyValue{string(t.Key), string(t.Value)}] = struct{}{}
+						if m[string(name)] == nil {
+							m[string(name)] = make(map[KeyValue]struct{})
+						}
+						m[string(name)][KeyValue{string(t.Key), string(t.Value)}] = struct{}{}
 					}
 				}
 				return nil
 			}); err != nil {
 				return nil, err
 			}
-
-			/*
-				// Loop over all keys for each series.
-				m := make(map[KeyValue]struct{}, len(ss))
-				for _, series := range ss {
-					series.ForEachTag(func(t models.Tag) {
-						if !ok {
-							// nop
-						} else if _, exists := keySet[string(t.Key)]; !exists {
-							return
-						}
-						m[KeyValue{string(t.Key), string(t.Value)}] = struct{}{}
-					})
-				}
-			*/
-
-			// Sort key/value set.
-			var a []KeyValue
-			if len(m) > 0 {
-				a = make([]KeyValue, 0, len(m))
-				for kv := range m {
-					a = append(a, kv)
-				}
-				sort.Sort(KeyValues(a))
-			}
-
-			tagValues = append(tagValues, TagValues{
-				Measurement: string(name),
-				Values:      a,
-			})
 		}
 	}
 
+	// Sort key/value set.
+	var tagValues []TagValues
+	for name, kvs := range m {
+		a := make([]KeyValue, 0, len(kvs))
+		for kv := range kvs {
+			a = append(a, kv)
+		}
+		sort.Sort(KeyValues(a))
+
+		tagValues = append(tagValues, TagValues{
+			Measurement: name,
+			Values:      a,
+		})
+	}
+	sort.Sort(TagValuesSlice(tagValues))
 	return tagValues, nil
+}
+
+func (s *Store) monitorShards() {
+	defer s.wg.Done()
+	t := time.NewTicker(10 * time.Second)
+	defer t.Stop()
+	t2 := time.NewTicker(time.Minute)
+	defer t2.Stop()
+	for {
+		select {
+		case <-s.closing:
+			return
+		case <-t.C:
+			s.mu.RLock()
+			for _, sh := range s.shards {
+				if sh.IsIdle() {
+					sh.SetCompactionsEnabled(false)
+				} else {
+					sh.SetCompactionsEnabled(true)
+				}
+			}
+			s.mu.RUnlock()
+		case <-t2.C:
+			if s.EngineOptions.Config.MaxValuesPerTag == 0 {
+				continue
+			}
+
+			s.mu.RLock()
+			shards := s.filterShards(func(sh *Shard) bool {
+				return sh.IndexType() == "inmem"
+			})
+			s.mu.RUnlock()
+
+			// No inmem shards...
+			if len(shards) == 0 {
+				continue
+			}
+
+			// inmem shards share the same index instance so just use the first one to avoid
+			// allocating the same measurements repeatedly
+			first := shards[0]
+			names, err := first.MeasurementNamesByExpr(nil)
+			if err != nil {
+				s.Logger.Warn("cannot retrieve measurement names", zap.Error(err))
+				continue
+			}
+
+			s.walkShards(shards, func(sh *Shard) error {
+				db := sh.database
+				id := sh.id
+
+				for _, name := range names {
+					sh.ForEachMeasurementTagKey(name, func(k []byte) error {
+						n := sh.TagKeyCardinality(name, k)
+						perc := int(float64(n) / float64(s.EngineOptions.Config.MaxValuesPerTag) * 100)
+						if perc > 100 {
+							perc = 100
+						}
+
+						// Log at 80, 85, 90-100% levels
+						if perc == 80 || perc == 85 || perc >= 90 {
+							s.Logger.Info(fmt.Sprintf("WARN: %d%% of max-values-per-tag limit exceeded: (%d/%d), db=%s shard=%d measurement=%s tag=%s",
+								perc, n, s.EngineOptions.Config.MaxValuesPerTag, db, id, name, k))
+						}
+						return nil
+					})
+				}
+				return nil
+			})
+		}
+	}
 }
 
 // KeyValue holds a string key and a string value.
