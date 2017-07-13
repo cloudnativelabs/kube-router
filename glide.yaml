@@ -1,15 +1,19 @@
 package: github.com/cloudnativelabs/kube-router
 import:
 - package: github.com/coreos/go-iptables
-  version: master
+  version: v0.2.0
   subpackages:
   - iptables
 - package: github.com/golang/glog
+  version: master
 - package: github.com/janeczku/go-ipset
+  repo: git@github.com:/bzub/go-ipset
+  vcs: git
   version: master
   subpackages:
   - ipset
 - package: github.com/mqliang/libipvs
+  version: master
 - package: github.com/osrg/gobgp
   version: ^1.17.0
   subpackages:
@@ -19,14 +23,18 @@ import:
   - server
   - table
 - package: github.com/spf13/pflag
+  version: master
 - package: github.com/vishvananda/netlink
+  version: master
 - package: k8s.io/apimachinery
+  # version: 85ace5365f33b16fc735c866a12e3c765b9700f2
+  version: abe34e4f5b4413c282a83011892cbeea5b32223b
   subpackages:
   - pkg/apis/meta/v1
   - pkg/fields
   - pkg/labels
 - package: k8s.io/client-go
-  version: ^3.0.0-beta.0
+  version: ~4.0.0-beta.0
   subpackages:
   - kubernetes
   - listers/core/v1
@@ -35,7 +43,16 @@ import:
   - tools/cache
   - tools/clientcmd
 - package: github.com/armon/go-radix
+  version: master
 - package: google.golang.org/grpc
   version: ~1.2.1
 - package: github.com/containernetworking/cni
-  version: ^0.5.2
+  version: 0.5.2
+- package: github.com/docker/distribution
+  repo: git@github.com:/bzub/distribution
+  vcs: git
+  version: logrus_case_dep_update
+- package: github.com/sirupsen/logrus
+  version: master
+- package: github.com/hkwi/nlgo
+  version: master
