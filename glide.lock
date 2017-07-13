@@ -1,5 +1,5 @@
-hash: aa4807befbaa3fa5d489feed6ecaca17a92edb6761f7a3aebfbb053f1c636754
-updated: 2017-07-12T21:49:20.87386587-05:00
+hash: addbb83ea36694c5fd610831309d4791ab9493be88a8b650aa0bc921dc4b3c32
+updated: 2017-07-14T02:15:33.292128568+05:30
 imports:
 - name: github.com/armon/go-radix
   version: 4239b77079c7b5d1243b7b4736304ce8ddb6f0f2
@@ -125,7 +125,7 @@ imports:
 - name: github.com/opencontainers/go-digest
   version: 279bed98673dd5bef374d3b6e4b09e2af76183bf
 - name: github.com/osrg/gobgp
-  version: 9f9a71eab2bc9f2fed0d7c32a05f74d4c42b12ae
+  version: 4b5e13376c70481aacc1c2c508738279f8cc9e5c
   subpackages:
   - api
   - config
@@ -147,7 +147,7 @@ imports:
 - name: github.com/satori/go.uuid
   version: 5bf94b69c6b68ee1b541973bb8e1144db23a194b
 - name: github.com/sirupsen/logrus
-  version: 1fe8319fcaef78ef9220c9b05178df0f871dbc5d
+  version: 51dc0fc64317a2861273909081f9c315786533eb
 - name: github.com/spf13/afero
   version: 9be650865eab0c12963d8753212f4f9c66cdcf12
   subpackages:
