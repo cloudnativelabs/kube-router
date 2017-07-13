@@ -590,31 +590,10 @@ func (m BGPAddPathMode) String() string {
 	}
 }
 
-type CapAddPathTuple struct {
-	RouteFamily RouteFamily
-	Mode        BGPAddPathMode
-}
-
-func (t *CapAddPathTuple) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		RouteFamily RouteFamily `json:"family"`
-		Mode        uint8       `json:"mode"`
-	}{
-		RouteFamily: t.RouteFamily,
-		Mode:        uint8(t.Mode),
-	})
-}
-
-func NewCapAddPathTuple(family RouteFamily, mode BGPAddPathMode) *CapAddPathTuple {
-	return &CapAddPathTuple{
-		RouteFamily: family,
-		Mode:        mode,
-	}
-}
-
 type CapAddPath struct {
 	DefaultParameterCapability
-	Tuples []*CapAddPathTuple
+	RouteFamily RouteFamily
+	Mode        BGPAddPathMode
 }
 
 func (c *CapAddPath) DecodeFromBytes(data []byte) error {
@@ -623,46 +602,40 @@ func (c *CapAddPath) DecodeFromBytes(data []byte) error {
 	if len(data) < 4 {
 		return NewMessageError(BGP_ERROR_OPEN_MESSAGE_ERROR, BGP_ERROR_SUB_UNSUPPORTED_CAPABILITY, nil, "Not all CapabilityAddPath bytes available")
 	}
-	c.Tuples = []*CapAddPathTuple{}
-	for len(data) >= 4 {
-		t := &CapAddPathTuple{
-			RouteFamily: AfiSafiToRouteFamily(binary.BigEndian.Uint16(data[:2]), data[2]),
-			Mode:        BGPAddPathMode(data[3]),
-		}
-		c.Tuples = append(c.Tuples, t)
-		data = data[4:]
-	}
+	c.RouteFamily = AfiSafiToRouteFamily(binary.BigEndian.Uint16(data[:2]), data[2])
+	c.Mode = BGPAddPathMode(data[3])
 	return nil
 }
 
 func (c *CapAddPath) Serialize() ([]byte, error) {
-	buf := make([]byte, len(c.Tuples)*4)
-	for i, t := range c.Tuples {
-		afi, safi := RouteFamilyToAfiSafi(t.RouteFamily)
-		binary.BigEndian.PutUint16(buf[i*4:i*4+2], afi)
-		buf[i*4+2] = safi
-		buf[i*4+3] = byte(t.Mode)
-	}
+	buf := make([]byte, 4)
+	afi, safi := RouteFamilyToAfiSafi(c.RouteFamily)
+	binary.BigEndian.PutUint16(buf, afi)
+	buf[2] = safi
+	buf[3] = byte(c.Mode)
 	c.DefaultParameterCapability.CapValue = buf
 	return c.DefaultParameterCapability.Serialize()
 }
 
 func (c *CapAddPath) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
-		Code   BGPCapabilityCode  `json:"code"`
-		Tuples []*CapAddPathTuple `json:"tuples"`
+		Code  BGPCapabilityCode `json:"code"`
+		Value RouteFamily       `json:"value"`
+		Mode  BGPAddPathMode    `json:"mode"`
 	}{
-		Code:   c.Code(),
-		Tuples: c.Tuples,
+		Code:  c.Code(),
+		Value: c.RouteFamily,
+		Mode:  c.Mode,
 	})
 }
 
-func NewCapAddPath(tuples []*CapAddPathTuple) *CapAddPath {
+func NewCapAddPath(rf RouteFamily, mode BGPAddPathMode) *CapAddPath {
 	return &CapAddPath{
 		DefaultParameterCapability: DefaultParameterCapability{
 			CapCode: BGP_CAP_ADD_PATH,
 		},
-		Tuples: tuples,
+		RouteFamily: rf,
+		Mode:        mode,
 	}
 }
 

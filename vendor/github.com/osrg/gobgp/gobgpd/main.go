@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"syscall"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/jessevdk/go-flags"
 	p "github.com/kr/pretty"
 	api "github.com/osrg/gobgp/api"
@@ -31,7 +32,6 @@ import (
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/server"
 	"github.com/osrg/gobgp/table"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -149,7 +149,6 @@ func main() {
 		select {
 		case newConfig := <-configCh:
 			var added, deleted, updated []config.Neighbor
-			var addedPg, deletedPg, updatedPg []config.PeerGroup
 			var updatePolicy bool
 
 			if c == nil {
@@ -191,7 +190,6 @@ func main() {
 				}
 
 				added = newConfig.Neighbors
-				addedPg = newConfig.PeerGroups
 				if opts.GracefulRestart {
 					for i, n := range added {
 						if n.GracefulRestart.Config.Enabled {
@@ -201,10 +199,7 @@ func main() {
 				}
 
 			} else {
-				addedPg, deletedPg, updatedPg = config.UpdatePeerGroupConfig(c, newConfig)
-				added, deleted, updated = config.UpdateNeighborConfig(c, newConfig)
-				updatePolicy = config.CheckPolicyDifference(config.ConfigSetToRoutingPolicy(c), config.ConfigSetToRoutingPolicy(newConfig))
-
+				added, deleted, updated, updatePolicy = config.UpdateConfig(c, newConfig)
 				if updatePolicy {
 					log.Info("Policy config is updated")
 					p := config.ConfigSetToRoutingPolicy(newConfig)
@@ -246,46 +241,21 @@ func main() {
 				}
 				c = newConfig
 			}
-			for i, pg := range addedPg {
-				log.Infof("PeerGroup %s is added", pg.Config.PeerGroupName)
-				if err := bgpServer.AddPeerGroup(&addedPg[i]); err != nil {
-					log.Warn(err)
-				}
-			}
-			for i, pg := range deletedPg {
-				log.Infof("PeerGroup %s is deleted", pg.Config.PeerGroupName)
-				if err := bgpServer.DeletePeerGroup(&deletedPg[i]); err != nil {
-					log.Warn(err)
-				}
-			}
-			for i, pg := range updatedPg {
-				log.Infof("PeerGroup %s is updated", pg.Config.PeerGroupName)
-				u, err := bgpServer.UpdatePeerGroup(&updatedPg[i])
-				if err != nil {
-					log.Warn(err)
-				}
-				updatePolicy = updatePolicy || u
-			}
-			for _, dn := range newConfig.DynamicNeighbors {
-				log.Infof("Dynamic Neighbor %s is added to PeerGroup %s", dn.Config.Prefix, dn.Config.PeerGroup)
-				if err := bgpServer.AddDynamicNeighbor(&dn); err != nil {
-					log.Warn(err)
-				}
-			}
+
 			for i, p := range added {
-				log.Infof("Peer %v is added", p.State.NeighborAddress)
+				log.Infof("Peer %v is added", p.Config.NeighborAddress)
 				if err := bgpServer.AddNeighbor(&added[i]); err != nil {
 					log.Warn(err)
 				}
 			}
 			for i, p := range deleted {
-				log.Infof("Peer %v is deleted", p.State.NeighborAddress)
+				log.Infof("Peer %v is deleted", p.Config.NeighborAddress)
 				if err := bgpServer.DeleteNeighbor(&deleted[i]); err != nil {
 					log.Warn(err)
 				}
 			}
 			for i, p := range updated {
-				log.Infof("Peer %v is updated", p.State.NeighborAddress)
+				log.Infof("Peer %v is updated", p.Config.NeighborAddress)
 				u, err := bgpServer.UpdateNeighbor(&updated[i])
 				if err != nil {
 					log.Warn(err)

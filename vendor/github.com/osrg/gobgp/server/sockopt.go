@@ -29,10 +29,6 @@ func SetTcpTTLSockopts(conn *net.TCPConn, ttl int) error {
 	return fmt.Errorf("setting ttl is not supported")
 }
 
-func SetTcpMinTTLSockopts(conn *net.TCPConn, ttl int) error {
-	return fmt.Errorf("setting min ttl is not supported")
-}
-
 func DialTCPTimeoutWithMD5Sig(host string, port int, localAddr, key string, msec int) (*net.TCPConn, error) {
 	return nil, fmt.Errorf("md5 active connection unsupported")
 }

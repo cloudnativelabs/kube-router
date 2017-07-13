@@ -19,7 +19,7 @@ package server
 import (
 	"encoding/binary"
 	"fmt"
-	log "github.com/sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 	"net"
 	"os"
 	"strings"
@@ -348,8 +348,7 @@ func saDelete(address string) error {
 }
 
 const (
-	TCP_MD5SIG       = 0x4 // TCP MD5 Signature (RFC2385)
-	IPV6_MINHOPCOUNT = 73  // Generalized TTL Security Mechanism (RFC5082)
+	TCP_MD5SIG = 0x4
 )
 
 func SetTcpMD5SigSockopts(l *net.TCPListener, address string, key string) error {
@@ -374,7 +373,13 @@ func SetTcpMD5SigSockopts(l *net.TCPListener, address string, key string) error 
 	return saDelete(address)
 }
 
-func setTcpSockoptInt(conn *net.TCPConn, level int, name int, value int) error {
+func SetTcpTTLSockopts(conn *net.TCPConn, ttl int) error {
+	level := syscall.IPPROTO_IP
+	name := syscall.IP_TTL
+	if strings.Contains(conn.RemoteAddr().String(), "[") {
+		level = syscall.IPPROTO_IPV6
+		name = syscall.IPV6_UNICAST_HOPS
+	}
 	fi, err := conn.File()
 	defer fi.Close()
 	if err != nil {
@@ -383,27 +388,7 @@ func setTcpSockoptInt(conn *net.TCPConn, level int, name int, value int) error {
 	if conn, err := net.FileConn(fi); err == nil {
 		defer conn.Close()
 	}
-	return os.NewSyscallError("setsockopt", syscall.SetsockoptInt(int(fi.Fd()), level, name, value))
-}
-
-func SetTcpTTLSockopts(conn *net.TCPConn, ttl int) error {
-	level := syscall.IPPROTO_IP
-	name := syscall.IP_TTL
-	if strings.Contains(conn.RemoteAddr().String(), "[") {
-		level = syscall.IPPROTO_IPV6
-		name = syscall.IPV6_UNICAST_HOPS
-	}
-	return setTcpSockoptInt(conn, level, name, ttl)
-}
-
-func SetTcpMinTTLSockopts(conn *net.TCPConn, ttl int) error {
-	level := syscall.IPPROTO_IP
-	name := syscall.IP_MINTTL
-	if strings.Contains(conn.RemoteAddr().String(), "[") {
-		level = syscall.IPPROTO_IPV6
-		name = IPV6_MINHOPCOUNT
-	}
-	return setTcpSockoptInt(conn, level, name, ttl)
+	return os.NewSyscallError("setsockopt", syscall.SetsockoptInt(int(fi.Fd()), level, name, ttl))
 }
 
 func DialTCPTimeoutWithMD5Sig(host string, port int, localAddr, key string, msec int) (*net.TCPConn, error) {

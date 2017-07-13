@@ -17,11 +17,11 @@ package server
 
 import (
 	"fmt"
+	log "github.com/Sirupsen/logrus"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/packet/bmp"
 	"github.com/osrg/gobgp/table"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"strconv"
 	"time"
@@ -127,9 +127,6 @@ func (b *bmpClient) loop() {
 			if b.c.RouteMonitoringPolicy == config.BMP_ROUTE_MONITORING_POLICY_TYPE_LOCAL_RIB || b.c.RouteMonitoringPolicy == config.BMP_ROUTE_MONITORING_POLICY_TYPE_ALL {
 				ops = append(ops, WatchBestPath(true))
 			}
-			if b.c.RouteMirroringEnabled {
-				ops = append(ops, WatchMessage(false))
-			}
 			w := b.s.Watch(ops...)
 			defer w.Stop()
 
@@ -212,15 +209,6 @@ func (b *bmpClient) loop() {
 								return false
 							}
 						}
-					case *WatchEventMessage:
-						info := &table.PeerInfo{
-							Address: msg.PeerAddress,
-							AS:      msg.PeerAS,
-							ID:      msg.PeerID,
-						}
-						if err := write(bmpPeerRouteMirroring(bmp.BMP_PEER_TYPE_GLOBAL, 0, info, msg.Timestamp.Unix(), msg.Message)); err != nil {
-							return false
-						}
 					}
 				case <-tickerCh:
 					neighborList := b.s.GetNeighbor("", true)
@@ -289,26 +277,12 @@ func bmpPeerRoute(t uint8, policy bool, pd uint64, peeri *table.PeerInfo, timest
 
 func bmpPeerStats(peerType uint8, peerDist uint64, timestamp int64, neighConf *config.Neighbor) *bmp.BMPMessage {
 	var peerFlags uint8 = 0
-	ph := bmp.NewBMPPeerHeader(peerType, peerFlags, peerDist, neighConf.State.NeighborAddress, neighConf.State.PeerAs, neighConf.State.RemoteRouterId, float64(timestamp))
+	ph := bmp.NewBMPPeerHeader(peerType, peerFlags, peerDist, neighConf.Config.NeighborAddress, neighConf.State.PeerAs, neighConf.State.RemoteRouterId, float64(timestamp))
 	return bmp.NewBMPStatisticsReport(
 		*ph,
 		[]bmp.BMPStatsTLVInterface{
 			bmp.NewBMPStatsTLV64(bmp.BMP_STAT_TYPE_ADJ_RIB_IN, uint64(neighConf.State.AdjTable.Accepted)),
 			bmp.NewBMPStatsTLV64(bmp.BMP_STAT_TYPE_LOC_RIB, uint64(neighConf.State.AdjTable.Advertised+neighConf.State.AdjTable.Filtered)),
-			bmp.NewBMPStatsTLV32(bmp.BMP_STAT_TYPE_WITHDRAW_UPDATE, neighConf.State.Messages.Received.WithdrawUpdate),
-			bmp.NewBMPStatsTLV32(bmp.BMP_STAT_TYPE_WITHDRAW_PREFIX, neighConf.State.Messages.Received.WithdrawPrefix),
-		},
-	)
-}
-
-func bmpPeerRouteMirroring(peerType uint8, peerDist uint64, peerInfo *table.PeerInfo, timestamp int64, msg *bgp.BGPMessage) *bmp.BMPMessage {
-	var peerFlags uint8 = 0
-	ph := bmp.NewBMPPeerHeader(peerType, peerFlags, peerDist, peerInfo.Address.String(), peerInfo.AS, peerInfo.ID.String(), float64(timestamp))
-	return bmp.NewBMPRouteMirroring(
-		*ph,
-		[]bmp.BMPRouteMirrTLVInterface{
-			// RFC7854: BGP Message TLV MUST occur last in the list of TLVs
-			bmp.NewBMPRouteMirrTLVBGPMsg(bmp.BMP_ROUTE_MIRRORING_TLV_TYPE_BGP_MSG, msg),
 		},
 	)
 }

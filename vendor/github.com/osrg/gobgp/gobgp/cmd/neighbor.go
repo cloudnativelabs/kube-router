@@ -77,7 +77,7 @@ func showNeighbors(vrf string) error {
 
 	if globalOpts.Quiet {
 		for _, p := range m {
-			fmt.Println(p.State.NeighborAddress)
+			fmt.Println(p.Config.NeighborAddress)
 		}
 		return nil
 	}
@@ -92,7 +92,7 @@ func showNeighbors(vrf string) error {
 	for _, n := range m {
 		if i := len(n.Config.NeighborInterface); i > maxaddrlen {
 			maxaddrlen = i
-		} else if j := len(n.State.NeighborAddress); j > maxaddrlen {
+		} else if j := len(n.Config.NeighborAddress); j > maxaddrlen {
 			maxaddrlen = j
 		}
 		if l := len(getASN(n)); l > maxaslen {
@@ -142,7 +142,7 @@ func showNeighbors(vrf string) error {
 	}
 
 	for i, n := range m {
-		neigh := n.State.NeighborAddress
+		neigh := n.Config.NeighborAddress
 		if n.Config.NeighborInterface != "" {
 			neigh = n.Config.NeighborInterface
 		}
@@ -163,7 +163,7 @@ func showNeighbor(args []string) error {
 		return nil
 	}
 
-	fmt.Printf("BGP neighbor is %s, remote AS %s", p.State.NeighborAddress, getASN(p))
+	fmt.Printf("BGP neighbor is %s, remote AS %s", p.Config.NeighborAddress, getASN(p))
 
 	if p.RouteReflector.Config.RouteReflectorClient {
 		fmt.Printf(", route-reflector-client\n")
@@ -854,7 +854,6 @@ func modNeighbor(cmdType string, args []string) error {
 			peer.Config.NeighborInterface = m["interface"][0]
 		} else {
 			peer.Config.NeighborAddress = m[""][0]
-			peer.State.NeighborAddress = m[""][0]
 		}
 		if len(m["vrf"]) == 1 {
 			peer.Config.Vrf = m["vrf"][0]
@@ -953,7 +952,7 @@ func NewNeighborCmd() *cobra.Command {
 						if err != nil {
 							exitWithError(err)
 						}
-						addr = peer.State.NeighborAddress
+						addr = peer.Config.NeighborAddress
 					}
 					err := f(cmd.Use, addr, args[:len(args)-1])
 					if err != nil {
@@ -984,7 +983,7 @@ func NewNeighborCmd() *cobra.Command {
 			if err != nil {
 				exitWithError(err)
 			}
-			remoteIP := peer.State.NeighborAddress
+			remoteIP := peer.Config.NeighborAddress
 			for _, v := range []string{CMD_IN, CMD_IMPORT, CMD_EXPORT} {
 				if err := showNeighborPolicy(remoteIP, v, 4); err != nil {
 					exitWithError(err)
@@ -1001,7 +1000,7 @@ func NewNeighborCmd() *cobra.Command {
 				if err != nil {
 					exitWithError(err)
 				}
-				remoteIP := peer.State.NeighborAddress
+				remoteIP := peer.Config.NeighborAddress
 				err = showNeighborPolicy(remoteIP, cmd.Use, 0)
 				if err != nil {
 					exitWithError(err)
@@ -1017,7 +1016,7 @@ func NewNeighborCmd() *cobra.Command {
 					if err != nil {
 						exitWithError(err)
 					}
-					remoteIP := peer.State.NeighborAddress
+					remoteIP := peer.Config.NeighborAddress
 					args = args[:len(args)-1]
 					if err = modNeighborPolicy(remoteIP, cmd.Use, subcmd.Use, args); err != nil {
 						exitWithError(err)

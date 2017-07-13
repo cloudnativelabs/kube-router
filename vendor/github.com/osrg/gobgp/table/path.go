@@ -24,10 +24,10 @@ import (
 	"sort"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/satori/go.uuid"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -258,7 +258,7 @@ func UpdatePathAttrs(global *config.Global, peer *config.Neighbor, info *PeerInf
 	} else {
 		log.WithFields(log.Fields{
 			"Topic": "Peer",
-			"Key":   peer.State.NeighborAddress,
+			"Key":   peer.Config.NeighborAddress,
 		}).Warnf("invalid peer type: %d", peer.State.PeerType)
 	}
 	return path

@@ -16,10 +16,10 @@
 package server
 
 import (
+	log "github.com/Sirupsen/logrus"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/table"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"net"
 	"runtime"
@@ -31,17 +31,13 @@ func TestModPolicyAssign(t *testing.T) {
 	assert := assert.New(t)
 	s := NewBgpServer()
 	go s.Serve()
-	err := s.Start(&config.Global{
+	s.Start(&config.Global{
 		Config: config.GlobalConfig{
 			As:       1,
 			RouterId: "1.1.1.1",
-			Port:     -1,
 		},
 	})
-	assert.Nil(err)
-	defer s.Stop()
-
-	err = s.AddPolicy(&table.Policy{Name: "p1"}, false)
+	err := s.AddPolicy(&table.Policy{Name: "p1"}, false)
 	assert.Nil(err)
 
 	err = s.AddPolicy(&table.Policy{Name: "p2"}, false)
@@ -66,16 +62,13 @@ func TestMonitor(test *testing.T) {
 	assert := assert.New(test)
 	s := NewBgpServer()
 	go s.Serve()
-	err := s.Start(&config.Global{
+	s.Start(&config.Global{
 		Config: config.GlobalConfig{
 			As:       1,
 			RouterId: "1.1.1.1",
 			Port:     10179,
 		},
 	})
-	assert.Nil(err)
-	defer s.Stop()
-
 	n := &config.Neighbor{
 		Config: config.NeighborConfig{
 			NeighborAddress: "127.0.0.1",
@@ -87,21 +80,18 @@ func TestMonitor(test *testing.T) {
 			},
 		},
 	}
-	err = s.AddNeighbor(n)
-	assert.Nil(err)
-
+	if err := s.AddNeighbor(n); err != nil {
+		log.Fatal(err)
+	}
 	t := NewBgpServer()
 	go t.Serve()
-	err = t.Start(&config.Global{
+	t.Start(&config.Global{
 		Config: config.GlobalConfig{
 			As:       2,
 			RouterId: "2.2.2.2",
 			Port:     -1,
 		},
 	})
-	assert.Nil(err)
-	defer t.Stop()
-
 	m := &config.Neighbor{
 		Config: config.NeighborConfig{
 			NeighborAddress: "127.0.0.1",
@@ -113,8 +103,9 @@ func TestMonitor(test *testing.T) {
 			},
 		},
 	}
-	err = t.AddNeighbor(m)
-	assert.Nil(err)
+	if err := t.AddNeighbor(m); err != nil {
+		log.Fatal(err)
+	}
 
 	for {
 		time.Sleep(time.Second)
@@ -168,10 +159,6 @@ func TestNumGoroutineWithAddDeleteNeighbor(t *testing.T) {
 		},
 	})
 	assert.Nil(err)
-	defer s.Stop()
-
-	// wait a few seconds to avoid taking effect from other test cases.
-	time.Sleep(time.Second * 5)
 
 	num := runtime.NumGoroutine()
 
@@ -355,262 +342,4 @@ func TestFilterpathWithRejectPolicy(t *testing.T) {
 		}
 	}
 
-}
-
-func TestPeerGroup(test *testing.T) {
-	assert := assert.New(test)
-	log.SetLevel(log.DebugLevel)
-	s := NewBgpServer()
-	go s.Serve()
-	err := s.Start(&config.Global{
-		Config: config.GlobalConfig{
-			As:       1,
-			RouterId: "1.1.1.1",
-			Port:     10179,
-		},
-	})
-	assert.Nil(err)
-	defer s.Stop()
-
-	g := &config.PeerGroup{
-		Config: config.PeerGroupConfig{
-			PeerAs:        2,
-			PeerGroupName: "g",
-		},
-	}
-	err = s.AddPeerGroup(g)
-	assert.Nil(err)
-
-	n := &config.Neighbor{
-		Config: config.NeighborConfig{
-			NeighborAddress: "127.0.0.1",
-			PeerGroup:       "g",
-		},
-		Transport: config.Transport{
-			Config: config.TransportConfig{
-				PassiveMode: true,
-			},
-		},
-	}
-	configured := map[string]interface{}{
-		"config": map[string]interface{}{
-			"neigbor-address": "127.0.0.1",
-			"peer-group":      "g",
-		},
-		"transport": map[string]interface{}{
-			"config": map[string]interface{}{
-				"passive-mode": true,
-			},
-		},
-	}
-	config.RegisterConfiguredFields("127.0.0.1", configured)
-	err = s.AddNeighbor(n)
-	assert.Nil(err)
-
-	t := NewBgpServer()
-	go t.Serve()
-	err = t.Start(&config.Global{
-		Config: config.GlobalConfig{
-			As:       2,
-			RouterId: "2.2.2.2",
-			Port:     -1,
-		},
-	})
-	assert.Nil(err)
-	defer t.Stop()
-
-	m := &config.Neighbor{
-		Config: config.NeighborConfig{
-			NeighborAddress: "127.0.0.1",
-			PeerAs:          1,
-		},
-		Transport: config.Transport{
-			Config: config.TransportConfig{
-				RemotePort: 10179,
-			},
-		},
-	}
-	err = t.AddNeighbor(m)
-	assert.Nil(err)
-
-	for {
-		time.Sleep(time.Second)
-		if t.GetNeighbor("", false)[0].State.SessionState == config.SESSION_STATE_ESTABLISHED {
-			break
-		}
-	}
-}
-
-func TestDynamicNeighbor(t *testing.T) {
-	assert := assert.New(t)
-	log.SetLevel(log.DebugLevel)
-	s1 := NewBgpServer()
-	go s1.Serve()
-	err := s1.Start(&config.Global{
-		Config: config.GlobalConfig{
-			As:       1,
-			RouterId: "1.1.1.1",
-			Port:     10179,
-		},
-	})
-	assert.Nil(err)
-	defer s1.Stop()
-
-	g := &config.PeerGroup{
-		Config: config.PeerGroupConfig{
-			PeerAs:        2,
-			PeerGroupName: "g",
-		},
-	}
-	err = s1.AddPeerGroup(g)
-	assert.Nil(err)
-
-	d := &config.DynamicNeighbor{
-		Config: config.DynamicNeighborConfig{
-			Prefix:    "127.0.0.0/24",
-			PeerGroup: "g",
-		},
-	}
-	err = s1.AddDynamicNeighbor(d)
-	assert.Nil(err)
-
-	s2 := NewBgpServer()
-	go s2.Serve()
-	err = s2.Start(&config.Global{
-		Config: config.GlobalConfig{
-			As:       2,
-			RouterId: "2.2.2.2",
-			Port:     -1,
-		},
-	})
-	assert.Nil(err)
-	defer s2.Stop()
-
-	m := &config.Neighbor{
-		Config: config.NeighborConfig{
-			NeighborAddress: "127.0.0.1",
-			PeerAs:          1,
-		},
-		Transport: config.Transport{
-			Config: config.TransportConfig{
-				RemotePort: 10179,
-			},
-		},
-	}
-	err = s2.AddNeighbor(m)
-
-	assert.Nil(err)
-
-	for {
-		time.Sleep(time.Second)
-		if s2.GetNeighbor("", false)[0].State.SessionState == config.SESSION_STATE_ESTABLISHED {
-			break
-		}
-	}
-}
-
-func TestGracefulRestartTimerExpired(t *testing.T) {
-	assert := assert.New(t)
-	s1 := NewBgpServer()
-	go s1.Serve()
-	err := s1.Start(&config.Global{
-		Config: config.GlobalConfig{
-			As:       1,
-			RouterId: "1.1.1.1",
-			Port:     10179,
-		},
-	})
-	assert.Nil(err)
-	defer s1.Stop()
-
-	n := &config.Neighbor{
-		Config: config.NeighborConfig{
-			NeighborAddress: "127.0.0.1",
-			PeerAs:          2,
-		},
-		Transport: config.Transport{
-			Config: config.TransportConfig{
-				PassiveMode: true,
-			},
-		},
-		GracefulRestart: config.GracefulRestart{
-			Config: config.GracefulRestartConfig{
-				Enabled:     true,
-				RestartTime: 10,
-			},
-		},
-	}
-	err = s1.AddNeighbor(n)
-	assert.Nil(err)
-
-	s2 := NewBgpServer()
-	go s2.Serve()
-	err = s2.Start(&config.Global{
-		Config: config.GlobalConfig{
-			As:       2,
-			RouterId: "2.2.2.2",
-			Port:     -1,
-		},
-	})
-	assert.Nil(err)
-	defer s2.Stop()
-
-	m := &config.Neighbor{
-		Config: config.NeighborConfig{
-			NeighborAddress: "127.0.0.1",
-			PeerAs:          1,
-		},
-		Transport: config.Transport{
-			Config: config.TransportConfig{
-				RemotePort: 10179,
-			},
-		},
-		GracefulRestart: config.GracefulRestart{
-			Config: config.GracefulRestartConfig{
-				Enabled:     true,
-				RestartTime: 10,
-			},
-		},
-	}
-	err = s2.AddNeighbor(m)
-	assert.Nil(err)
-
-	// Waiting for BGP session established.
-	for {
-		time.Sleep(time.Second)
-		if s2.GetNeighbor("", false)[0].State.SessionState == config.SESSION_STATE_ESTABLISHED {
-			break
-		}
-	}
-
-	// Force TCP session disconnected in order to cause Graceful Restart at s1
-	// side.
-	for _, n := range s2.neighborMap {
-		n.fsm.conn.Close()
-	}
-	s2.Stop()
-
-	time.Sleep(5 * time.Second)
-
-	// Create dummy session which does NOT send BGP OPEN message in order to
-	// cause Graceful Restart timer expired.
-	var conn net.Conn
-	for {
-		time.Sleep(time.Second)
-		var err error
-		conn, err = net.Dial("tcp", "127.0.0.1:10179")
-		if err != nil {
-			log.Warn("net.Dial:", err)
-		}
-		break
-	}
-	defer conn.Close()
-
-	// Waiting for Graceful Restart timer expired and moving on to IDLE state.
-	for {
-		time.Sleep(time.Second)
-		if s1.GetNeighbor("", false)[0].State.SessionState == config.SESSION_STATE_IDLE {
-			break
-		}
-	}
 }

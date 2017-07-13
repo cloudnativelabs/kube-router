@@ -23,9 +23,9 @@ import (
 	"net"
 	"sort"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
-	log "github.com/sirupsen/logrus"
 )
 
 var SelectionOptions config.RouteSelectionOptionsConfig
@@ -127,7 +127,7 @@ func (i *PeerInfo) String() string {
 func NewPeerInfo(g *config.Global, p *config.Neighbor) *PeerInfo {
 	id := net.ParseIP(string(p.RouteReflector.Config.RouteReflectorClusterId)).To4()
 	// exclude zone info
-	naddr, _ := net.ResolveIPAddr("ip", p.State.NeighborAddress)
+	naddr, _ := net.ResolveIPAddr("ip", p.Config.NeighborAddress)
 	return &PeerInfo{
 		AS:                      p.Config.PeerAs,
 		LocalAS:                 g.Config.As,
