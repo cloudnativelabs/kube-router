@@ -4,14 +4,15 @@ metadata:
   name: kube-router
   namespace: kube-system
   labels:
-    app: kube-router
+    k8s-app: kube-router
 spec:
   template:
     metadata:
       labels:
-        name: kube-router
+        k8s-app: kube-router
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
-      hostNetwork: true
       containers:
       - name: kube-router
         image: cloudnativelabs/kube-router
@@ -32,6 +33,13 @@ spec:
             name: cni-conf-dir
           - mountPath: /var/lib/kube-router/kubeconfig
             name: kubeconfig
+      hostNetwork: true
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
       volumes:
         - name: lib-modules
           hostPath:
