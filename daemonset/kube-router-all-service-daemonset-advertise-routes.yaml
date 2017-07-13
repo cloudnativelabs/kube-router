@@ -4,12 +4,12 @@ metadata:
   name: kube-router
   namespace: kube-system
   labels:
-    app: kube-router
+    k8s-app: kube-router
 spec:
   template:
     metadata:
       labels:
-        name: kube-router
+        k8s-app: kube-router
     spec:
       hostNetwork: true
       containers:
