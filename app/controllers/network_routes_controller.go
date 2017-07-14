@@ -3,12 +3,17 @@ package controllers
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/cloudnativelabs/kube-router/app/options"
 	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/cloudnativelabs/kube-router/utils"
@@ -65,6 +70,9 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			glog.Errorf("Failed to insert pod CIDR into CNI conf file: %s", err.Error())
 		}
 	}
+
+	// In case of cluster provisioned on AWS disable source-destination check
+	nrc.disableSourceDestinationCheck()
 
 	t := time.NewTicker(nrc.syncPeriod)
 	defer t.Stop()
@@ -220,6 +228,47 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 }
 
 func (nrc *NetworkRoutingController) Cleanup() {
+}
+
+func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
+
+	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
+		return
+	}
+
+	for _, node := range nodes.Items {
+		if node.Spec.ProviderID == "" || !strings.HasPrefix(node.Spec.ProviderID, "aws") {
+			return
+		}
+		providerID := strings.Replace(node.Spec.ProviderID, "///", "//", 1)
+		url, err := url.Parse(providerID)
+		instanceID := url.Path
+		instanceID = strings.Trim(instanceID, "/")
+		glog.Infof("Disabling source destination check for the instance: " + instanceID)
+
+		sess, _ := session.NewSession(aws.NewConfig().WithMaxRetries(5))
+		metadataClient := ec2metadata.New(sess)
+		region, err := metadataClient.Region()
+		if err != nil {
+			glog.Errorf("Failed to disable source destination check due to: " + err.Error())
+			return
+		}
+		sess.Config.Region = aws.String(region)
+		ec2Client := ec2.New(sess)
+		_, err = ec2Client.ModifyInstanceAttribute(
+			&ec2.ModifyInstanceAttributeInput{
+				InstanceId: aws.String(instanceID),
+				SourceDestCheck: &ec2.AttributeBooleanValue{
+					Value: aws.Bool(false),
+				},
+			},
+		)
+		if err != nil {
+			glog.Errorf("Failed to disable source destination check due to: " + err.Error())
+		}
+	}
 }
 
 // Refresh the peer relationship rest of the nodes in the cluster. Node add/remove

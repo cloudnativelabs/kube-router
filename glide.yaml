@@ -56,3 +56,5 @@ import:
   version: master
 - package: github.com/hkwi/nlgo
   version: master
+- package: github.com/aws/aws-sdk-go/
+  version: ^v1.8.36
