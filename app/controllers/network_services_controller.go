@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,6 +19,8 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	"github.com/mqliang/libipvs"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/vishvananda/netlink"
 	"k8s.io/client-go/kubernetes"
 )
@@ -27,10 +30,21 @@ const (
 	IFACE_NOT_FOUND    = "Link not found"
 	IFACE_HAS_ADDR     = "file exists"
 	IPVS_SERVER_EXISTS = "file exists"
+	namespace          = "kube_router"
 )
 
 var (
 	h libipvs.IPVSHandle
+	serviceBackendActiveConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_backend_active_connections",
+		Help:      "Active conntection to backend of service",
+	}, []string{"namespace", "service_name", "backend"})
+	serviceBackendInactiveConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_backend_inactive_connections",
+		Help:      "Active conntection to backend of service",
+	}, []string{"namespace", "service_name", "backend"})
 )
 
 // Network services controller enables local node as network service proxy through IPVS/LVS.
@@ -55,6 +69,8 @@ type NetworkServicesController struct {
 
 // internal representation of kubernetes service
 type serviceInfo struct {
+	name            string
+	namespace       string
 	clusterIP       net.IP
 	port            int
 	protocol        string
@@ -89,6 +105,12 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	if err != nil {
 		return errors.New("Failed to do add masqurade rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
+
+	// register metrics
+	prometheus.MustRegister(serviceBackendActiveConn)
+	prometheus.MustRegister(serviceBackendInactiveConn)
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(":8080", nil)
 
 	// enable ipvs connection tracking
 	err = ensureIpvsConntrack()
@@ -132,6 +154,7 @@ func (nsc *NetworkServicesController) sync() {
 		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
 	}
 	nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+	nsc.publishMetrics(nsc.serviceMap)
 }
 
 // handle change in endpoints update from the API server
@@ -308,6 +331,41 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	return nil
 }
 
+func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
+	ipvsSvcs, err := h.ListServices()
+	if err != nil {
+		return errors.New("Failed to list IPVS services: " + err.Error())
+	}
+
+	for _, svc := range serviceInfoMap {
+		for _, ipvsSvc := range ipvsSvcs {
+			if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
+				svc.protocol == ipvsSvc.Protocol.String() && uint16(svc.port) == ipvsSvc.Port {
+				dsts, err := h.ListDestinations(ipvsSvc)
+				if err != nil {
+					glog.Errorf("Failed to get list of servers from ipvs service")
+				}
+				for _, dst := range dsts {
+					serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.ActiveConns))
+					serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
+				}
+			}
+			if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
+				svc.protocol == ipvsSvc.Protocol.String() && uint16(svc.port) == ipvsSvc.Port {
+				dsts, err := h.ListDestinations(ipvsSvc)
+				if err != nil {
+					glog.Errorf("Failed to get list of servers from ipvs service")
+				}
+				for _, dst := range dsts {
+					serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.ActiveConns))
+					serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func buildServicesInfo() serviceInfoMap {
 	serviceMap := make(serviceInfoMap)
 	for _, svc := range watchers.ServiceWatcher.List() {
@@ -328,6 +386,8 @@ func buildServicesInfo() serviceInfoMap {
 				port:      int(port.Port),
 				protocol:  strings.ToLower(string(port.Protocol)),
 				nodePort:  int(port.NodePort),
+				name:      svc.ObjectMeta.Name,
+				namespace: svc.ObjectMeta.Namespace,
 			}
 
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")

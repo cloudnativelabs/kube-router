@@ -1,10 +1,10 @@
-hash: 1b35653858c8208c9b893e051bb89d897eed43569f8672ee39d5b760bfbdc95c
-updated: 2017-07-14T23:40:32.45580862+05:30
+hash: 73e0c06b523189ee0670efcb4c7edcde6328a053ff878379d92735be568bd26e
+updated: 2017-07-16T03:04:38.257956637+05:30
 imports:
 - name: github.com/armon/go-radix
   version: 4239b77079c7b5d1243b7b4736304ce8ddb6f0f2
 - name: github.com/aws/aws-sdk-go
-  version: 1fd5dd46e2bf3e0be156701a559098dc823053d5
+  version: b73b028e599fa9176687c70b8f9cafbe57c27d20
   subpackages:
   - aws
   - aws/awserr
@@ -31,6 +31,10 @@ imports:
   - private/protocol/xml/xmlutil
   - service/ec2
   - service/sts
+- name: github.com/beorn7/perks
+  version: 4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9
+  subpackages:
+  - quantile
 - name: github.com/containernetworking/cni
   version: 137b4975ecab6e1f0c24c1e3c228a50a3cfba75e
   subpackages:
@@ -150,6 +154,10 @@ imports:
   - buffer
   - jlexer
   - jwriter
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: c12348ce28de40eed0136aa2b644d0ee0650e56c
+  subpackages:
+  - pbutil
 - name: github.com/mitchellh/mapstructure
   version: d0303fe809921458f417bcf828397a65db30a7e4
 - name: github.com/mqliang/libipvs
@@ -172,6 +180,25 @@ imports:
   version: 69d355db5304c0f7f809a2edc054553e7142f016
 - name: github.com/pkg/errors
   version: c605e284fe17294bda444b34710735b29d1a9d90
+- name: github.com/prometheus/client_golang
+  version: c5b7fccd204277076155f10851dad72b76a49317
+  subpackages:
+  - prometheus
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: 6f3806018612930941127f2a7c6c453ba2c527d2
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: 3e6a7635bac6573d43f49f97b47eb9bda195dba8
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: e645f4e5aaa8506fc71d6edbc5c4ff02c04c46f2
+  subpackages:
+  - xfs
 - name: github.com/PuerkitoBio/purell
   version: 8a290539e2e8629dbc4e6bad948158f790ec31f4
 - name: github.com/PuerkitoBio/urlesc
