@@ -3,8 +3,8 @@ package controllers
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,6 +48,10 @@ type NetworkRoutingController struct {
 
 var (
 	activeNodes = make(map[string]bool)
+)
+
+const (
+	clustetNieghboursSet = "clusterneighboursset"
 )
 
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
@@ -108,6 +112,11 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		} else {
 			break
 		}
+	}
+
+	err = nrc.initExportPolicies()
+	if err != nil {
+		glog.Errorf("Failed to add BGP export policies %s.", err.Error())
 	}
 
 	// loop forever till notified to stop on stopCh
@@ -188,7 +197,6 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 	attrs := []bgp.PathAttributeInterface{
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
-		bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{4000, 400000, 300000, 40001})}),
 	}
 	glog.Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrLen),
@@ -203,7 +211,6 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 	attrs := []bgp.PathAttributeInterface{
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
-		bgp.NewPathAttributeAsPath([]bgp.AsPathParamInterface{bgp.NewAs4PathParam(bgp.BGP_ASPATH_ATTR_TYPE_SEQ, []uint32{4000, 400000, 300000, 40001})}),
 	}
 	glog.Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
@@ -402,6 +409,65 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 		}
 		delete(activeNodes, nodeIP.String())
 	}
+}
+
+// add BGP export policy so that no learned route from the neightbour
+// is exported or advertised to global or per node peer
+func (nrc *NetworkRoutingController) initExportPolicies() error {
+
+	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	nieghbors := make([]string, 0)
+	for _, node := range nodes.Items {
+		nodeIP, _ := getNodeIP(&node)
+		if nodeIP.String() == nrc.nodeIP.String() {
+			continue
+		}
+		nieghbors = append(nieghbors, nodeIP.String())
+	}
+
+	ns, err := table.NewNeighborSet(config.NeighborSet{
+		NeighborSetName:  clustetNieghboursSet,
+		NeighborInfoList: nieghbors,
+	})
+	if err != nil {
+		return err
+	}
+
+	err = nrc.bgpServer.AddDefinedSet(ns)
+	if err != nil {
+		return err
+	}
+
+	definition := config.PolicyDefinition{
+		Name: "kube_router",
+		Statements: []config.Statement{
+			config.Statement{
+				Conditions: config.Conditions{
+					MatchNeighborSet: config.MatchNeighborSet{
+						NeighborSet: clustetNieghboursSet,
+					},
+				},
+				Actions: config.Actions{
+					RouteDisposition: config.ROUTE_DISPOSITION_REJECT_ROUTE,
+				},
+			},
+		},
+	}
+
+	policy, err := table.NewPolicy(definition)
+	if err != nil {
+		return err
+	}
+	if err = nrc.bgpServer.AddPolicy(policy, false); err != nil {
+		return err
+	}
+	return nrc.bgpServer.AddPolicyAssignment("", table.POLICY_DIRECTION_EXPORT,
+		[]*config.PolicyDefinition{&definition},
+		table.ROUTE_TYPE_ACCEPT)
 }
 
 func (nrc *NetworkRoutingController) startBgpServer() error {
