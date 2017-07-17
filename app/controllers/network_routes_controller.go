@@ -223,6 +223,10 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 		Protocol: 0x11,
 	}
 
+	if path.IsWithdraw {
+		glog.Infof("Removing route: '%s via %s' from peer in the routing table", dst, nexthop)
+		return netlink.RouteDel(route)
+	}
 	glog.Infof("Inject route: '%s via %s' from peer to routing table", dst, nexthop)
 	return netlink.RouteReplace(route)
 }
