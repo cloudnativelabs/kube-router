@@ -114,11 +114,6 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 	}
 
-	err = nrc.initExportPolicies()
-	if err != nil {
-		glog.Errorf("Failed to add BGP export policies %s.", err.Error())
-	}
-
 	// loop forever till notified to stop on stopCh
 	for {
 		select {
