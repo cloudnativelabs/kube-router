@@ -34,7 +34,7 @@ const (
 )
 
 var (
-	h libipvs.IPVSHandle
+	h                        libipvs.IPVSHandle
 	serviceBackendActiveConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_backend_active_connections",
@@ -44,6 +44,16 @@ var (
 		Namespace: namespace,
 		Name:      "service_backend_inactive_connections",
 		Help:      "Active conntection to backend of service",
+	}, []string{"namespace", "service_name", "backend"})
+	serviceBackendPpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_backend_pps_in",
+		Help:      "Incoming packets per second",
+	}, []string{"namespace", "service_name", "backend"})
+	serviceBackendPpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_backend_pps_out",
+		Help:      "Outoging packets per second",
 	}, []string{"namespace", "service_name", "backend"})
 )
 
@@ -109,6 +119,8 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	// register metrics
 	prometheus.MustRegister(serviceBackendActiveConn)
 	prometheus.MustRegister(serviceBackendInactiveConn)
+	prometheus.MustRegister(serviceBackendPpsIn)
+	prometheus.MustRegister(serviceBackendPpsOut)
 	http.Handle("/metrics", promhttp.Handler())
 	go http.ListenAndServe(":8080", nil)
 
@@ -348,6 +360,8 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 				for _, dst := range dsts {
 					serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.ActiveConns))
 					serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
+					serviceBackendPpsIn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSIn))
+					serviceBackendPpsOut.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSOut))
 				}
 			}
 			if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
@@ -359,6 +373,8 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 				for _, dst := range dsts {
 					serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.ActiveConns))
 					serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
+					serviceBackendPpsIn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSIn))
+					serviceBackendPpsOut.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSOut))
 				}
 			}
 		}
