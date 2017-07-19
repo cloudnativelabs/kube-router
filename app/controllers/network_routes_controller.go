@@ -524,6 +524,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 			glog.Errorf("Failed to add node %s as peer due to %s", nodeIP, err)
 		}
 		activeNodes[nodeIP.String()] = true
+		nrc.disableSourceDestinationCheck()
 	} else if nodeUpdate.Op == watchers.REMOVE {
 		glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
 		n := &config.Neighbor{
