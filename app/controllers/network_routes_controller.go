@@ -42,6 +42,7 @@ type NetworkRoutingController struct {
 	defaultNodeAsnNumber uint32
 	nodeAsnNumber        uint32
 	globalPeerRouters    []string
+	nodePeerRouters      []string
 	globalPeerAsnNumber  uint32
 	bgpFullMeshMode      bool
 }
@@ -149,6 +150,11 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			glog.Errorf("Failed to advertise route: %s", err.Error())
 		}
 
+		err = nrc.addExportPolicies()
+		if err != nil {
+			glog.Errorf("Failed to add BGP export policies due to %s", err.Error())
+		}
+
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down network routes controller")
@@ -186,6 +192,7 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 	if err != nil {
 		return err
 	}
+
 	cidrStr := strings.Split(cidr, "/")
 	subnet := cidrStr[0]
 	cidrLen, err := strconv.Atoi(cidrStr[1])
@@ -201,6 +208,21 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 	return nil
 }
 
+func (nrc *NetworkRoutingController) getClusterIps() ([]string, error) {
+	clusterIpList := make([]string, 0)
+	for _, svc := range watchers.ServiceWatcher.List() {
+		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
+
+			// skip headless services
+			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
+				continue
+			}
+			clusterIpList = append(clusterIpList, svc.Spec.ClusterIP)
+		}
+	}
+	return clusterIpList, nil
+}
+
 func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error {
 
 	attrs := []bgp.PathAttributeInterface{
@@ -212,6 +234,117 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 		clusterIp), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
 	}
+	return nil
+}
+
+// Each node advertises its pod CIDR to the nodes with same ASN (iBGP peers) and to the global BGP peer
+// or per node BGP peer. Each node ends up advertising not only pod CIDR assigned to the self but other
+// routers learned to the node pod CIDR's as well to global BGP peer or per node BGP peers. external BGP
+// peer will randomly (since all path have equal selection atributes) select the routes from multiple
+// routes to a pod CIDR which will result in extra hop. To prevent this behaviour this methods add
+// defult export policy to reject. and explicit policy is added so that each node only advertised the
+// pod CIDR assigned to it. Additionally export policy is added so that a node advertises cluster IP's
+// only to the external BGP peers.
+func (nrc *NetworkRoutingController) addExportPolicies() error {
+
+	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
+	if err != nil {
+		return err
+	}
+
+	// creates prefix set to represent the assigned node's pod CIDR
+	podCidrPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
+		PrefixSetName: "podcidrprefixset",
+		PrefixList: []config.Prefix{
+			config.Prefix{
+				IpPrefix: cidr,
+			},
+		},
+	})
+	nrc.bgpServer.AddDefinedSet(podCidrPrefixSet)
+
+	// creates prefix set to represent all the cluster IP associated with the services
+	clusterIpPrefixList := make([]config.Prefix, 0)
+	clusterIps, _ := nrc.getClusterIps()
+	for _, ip := range clusterIps {
+		clusterIpPrefixList = append(clusterIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
+	}
+	clusterIpPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
+		PrefixSetName: "clusteripprefixset",
+		PrefixList:    clusterIpPrefixList,
+	})
+	nrc.bgpServer.AddDefinedSet(clusterIpPrefixSet)
+
+	statements := make([]config.Statement, 0)
+
+	// statement to represent the export policy to permit advertising node's pod CIDR
+	statements = append(statements,
+		config.Statement{
+			Conditions: config.Conditions{
+				MatchPrefixSet: config.MatchPrefixSet{
+					PrefixSet: "podcidrprefixset",
+				},
+			},
+			Actions: config.Actions{
+				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+			},
+		})
+
+	externalBgpPeers := make([]string, 0)
+	if len(nrc.globalPeerRouters) != 0 {
+		externalBgpPeers = append(externalBgpPeers, nrc.globalPeerRouters...)
+	}
+	if len(nrc.nodePeerRouters) != 0 {
+		externalBgpPeers = append(externalBgpPeers, nrc.nodePeerRouters...)
+	}
+	if len(externalBgpPeers) > 0 {
+		ns, _ := table.NewNeighborSet(config.NeighborSet{
+			NeighborSetName:  "externalpeerset",
+			NeighborInfoList: externalBgpPeers,
+		})
+		nrc.bgpServer.AddDefinedSet(ns)
+		// statement to represent the export policy to permit advertising cluster IP's
+		// only to the global BGP peer or node specific BGP peer
+		statements = append(statements, config.Statement{
+			Conditions: config.Conditions{
+				MatchPrefixSet: config.MatchPrefixSet{
+					PrefixSet: "clusteripprefixset",
+				},
+				MatchNeighborSet: config.MatchNeighborSet{
+					NeighborSet: "externalpeerset",
+				},
+			},
+			Actions: config.Actions{
+				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+			},
+		})
+	}
+
+	definition := config.PolicyDefinition{
+		Name:       "kube_router",
+		Statements: statements,
+	}
+
+	policy, err := table.NewPolicy(definition)
+	if err != nil {
+		return err
+	}
+	if err = nrc.bgpServer.AddPolicy(policy, false); err != nil {
+		return err
+	}
+	err = nrc.bgpServer.AddPolicyAssignment("",
+		table.POLICY_DIRECTION_EXPORT,
+		[]*config.PolicyDefinition{&definition},
+		table.ROUTE_TYPE_ACCEPT)
+	if err != nil {
+		return err
+	}
+
+	// configure default BGP export policy to reject
+	pd := make([]*config.PolicyDefinition, 0)
+	pd = append(pd, &definition)
+	nrc.bgpServer.ReplacePolicyAssignment("", table.POLICY_DIRECTION_EXPORT, pd, table.ROUTE_TYPE_REJECT)
+
 	return nil
 }
 
@@ -406,65 +539,6 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 	}
 }
 
-// add BGP export policy so that no learned route from the neightbour
-// is exported or advertised to global or per node peer
-func (nrc *NetworkRoutingController) initExportPolicies() error {
-
-	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	nieghbors := make([]string, 0)
-	for _, node := range nodes.Items {
-		nodeIP, _ := getNodeIP(&node)
-		if nodeIP.String() == nrc.nodeIP.String() {
-			continue
-		}
-		nieghbors = append(nieghbors, nodeIP.String())
-	}
-
-	ns, err := table.NewNeighborSet(config.NeighborSet{
-		NeighborSetName:  clustetNieghboursSet,
-		NeighborInfoList: nieghbors,
-	})
-	if err != nil {
-		return err
-	}
-
-	err = nrc.bgpServer.AddDefinedSet(ns)
-	if err != nil {
-		return err
-	}
-
-	definition := config.PolicyDefinition{
-		Name: "kube_router",
-		Statements: []config.Statement{
-			config.Statement{
-				Conditions: config.Conditions{
-					MatchNeighborSet: config.MatchNeighborSet{
-						NeighborSet: clustetNieghboursSet,
-					},
-				},
-				Actions: config.Actions{
-					RouteDisposition: config.ROUTE_DISPOSITION_REJECT_ROUTE,
-				},
-			},
-		},
-	}
-
-	policy, err := table.NewPolicy(definition)
-	if err != nil {
-		return err
-	}
-	if err = nrc.bgpServer.AddPolicy(policy, false); err != nil {
-		return err
-	}
-	return nrc.bgpServer.AddPolicyAssignment("", table.POLICY_DIRECTION_EXPORT,
-		[]*config.PolicyDefinition{&definition},
-		table.ROUTE_TYPE_ACCEPT)
-}
-
 func (nrc *NetworkRoutingController) startBgpServer() error {
 
 	var nodeAsnNumber uint32
@@ -568,6 +642,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			}
 		}
 
+		nrc.nodePeerRouters = nodePeerRouters
 		glog.Infof("Successfully configured  %s in ASN %v as BGP peer to the node", nodeBgpPeersAnnotation, peerAsnNo)
 	}
 
