@@ -385,7 +385,6 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		url, err := url.Parse(providerID)
 		instanceID := url.Path
 		instanceID = strings.Trim(instanceID, "/")
-		glog.Infof("Disabling source destination check for the instance: " + instanceID)
 
 		sess, _ := session.NewSession(aws.NewConfig().WithMaxRetries(5))
 		metadataClient := ec2metadata.New(sess)
@@ -406,6 +405,8 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		)
 		if err != nil {
 			glog.Errorf("Failed to disable source destination check due to: " + err.Error())
+		} else {
+			glog.Infof("Disabled source destination check for the instance: " + instanceID)
 		}
 	}
 }
@@ -524,7 +525,6 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 			glog.Errorf("Failed to add node %s as peer due to %s", nodeIP, err)
 		}
 		activeNodes[nodeIP.String()] = true
-		nrc.disableSourceDestinationCheck()
 	} else if nodeUpdate.Op == watchers.REMOVE {
 		glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
 		n := &config.Neighbor{
@@ -538,6 +538,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 		}
 		delete(activeNodes, nodeIP.String())
 	}
+	nrc.disableSourceDestinationCheck()
 }
 
 func (nrc *NetworkRoutingController) startBgpServer() error {
