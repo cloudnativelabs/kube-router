@@ -767,7 +767,14 @@ func getKubeDummyInterface() (netlink.Link, error) {
 func (nsc *NetworkServicesController) Cleanup() {
 	// cleanup ipvs rules by flush
 	glog.Infof("Cleaning up IPVS configuration permanently")
-	err := h.Flush()
+
+	handle, err := libipvs.New()
+	if err != nil {
+		glog.Errorf("Failed to cleanup ipvs rules: ", err.Error())
+		return
+	}
+
+	err = handle.Flush()
 	if err != nil {
 		glog.Errorf("Failed to cleanup ipvs rules: ", err.Error())
 		return
