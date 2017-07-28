@@ -30,7 +30,7 @@ Features:
 Network policy controller is responsible for reading the namespace, network policy and pods information from Kubernetes API server and configure iptables accordingly to provide ingress filter to the pods.
 
 Kube-router supports the networking.k8s.io/NetworkPolicy API or network policy V1/GA
-[semantics](https://github.com/kubernetes/kubernetes/pull/39164#issue-197243974) 
+[semantics](https://github.com/kubernetes/kubernetes/pull/39164#issue-197243974) and also network policy beta semantics. 
 
 Please read blog for design details of Network Policy controller
 https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/
