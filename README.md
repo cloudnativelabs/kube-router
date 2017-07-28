@@ -63,6 +63,9 @@ is easy with kube-router -- just add a flag to kube-router. It uses ipsets with
 iptables to ensure your firewall rules have as little performance impact on your
 cluster as possible.
 
+Kube-router supports the networking.k8s.io/NetworkPolicy API or network policy V1/GA
+[semantics](https://github.com/kubernetes/kubernetes/pull/39164#issue-197243974) and also network policy beta semantics.
+
 Read more about kube-router's approach to Kubernetes Network Policies:
 - [Enforcing Kubernetes network policies with iptables](https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/)
 

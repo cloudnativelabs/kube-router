@@ -2,6 +2,7 @@ package watchers
 
 import (
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/utils"
@@ -9,11 +10,12 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 	apiextensions "k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	networking "k8s.io/client-go/pkg/apis/networking/v1"
 	cache "k8s.io/client-go/tools/cache"
 )
 
 type NetworkPolicyUpdate struct {
-	NetworkPolicy *apiextensions.NetworkPolicy
+	NetworkPolicy interface{}
 	Op            Operation
 }
 
@@ -33,28 +35,16 @@ type NetworkPolicyUpdatesHandler interface {
 }
 
 func (npw *networkPolicyWatcher) networkPolicyAddEventHandler(obj interface{}) {
-	policy, ok := obj.(*apiextensions.NetworkPolicy)
-	if !ok {
-		return
-	}
-	npw.broadcaster.Notify(&NetworkPolicyUpdate{Op: ADD, NetworkPolicy: policy})
+	npw.broadcaster.Notify(&NetworkPolicyUpdate{Op: ADD, NetworkPolicy: obj})
 }
 
 func (npw *networkPolicyWatcher) networkPolicyDeleteEventHandler(obj interface{}) {
-	policy, ok := obj.(*apiextensions.NetworkPolicy)
-	if !ok {
-		return
-	}
-	npw.broadcaster.Notify(&NetworkPolicyUpdate{Op: REMOVE, NetworkPolicy: policy})
+	npw.broadcaster.Notify(&NetworkPolicyUpdate{Op: REMOVE, NetworkPolicy: obj})
 }
 
 func (npw *networkPolicyWatcher) networkPolicyUpdateEventHandler(oldObj, newObj interface{}) {
-	policy, ok := newObj.(*apiextensions.NetworkPolicy)
-	if !ok {
-		return
-	}
 	if !reflect.DeepEqual(newObj, oldObj) {
-		npw.broadcaster.Notify(&NetworkPolicyUpdate{Op: UPDATE, NetworkPolicy: policy})
+		npw.broadcaster.Notify(&NetworkPolicyUpdate{Op: UPDATE, NetworkPolicy: newObj})
 	}
 }
 
@@ -64,13 +54,8 @@ func (npw *networkPolicyWatcher) RegisterHandler(handler NetworkPolicyUpdatesHan
 	}))
 }
 
-func (npw *networkPolicyWatcher) List() []*apiextensions.NetworkPolicy {
-	obj_list := npw.networkPolicyLister.List()
-	np_instances := make([]*apiextensions.NetworkPolicy, len(obj_list))
-	for i, ins := range obj_list {
-		np_instances[i] = ins.(*apiextensions.NetworkPolicy)
-	}
-	return np_instances
+func (npw *networkPolicyWatcher) List() []interface{} {
+	return npw.networkPolicyLister.List()
 }
 
 func (npw *networkPolicyWatcher) HasSynced() bool {
@@ -91,13 +76,29 @@ func StartNetworkPolicyWatcher(clientset *kubernetes.Clientset, resyncPeriod tim
 	}
 
 	npw.clientset = clientset
+
+	v1NetworkPolicy := true
+	v, _ := clientset.Discovery().ServerVersion()
+	minorVer, _ := strconv.Atoi(v.Minor)
+	if v.Major == "1" && minorVer < 7 {
+		v1NetworkPolicy = false
+	}
+
 	npw.broadcaster = utils.NewBroadcaster()
-	lw := cache.NewListWatchFromClient(clientset.Extensions().RESTClient(), "networkpolicies", metav1.NamespaceAll, fields.Everything())
-	npw.networkPolicyLister, npw.networkPolicyController = cache.NewIndexerInformer(
-		lw,
-		&apiextensions.NetworkPolicy{}, resyncPeriod, eventHandler,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-	)
+	var lw *cache.ListWatch
+	if v1NetworkPolicy {
+		lw = cache.NewListWatchFromClient(clientset.Networking().RESTClient(), "networkpolicies", metav1.NamespaceAll, fields.Everything())
+		npw.networkPolicyLister, npw.networkPolicyController = cache.NewIndexerInformer(
+			lw,	&networking.NetworkPolicy{}, resyncPeriod, eventHandler,
+			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+		)
+	} else {
+		lw = cache.NewListWatchFromClient(clientset.Extensions().RESTClient(), "networkpolicies", metav1.NamespaceAll, fields.Everything())
+		npw.networkPolicyLister, npw.networkPolicyController = cache.NewIndexerInformer(
+			lw, &apiextensions.NetworkPolicy{}, resyncPeriod, eventHandler,
+			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+		)
+	}
 	networkPolicyStopCh = make(chan struct{})
 	go npw.networkPolicyController.Run(networkPolicyStopCh)
 	return &npw, nil
