@@ -12,6 +12,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/golang/glog"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -22,16 +23,19 @@ type KubeRouter struct {
 
 func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error) {
 
-	if len(config.Master) == 0 && len(config.Kubeconfig) == 0 {
-		if _, err := os.Stat("/var/lib/kube-router/kubeconfig"); os.IsNotExist(err) {
-			return nil, errors.New("Either one of --master or --kubeconfig must be specified. Or valid kubeconfig file must exist as /var/lib/kube-router/kubeconfig")
+	var clientconfig *rest.Config
+	var err error
+	// Use out of cluster config if the URL or kubeconfig have been specified. Otherwise use incluster config.
+	if len(config.Master) != 0 || len(config.Kubeconfig) != 0 {
+		clientconfig, err = clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
+		if err != nil {
+			return nil, errors.New("Failed to build configuration from CLI: " + err.Error())
 		}
-		config.Kubeconfig = "/var/lib/kube-router/kubeconfig"
-	}
-
-	clientconfig, err := clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
-	if err != nil {
-		return nil, errors.New("Failed to build configuration from CLI: " + err.Error())
+	} else {
+		clientconfig, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, errors.New("unable to initialize inclusterconfig: " + err.Error())
+		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(clientconfig)
