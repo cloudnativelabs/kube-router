@@ -68,8 +68,10 @@ type podInfo struct {
 }
 
 type ingressRule struct {
-	ports   []protocolAndPort
-	srcPods []podInfo
+	matchAllPorts  bool
+	ports          []protocolAndPort
+	matchAllSource bool
+	srcPods        []podInfo
 }
 
 type protocolAndPort struct {
@@ -304,7 +306,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 
 			// case where only 'ports' details specified but no 'from' details in the ingress rule
 			// so match on all sources, with specified port and protocol
-			if len(ingressRule.srcPods) == 0 && len(ingressRule.ports) != 0 {
+			if ingressRule.matchAllSource && !ingressRule.matchAllPorts {
 				for _, portProtocol := range ingressRule.ports {
 					comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
@@ -322,7 +324,14 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 
 			// case where nether ports nor from details are speified in the ingress rule
 			// so match on all ports, protocol, source IP's
-			if len(ingressRule.srcPods) == 0 && len(ingressRule.ports) == 0 {
+			if ingressRule.matchAllSource && ingressRule.matchAllPorts {
+
+				// if no ports or source information is present in spec this is specical case
+				// where network policy does not allow any traffic
+				if npc.v1NetworkPolicy {
+					continue
+				}
+
 				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
@@ -655,24 +664,39 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 			ingressRule := ingressRule{}
 
 			ingressRule.ports = make([]protocolAndPort, 0)
-			for _, port := range specIngressRule.Ports {
-				protocolAndPort := protocolAndPort{protocol: string(*port.Protocol), port: port.Port.String()}
-				ingressRule.ports = append(ingressRule.ports, protocolAndPort)
+
+			// If this field is empty or missing in the spec, this rule matches all ports
+			if len(specIngressRule.Ports) == 0 {
+				ingressRule.matchAllPorts = true
+			} else {
+				ingressRule.matchAllPorts = false
+				for _, port := range specIngressRule.Ports {
+					protocolAndPort := protocolAndPort{protocol: string(*port.Protocol), port: port.Port.String()}
+					ingressRule.ports = append(ingressRule.ports, protocolAndPort)
+				}
 			}
 
 			ingressRule.srcPods = make([]podInfo, 0)
-			for _, peer := range specIngressRule.From {
-				matchingPods, err := watchers.PodWatcher.ListByNamespaceAndLabels(policy.Namespace, peer.PodSelector.MatchLabels)
-				if err == nil {
-					for _, matchingPod := range matchingPods {
-						ingressRule.srcPods = append(ingressRule.srcPods,
-							podInfo{ip: matchingPod.Status.PodIP,
-								name:      matchingPod.ObjectMeta.Name,
-								namespace: matchingPod.ObjectMeta.Namespace,
-								labels:    matchingPod.ObjectMeta.Labels})
+
+			// If this field is empty or missing in the spec, this rule matches all sources
+			if len(specIngressRule.From) == 0 {
+				ingressRule.matchAllSource = true
+			} else {
+				ingressRule.matchAllSource = false
+				for _, peer := range specIngressRule.From {
+					matchingPods, err := watchers.PodWatcher.ListByNamespaceAndLabels(policy.Namespace, peer.PodSelector.MatchLabels)
+					if err == nil {
+						for _, matchingPod := range matchingPods {
+							ingressRule.srcPods = append(ingressRule.srcPods,
+								podInfo{ip: matchingPod.Status.PodIP,
+									name:      matchingPod.ObjectMeta.Name,
+									namespace: matchingPod.ObjectMeta.Namespace,
+									labels:    matchingPod.ObjectMeta.Labels})
+						}
 					}
 				}
 			}
+
 			newPolicy.ingressRules = append(newPolicy.ingressRules, ingressRule)
 		}
 		NetworkPolicies = append(NetworkPolicies, newPolicy)
