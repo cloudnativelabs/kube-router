@@ -595,9 +595,19 @@ func (npc *NetworkPolicyController) getFirewallEnabledPods(nodeIp string) (*map[
 			podNeedsFirewall := false
 			for _, policy_obj := range watchers.NetworkPolicyWatcher.List() {
 				policy, _ := policy_obj.(*networking.NetworkPolicy)
+
+				// we are only interested in the network policies in same namespace that of pod
 				if policy.Namespace != pod.ObjectMeta.Namespace {
 					continue
 				}
+
+				// An empty podSelector matches all pods in this namespace.
+				if len(policy.Spec.PodSelector.MatchLabels) == 0 || len(policy.Spec.PodSelector.MatchExpressions) == 0 {
+					podNeedsFirewall = true
+					break
+				}
+
+				// if pod matches atleast on network policy labels then pod needs firewall
 				matchingPods, err := watchers.PodWatcher.ListByNamespaceAndLabels(policy.Namespace,
 					policy.Spec.PodSelector.MatchLabels)
 				if err != nil {
