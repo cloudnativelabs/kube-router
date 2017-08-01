@@ -16,7 +16,7 @@ spec:
       containers:
       - name: kube-router
         image: cloudnativelabs/kube-router
-        args: ["--run-router=false", "--run-firewall=true", "--run-service-proxy=false"]
+        args: ["--run-router=false", "--run-firewall=true", "--run-service-proxy=false", "--kubeconfig=/var/lib/kube-router/kubeconfig"]
         securityContext:
           privileged: true
         imagePullPolicy: Always

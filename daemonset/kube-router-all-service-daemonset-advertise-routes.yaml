@@ -20,6 +20,7 @@ spec:
           - "--run-router=true"
           - "--run-firewall=true"
           - "--run-service-proxy=true"
+          - "--kubeconfig=/var/lib/kube-router/kubeconfig"
           - "--advertise-cluster-ip=true"
           - "--cluster-asn=64512"
           - "--peer-router=192.168.1.99"
