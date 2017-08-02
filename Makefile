@@ -119,11 +119,13 @@ else
 	@echo
 endif
 
-gobgp:
+gobgp: vendor/github.com/osrg/gobgp/gobgp
 	$(DOCKER) run -v $(PWD):/pwd golang:alpine \
 	    sh -c ' \
 	    apk add -U git && \
+	    ln -s /pwd/vendor /go/src && \
 	    CGO_ENABLED=0 go get github.com/osrg/gobgp/gobgp && \
+	    gobgp --version && \
 	    cp /go/bin/gobgp /pwd'
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
