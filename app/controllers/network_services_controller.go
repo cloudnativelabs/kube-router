@@ -301,11 +301,12 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	// cleanup stale ipvs service and servers
 	glog.Infof("Cleaning up if any, old ipvs service and servers which are no longer needed")
+	glog.Infof("looping through configured services")
 	ipvsSvcs, err := h.ListServices()
+	glog.Infof("got configured services")
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
-	glog.Infof("looping through configured services")
 	for _, ipvsSvc := range ipvsSvcs {
 		key := generateIpPortId(ipvsSvc.Address.String(), ipvsSvc.Protocol.String(), strconv.Itoa(int(ipvsSvc.Port)))
 		endpoints, ok := activeServiceEndpointMap[key]
@@ -319,6 +320,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		} else {
 			glog.Infof("looping through configured destinations")
 			dsts, err := h.ListDestinations(ipvsSvc)
+			glog.Infof("got configured destinations")
 			if err != nil {
 				glog.Errorf("Failed to get list of servers from ipvs service")
 			}
