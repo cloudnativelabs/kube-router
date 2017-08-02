@@ -256,7 +256,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	podCidrPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
 		PrefixSetName: "podcidrprefixset",
 		PrefixList: []config.Prefix{
-			config.Prefix{
+			{
 				IpPrefix: cidr,
 			},
 		},

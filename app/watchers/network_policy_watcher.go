@@ -89,7 +89,7 @@ func StartNetworkPolicyWatcher(clientset *kubernetes.Clientset, resyncPeriod tim
 	if v1NetworkPolicy {
 		lw = cache.NewListWatchFromClient(clientset.Networking().RESTClient(), "networkpolicies", metav1.NamespaceAll, fields.Everything())
 		npw.networkPolicyLister, npw.networkPolicyController = cache.NewIndexerInformer(
-			lw,	&networking.NetworkPolicy{}, resyncPeriod, eventHandler,
+			lw, &networking.NetworkPolicy{}, resyncPeriod, eventHandler,
 			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 		)
 	} else {
