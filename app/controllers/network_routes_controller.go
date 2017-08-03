@@ -256,12 +256,15 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	podCidrPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
 		PrefixSetName: "podcidrprefixset",
 		PrefixList: []config.Prefix{
-			config.Prefix{
+			{
 				IpPrefix: cidr,
 			},
 		},
 	})
-	nrc.bgpServer.AddDefinedSet(podCidrPrefixSet)
+	err = nrc.bgpServer.ReplaceDefinedSet(podCidrPrefixSet)
+	if err != nil {
+		nrc.bgpServer.AddDefinedSet(podCidrPrefixSet)
+	}
 
 	// creates prefix set to represent all the cluster IP associated with the services
 	clusterIpPrefixList := make([]config.Prefix, 0)
@@ -273,7 +276,10 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		PrefixSetName: "clusteripprefixset",
 		PrefixList:    clusterIpPrefixList,
 	})
-	nrc.bgpServer.AddDefinedSet(clusterIpPrefixSet)
+	err = nrc.bgpServer.ReplaceDefinedSet(clusterIpPrefixSet)
+	if err != nil {
+		nrc.bgpServer.AddDefinedSet(clusterIpPrefixSet)
+	}
 
 	statements := make([]config.Statement, 0)
 
@@ -302,7 +308,10 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			NeighborSetName:  "externalpeerset",
 			NeighborInfoList: externalBgpPeers,
 		})
-		nrc.bgpServer.AddDefinedSet(ns)
+		err = nrc.bgpServer.ReplaceDefinedSet(ns)
+		if err != nil {
+			nrc.bgpServer.AddDefinedSet(ns)
+		}
 		// statement to represent the export policy to permit advertising cluster IP's
 		// only to the global BGP peer or node specific BGP peer
 		statements = append(statements, config.Statement{
