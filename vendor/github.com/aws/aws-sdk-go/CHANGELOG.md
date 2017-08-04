@@ -1,3 +1,102 @@
+Release v1.10.20 (2017-08-01)
+===
+
+### Service Client Updates
+* `service/codedeploy`: Updates service API and documentation
+  * AWS CodeDeploy now supports the use of multiple tag groups in a single deployment group (an intersection of tags) to identify the instances for a deployment. When you create or update a deployment group, use the new ec2TagSet and onPremisesTagSet structures to specify up to three groups of tags. Only instances that are identified by at least one tag in each of the tag groups are included in the deployment group.
+* `service/config`: Updates service API and documentation
+* `service/ec2`: Updates service waiters
+  * Ec2 SpotInstanceRequestFulfilled waiter update
+* `service/elasticloadbalancingv2`: Updates service waiters
+* `service/email`: Updates service API, documentation, paginators, and examples
+  * This update adds information about publishing email open and click events. This update also adds information about publishing email events to Amazon Simple Notification Service (Amazon SNS).
+* `service/pinpoint`: Updates service API and documentation
+  * This release of the Pinpoint SDK enables App management - create, delete, update operations, Raw Content delivery for APNs and GCM campaign messages and From Address override.
+
+Release v1.10.19 (2017-08-01)
+===
+
+### Service Client Updates
+* `aws/endpoints`: Updated Regions and Endpoints metadata.
+* `service/inspector`: Updates service API, documentation, and paginators
+  * Inspector's StopAssessmentRun API has been updated with a new input option - stopAction. This request parameter can be set to either START_EVALUATION or SKIP_EVALUATION. START_EVALUATION (the default value, and the previous behavior) stops the AWS agent data collection and begins the results evaluation for findings generation based on the data collected so far. SKIP_EVALUATION cancels the assessment run immediately, after which no findings are generated.
+* `service/ssm`: Updates service API and documentation
+  * Adds a SendAutomationSignal API to SSM Service. This API is used to send a signal to an automation execution to change the current behavior or status of the execution.
+
+Release v1.10.18 (2017-07-27)
+===
+
+### Service Client Updates
+* `service/ec2`: Updates service API and documentation
+  * The CreateDefaultVPC API enables you to create a new default VPC . You no longer need to contact AWS support, if your default VPC has been deleted.
+* `service/kinesisanalytics`: Updates service API and documentation
+  * Added additional exception types and clarified documentation.
+
+Release v1.10.17 (2017-07-27)
+===
+
+### Service Client Updates
+* `service/dynamodb`: Updates service documentation and examples
+  * Corrected a typo.
+* `service/ec2`: Updates service API and documentation
+  * Amazon EC2 Elastic GPUs allow you to easily attach low-cost graphics acceleration to current generation EC2 instances. With Amazon EC2 Elastic GPUs, you can configure the right amount of graphics acceleration to your particular workload without being constrained by fixed hardware configurations and limited GPU selection.
+* `service/monitoring`: Updates service documentation
+  * This release adds high resolution features to CloudWatch, with support for Custom Metrics down to 1 second and Alarms down to 10 seconds.
+
+Release v1.10.16 (2017-07-26)
+===
+
+### Service Client Updates
+* `service/clouddirectory`: Updates service API and documentation
+  * Cloud Directory adds support for additional batch operations.
+* `service/cloudformation`: Updates service API and documentation
+  * AWS CloudFormation StackSets enables you to manage stacks across multiple accounts and regions.
+
+### SDK Enhancements
+* `aws/signer/v4`: Optimize V4 signer's header duplicate space stripping. [#1417](https://github.com/aws/aws-sdk-go/pull/1417)
+
+Release v1.10.15 (2017-07-24)
+===
+
+### Service Client Updates
+* `service/appstream`: Updates service API, documentation, and waiters
+  * Amazon AppStream 2.0 image builders and fleets can now access applications and network resources that rely on Microsoft Active Directory (AD) for authentication and permissions. This new feature allows you to join your streaming instances to your AD, so you can use your existing AD user management tools.
+* `service/ec2`: Updates service API and documentation
+  * Spot Fleet tagging capability allows customers to automatically tag instances launched by Spot Fleet. You can use this feature to label or distinguish instances created by distinct Spot Fleets. Tagging your EC2 instances also enables you to see instance cost allocation by tag in your AWS bill.
+
+### SDK Bugs
+* `aws/signer/v4`: Fix out of bounds panic in stripExcessSpaces [#1412](https://github.com/aws/aws-sdk-go/pull/1412)
+  * Fixes the out of bands panic in stripExcessSpaces caused by an incorrect calculation of the stripToIdx value. Simplified to code also.
+  * Fixes [#1411](https://github.com/aws/aws-sdk-go/issues/1411)
+Release v1.10.14 (2017-07-20)
+===
+
+### Service Client Updates
+* `service/elasticmapreduce`: Updates service API and documentation
+  * Amazon EMR now includes the ability to use a custom Amazon Linux AMI and adjustable root volume size when launching a cluster.
+
+Release v1.10.13 (2017-07-19)
+===
+
+### Service Client Updates
+* `service/budgets`: Updates service API and documentation
+  * Update budget Management API's to list/create/update RI_UTILIZATION type budget. Update budget Management API's to support DAILY timeUnit for RI_UTILIZATION type budget.
+
+### SDK Enhancements
+* `service/s3`:  Use interfaces assertions instead of ValuesAtPath for S3 field lookups. [#1401](https://github.com/aws/aws-sdk-go/pull/1401)
+  * Improves the performance across the board for all S3 API calls by removing the usage of `ValuesAtPath` being used for every S3 API call.
+
+### SDK Bugs
+* `aws/request`: waiter test bug
+  * waiters_test.go file would sometimes fail due to travis hiccups. This occurs because a test would sometimes fail the cancel check and succeed the timeout. However, the timeout check should never occur in that test. This fix introduces a new field that dictates how waiters will sleep.
+Release v1.10.12 (2017-07-17)
+===
+
+### Service Client Updates
+* `service/cognito-idp`: Updates service API and documentation
+* `service/lambda`: Updates service API and documentation
+  * Lambda@Edge lets you run code closer to your end users without provisioning or managing servers. With Lambda@Edge, your code runs in AWS edge locations, allowing you to respond to your end users at the lowest latency. Your code is triggered by Amazon CloudFront events, such as requests to and from origin servers and viewers, and it is ready to execute at every AWS edge location whenever a request for content is received. You just upload your Node.js code to AWS Lambda and Lambda takes care of everything required to run and scale your code with high availability. You only pay for the compute time you consume - there is no charge when your code is not running.
+
 Release v1.10.11 (2017-07-14)
 ===
 

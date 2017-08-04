@@ -2,6 +2,7 @@ package tsm1
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -36,10 +37,11 @@ const (
 	// walEncodeBufSize is the size of the wal entry encoding buffer
 	walEncodeBufSize = 4 * 1024 * 1024
 
-	float64EntryType = 1
-	integerEntryType = 2
-	booleanEntryType = 3
-	stringEntryType  = 4
+	float64EntryType  = 1
+	integerEntryType  = 2
+	booleanEntryType  = 3
+	stringEntryType   = 4
+	unsignedEntryType = 5
 )
 
 // WalEntryType is a byte written to a wal segment file that indicates what the following compressed block contains.
@@ -478,7 +480,7 @@ func (l *WAL) CloseSegment() error {
 }
 
 // Delete deletes the given keys, returning the segment ID for the operation.
-func (l *WAL) Delete(keys []string) (int, error) {
+func (l *WAL) Delete(keys [][]byte) (int, error) {
 	if len(keys) == 0 {
 		return 0, nil
 	}
@@ -495,7 +497,7 @@ func (l *WAL) Delete(keys []string) (int, error) {
 
 // DeleteRange deletes the given keys within the given time range,
 // returning the segment ID for the operation.
-func (l *WAL) DeleteRange(keys []string, min, max int64) (int, error) {
+func (l *WAL) DeleteRange(keys [][]byte, min, max int64) (int, error) {
 	if len(keys) == 0 {
 		return 0, nil
 	}
@@ -604,7 +606,7 @@ func (w *WriteWALEntry) MarshalSize() int {
 		encLen += 8 * len(v) // timestamps (8)
 
 		switch v[0].(type) {
-		case FloatValue, IntegerValue:
+		case FloatValue, IntegerValue, UnsignedValue:
 			encLen += 8 * len(v)
 		case BooleanValue:
 			encLen += 1 * len(v)
@@ -667,6 +669,8 @@ func (w *WriteWALEntry) Encode(dst []byte) ([]byte, error) {
 			curType = float64EntryType
 		case IntegerValue:
 			curType = integerEntryType
+		case UnsignedValue:
+			curType = unsignedEntryType
 		case BooleanValue:
 			curType = booleanEntryType
 		case StringValue:
@@ -697,6 +701,12 @@ func (w *WriteWALEntry) Encode(dst []byte) ([]byte, error) {
 				n += 8
 			case IntegerValue:
 				if curType != integerEntryType {
+					return nil, fmt.Errorf("incorrect value found in %T slice: %T", v[0].Value(), vv)
+				}
+				binary.BigEndian.PutUint64(dst[n:n+8], uint64(vv.value))
+				n += 8
+			case UnsignedValue:
+				if curType != unsignedEntryType {
 					return nil, fmt.Errorf("incorrect value found in %T slice: %T", v[0].Value(), vv)
 				}
 				binary.BigEndian.PutUint64(dst[n:n+8], uint64(vv.value))
@@ -792,6 +802,21 @@ func (w *WriteWALEntry) UnmarshalBinary(b []byte) error {
 			}
 			w.Values[k] = values
 
+		case unsignedEntryType:
+			if i+16*nvals > len(b) {
+				return ErrWALCorrupt
+			}
+
+			values := make([]Value, 0, nvals)
+			for j := 0; j < nvals; j++ {
+				un := int64(binary.BigEndian.Uint64(b[i : i+8]))
+				i += 8
+				v := binary.BigEndian.Uint64(b[i : i+8])
+				i += 8
+				values = append(values, NewUnsignedValue(un, v))
+			}
+			w.Values[k] = values
+
 		case booleanEntryType:
 			if i+9*nvals > len(b) {
 				return ErrWALCorrupt
@@ -853,7 +878,7 @@ func (w *WriteWALEntry) Type() WalEntryType {
 
 // DeleteWALEntry represents the deletion of multiple series.
 type DeleteWALEntry struct {
-	Keys []string
+	Keys [][]byte
 	sz   int
 }
 
@@ -865,7 +890,7 @@ func (w *DeleteWALEntry) MarshalBinary() ([]byte, error) {
 
 // UnmarshalBinary deserializes the byte slice into w.
 func (w *DeleteWALEntry) UnmarshalBinary(b []byte) error {
-	w.Keys = strings.Split(string(b), "\n")
+	w.Keys = bytes.Split(b, []byte("\n"))
 	return nil
 }
 
@@ -910,7 +935,7 @@ func (w *DeleteWALEntry) Type() WalEntryType {
 
 // DeleteRangeWALEntry represents the deletion of multiple series.
 type DeleteRangeWALEntry struct {
-	Keys     []string
+	Keys     [][]byte
 	Min, Max int64
 	sz       int
 }
@@ -941,7 +966,7 @@ func (w *DeleteRangeWALEntry) UnmarshalBinary(b []byte) error {
 		if i+sz > len(b) {
 			return ErrWALCorrupt
 		}
-		w.Keys = append(w.Keys, string(b[i:i+sz]))
+		w.Keys = append(w.Keys, b[i:i+sz])
 		i += sz
 	}
 	return nil

@@ -7,13 +7,17 @@ import:
 - package: github.com/golang/glog
   version: master
 - package: github.com/janeczku/go-ipset
+  version: master
   repo: git@github.com:/bzub/go-ipset
+  vcs: git
+  subpackages:
+  - ipset
+- package: github.com/docker/libnetwork
+  repo: git@github.com:/cloudnativelabs/libnetwork
   vcs: git
   version: master
   subpackages:
-  - ipset
-- package: github.com/mqliang/libipvs
-  version: master
+  - ipvs
 - package: github.com/osrg/gobgp
   version: master
   subpackages:
@@ -27,7 +31,6 @@ import:
 - package: github.com/vishvananda/netlink
   version: master
 - package: k8s.io/apimachinery
-  # version: 85ace5365f33b16fc735c866a12e3c765b9700f2
   version: abe34e4f5b4413c282a83011892cbeea5b32223b
   subpackages:
   - pkg/apis/meta/v1
@@ -49,14 +52,12 @@ import:
 - package: github.com/containernetworking/cni
   version: 0.5.2
 - package: github.com/docker/distribution
+  version: logrus_case_dep_update
   repo: git@github.com:/bzub/distribution
   vcs: git
-  version: logrus_case_dep_update
 - package: github.com/sirupsen/logrus
   version: master
-- package: github.com/hkwi/nlgo
-  version: master
-- package: github.com/aws/aws-sdk-go/
+- package: github.com/aws/aws-sdk-go
   version: ^v1.8.36
 - package: github.com/prometheus/client_golang
   version: ~0.8.0

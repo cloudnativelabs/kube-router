@@ -24,32 +24,67 @@ import (
 	"sort"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
+	uuid "github.com/satori/go.uuid"
+
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
-	"github.com/satori/go.uuid"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
 	DEFAULT_LOCAL_PREF = 100
 )
 
-type Bitmap []uint64
-
-func (b Bitmap) Flag(i uint) {
-	b[i/64] |= 1 << uint(i%64)
+type Bitmap struct {
+	bitmap []uint64
 }
 
-func (b Bitmap) Unflag(i uint) {
-	b[i/64] &^= 1 << uint(i%64)
+func (b *Bitmap) Flag(i uint) {
+	b.bitmap[i/64] |= 1 << uint(i%64)
 }
 
-func (b Bitmap) GetFlag(i uint) bool {
-	return b[i/64]&(1<<uint(i%64)) > 0
+func (b *Bitmap) Unflag(i uint) {
+	b.bitmap[i/64] &^= 1 << uint(i%64)
 }
 
-func NewBitmap(size int) Bitmap {
-	return Bitmap(make([]uint64, (size+64-1)/64))
+func (b *Bitmap) GetFlag(i uint) bool {
+	return b.bitmap[i/64]&(1<<uint(i%64)) > 0
+}
+
+func (b *Bitmap) FindandSetZeroBit() (uint, error) {
+	for i := 0; i < len(b.bitmap); i++ {
+		if b.bitmap[i] == math.MaxUint64 {
+			continue
+		}
+		// replace this with TrailingZero64() when gobgp drops go 1.8 support.
+		for j := 0; j < 64; j++ {
+			v := ^b.bitmap[i]
+			if v&(1<<uint64(j)) > 0 {
+				r := i*64 + j
+				b.Flag(uint(r))
+				return uint(r), nil
+			}
+		}
+	}
+	return 0, fmt.Errorf("no space")
+}
+
+func (b *Bitmap) Expand() {
+	old := b.bitmap
+	new := make([]uint64, len(old)+1)
+	for i := 0; i < len(old); i++ {
+		new[i] = old[i]
+	}
+	b.bitmap = new
+}
+
+func NewBitmap(size int) *Bitmap {
+	b := &Bitmap{}
+	if size != 0 {
+		b.bitmap = make([]uint64, (size+64-1)/64)
+	}
+	return b
 }
 
 type originInfo struct {
@@ -57,12 +92,48 @@ type originInfo struct {
 	source             *PeerInfo
 	timestamp          time.Time
 	noImplicitWithdraw bool
-	validation         config.RpkiValidationResultType
+	validation         *Validation
 	isFromExternal     bool
 	key                string
 	uuid               uuid.UUID
 	eor                bool
 	stale              bool
+}
+
+type RpkiValidationReasonType string
+
+const (
+	RPKI_VALIDATION_REASON_TYPE_NONE   RpkiValidationReasonType = "none"
+	RPKI_VALIDATION_REASON_TYPE_AS     RpkiValidationReasonType = "as"
+	RPKI_VALIDATION_REASON_TYPE_LENGTH RpkiValidationReasonType = "length"
+)
+
+var RpkiValidationReasonTypeToIntMap = map[RpkiValidationReasonType]int{
+	RPKI_VALIDATION_REASON_TYPE_NONE:   0,
+	RPKI_VALIDATION_REASON_TYPE_AS:     1,
+	RPKI_VALIDATION_REASON_TYPE_LENGTH: 2,
+}
+
+func (v RpkiValidationReasonType) ToInt() int {
+	i, ok := RpkiValidationReasonTypeToIntMap[v]
+	if !ok {
+		return -1
+	}
+	return i
+}
+
+var IntToRpkiValidationReasonTypeMap = map[int]RpkiValidationReasonType{
+	0: RPKI_VALIDATION_REASON_TYPE_NONE,
+	1: RPKI_VALIDATION_REASON_TYPE_AS,
+	2: RPKI_VALIDATION_REASON_TYPE_LENGTH,
+}
+
+type Validation struct {
+	Status          config.RpkiValidationResultType
+	Reason          RpkiValidationReasonType
+	Matched         []*ROA
+	UnmatchedAs     []*ROA
+	UnmatchedLength []*ROA
 }
 
 type FlowSpecComponents []bgp.FlowSpecComponentInterface
@@ -173,6 +244,14 @@ func UpdatePathAttrs(global *config.Global, peer *config.Neighbor, info *PeerInf
 		if _, y := bgp.PathAttrFlags[a.GetType()]; !y {
 			if a.GetFlags()&bgp.BGP_ATTR_FLAG_TRANSITIVE == 0 {
 				path.delPathAttr(a.GetType())
+			}
+		} else {
+			switch a.GetType() {
+			case bgp.BGP_ATTR_TYPE_CLUSTER_LIST, bgp.BGP_ATTR_TYPE_ORIGINATOR_ID:
+				if !(peer.State.PeerType == config.PEER_TYPE_INTERNAL && peer.RouteReflector.Config.RouteReflectorClient) {
+					// send these attributes to only rr clients
+					path.delPathAttr(a.GetType())
+				}
 			}
 		}
 	}
@@ -306,12 +385,20 @@ func (path *Path) NoImplicitWithdraw() bool {
 	return path.OriginInfo().noImplicitWithdraw
 }
 
-func (path *Path) Validation() config.RpkiValidationResultType {
+func (path *Path) Validation() *Validation {
 	return path.OriginInfo().validation
 }
 
-func (path *Path) SetValidation(r config.RpkiValidationResultType) {
-	path.OriginInfo().validation = r
+func (path *Path) ValidationStatus() config.RpkiValidationResultType {
+	if v := path.OriginInfo().validation; v != nil {
+		return v.Status
+	} else {
+		return config.RPKI_VALIDATION_RESULT_TYPE_NONE
+	}
+}
+
+func (path *Path) SetValidation(v *Validation) {
+	path.OriginInfo().validation = v
 }
 
 func (path *Path) IsFromExternal() bool {
@@ -977,7 +1064,7 @@ func (path *Path) MarshalJSON() ([]byte, error) {
 		PathAttrs:  path.GetPathAttrs(),
 		Age:        path.GetTimestamp().Unix(),
 		Withdrawal: path.IsWithdraw,
-		Validation: string(path.Validation()),
+		Validation: string(path.ValidationStatus()),
 		SourceID:   path.GetSource().ID,
 		NeighborIP: path.GetSource().Address,
 		Stale:      path.IsStale(),

@@ -26,13 +26,14 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/server"
 	"github.com/osrg/gobgp/table"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 )
 
 type Server struct {
@@ -345,6 +346,18 @@ func (s *Server) GetNeighbor(ctx context.Context, arg *GetNeighborRequest) (*Get
 	return &GetNeighborResponse{Peers: p}, nil
 }
 
+func NewValidationFromTableStruct(v *table.Validation) *RPKIValidation {
+	if v == nil {
+		return &RPKIValidation{}
+	}
+	return &RPKIValidation{
+		Reason:          RPKIValidation_Reason(v.Reason.ToInt()),
+		Matched:         NewRoaListFromTableStructList(v.Matched),
+		UnmatchedAs:     NewRoaListFromTableStructList(v.UnmatchedAs),
+		UnmatchedLength: NewRoaListFromTableStructList(v.UnmatchedLength),
+	}
+}
+
 func ToPathApi(path *table.Path) *Path {
 	nlri := path.GetNlri()
 	n, _ := nlri.Serialize()
@@ -362,7 +375,8 @@ func ToPathApi(path *table.Path) *Path {
 		Pattrs:             pattrs,
 		Age:                path.GetTimestamp().Unix(),
 		IsWithdraw:         path.IsWithdraw,
-		Validation:         int32(path.Validation().ToInt()),
+		Validation:         int32(path.ValidationStatus().ToInt()),
+		ValidationDetail:   NewValidationFromTableStruct(path.Validation()),
 		Filtered:           path.Filtered("") == table.POLICY_DIRECTION_IN,
 		Family:             family,
 		Stale:              path.IsStale(),
@@ -371,6 +385,7 @@ func ToPathApi(path *table.Path) *Path {
 		Uuid:               path.UUID().Bytes(),
 		IsNexthopInvalid:   path.IsNexthopInvalid,
 		Identifier:         nlri.PathIdentifier(),
+		LocalIdentifier:    nlri.PathLocalIdentifier(),
 	}
 	if s := path.GetSource(); s != nil {
 		p.SourceAsn = s.AS
@@ -636,6 +651,7 @@ func (s *Server) api2PathList(resource Resource, ApiPathList []*Path) ([]*table.
 			if err != nil {
 				return nil, err
 			}
+			nlri.SetPathIdentifier(path.Identifier)
 		}
 
 		for _, attr := range path.Pattrs {
@@ -860,21 +876,7 @@ func (s *Server) GetRoa(ctx context.Context, arg *GetRoaRequest) (*GetRoaRespons
 	if err != nil {
 		return nil, err
 	}
-	l := make([]*Roa, 0, len(roas))
-	for _, r := range roas {
-		host, port, _ := net.SplitHostPort(r.Src)
-		l = append(l, &Roa{
-			As:        r.AS,
-			Maxlen:    uint32(r.MaxLen),
-			Prefixlen: uint32(r.Prefix.Length),
-			Prefix:    r.Prefix.Prefix.String(),
-			Conf: &RPKIConf{
-				Address:    host,
-				RemotePort: port,
-			},
-		})
-	}
-	return &GetRoaResponse{Roas: l}, nil
+	return &GetRoaResponse{Roas: NewRoaListFromTableStructList(roas)}, nil
 }
 
 func (s *Server) EnableZebra(ctx context.Context, arg *EnableZebraRequest) (*EnableZebraResponse, error) {
@@ -2061,6 +2063,24 @@ func NewPolicyFromApiStruct(a *Policy) (*table.Policy, error) {
 		Name:       a.Name,
 		Statements: stmts,
 	}, nil
+}
+
+func NewRoaListFromTableStructList(origin []*table.ROA) []*Roa {
+	l := make([]*Roa, 0)
+	for _, r := range origin {
+		host, port, _ := net.SplitHostPort(r.Src)
+		l = append(l, &Roa{
+			As:        r.AS,
+			Maxlen:    uint32(r.MaxLen),
+			Prefixlen: uint32(r.Prefix.Length),
+			Prefix:    r.Prefix.Prefix.String(),
+			Conf: &RPKIConf{
+				Address:    host,
+				RemotePort: port,
+			},
+		})
+	}
+	return l
 }
 
 func (s *Server) GetPolicy(ctx context.Context, arg *GetPolicyRequest) (*GetPolicyResponse, error) {

@@ -290,6 +290,7 @@ func (e *Engine) enableSnapshotCompactions() {
 		return
 	}
 
+	e.Compactor.EnableSnapshots()
 	quit := make(chan struct{})
 	e.snapDone = quit
 	e.snapWG.Add(1)
@@ -304,6 +305,7 @@ func (e *Engine) disableSnapshotCompactions() {
 	if e.snapDone != nil {
 		close(e.snapDone)
 		e.snapDone = nil
+		e.Compactor.DisableSnapshots()
 	}
 
 	e.mu.Unlock()
@@ -344,6 +346,19 @@ func (e *Engine) HasTagKey(name, key []byte) (bool, error) {
 
 func (e *Engine) MeasurementTagKeysByExpr(name []byte, expr influxql.Expr) (map[string]struct{}, error) {
 	return e.index.MeasurementTagKeysByExpr(name, expr)
+}
+
+// MeasurementTagKeyValuesByExpr returns a set of tag values filtered by an expression.
+//
+// MeasurementTagKeyValuesByExpr relies on the provided tag keys being sorted.
+// The caller can indicate the tag keys have been sorted by setting the
+// keysSorted argument appropriately. Tag values are returned in a slice that
+// is indexible according to the sorted order of the tag keys, e.g., the values
+// for the earliest tag k will be available in index 0 of the returned values
+// slice.
+//
+func (e *Engine) MeasurementTagKeyValuesByExpr(name []byte, keys []string, expr influxql.Expr, keysSorted bool) ([][]string, error) {
+	return e.index.MeasurementTagKeyValuesByExpr(name, keys, expr, keysSorted)
 }
 
 func (e *Engine) ForEachMeasurementTagKey(name []byte, fn func(key []byte) error) error {
@@ -532,13 +547,13 @@ func (e *Engine) LoadMetadataIndex(shardID uint64, index tsdb.Index) error {
 	}
 
 	// load metadata from the Cache
-	if err := e.Cache.ApplyEntryFn(func(key string, entry *entry) error {
+	if err := e.Cache.ApplyEntryFn(func(key []byte, entry *entry) error {
 		fieldType, err := entry.values.InfluxQLType()
 		if err != nil {
 			e.logger.Info(fmt.Sprintf("error getting the data type of values for key %s: %s", key, err.Error()))
 		}
 
-		if err := e.addToIndexFromKey([]byte(key), fieldType); err != nil {
+		if err := e.addToIndexFromKey(key, fieldType); err != nil {
 			return err
 		}
 		return nil
@@ -848,6 +863,12 @@ func (e *Engine) WritePoints(points []models.Point) error {
 					return err
 				}
 				v = NewIntegerValue(t, iv)
+			case models.Unsigned:
+				iv, err := iter.UnsignedValue()
+				if err != nil {
+					return err
+				}
+				v = NewUnsignedValue(t, iv)
 			case models.String:
 				v = NewStringValue(t, iter.StringValue())
 			case models.Boolean:
@@ -930,7 +951,7 @@ func (e *Engine) DeleteSeriesRange(seriesKeys [][]byte, min, max int64) error {
 	defer e.enableLevelCompactions(true)
 
 	tempKeys := seriesKeys[:]
-	deleteKeys := make([]string, 0, len(seriesKeys))
+	deleteKeys := make([][]byte, 0, len(seriesKeys))
 	// go through the keys in the file store
 	if err := e.FileStore.WalkKeys(func(k []byte, _ byte) error {
 		seriesKey, _ := SeriesAndFieldFromCompositeKey(k)
@@ -943,7 +964,7 @@ func (e *Engine) DeleteSeriesRange(seriesKeys [][]byte, min, max int64) error {
 
 		// Keys match, add the full series key to delete.
 		if len(tempKeys) > 0 && bytes.Equal(tempKeys[0], seriesKey) {
-			deleteKeys = append(deleteKeys, string(k))
+			deleteKeys = append(deleteKeys, k)
 		}
 
 		return nil
@@ -959,7 +980,7 @@ func (e *Engine) DeleteSeriesRange(seriesKeys [][]byte, min, max int64) error {
 	walKeys := deleteKeys[:0]
 
 	// ApplySerialEntryFn cannot return an error in this invocation.
-	_ = e.Cache.ApplyEntryFn(func(k string, _ *entry) error {
+	_ = e.Cache.ApplyEntryFn(func(k []byte, _ *entry) error {
 		seriesKey, _ := SeriesAndFieldFromCompositeKey([]byte(k))
 
 		// Cache does not walk keys in sorted order, so search the sorted
@@ -1269,14 +1290,14 @@ func (e *Engine) onFileStoreReplace(newFiles []TSMFile) {
 	}
 
 	// load metadata from the Cache
-	e.Cache.ApplyEntryFn(func(key string, entry *entry) error {
+	e.Cache.ApplyEntryFn(func(key []byte, entry *entry) error {
 		fieldType, err := entry.values.InfluxQLType()
 		if err != nil {
 			e.logger.Error(fmt.Sprintf("refresh index (3): %v", err))
 			return nil
 		}
 
-		if err := e.addToIndexFromKey([]byte(key), fieldType); err != nil {
+		if err := e.addToIndexFromKey(key, fieldType); err != nil {
 			e.logger.Error(fmt.Sprintf("refresh index (4): %v", err))
 			return nil
 		}
@@ -1524,7 +1545,7 @@ func (e *Engine) cleanupTempTSMFiles() error {
 }
 
 // KeyCursor returns a KeyCursor for the given key starting at time t.
-func (e *Engine) KeyCursor(key string, t int64, ascending bool) *KeyCursor {
+func (e *Engine) KeyCursor(key []byte, t int64, ascending bool) *KeyCursor {
 	return e.FileStore.KeyCursor(key, t, ascending)
 }
 
@@ -1844,16 +1865,19 @@ func (e *Engine) createVarRefSeriesIterator(ref *influxql.VarRef, name string, s
 				// If a field was requested, use a nil cursor of the requested type.
 				switch ref.Type {
 				case influxql.Float, influxql.AnyField:
-					aux[i] = &floatNilLiteralCursor{}
+					aux[i] = nilFloatLiteralValueCursor
 					continue
 				case influxql.Integer:
-					aux[i] = &integerNilLiteralCursor{}
+					aux[i] = nilIntegerLiteralValueCursor
+					continue
+				case influxql.Unsigned:
+					aux[i] = nilUnsignedLiteralValueCursor
 					continue
 				case influxql.String:
-					aux[i] = &stringNilLiteralCursor{}
+					aux[i] = nilStringLiteralValueCursor
 					continue
 				case influxql.Boolean:
-					aux[i] = &booleanNilLiteralCursor{}
+					aux[i] = nilBooleanLiteralValueCursor
 					continue
 				}
 			}
@@ -1861,9 +1885,9 @@ func (e *Engine) createVarRefSeriesIterator(ref *influxql.VarRef, name string, s
 			// If field doesn't exist, use the tag value.
 			if v := tags.Value(ref.Val); v == "" {
 				// However, if the tag value is blank then return a null.
-				aux[i] = &stringNilLiteralCursor{}
+				aux[i] = nilStringLiteralValueCursor
 			} else {
-				aux[i] = &stringLiteralCursor{value: v}
+				aux[i] = &literalValueCursor{value: v}
 			}
 		}
 	}
@@ -1885,16 +1909,19 @@ func (e *Engine) createVarRefSeriesIterator(ref *influxql.VarRef, name string, s
 				// If a field was requested, use a nil cursor of the requested type.
 				switch ref.Type {
 				case influxql.Float, influxql.AnyField:
-					conds[i] = &floatNilLiteralCursor{}
+					conds[i] = nilFloatLiteralValueCursor
 					continue
 				case influxql.Integer:
-					conds[i] = &integerNilLiteralCursor{}
+					conds[i] = nilIntegerLiteralValueCursor
+					continue
+				case influxql.Unsigned:
+					conds[i] = nilUnsignedLiteralValueCursor
 					continue
 				case influxql.String:
-					conds[i] = &stringNilLiteralCursor{}
+					conds[i] = nilStringLiteralValueCursor
 					continue
 				case influxql.Boolean:
-					conds[i] = &booleanNilLiteralCursor{}
+					conds[i] = nilBooleanLiteralValueCursor
 					continue
 				}
 			}
@@ -1902,9 +1929,9 @@ func (e *Engine) createVarRefSeriesIterator(ref *influxql.VarRef, name string, s
 			// If field doesn't exist, use the tag value.
 			if v := tags.Value(ref.Val); v == "" {
 				// However, if the tag value is blank then return a null.
-				conds[i] = &stringNilLiteralCursor{}
+				conds[i] = nilStringLiteralValueCursor
 			} else {
-				conds[i] = &stringLiteralCursor{value: v}
+				conds[i] = &literalValueCursor{value: v}
 			}
 		}
 	}
@@ -1932,6 +1959,8 @@ func (e *Engine) createVarRefSeriesIterator(ref *influxql.VarRef, name string, s
 		return newFloatIterator(name, tags, itrOpt, cur, aux, conds, condNames), nil
 	case integerCursor:
 		return newIntegerIterator(name, tags, itrOpt, cur, aux, conds, condNames), nil
+	case unsignedCursor:
+		return newUnsignedIterator(name, tags, itrOpt, cur, aux, conds, condNames), nil
 	case stringCursor:
 		return newStringIterator(name, tags, itrOpt, cur, aux, conds, condNames), nil
 	case booleanCursor:
@@ -1964,12 +1993,27 @@ func (e *Engine) buildCursor(measurement, seriesKey string, ref *influxql.VarRef
 			case influxql.Integer:
 				cur := e.buildIntegerCursor(measurement, seriesKey, ref.Val, opt)
 				return &floatCastIntegerCursor{cursor: cur}
+			case influxql.Unsigned:
+				cur := e.buildUnsignedCursor(measurement, seriesKey, ref.Val, opt)
+				return &floatCastUnsignedCursor{cursor: cur}
 			}
 		case influxql.Integer:
 			switch f.Type {
 			case influxql.Float:
 				cur := e.buildFloatCursor(measurement, seriesKey, ref.Val, opt)
 				return &integerCastFloatCursor{cursor: cur}
+			case influxql.Unsigned:
+				cur := e.buildUnsignedCursor(measurement, seriesKey, ref.Val, opt)
+				return &integerCastUnsignedCursor{cursor: cur}
+			}
+		case influxql.Unsigned:
+			switch f.Type {
+			case influxql.Float:
+				cur := e.buildFloatCursor(measurement, seriesKey, ref.Val, opt)
+				return &unsignedCastFloatCursor{cursor: cur}
+			case influxql.Integer:
+				cur := e.buildIntegerCursor(measurement, seriesKey, ref.Val, opt)
+				return &unsignedCastIntegerCursor{cursor: cur}
 			}
 		}
 		return nil
@@ -1981,6 +2025,8 @@ func (e *Engine) buildCursor(measurement, seriesKey string, ref *influxql.VarRef
 		return e.buildFloatCursor(measurement, seriesKey, ref.Val, opt)
 	case influxql.Integer:
 		return e.buildIntegerCursor(measurement, seriesKey, ref.Val, opt)
+	case influxql.Unsigned:
+		return e.buildUnsignedCursor(measurement, seriesKey, ref.Val, opt)
 	case influxql.String:
 		return e.buildStringCursor(measurement, seriesKey, ref.Val, opt)
 	case influxql.Boolean:
@@ -1992,29 +2038,41 @@ func (e *Engine) buildCursor(measurement, seriesKey string, ref *influxql.VarRef
 
 // buildFloatCursor creates a cursor for a float field.
 func (e *Engine) buildFloatCursor(measurement, seriesKey, field string, opt influxql.IteratorOptions) floatCursor {
-	cacheValues := e.Cache.Values(SeriesFieldKey(seriesKey, field))
-	keyCursor := e.KeyCursor(SeriesFieldKey(seriesKey, field), opt.SeekTime(), opt.Ascending)
+	key := SeriesFieldKeyBytes(seriesKey, field)
+	cacheValues := e.Cache.Values(key)
+	keyCursor := e.KeyCursor(key, opt.SeekTime(), opt.Ascending)
 	return newFloatCursor(opt.SeekTime(), opt.Ascending, cacheValues, keyCursor)
 }
 
 // buildIntegerCursor creates a cursor for an integer field.
 func (e *Engine) buildIntegerCursor(measurement, seriesKey, field string, opt influxql.IteratorOptions) integerCursor {
-	cacheValues := e.Cache.Values(SeriesFieldKey(seriesKey, field))
-	keyCursor := e.KeyCursor(SeriesFieldKey(seriesKey, field), opt.SeekTime(), opt.Ascending)
+	key := SeriesFieldKeyBytes(seriesKey, field)
+	cacheValues := e.Cache.Values(key)
+	keyCursor := e.KeyCursor(key, opt.SeekTime(), opt.Ascending)
 	return newIntegerCursor(opt.SeekTime(), opt.Ascending, cacheValues, keyCursor)
+}
+
+// buildUnsignedCursor creates a cursor for an unsigned field.
+func (e *Engine) buildUnsignedCursor(measurement, seriesKey, field string, opt influxql.IteratorOptions) unsignedCursor {
+	key := SeriesFieldKeyBytes(seriesKey, field)
+	cacheValues := e.Cache.Values(key)
+	keyCursor := e.KeyCursor(key, opt.SeekTime(), opt.Ascending)
+	return newUnsignedCursor(opt.SeekTime(), opt.Ascending, cacheValues, keyCursor)
 }
 
 // buildStringCursor creates a cursor for a string field.
 func (e *Engine) buildStringCursor(measurement, seriesKey, field string, opt influxql.IteratorOptions) stringCursor {
-	cacheValues := e.Cache.Values(SeriesFieldKey(seriesKey, field))
-	keyCursor := e.KeyCursor(SeriesFieldKey(seriesKey, field), opt.SeekTime(), opt.Ascending)
+	key := SeriesFieldKeyBytes(seriesKey, field)
+	cacheValues := e.Cache.Values(key)
+	keyCursor := e.KeyCursor(key, opt.SeekTime(), opt.Ascending)
 	return newStringCursor(opt.SeekTime(), opt.Ascending, cacheValues, keyCursor)
 }
 
 // buildBooleanCursor creates a cursor for a boolean field.
 func (e *Engine) buildBooleanCursor(measurement, seriesKey, field string, opt influxql.IteratorOptions) booleanCursor {
-	cacheValues := e.Cache.Values(SeriesFieldKey(seriesKey, field))
-	keyCursor := e.KeyCursor(SeriesFieldKey(seriesKey, field), opt.SeekTime(), opt.Ascending)
+	key := SeriesFieldKeyBytes(seriesKey, field)
+	cacheValues := e.Cache.Values(key)
+	keyCursor := e.KeyCursor(key, opt.SeekTime(), opt.Ascending)
 	return newBooleanCursor(opt.SeekTime(), opt.Ascending, cacheValues, keyCursor)
 }
 
@@ -2027,12 +2085,22 @@ func SeriesFieldKey(seriesKey, field string) string {
 	return seriesKey + keyFieldSeparator + field
 }
 
+func SeriesFieldKeyBytes(seriesKey, field string) []byte {
+	b := make([]byte, len(seriesKey)+len(keyFieldSeparator)+len(field))
+	i := copy(b[:], seriesKey)
+	i += copy(b[i:], keyFieldSeparatorBytes)
+	copy(b[i:], field)
+	return b
+}
+
 func tsmFieldTypeToInfluxQLDataType(typ byte) (influxql.DataType, error) {
 	switch typ {
 	case BlockFloat64:
 		return influxql.Float, nil
 	case BlockInteger:
 		return influxql.Integer, nil
+	case BlockUnsigned:
+		return influxql.Unsigned, nil
 	case BlockBoolean:
 		return influxql.Boolean, nil
 	case BlockString:

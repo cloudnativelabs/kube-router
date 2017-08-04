@@ -713,7 +713,16 @@ func ParsePath(rf bgp.RouteFamily, args []string) (*table.Path, error) {
 			nlri = bgp.NewIPv6AddrPrefix(uint8(ones), ip.String())
 		}
 
-		extcomms = args[1:]
+		if len(args) > 2 && args[1] == "identifier" {
+			if id, err := strconv.Atoi(args[2]); err != nil {
+				return nil, fmt.Errorf("invalid format")
+			} else {
+				nlri.SetPathIdentifier(uint32(id))
+			}
+			extcomms = args[3:]
+		} else {
+			extcomms = args[1:]
+		}
 
 	case bgp.RF_IPv4_VPN, bgp.RF_IPv6_VPN:
 		if len(args) < 5 || args[1] != "label" || args[3] != "rd" {
@@ -870,8 +879,8 @@ func modPath(resource string, name, modtype string, args []string) error {
 		}
 		etherTypes := strings.Join(ss, ", ")
 		helpErrMap := map[bgp.RouteFamily]error{}
-		helpErrMap[bgp.RF_IPv4_UC] = fmt.Errorf("usage: %s rib %s <PREFIX> [origin { igp | egp | incomplete }] [nexthop <ADDRESS>] [med <VALUE>] [local-pref <VALUE>] [community <VALUE>] [aigp metric <METRIC>] [large-community <VALUE> ] -a ipv4", cmdstr, modtype)
-		helpErrMap[bgp.RF_IPv6_UC] = fmt.Errorf("usage: %s rib %s <PREFIX> [origin { igp | egp | incomplete }] [nexthop <ADDRESS>] [med <VALUE>] [local-pref <VALUE>] [community <VALUE>] [aigp metric <METRIC>] [large-community <VALUE> ] -a ipv6", cmdstr, modtype)
+		helpErrMap[bgp.RF_IPv4_UC] = fmt.Errorf("usage: %s rib %s <PREFIX> [identifier <VALUE>] [origin { igp | egp | incomplete }] [nexthop <ADDRESS>] [med <VALUE>] [local-pref <VALUE>] [community <VALUE>] [aigp metric <METRIC>] [large-community <VALUE> ] -a ipv4", cmdstr, modtype)
+		helpErrMap[bgp.RF_IPv6_UC] = fmt.Errorf("usage: %s rib %s <PREFIX> [identifier <VALUE>] [origin { igp | egp | incomplete }] [nexthop <ADDRESS>] [med <VALUE>] [local-pref <VALUE>] [community <VALUE>] [aigp metric <METRIC>] [large-community <VALUE> ] -a ipv6", cmdstr, modtype)
 		fsHelpMsgFmt := fmt.Sprintf(`err: %s
 usage: %s rib %s%%smatch <MATCH_EXPR> then <THEN_EXPR> -a %%s
 %%s

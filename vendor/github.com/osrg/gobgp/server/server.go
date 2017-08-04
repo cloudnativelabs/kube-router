@@ -24,10 +24,11 @@ import (
 	"time"
 
 	"github.com/eapache/channels"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/table"
-	log "github.com/sirupsen/logrus"
 )
 
 type TCPListener struct {
@@ -65,6 +66,15 @@ func NewTCPListener(address string, port uint32, ch chan *net.TCPConn) (*TCPList
 	if err != nil {
 		return nil, err
 	}
+	// Note: Set TTL=255 for incoming connection listener in order to accept
+	// connection in case for the neighbor has TTL Security settings.
+	if err := SetListenTcpTTLSockopt(l, 255); err != nil {
+		log.WithFields(log.Fields{
+			"Topic": "Peer",
+			"Key":   addr,
+		}).Warnf("cannot set TTL(=%d) for TCPLisnter: %s", 255, err)
+	}
+
 	closeCh := make(chan struct{})
 	go func() error {
 		for {
@@ -510,24 +520,31 @@ func (server *BgpServer) notifyPostPolicyUpdateWatcher(peer *Peer, pathList []*t
 	server.notifyWatcher(WATCH_EVENT_TYPE_POST_UPDATE, ev)
 }
 
-func dstsToPaths(id string, dsts []*table.Destination) ([]*table.Path, []*table.Path, [][]*table.Path) {
+func dstsToPaths(id string, dsts []*table.Destination, addpath bool) ([]*table.Path, []*table.Path, [][]*table.Path) {
 	bestList := make([]*table.Path, 0, len(dsts))
 	oldList := make([]*table.Path, 0, len(dsts))
 	mpathList := make([][]*table.Path, 0, len(dsts))
 
 	for _, dst := range dsts {
-		best, old, mpath := dst.GetChanges(id, false)
-		bestList = append(bestList, best)
-		oldList = append(oldList, old)
-		if mpath != nil {
-			mpathList = append(mpathList, mpath)
+		if addpath {
+			bestList = append(bestList, dst.GetAddPathChanges(id)...)
+		} else {
+			best, old, mpath := dst.GetChanges(id, false)
+			bestList = append(bestList, best)
+			oldList = append(oldList, old)
+			if mpath != nil {
+				mpathList = append(mpathList, mpath)
+			}
 		}
+	}
+	if addpath {
+		oldList = nil
 	}
 	return bestList, oldList, mpathList
 }
 
 func (server *BgpServer) dropPeerAllRoutes(peer *Peer, families []bgp.RouteFamily) {
-	var bestList []*table.Path
+	var gBestList, bestList []*table.Path
 	var mpathList [][]*table.Path
 	families = peer.toGlobalFamilies(families)
 	rib := server.globalRib
@@ -537,16 +554,20 @@ func (server *BgpServer) dropPeerAllRoutes(peer *Peer, families []bgp.RouteFamil
 	for _, rf := range families {
 		dsts := rib.DeletePathsByPeer(peer.fsm.peerInfo, rf)
 		if !peer.isRouteServerClient() {
-			bestList, _, mpathList = dstsToPaths(table.GLOBAL_RIB_NAME, dsts)
-			server.notifyBestWatcher(bestList, mpathList)
+			gBestList, _, mpathList = dstsToPaths(table.GLOBAL_RIB_NAME, dsts, false)
+			server.notifyBestWatcher(gBestList, mpathList)
 		}
 
 		for _, targetPeer := range server.neighborMap {
 			if peer.isRouteServerClient() != targetPeer.isRouteServerClient() || targetPeer == peer {
 				continue
 			}
-			if targetPeer.isRouteServerClient() {
-				bestList, _, _ = dstsToPaths(targetPeer.TableID(), dsts)
+			if targetPeer.isAddPathSendEnabled(rf) {
+				bestList, _, _ = dstsToPaths(targetPeer.TableID(), dsts, true)
+			} else if targetPeer.isRouteServerClient() {
+				bestList, _, _ = dstsToPaths(targetPeer.TableID(), dsts, false)
+			} else {
+				bestList = gBestList
 			}
 			if paths := targetPeer.processOutgoingPaths(bestList, nil); len(paths) > 0 {
 				sendFsmOutgoingMsg(targetPeer, paths, nil, false)
@@ -638,7 +659,7 @@ func (server *BgpServer) RSimportPaths(peer *Peer, pathList []*table.Path) []*ta
 func (server *BgpServer) propagateUpdate(peer *Peer, pathList []*table.Path) {
 	var dsts []*table.Destination
 
-	var bestList, oldList []*table.Path
+	var gBestList, gOldList, bestList, oldList []*table.Path
 	var mpathList [][]*table.Path
 
 	rib := server.globalRib
@@ -654,7 +675,6 @@ func (server *BgpServer) propagateUpdate(peer *Peer, pathList []*table.Path) {
 		rib = server.rsRib
 		for _, path := range pathList {
 			path.Filter(peer.ID(), table.POLICY_DIRECTION_IMPORT)
-			path.Filter(table.GLOBAL_RIB_NAME, table.POLICY_DIRECTION_IMPORT)
 		}
 		moded := make([]*table.Path, 0)
 		for _, targetPeer := range server.neighborMap {
@@ -720,22 +740,34 @@ func (server *BgpServer) propagateUpdate(peer *Peer, pathList []*table.Path) {
 		server.notifyPostPolicyUpdateWatcher(peer, pathList)
 		dsts = rib.ProcessPaths(pathList)
 
-		bestList, oldList, mpathList = dstsToPaths(table.GLOBAL_RIB_NAME, dsts)
-		if len(bestList) == 0 {
-			return
-		}
-		server.notifyBestWatcher(bestList, mpathList)
+		gBestList, gOldList, mpathList = dstsToPaths(table.GLOBAL_RIB_NAME, dsts, false)
+		server.notifyBestWatcher(gBestList, mpathList)
 	}
 
-	for _, targetPeer := range server.neighborMap {
-		if (peer == nil && targetPeer.isRouteServerClient()) || (peer != nil && peer.isRouteServerClient() != targetPeer.isRouteServerClient()) {
-			continue
+	families := make(map[bgp.RouteFamily][]*table.Destination)
+	for _, dst := range dsts {
+		if families[dst.Family()] == nil {
+			families[dst.Family()] = make([]*table.Destination, 0, len(dsts))
 		}
-		if targetPeer.isRouteServerClient() {
-			bestList, oldList, _ = dstsToPaths(targetPeer.TableID(), dsts)
-		}
-		if paths := targetPeer.processOutgoingPaths(bestList, oldList); len(paths) > 0 {
-			sendFsmOutgoingMsg(targetPeer, paths, nil, false)
+		families[dst.Family()] = append(families[dst.Family()], dst)
+	}
+
+	for family, l := range families {
+		for _, targetPeer := range server.neighborMap {
+			if (peer == nil && targetPeer.isRouteServerClient()) || (peer != nil && peer.isRouteServerClient() != targetPeer.isRouteServerClient()) {
+				continue
+			}
+			if targetPeer.isAddPathSendEnabled(family) {
+				bestList, oldList, _ = dstsToPaths(targetPeer.TableID(), l, true)
+			} else if targetPeer.isRouteServerClient() {
+				bestList, oldList, _ = dstsToPaths(targetPeer.TableID(), l, false)
+			} else {
+				bestList = gBestList
+				oldList = gOldList
+			}
+			if paths := targetPeer.processOutgoingPaths(bestList, oldList); len(paths) > 0 {
+				sendFsmOutgoingMsg(targetPeer, paths, nil, false)
+			}
 		}
 	}
 }
@@ -1722,14 +1754,13 @@ func (server *BgpServer) addNeighbor(c *config.Neighbor) error {
 
 	if server.bgpConfig.Global.Config.Port > 0 {
 		for _, l := range server.Listeners(addr) {
-			if err := SetTcpMD5SigSockopts(l, addr, c.Config.AuthPassword); err != nil {
-				log.WithFields(log.Fields{
-					"Topic": "Peer",
-				}).Debugf("failed to set md5 %s %s", addr, err)
-			} else {
-				log.WithFields(log.Fields{
-					"Topic": "Peer",
-				}).Debugf("successfully set md5 %s", addr)
+			if c.Config.AuthPassword != "" {
+				if err := SetTcpMD5SigSockopt(l, addr, c.Config.AuthPassword); err != nil {
+					log.WithFields(log.Fields{
+						"Topic": "Peer",
+						"Key":   addr,
+					}).Warnf("failed to set md5: %s", err)
+				}
 			}
 		}
 	}
@@ -1826,7 +1857,12 @@ func (server *BgpServer) deleteNeighbor(c *config.Neighbor, code, subcode uint8)
 		return fmt.Errorf("Can't delete a peer configuration for %s", addr)
 	}
 	for _, l := range server.Listeners(addr) {
-		SetTcpMD5SigSockopts(l, addr, "")
+		if err := SetTcpMD5SigSockopt(l, addr, ""); err != nil {
+			log.WithFields(log.Fields{
+				"Topic": "Peer",
+				"Key":   addr,
+			}).Warnf("failed to unset md5: %s", err)
+		}
 	}
 	log.WithFields(log.Fields{
 		"Topic": "Peer",
