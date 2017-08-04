@@ -217,7 +217,7 @@ func (t *Table) getOrCreateDest(nlri bgp.AddrPrefixInterface) *Destination {
 			"Topic": "Table",
 			"Key":   tableKey,
 		}).Debugf("create Destination")
-		dest = NewDestination(nlri)
+		dest = NewDestination(nlri, 64)
 		t.setDestination(tableKey, dest)
 	}
 	return dest

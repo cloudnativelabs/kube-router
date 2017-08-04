@@ -11,6 +11,8 @@
 - [#8574](https://github.com/influxdata/influxdb/pull/8574): Add 'X-Influxdb-Build' to http response headers so users can identify if a response is from an OSS or Enterprise service.
 - [#8426](https://github.com/influxdata/influxdb/issues/8426): Add `parse-multivalue-plugin` to allow users to choose how multivalue plugins should be handled by the collectd service.
 - [#8548](https://github.com/influxdata/influxdb/issues/8548): Allow panic recovery to be disabled when investigating server issues.
+- [#8525](https://github.com/influxdata/influxdb/issues/8525): Support http pipelining for /query endpoint.
+- [#8652](https://github.com/influxdata/influxdb/pull/8652): Reduce allocations when reading data
 
 ### Bugfixes
 
@@ -18,15 +20,28 @@
 - [#8466](https://github.com/influxdata/influxdb/issues/8466): illumos build broken on syscall.Mmap
 - [#8124](https://github.com/influxdata/influxdb/issues/8124): Prevent privileges on non-existent databases from being set.
 - [#8558](https://github.com/influxdata/influxdb/issues/8558): Dropping measurement used several GB disk space
+- [#8569](https://github.com/influxdata/influxdb/issues/8569): Fix the cq start and end times to use unix timestamps.
+- [#8601](https://github.com/influxdata/influxdb/pull/8601): Fixed time boundaries for continuous queries with time zones.
+- [#8097](https://github.com/influxdata/influxdb/pull/8097): Return query parsing errors in CSV formats.
+- [#8607](https://github.com/influxdata/influxdb/issues/8607): Fix time zone shifts when the shift happens on a time zone boundary.
+- [#8639](https://github.com/influxdata/influxdb/issues/8639): Parse time literals using the time zone in the select statement.
 
-## v1.3.1 [unreleased]
+## v1.3.2 [unreleased]
+
+### Bugfixes
+
+- [#8629](https://github.com/influxdata/influxdb/pull/8629): Interrupt in progress TSM compactions
+- [#8630](https://github.com/influxdata/influxdb/pull/8630): Prevent excessive memory usage when dropping series
+- [#8640](https://github.com/influxdata/influxdb/issues/8640): Significantly improve performance of SHOW TAG VALUES.
+
+## v1.3.1 [2017-07-20]
 
 ### Bugfixes
 
 - [#8559](https://github.com/influxdata/influxdb/issues/8559): Ensure temporary TSM files get cleaned up when compaction aborted.
 - [#8500](https://github.com/influxdata/influxdb/issues/8500): InfluxDB goes unresponsive
 - [#8531](https://github.com/influxdata/influxdb/issues/8531): Duplicate points generated via INSERT after DELETE
-
+- [#8569](https://github.com/influxdata/influxdb/issues/8569): Fix the cq start and end times to use unix timestamps.
 
 ## v1.3.0 [2017-06-21]
 

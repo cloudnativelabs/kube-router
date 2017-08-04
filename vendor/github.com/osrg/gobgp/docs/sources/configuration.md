@@ -17,9 +17,6 @@
         default-import-policy = "reject-route"
         export-policy-list = ["policy2"]
         default-export-policy = "accept-route"
-    [global.mpls-label-range]
-        min-label = 1000
-        max-label = 2000
 
 [[rpki-servers]]
     [rpki-servers.config]
@@ -34,9 +31,10 @@
         statistics-timeout = 3600
 
 [[mrt-dump]]
-    dump-type = "updates"
-    file-name = "/tmp/log/2006/01/02.1504.dump"
-    interval = 180
+    [mrt-dump.config]
+        dump-type = "updates"
+        file-name = "/tmp/log/2006/01/02.1504.dump"
+        dump-interval = 180
 
 [zebra]
     [zebra.config]
@@ -73,6 +71,7 @@
         route-reflector-client = true
         route-reflector-cluster-id = "192.168.0.1"
     [neighbors.add-paths.config]
+        send-max = 8
         receive = true
     [neighbors.graceful-restart.config]
         enabled = true
@@ -126,6 +125,7 @@
         [neighbors.afi-safis.config]
         afi-safi-name = "ipv6-flowspec"
     [[neighbors.afi-safis]]
+        [neighbors.afi-safis.config]
         afi-safi-name = "opaque"
     [neighbors.apply-policy.config]
         import-policy-list = ["policy1"]
@@ -190,7 +190,7 @@
             community-set = "cs0"
             match-set-options = "all"
         [policy-definitions.statements.conditions.bgp-conditions.match-large-community-set]
-            community-set = "ls0"
+            large-community-set = "ls0"
             match-set-options = "all"
         [policy-definitions.statements.actions.bgp-actions.set-as-path-prepend]
             as = "last-as"
@@ -249,7 +249,7 @@
 [[policy-definitions]]
     name = "route-type-policy"
     [[policy-definitions.statements]]
-        # this statement matches with locally generated routes 
+        # this statement matches with locally generated routes
         [policy-definitions.statements.conditions.bgp-conditions]
             route-type = "local"
         [policy-definitions.statements.actions]

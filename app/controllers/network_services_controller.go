@@ -17,8 +17,8 @@ import (
 	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
+	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
-	"github.com/mqliang/libipvs"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/vishvananda/netlink"
@@ -34,7 +34,7 @@ const (
 )
 
 var (
-	h                        libipvs.IPVSHandle
+	h                        *ipvs.Handle
 	serviceBackendActiveConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_backend_active_connections",
@@ -257,7 +257,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		activeServiceEndpointMap[clusterServiceId] = make([]string, 0)
 
 		// create IPVS service for the service to be exposed through the nodeport
-		var ipvs_nodeport_svc *libipvs.Service
+		var ipvs_nodeport_svc *ipvs.Service
 		var nodeServiceId string
 		if svc.nodePort != 0 {
 			ipvs_nodeport_svc, err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity)
@@ -272,7 +272,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		// add IPVS remote server to the IPVS service
 		endpoints := endpointsInfoMap[k]
 		for _, endpoint := range endpoints {
-			dst := libipvs.Destination{
+			dst := ipvs.Destination{
 				Address:       net.ParseIP(endpoint.ip),
 				AddressFamily: syscall.AF_INET,
 				Port:          uint16(endpoint.port),
@@ -301,22 +301,28 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	// cleanup stale ipvs service and servers
 	glog.Infof("Cleaning up if any, old ipvs service and servers which are no longer needed")
-	ipvsSvcs, err := h.ListServices()
+	ipvsSvcs, err := h.GetServices()
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
+	var protocol string
 	for _, ipvsSvc := range ipvsSvcs {
-		key := generateIpPortId(ipvsSvc.Address.String(), ipvsSvc.Protocol.String(), strconv.Itoa(int(ipvsSvc.Port)))
+		if ipvsSvc.Protocol == syscall.IPPROTO_TCP {
+			protocol = "tcp"
+		} else {
+			protocol = "udp"
+		}
+		key := generateIpPortId(ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
 		endpoints, ok := activeServiceEndpointMap[key]
 		if !ok {
-			glog.Infof("Found a IPVS service %s:%s:%s which is no longer needed so cleaning up", ipvsSvc.Address.String(), ipvsSvc.Protocol.String(), strconv.Itoa(int(ipvsSvc.Port)))
+			glog.Infof("Found a IPVS service %s:%s:%s which is no longer needed so cleaning up", ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
 			err := h.DelService(ipvsSvc)
 			if err != nil {
 				glog.Errorf("Failed to delete stale IPVS service: ", err.Error())
 				continue
 			}
 		} else {
-			dsts, err := h.ListDestinations(ipvsSvc)
+			dsts, err := h.GetDestinations(ipvsSvc)
 			if err != nil {
 				glog.Errorf("Failed to get list of servers from ipvs service")
 			}
@@ -330,7 +336,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 				if !validEp {
 					glog.Infof("Found a IPVS service %s:%s:%s, destination %s which is no longer needed so cleaning up",
-						ipvsSvc.Address.String(), ipvsSvc.Protocol.String(), strconv.Itoa(int(ipvsSvc.Port)), dst.Address.String())
+						ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)), dst.Address.String())
 					err := h.DelDestination(ipvsSvc, dst)
 					if err != nil {
 						glog.Errorf("Failed to delete server from ipvs service")
@@ -344,41 +350,41 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 }
 
 func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
-	ipvsSvcs, err := h.ListServices()
-	if err != nil {
-		return errors.New("Failed to list IPVS services: " + err.Error())
-	}
-
-	for _, svc := range serviceInfoMap {
-		for _, ipvsSvc := range ipvsSvcs {
-			if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
-				svc.protocol == ipvsSvc.Protocol.String() && uint16(svc.port) == ipvsSvc.Port {
-				dsts, err := h.ListDestinations(ipvsSvc)
-				if err != nil {
-					glog.Errorf("Failed to get list of servers from ipvs service")
-				}
-				for _, dst := range dsts {
-					serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.ActiveConns))
-					serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
-					serviceBackendPpsIn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSIn))
-					serviceBackendPpsOut.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSOut))
-				}
-			}
-			if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
-				svc.protocol == ipvsSvc.Protocol.String() && uint16(svc.port) == ipvsSvc.Port {
-				dsts, err := h.ListDestinations(ipvsSvc)
-				if err != nil {
-					glog.Errorf("Failed to get list of servers from ipvs service")
-				}
-				for _, dst := range dsts {
-					serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.ActiveConns))
-					serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
-					serviceBackendPpsIn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSIn))
-					serviceBackendPpsOut.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSOut))
-				}
-			}
-		}
-	}
+	// ipvsSvcs, err := h.GetServices()
+	// if err != nil {
+	// 	return errors.New("Failed to list IPVS services: " + err.Error())
+	// }
+	//
+	// for _, svc := range serviceInfoMap {
+	// 	for _, ipvsSvc := range ipvsSvcs {
+	// 		if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
+	// 			svc.protocol == strconv.Itoa(int(ipvsSvc.Protocol)) && uint16(svc.port) == ipvsSvc.Port {
+	// 			dsts, err := h.GetDestinations(ipvsSvc)
+	// 			if err != nil {
+	// 				glog.Errorf("Failed to get list of servers from ipvs service")
+	// 			}
+	// 			for _, dst := range dsts {
+	// 				serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats))
+	// 				serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
+	// 				serviceBackendPpsIn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSIn))
+	// 				serviceBackendPpsOut.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSOut))
+	// 			}
+	// 		}
+	// 		if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
+	// 			svc.protocol == strconv.Itoa(int(ipvsSvc.Protocol)) && uint16(svc.port) == ipvsSvc.Port {
+	// 			dsts, err := h.GetDestinations(ipvsSvc)
+	// 			if err != nil {
+	// 				glog.Errorf("Failed to get list of servers from ipvs service")
+	// 			}
+	// 			for _, dst := range dsts {
+	// 				serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.ActiveConns))
+	// 				serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
+	// 				serviceBackendPpsIn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSIn))
+	// 				serviceBackendPpsOut.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSOut))
+	// 			}
+	// 		}
+	// 	}
+	// }
 	return nil
 }
 
@@ -681,42 +687,42 @@ func deleteMasqueradeIptablesRule() error {
 	return nil
 }
 
-func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*libipvs.Service, error) {
-	svcs, err := h.ListServices()
+func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.Service, error) {
+	svcs, err := h.GetServices()
 	if err != nil {
 		return nil, err
 	}
 	for _, svc := range svcs {
 		if strings.Compare(vip.String(), svc.Address.String()) == 0 &&
-			libipvs.Protocol(protocol) == svc.Protocol && port == svc.Port {
+			protocol == svc.Protocol && port == svc.Port {
 			glog.Infof("ipvs service %s:%s:%s already exists so returning", vip.String(),
-				libipvs.Protocol(protocol), strconv.Itoa(int(port)))
+				protocol, strconv.Itoa(int(port)))
 			return svc, nil
 		}
 	}
-	svc := libipvs.Service{
+	svc := ipvs.Service{
 		Address:       vip,
 		AddressFamily: syscall.AF_INET,
-		Protocol:      libipvs.Protocol(protocol),
+		Protocol:      protocol,
 		Port:          port,
-		SchedName:     libipvs.RoundRobin,
+		SchedName:     ipvs.RoundRobin,
 	}
 
 	if persistent {
 		// set bit to enable service persistence
-		svc.Flags.Flags |= (1 << 24)
-		svc.Flags.Mask |= 0xFFFFFFFF
+		svc.Flags |= (1 << 24)
+		svc.Netmask |= 0xFFFFFFFF
 		// TODO: once service manifest supports timeout time remove hardcoding
 		svc.Timeout = 180 * 60
 	}
 	if err := h.NewService(&svc); err != nil {
-		return nil, fmt.Errorf("Failed to create service: %s:%s:%s", vip.String(), libipvs.Protocol(protocol), strconv.Itoa(int(port)))
+		return nil, fmt.Errorf("Failed to create service: %s:%s:%s", vip.String(), protocol, strconv.Itoa(int(port)))
 	}
-	glog.Infof("Successfully added service: %s:%s:%s", vip.String(), libipvs.Protocol(protocol), strconv.Itoa(int(port)))
+	glog.Infof("Successfully added service: %s:%s:%s", vip.String(), protocol, strconv.Itoa(int(port)))
 	return &svc, nil
 }
 
-func ipvsAddServer(service *libipvs.Service, dest *libipvs.Destination) error {
+func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination) error {
 
 	err := h.NewDestination(service, dest)
 	if err == nil {
@@ -768,17 +774,13 @@ func (nsc *NetworkServicesController) Cleanup() {
 	// cleanup ipvs rules by flush
 	glog.Infof("Cleaning up IPVS configuration permanently")
 
-	handle, err := libipvs.New()
+	handle, err := ipvs.New("")
 	if err != nil {
 		glog.Errorf("Failed to cleanup ipvs rules: ", err.Error())
 		return
 	}
 
-	err = handle.Flush()
-	if err != nil {
-		glog.Errorf("Failed to cleanup ipvs rules: ", err.Error())
-		return
-	}
+	handle.Close()
 
 	// cleanup iptable masqurade rule
 	err = deleteMasqueradeIptablesRule()
@@ -812,11 +814,12 @@ func (nsc *NetworkServicesController) Cleanup() {
 
 func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
 
-	handle, err := libipvs.New()
+	var err error
+	h, err = ipvs.New("")
 	if err != nil {
 		return nil, err
 	}
-	h = handle
+	// &h = handle
 
 	nsc := NetworkServicesController{}
 	nsc.syncPeriod = config.IpvsSyncPeriod

@@ -104,6 +104,46 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestDeletePrefix(t *testing.T) {
+	type exp struct {
+		inp[] string
+		prefix string
+		out[] string
+		numDeleted int
+	}
+
+	cases := []exp{
+		{[]string{"", "A", "AB", "ABC", "R", "S"}, "A", []string{"", "R", "S"},  3},
+		{[]string{"", "A", "AB", "ABC", "R", "S"}, "ABC", []string{"", "A", "AB", "R", "S"},  1},
+		{[]string{"", "A", "AB", "ABC", "R", "S"}, "", []string{},  6},
+		{[]string{"", "A", "AB", "ABC", "R", "S"}, "S", []string{"", "A", "AB", "ABC", "R"},  1},
+		{[]string{"", "A", "AB", "ABC", "R", "S"}, "SS", []string{"", "A", "AB", "ABC", "R", "S"},  0},
+	}
+
+	for _, test := range cases {
+		r := New()
+		for _, ss := range test.inp {
+			r.Insert(ss, true)
+		}
+
+		deleted := r.DeletePrefix(test.prefix)
+		if deleted != test.numDeleted {
+			t.Fatalf("Bad delete, expected %v to be deleted but got %v", test.numDeleted, deleted)
+		}
+
+		out := []string{}
+		fn := func(s string, v interface{}) bool {
+			out = append(out, s)
+			return false
+		}
+		r.Walk(fn)
+
+		if !reflect.DeepEqual(out, test.out) {
+			t.Fatalf("mis-match: %v %v", out, test.out)
+		}
+	}
+}
+
 func TestLongestPrefix(t *testing.T) {
 	r := New()
 

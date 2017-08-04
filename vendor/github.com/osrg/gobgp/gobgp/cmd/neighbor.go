@@ -18,15 +18,17 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/osrg/gobgp/config"
-	"github.com/osrg/gobgp/packet/bgp"
-	"github.com/osrg/gobgp/table"
-	"github.com/spf13/cobra"
 	"net"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
+
+	"github.com/osrg/gobgp/config"
+	"github.com/osrg/gobgp/packet/bgp"
+	"github.com/osrg/gobgp/table"
 )
 
 func getNeighbors(vrf string) (neighbors, error) {
@@ -405,7 +407,7 @@ type AsPathFormat struct {
 	separator string
 }
 
-func ShowRoute(pathList []*table.Path, showAge, showBest, showLabel, showIdentifier, isMonitor, printHeader bool) {
+func ShowRoute(pathList []*table.Path, showAge, showBest, showLabel, isMonitor, printHeader bool, showIdentifier bgp.BGPAddPathMode) {
 
 	var pathStrs [][]interface{}
 	maxPrefixLen := 20
@@ -444,7 +446,7 @@ func ShowRoute(pathList []*table.Path, showAge, showBest, showLabel, showIdentif
 		if p.IsStale() {
 			best += "S"
 		}
-		switch p.Validation() {
+		switch p.ValidationStatus() {
 		case config.RPKI_VALIDATION_RESULT_TYPE_NOT_FOUND:
 			best += "N"
 		case config.RPKI_VALIDATION_RESULT_TYPE_VALID:
@@ -469,15 +471,18 @@ func ShowRoute(pathList []*table.Path, showAge, showBest, showLabel, showIdentif
 			if p.IsWithdraw {
 				title = "DELROUTE"
 			}
-			if showIdentifier {
+			if showIdentifier != bgp.BGP_ADD_PATH_NONE {
 				pathStrs = append(pathStrs, []interface{}{title, nlri.PathIdentifier(), nlri, nexthop, aspathstr, pattrstr})
 			} else {
 				pathStrs = append(pathStrs, []interface{}{title, nlri, nexthop, aspathstr, pattrstr})
 			}
 		} else {
 			args := []interface{}{best}
-			if showIdentifier {
+			switch showIdentifier {
+			case bgp.BGP_ADD_PATH_RECEIVE:
 				args = append(args, fmt.Sprint(nlri.PathIdentifier()))
+			case bgp.BGP_ADD_PATH_SEND:
+				args = append(args, fmt.Sprint(nlri.PathLocalIdentifier()))
 			}
 			args = append(args, nlri)
 			if showLabel {
@@ -511,7 +516,7 @@ func ShowRoute(pathList []*table.Path, showAge, showBest, showLabel, showIdentif
 		format = "[%s] %d:%s via %s aspath [%s] attrs %s\n"
 	} else {
 		format = fmt.Sprintf("%%-3s")
-		if showIdentifier {
+		if showIdentifier != bgp.BGP_ADD_PATH_NONE {
 			format += "%-3s "
 		}
 		format += fmt.Sprintf("%%-%ds ", maxPrefixLen)
@@ -527,7 +532,7 @@ func ShowRoute(pathList []*table.Path, showAge, showBest, showLabel, showIdentif
 
 	if printHeader {
 		args := []interface{}{""}
-		if showIdentifier {
+		if showIdentifier != bgp.BGP_ADD_PATH_NONE {
 			args = append(args, "ID")
 		}
 		args = append(args, "Network")
@@ -545,6 +550,71 @@ func ShowRoute(pathList []*table.Path, showAge, showBest, showLabel, showIdentif
 	for _, pathStr := range pathStrs {
 		fmt.Printf(format, pathStr...)
 	}
+}
+
+func checkOriginAsWasNotShown(p *table.Path, shownAs map[uint32]struct{}) bool {
+	asPath := p.GetAsPath().Value
+	// the path was generated in internal
+	if len(asPath) == 0 {
+		return false
+	}
+	aslist := asPath[len(asPath)-1].(*bgp.As4PathParam).AS
+	origin := aslist[len(aslist)-1]
+
+	if _, ok := shownAs[origin]; ok {
+		return false
+	}
+	shownAs[origin] = struct{}{}
+	return true
+}
+
+func ShowValidationInfo(p *table.Path) {
+	status := p.Validation().Status
+	reason := p.Validation().Reason
+	asPath := p.GetAsPath().Value
+	aslist := asPath[len(asPath)-1].(*bgp.As4PathParam).AS
+	origin := aslist[len(aslist)-1]
+
+	fmt.Printf("Target Prefix: %s, AS: %d\n", p.GetNlri().String(), origin)
+	fmt.Printf("  This route is %s", status)
+	switch status {
+	case config.RPKI_VALIDATION_RESULT_TYPE_INVALID:
+		fmt.Printf("  reason: %s\n", reason)
+		switch reason {
+		case table.RPKI_VALIDATION_REASON_TYPE_AS:
+			fmt.Println("  No VRP ASN matches the route origin ASN.")
+		case table.RPKI_VALIDATION_REASON_TYPE_LENGTH:
+			fmt.Println("  Route Prefix length is greater than the maximum length allowed by VRP(s) matching this route origin ASN.")
+		}
+	case config.RPKI_VALIDATION_RESULT_TYPE_NOT_FOUND:
+		fmt.Println("\n  No VRP Covers the Route Prefix")
+	default:
+		fmt.Print("\n\n")
+	}
+
+	printVRPs := func(l []*table.ROA) {
+		if len(l) == 0 {
+			fmt.Println("    No Entry")
+		} else {
+			var format string
+			if ip, _, _ := net.ParseCIDR(p.GetNlri().String()); ip.To4() != nil {
+				format = "    %-18s %-6s %-10s\n"
+			} else {
+				format = "    %-42s %-6s %-10s\n"
+			}
+			fmt.Printf(format, "Network", "AS", "MaxLen")
+			for _, m := range l {
+				fmt.Printf(format, m.Prefix, fmt.Sprint(m.AS), fmt.Sprint(m.MaxLen))
+			}
+		}
+	}
+
+	fmt.Println("  Matched VRPs: ")
+	printVRPs(p.Validation().Matched)
+	fmt.Println("  Unmatched AS VRPs: ")
+	printVRPs(p.Validation().UnmatchedAs)
+	fmt.Println("  Unmatched Length VRPs: ")
+	printVRPs(p.Validation().UnmatchedLength)
 }
 
 func showRibInfo(r, name string) error {
@@ -602,7 +672,9 @@ func showNeighborRib(r string, name string, args []string) error {
 	showBest := false
 	showAge := true
 	showLabel := false
-	showIdentifier := false
+	showIdentifier := bgp.BGP_ADD_PATH_NONE
+	validationTarget := ""
+
 	def := addr2AddressFamily(net.ParseIP(name))
 	switch r {
 	case CMD_GLOBAL:
@@ -626,21 +698,29 @@ func showNeighborRib(r string, name string, args []string) error {
 
 	var filter []*table.LookupPrefix
 	if len(args) > 0 {
+		target := args[0]
 		if _, _, err = parseCIDRorIP(args[0]); err != nil {
 			return err
 		}
 		var option table.LookupOption
-		if len(args) > 1 {
-			if args[1] == "longer-prefixes" {
+		args = args[1:]
+		for len(args) != 0 {
+			if args[0] == "longer-prefixes" {
 				option = table.LOOKUP_LONGER
-			} else if args[1] == "shorter-prefixes" {
+			} else if args[0] == "shorter-prefixes" {
 				option = table.LOOKUP_SHORTER
+			} else if args[0] == "validation" {
+				if r != CMD_ADJ_IN {
+					return fmt.Errorf("RPKI information is supported for only adj-in.")
+				}
+				validationTarget = target
 			} else {
 				return fmt.Errorf("invalid format for route filtering")
 			}
+			args = args[1:]
 		}
 		filter = []*table.LookupPrefix{&table.LookupPrefix{
-			Prefix:       args[0],
+			Prefix:       target,
 			LookupOption: option,
 		},
 		}
@@ -653,10 +733,10 @@ func showNeighborRib(r string, name string, args []string) error {
 	case CMD_LOCAL:
 		rib, err = client.GetLocalRIB(name, family, filter)
 	case CMD_ADJ_IN, CMD_ACCEPTED, CMD_REJECTED:
-		showIdentifier = true
+		showIdentifier = bgp.BGP_ADD_PATH_RECEIVE
 		rib, err = client.GetAdjRIBIn(name, family, filter)
 	case CMD_ADJ_OUT:
-		showIdentifier = true
+		showIdentifier = bgp.BGP_ADD_PATH_SEND
 		rib, err = client.GetAdjRIBOut(name, family, filter)
 	case CMD_VRF:
 		rib, err = client.GetVRFRIB(name, family, filter)
@@ -685,8 +765,12 @@ func showNeighborRib(r string, name string, args []string) error {
 		return nil
 	}
 
+	shownAs := make(map[uint32]struct{})
 	counter := 0
 	for _, d := range rib.GetSortedDestinations() {
+		if validationTarget != "" && d.GetNlri().String() != validationTarget {
+			continue
+		}
 		var ps []*table.Path
 		if r == CMD_ACCEPTED || r == CMD_REJECTED {
 			for _, p := range d.GetAllKnownPathList() {
@@ -709,7 +793,18 @@ func showNeighborRib(r string, name string, args []string) error {
 		if counter == 0 {
 			showHeader = true
 		}
-		ShowRoute(ps, showAge, showBest, showLabel, showIdentifier, false, showHeader)
+		if validationTarget != "" {
+			for _, p := range ps {
+				asPath := p.GetAsPath().Value
+				if len(asPath) == 0 {
+					fmt.Printf("The path to %s was locally generated.\n", p.GetNlri().String())
+				} else if checkOriginAsWasNotShown(p, shownAs) {
+					ShowValidationInfo(p)
+				}
+			}
+		} else {
+			ShowRoute(ps, showAge, showBest, showLabel, false, showHeader, showIdentifier)
+		}
 		counter++
 	}
 

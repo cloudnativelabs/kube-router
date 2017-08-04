@@ -52,6 +52,21 @@ env.abort_exception = RuntimeError
 output.stderr = False
 
 
+def community_str(i):
+    """
+    Converts integer in to colon separated two bytes decimal strings like
+    BGP Community or Large Community representation.
+
+    For example, this function converts 13107300 = ((200 << 16) | 100)
+    into "200:100".
+    """
+    values = []
+    while i > 0:
+        values.append(str(i & 0xffff))
+        i >>= 16
+    return ':'.join(reversed(values))
+
+
 def wait_for_completion(f, timeout=120):
     interval = 1
     count = 0
@@ -105,8 +120,9 @@ def make_gobgp_ctn(tag='gobgp', local_gobgp_path='', from_image='osrg/quagga'):
     c << 'FROM {0}'.format(from_image)
     c << 'RUN go get -d github.com/osrg/gobgp/...; exit 0'
     c << 'RUN rm -rf /go/src/github.com/osrg/gobgp'
+    c << 'RUN go get -u github.com/golang/dep/cmd/dep'
     c << 'ADD gobgp /go/src/github.com/osrg/gobgp/'
-    c << 'RUN go get github.com/osrg/gobgp/...'
+    c << 'RUN cd /go/src/github.com/osrg/gobgp && dep ensure && go install ./gobgpd ./gobgp'
 
     rindex = local_gobgp_path.rindex('gobgp')
     if rindex < 0:
@@ -382,18 +398,28 @@ class BGPContainer(Container):
                   local_pref=None, identifier=None, reload_config=True):
         if route not in self.routes:
             self.routes[route] = []
-        self.routes[route].append({'prefix': route,
-                              'rf': rf,
-                              'attr': attribute,
-                              'next-hop': nexthop,
-                              'as-path': aspath,
-                              'community': community,
-                              'med': med,
-                              'local-pref': local_pref,
-                              'extended-community': extendedcommunity,
-                              'identifier': identifier,
-                              'matchs': matchs,
-                              'thens': thens})
+        self.routes[route].append({
+            'prefix': route,
+            'rf': rf,
+            'attr': attribute,
+            'next-hop': nexthop,
+            'as-path': aspath,
+            'community': community,
+            'med': med,
+            'local-pref': local_pref,
+            'extended-community': extendedcommunity,
+            'identifier': identifier,
+            'matchs': matchs,
+            'thens': thens,
+        })
+        if self.is_running and reload_config:
+            self.create_config()
+            self.reload_config()
+
+    def del_route(self, route, identifier=None, reload_config=True):
+        if route not in self.routes:
+            return
+        self.routes[route] = [p for p in self.routes[route] if p['identifier'] != identifier]
         if self.is_running and reload_config:
             self.create_config()
             self.reload_config()

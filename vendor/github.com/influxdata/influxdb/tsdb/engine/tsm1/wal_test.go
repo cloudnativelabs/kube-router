@@ -6,9 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/influxdata/influxdb/tsdb/engine/tsm1"
-
 	"github.com/golang/snappy"
+	"github.com/influxdata/influxdb/tsdb/engine/tsm1"
 )
 
 func TestWALWriter_WriteMulti_Single(t *testing.T) {
@@ -21,12 +20,14 @@ func TestWALWriter_WriteMulti_Single(t *testing.T) {
 	p2 := tsm1.NewValue(1, int64(1))
 	p3 := tsm1.NewValue(1, true)
 	p4 := tsm1.NewValue(1, "string")
+	p5 := tsm1.NewValue(1, ^uint64(0))
 
 	values := map[string][]tsm1.Value{
-		"cpu,host=A#!~#float":  []tsm1.Value{p1},
-		"cpu,host=A#!~#int":    []tsm1.Value{p2},
-		"cpu,host=A#!~#bool":   []tsm1.Value{p3},
-		"cpu,host=A#!~#string": []tsm1.Value{p4},
+		"cpu,host=A#!~#float":    []tsm1.Value{p1},
+		"cpu,host=A#!~#int":      []tsm1.Value{p2},
+		"cpu,host=A#!~#bool":     []tsm1.Value{p3},
+		"cpu,host=A#!~#string":   []tsm1.Value{p4},
+		"cpu,host=A#!~#unsigned": []tsm1.Value{p5},
 	}
 
 	entry := &tsm1.WriteWALEntry{
@@ -215,7 +216,7 @@ func TestWALWriter_WriteDelete_Single(t *testing.T) {
 	w := tsm1.NewWALSegmentWriter(f)
 
 	entry := &tsm1.DeleteWALEntry{
-		Keys: []string{"cpu"},
+		Keys: [][]byte{[]byte("cpu")},
 	}
 
 	if err := w.Write(mustMarshalEntry(entry)); err != nil {
@@ -250,7 +251,7 @@ func TestWALWriter_WriteDelete_Single(t *testing.T) {
 		t.Fatalf("key length mismatch: got %v, exp %v", got, exp)
 	}
 
-	if got, exp := e.Keys[0], entry.Keys[0]; got != exp {
+	if got, exp := string(e.Keys[0]), string(entry.Keys[0]); got != exp {
 		t.Fatalf("key mismatch: got %v, exp %v", got, exp)
 	}
 }
@@ -280,7 +281,7 @@ func TestWALWriter_WriteMultiDelete_Multiple(t *testing.T) {
 
 	// Write the delete entry
 	deleteEntry := &tsm1.DeleteWALEntry{
-		Keys: []string{"cpu,host=A#!~value"},
+		Keys: [][]byte{[]byte("cpu,host=A#!~value")},
 	}
 
 	if err := w.Write(mustMarshalEntry(deleteEntry)); err != nil {
@@ -344,7 +345,7 @@ func TestWALWriter_WriteMultiDelete_Multiple(t *testing.T) {
 		t.Fatalf("key length mismatch: got %v, exp %v", got, exp)
 	}
 
-	if got, exp := de.Keys[0], deleteEntry.Keys[0]; got != exp {
+	if got, exp := string(de.Keys[0]), string(deleteEntry.Keys[0]); got != exp {
 		t.Fatalf("key mismatch: got %v, exp %v", got, exp)
 	}
 }
@@ -377,7 +378,7 @@ func TestWALWriter_WriteMultiDeleteRange_Multiple(t *testing.T) {
 
 	// Write the delete entry
 	deleteEntry := &tsm1.DeleteRangeWALEntry{
-		Keys: []string{"cpu,host=A#!~value"},
+		Keys: [][]byte{[]byte("cpu,host=A#!~value")},
 		Min:  2,
 		Max:  3,
 	}
@@ -443,7 +444,7 @@ func TestWALWriter_WriteMultiDeleteRange_Multiple(t *testing.T) {
 		t.Fatalf("key length mismatch: got %v, exp %v", got, exp)
 	}
 
-	if got, exp := de.Keys[0], deleteEntry.Keys[0]; got != exp {
+	if got, exp := string(de.Keys[0]), string(deleteEntry.Keys[0]); got != exp {
 		t.Fatalf("key mismatch: got %v, exp %v", got, exp)
 	}
 
@@ -521,7 +522,7 @@ func TestWAL_Delete(t *testing.T) {
 		t.Fatalf("close segment length mismatch: got %v, exp %v", got, exp)
 	}
 
-	if _, err := w.Delete([]string{"cpu"}); err != nil {
+	if _, err := w.Delete([][]byte{[]byte("cpu")}); err != nil {
 		t.Fatalf("error writing points: %v", err)
 	}
 
@@ -607,12 +608,14 @@ func TestWriteWALSegment_UnmarshalBinary_WriteWALCorrupt(t *testing.T) {
 	p2 := tsm1.NewValue(1, int64(1))
 	p3 := tsm1.NewValue(1, true)
 	p4 := tsm1.NewValue(1, "string")
+	p5 := tsm1.NewValue(1, uint64(1))
 
 	values := map[string][]tsm1.Value{
-		"cpu,host=A#!~#float":  []tsm1.Value{p1, p1},
-		"cpu,host=A#!~#int":    []tsm1.Value{p2, p2},
-		"cpu,host=A#!~#bool":   []tsm1.Value{p3, p3},
-		"cpu,host=A#!~#string": []tsm1.Value{p4, p4},
+		"cpu,host=A#!~#float":    []tsm1.Value{p1, p1},
+		"cpu,host=A#!~#int":      []tsm1.Value{p2, p2},
+		"cpu,host=A#!~#bool":     []tsm1.Value{p3, p3},
+		"cpu,host=A#!~#string":   []tsm1.Value{p4, p4},
+		"cpu,host=A#!~#unsigned": []tsm1.Value{p5, p5},
 	}
 
 	w := &tsm1.WriteWALEntry{
@@ -638,7 +641,7 @@ func TestWriteWALSegment_UnmarshalBinary_WriteWALCorrupt(t *testing.T) {
 
 func TestWriteWALSegment_UnmarshalBinary_DeleteWALCorrupt(t *testing.T) {
 	w := &tsm1.DeleteWALEntry{
-		Keys: []string{"foo", "bar"},
+		Keys: [][]byte{[]byte("foo"), []byte("bar")},
 	}
 
 	b, err := w.MarshalBinary()
@@ -660,7 +663,7 @@ func TestWriteWALSegment_UnmarshalBinary_DeleteWALCorrupt(t *testing.T) {
 
 func TestWriteWALSegment_UnmarshalBinary_DeleteRangeWALCorrupt(t *testing.T) {
 	w := &tsm1.DeleteRangeWALEntry{
-		Keys: []string{"foo", "bar"},
+		Keys: [][]byte{[]byte("foo"), []byte("bar")},
 		Min:  1,
 		Max:  2,
 	}

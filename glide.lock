@@ -1,10 +1,10 @@
-hash: 73e0c06b523189ee0670efcb4c7edcde6328a053ff878379d92735be568bd26e
-updated: 2017-07-16T03:04:38.257956637+05:30
+hash: 0b35e7130df3f81011b44875ba84fc444742e3ea71b5d5b8d6787938d2f1402b
+updated: 2017-08-04T01:06:37.90272016-05:00
 imports:
 - name: github.com/armon/go-radix
-  version: 4239b77079c7b5d1243b7b4736304ce8ddb6f0f2
+  version: 1fca145dffbcaa8fe914309b1ec0cfc67500fe61
 - name: github.com/aws/aws-sdk-go
-  version: b73b028e599fa9176687c70b8f9cafbe57c27d20
+  version: b33b08175d12b795daa7726c5577b39d06a2551c
   subpackages:
   - aws
   - aws/awserr
@@ -68,6 +68,12 @@ imports:
   subpackages:
   - digestset
   - reference
+- name: github.com/docker/libnetwork
+  version: 7f6d4caf15dee844a369d1bb9e4bd0020c2607bf
+  repo: git@github.com:/cloudnativelabs/libnetwork
+  vcs: git
+  subpackages:
+  - ipvs
 - name: github.com/eapache/channels
   version: 47238d5aae8c0fefd518ef2bee46290909cf8263
 - name: github.com/eapache/queue
@@ -124,14 +130,12 @@ imports:
   - json/parser
   - json/scanner
   - json/token
-- name: github.com/hkwi/nlgo
-  version: dbae43f4fc47bf868bca3cc3c1ea2954c2059842
 - name: github.com/howeyc/gopass
   version: bf9dde6d0d2c004a008c27aaee91170c786f6db8
 - name: github.com/imdario/mergo
   version: 6633656539c1639d9d78127b7d47c622b5d7b6dc
 - name: github.com/influxdata/influxdb
-  version: 4244d0e0536be53aab18160cd57e59190d57a693
+  version: 392fa03cf3cc98b78e606c34996976cea65b6814
   subpackages:
   - client/v2
   - models
@@ -160,12 +164,10 @@ imports:
   - pbutil
 - name: github.com/mitchellh/mapstructure
   version: d0303fe809921458f417bcf828397a65db30a7e4
-- name: github.com/mqliang/libipvs
-  version: b5ccc1e5bd005b75d533a255f9c0cb06758e31d5
 - name: github.com/opencontainers/go-digest
   version: 279bed98673dd5bef374d3b6e4b09e2af76183bf
 - name: github.com/osrg/gobgp
-  version: 4b5e13376c70481aacc1c2c508738279f8cc9e5c
+  version: 97063ee76decb4105ad3991dcf34432f5e009f9d
   subpackages:
   - api
   - config
@@ -178,8 +180,6 @@ imports:
   - zebra
 - name: github.com/pelletier/go-toml
   version: 69d355db5304c0f7f809a2edc054553e7142f016
-- name: github.com/pkg/errors
-  version: c605e284fe17294bda444b34710735b29d1a9d90
 - name: github.com/prometheus/client_golang
   version: c5b7fccd204277076155f10851dad72b76a49317
   subpackages:
@@ -190,7 +190,7 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 3e6a7635bac6573d43f49f97b47eb9bda195dba8
+  version: 61f87aac8082fa8c3c5655c7608d7478d46ac2ad
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -206,7 +206,7 @@ imports:
 - name: github.com/satori/go.uuid
   version: 5bf94b69c6b68ee1b541973bb8e1144db23a194b
 - name: github.com/sirupsen/logrus
-  version: 51dc0fc64317a2861273909081f9c315786533eb
+  version: 181d419aa9e2223811b824e8f0b4af96f9ba9302
 - name: github.com/spf13/afero
   version: 9be650865eab0c12963d8753212f4f9c66cdcf12
   subpackages:
@@ -218,13 +218,13 @@ imports:
 - name: github.com/spf13/pflag
   version: e57e3eeb33f795204c1ca35f56c44f83227c6e66
 - name: github.com/spf13/viper
-  version: c1de95864d73a5465492829d7cb2dd422b19ac96
+  version: 25b30aa063fc18e48662b86996252eabdcf2f0c7
 - name: github.com/ugorji/go
   version: ded73eae5db7e7a0ef6f55aace87a2873c5d2b74
   subpackages:
   - codec
 - name: github.com/vishvananda/netlink
-  version: 8c5a115d793b6d223efadbdba04d1de197d386e8
+  version: a95659537721550a65cfc3638b664380696e38e1
   subpackages:
   - nl
 - name: github.com/vishvananda/netns

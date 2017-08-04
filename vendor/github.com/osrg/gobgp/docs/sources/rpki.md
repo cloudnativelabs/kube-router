@@ -175,6 +175,27 @@ $ gobgp neighbor 10.0.255.2 local
     N*> 192.168.1.0/24   10.0.255.1           65001                00:00:21   [{Origin: i}]
 ```
 
+
+### Detailed Information about validation
+You can get the detailed information about announced routes.
+```bash
+$ gobgp neighbor 10.0.255.1 adj-in 2.1.0.0/16 validation
+Target Prefix: 2.1.0.0/16, AS: 65001
+  This route is invalid  reason: as
+  No VRP ASN matches the route origin ASN.
+
+  Matched VRPs:
+    No Entry
+  Unmatched AS VRPs:
+    Network            AS    MaxLen
+    2.0.0.0/12         3215  16
+    2.1.0.0/16         3215  16
+  Unmatched Length VRPs:
+    No Entry
+```
+From this, we can notice that 2.1.0.0/16 (Origin AS: 65001) is invalid due to its origin AS,
+the origin AS should be 3215.
+
 ## <a name="section3"> Force Re-validation
 
 Validation is executed every time bgp update messages arrive. The
@@ -184,17 +205,3 @@ enables you to validate all the routes.
 ```bash
 $ gobgp rpki validate
 ```
-
-## <a name="section4"> Monitoring validation
-
-You can monitor the validation results in real-time.
-
-```bash
-$ gobgp monitor rpki
-[VALIDATION] Reason: Update, Peer: 10.0.255.1, Timestamp: 2016-01-18 06:47:33 -0800 PST, Prefix:217.196.16.0/20, OriginAS:24651, ASPath:24651, Old:NONE, New:INVALID, ROAs: [Source: 210.173.170.254:323, AS: 6453, Prefix: 217.196.16.0, Prefixlen: 20, Maxlen: 20], [Source: 210.173.170.254:323, AS: 6854, Prefix: 217.196.16.0, Prefixlen: 20, Maxlen: 20], [Source: 210.173.170.254:323, AS: 41798, Prefix: 217.196.16.0, Prefixlen: 20, Maxlen: 20], [Source: 210.173.170.254:323, AS: 43994, Prefix: 217.196.16.0, Prefixlen: 20, Maxlen: 20]
-[VALIDATION] Reason: PeerDown, Peer: 10.0.255.3, Timestamp: 2016-01-18 06:47:33 -0800 PST, Prefix:223.27.80.0/24, OriginAS:65003, ASPath:65003, Old:INVALID, New:INVALID
-```
-
-Notification is sent when the validation result of a route changes to
-invalid or non-invalid. Notification is also sent when an invalid
-route is withdrawn.

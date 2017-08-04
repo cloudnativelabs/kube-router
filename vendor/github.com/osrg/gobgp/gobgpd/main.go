@@ -1,3 +1,4 @@
+//
 // Copyright (C) 2014-2017 Nippon Telegraph and Telephone Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +17,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	_ "net/http/pprof"
@@ -25,16 +27,19 @@ import (
 	"syscall"
 
 	"github.com/jessevdk/go-flags"
-	p "github.com/kr/pretty"
+	"github.com/kr/pretty"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
 	api "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/server"
 	"github.com/osrg/gobgp/table"
-	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
+
+var version = "master"
 
 func main() {
 	sigCh := make(chan os.Signal, 1)
@@ -57,10 +62,16 @@ func main() {
 		TLS             bool   `long:"tls" description:"enable TLS authentication for gRPC API"`
 		TLSCertFile     string `long:"tls-cert-file" description:"The TLS cert file"`
 		TLSKeyFile      string `long:"tls-key-file" description:"The TLS key file"`
+		Version         bool   `long:"version" description:"show version number"`
 	}
 	_, err := flags.Parse(&opts)
 	if err != nil {
 		os.Exit(1)
+	}
+
+	if opts.Version {
+		fmt.Println("gobgpd version", version)
+		os.Exit(0)
 	}
 
 	if opts.CPUs == 0 {
@@ -115,7 +126,7 @@ func main() {
 		go config.ReadConfigfileServe(opts.ConfigFile, opts.ConfigType, configCh)
 		c := <-configCh
 		if opts.LogLevel == "debug" {
-			p.Println(c)
+			pretty.Println(c)
 		}
 		os.Exit(0)
 	}
