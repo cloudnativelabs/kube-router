@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"net/http"
 	"reflect"
@@ -422,6 +423,14 @@ func buildServicesInfo() serviceInfoMap {
 	return serviceMap
 }
 
+func shuffle(endPoints []endpointsInfo) []endpointsInfo {
+	for index1 := range endPoints {
+		index2 := rand.Intn(index1 + 1)
+		endPoints[index1], endPoints[index2] = endPoints[index2], endPoints[index1]
+	}
+	return endPoints
+}
+
 func buildEndpointsInfo() endpointsInfoMap {
 	endpointsMap := make(endpointsInfoMap)
 	for _, ep := range watchers.EndpointsWatcher.List() {
@@ -432,7 +441,7 @@ func buildEndpointsInfo() endpointsInfoMap {
 				for _, addr := range ep_subset.Addresses {
 					endpoints = append(endpoints, endpointsInfo{ip: addr.IP, port: int(port.Port)})
 				}
-				endpointsMap[svcId] = endpoints
+				endpointsMap[svcId] = shuffle(endpoints)
 			}
 		}
 	}
@@ -855,6 +864,8 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 
 	watchers.EndpointsWatcher.RegisterHandler(&nsc)
 	watchers.ServiceWatcher.RegisterHandler(&nsc)
+
+	rand.Seed(time.Now().UnixNano())
 
 	return &nsc, nil
 }
