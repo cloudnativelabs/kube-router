@@ -2,11 +2,11 @@
 set -o errexit
 set -o pipefail
 
-# Pull Request image tag format: PR00-PRUSER
+# Pull Request image tag format: PR00
 if [ "${TRAVIS_EVENT_TYPE}" = "pull_request" ]; then
     PR_USER=$(echo "$TRAVIS_PULL_REQUEST_SLUG" | sed -e 's/\/.*//')
     echo "Building/pushing PR$TRAVIS_PULL_REQUEST from $PR_USER"
-    make push IMG_TAG="PR$TRAVIS_PULL_REQUEST-$PR_USER"
+    make push IMG_TAG="PR$TRAVIS_PULL_REQUEST"
     exit 0
 fi
 
