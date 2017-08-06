@@ -23,6 +23,22 @@ kube-router: $(shell find . -name \*.go) ## Builds kube-router.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 
+vagrant-up-single-node: all vagrant-destroy ## Test the current codebase in a local VM single-node cluster
+	@docker="$(DOCKER)" hack/vagrant-up.sh
+
+vagrant-up-multi-node: all vagrant-destroy ## Test the current codebase in a local VM multi-node cluster
+	@docker="$(DOCKER)" HACK_MULTI_NODE="true" hack/vagrant-up.sh
+
+vagrant: ## Run vagrant against a previously up'd cluster. Example: make vagrant status
+	@hack/vagrant.sh $(VAGRANT_RUN_ARGS)
+
+vagrant-destroy: ## Destroy a previously created local VM cluster
+	@hack/vagrant-destroy.sh
+	@HACK_MULTI_NODE="true" hack/vagrant-destroy.sh
+
+vagrant-clean: vagrant-destroy ## Destroy a previously created local VM cluster and remove all downloaded/generated assets
+	@rm -rf hack/_output
+
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
@@ -75,7 +91,6 @@ release: push-release github-release ## Pushes a release to DockerHub and GitHub
 clean: ## Removes the kube-router binary and Docker images
 	rm -f kube-router
 	$(DOCKER) rmi $(REGISTRY_DEV)
-	$(DOCKER) rmi $(REGISTRY)
 
 gofmt: ## Tells you what files need to be gofmt'd.
 	@build/verify-gofmt.sh
@@ -131,7 +146,7 @@ gobgp: vendor/github.com/osrg/gobgp/gobgp
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	  awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 # TODO: Uncomment this target when all deps are version-pinned in glide.yaml
 # update-glide:
@@ -140,8 +155,17 @@ help:
 # 	# go get -d -u github.com/sgotti/glide-vc
 # 	glide vc --only-code --no-tests
 
+# If the first argument is "vagrant"...
+ifeq (vagrant,$(firstword $(MAKECMDGOALS)))
+  # use the rest as arguments for "vagrant"
+  VAGRANT_RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  # ...and turn them into do-nothing targets
+  $(eval $(VAGRANT_RUN_ARGS):;@:)
+endif
+
 .PHONY: build clean container run release goreleaser push gofmt gofmt-fix
 .PHONY: update-glide test docker-login push-release github-release help
-.PHONY: gopath gopath-fix
+.PHONY: gopath gopath-fix vagrant-up-single-node
+.PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
 
 .DEFAULT: all
