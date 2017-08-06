@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,6 +33,8 @@ import (
 type NetworkRoutingController struct {
 	nodeIP               net.IP
 	nodeHostName         string
+	nodeSubnet           net.IPNet
+	nodeInterface        string
 	mu                   sync.Mutex
 	clientset            *kubernetes.Clientset
 	bgpServer            *gobgp.BgpServer
@@ -361,10 +364,46 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	nexthop := path.GetNexthop()
 	nlri := path.GetNlri()
 	dst, _ := netlink.ParseIPNet(nlri.String())
-	route := &netlink.Route{
-		Dst:      dst,
-		Gw:       nexthop,
-		Protocol: 0x11,
+	var route *netlink.Route
+
+	// check if the neighbour is in same subnet
+	if !nrc.nodeSubnet.Contains(nexthop) {
+		tunnelName := "tun-" + strings.Replace(nexthop.String(), ".", "", -1)
+		glog.Infof("Found node: " + nexthop.String() + " to be in different subnet.")
+		var link netlink.Link
+		var err error
+		link, err = netlink.LinkByName(tunnelName)
+		if err != nil {
+			glog.Infof("Found node: " + nexthop.String() + " to be in different subnet. Creating tunnel: " + tunnelName)
+			cmd := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
+				"remote", nexthop.String(), "dev", nrc.nodeInterface)
+			err = cmd.Run()
+			if err != nil {
+				return errors.New("Route not injected for the route advertised by the node " + nexthop.String() +
+					". Failed to create tunnel interface " + tunnelName)
+			}
+			link, err = netlink.LinkByName(tunnelName)
+			if err != nil {
+				return errors.New("Route not injected for the route advertised by the node " + nexthop.String() +
+					". Failed to create tunnel interface " + tunnelName)
+			}
+			if err := netlink.LinkSetUp(link); err != nil {
+				return errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
+			}
+		} else {
+			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop.String() + " already exists.")
+		}
+		route = &netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Dst:       dst,
+			Protocol:  0x11,
+		}
+	} else {
+		route = &netlink.Route{
+			Dst:      dst,
+			Gw:       nexthop,
+			Protocol: 0x11,
+		}
 	}
 
 	if path.IsWithdraw {
@@ -660,6 +699,25 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	return nil
 }
 
+func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
+	links, err := netlink.LinkList()
+	if err != nil {
+		return net.IPNet{}, "", errors.New("Failed to get list of links")
+	}
+	for _, link := range links {
+		addresses, err := netlink.AddrList(link, netlink.FAMILY_V4)
+		if err != nil {
+			return net.IPNet{}, "", errors.New("Failed to get list of addr")
+		}
+		for _, addr := range addresses {
+			if addr.IPNet.IP.Equal(nodeIp) {
+				return *addr.IPNet, link.Attrs().Name, nil
+			}
+		}
+	}
+	return net.IPNet{}, "", errors.New("Failed to find interface with specified node ip")
+}
+
 func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
 
 	nrc := NetworkRoutingController{}
@@ -730,6 +788,12 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 		return nil, errors.New("Failed getting IP address from node object: " + err.Error())
 	}
 	nrc.nodeIP = nodeIP
+
+	nrc.nodeSubnet, nrc.nodeInterface, err = getNodeSubnet(nodeIP)
+	if err != nil {
+		return nil, errors.New("Failed find the subnet of the node IP and interface on" +
+			"which its configured: " + err.Error())
+	}
 
 	watchers.NodeWatcher.RegisterHandler(&nrc)
 
