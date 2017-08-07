@@ -390,6 +390,10 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 			if err := netlink.LinkSetUp(link); err != nil {
 				return errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
 			}
+			// reduce the MTU by 20 bytes to accommodate ipip tunnel overhead
+			if err := netlink.LinkSetMTU(link, link.Attrs().MTU-20); err != nil {
+				return errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
+			}
 		} else {
 			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop.String() + " already exists.")
 		}
