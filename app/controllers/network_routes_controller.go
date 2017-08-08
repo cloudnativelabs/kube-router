@@ -39,7 +39,7 @@ type NetworkRoutingController struct {
 	clientset            *kubernetes.Clientset
 	bgpServer            *gobgp.BgpServer
 	syncPeriod           time.Duration
-	clusterCIDR          string
+	enablePodEgress      bool
 	hostnameOverride     string
 	advertiseClusterIp   bool
 	defaultNodeAsnNumber uint32
@@ -73,6 +73,8 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	}
 
 	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
+		glog.Infof("cidr.IP not found, or oldCidr/currentCidr don't match.")
+		glog.Infof("cidr.IP is %s\noldCidr is %s\ncurrentCidr is %s\n", cidr.IP.String(), oldCidr, currentCidr)
 		err = utils.InsertPodCidrInCniSpec("/etc/cni/net.d/10-kuberouter.conf", currentCidr)
 		if err != nil {
 			glog.Errorf("Failed to insert pod CIDR into CNI conf file: %s", err.Error())
@@ -88,15 +90,29 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 	glog.Infof("Starting network route controller")
 
-	if len(nrc.clusterCIDR) != 0 {
-		args := []string{"-s", nrc.clusterCIDR, "!", "-d", nrc.clusterCIDR, "-j", "MASQUERADE"}
-		iptablesCmdHandler, err := iptables.New()
-		if err != nil {
-			glog.Errorf("Failed to add iptable rule to masqurade outbound traffic from pods due to %s. External connectivity will not work.", err.Error())
-		}
+	// Handle Pod egress masquerading configuration
+	args := []string{"-s", currentCidr, "!", "-d", currentCidr, "-j", "MASQUERADE"}
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		glog.Errorf("Failed create iptables handler due to %s.", err.Error())
+	}
+	if nrc.enablePodEgress {
 		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
 			glog.Errorf("Failed to add iptable rule to masqurade outbound traffic from pods due to %s. External connectivity will not work.", err.Error())
+		}
+		glog.Infof("Added iptables rule to masqurade outbound traffic from pods.")
+	} else {
+		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
+		if err != nil {
+			glog.Errorf("Failed to lookup iptable rule to masqurade outbound traffic from pods due to %s.", err.Error())
+		}
+		if exists {
+			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
+			if err != nil {
+				glog.Errorf("Failed to delete iptable rule to masqurade outbound traffic from pods due to %s. Pod egress might still work...", err.Error())
+			}
+			glog.Infof("Deleted iptables rule to masqurade outbound traffic from pods.")
 		}
 	}
 
@@ -727,7 +743,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 	nrc := NetworkRoutingController{}
 
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
-	nrc.clusterCIDR = kubeRouterConfig.ClusterCIDR
+	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
 
