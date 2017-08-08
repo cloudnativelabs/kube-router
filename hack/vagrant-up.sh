@@ -42,8 +42,8 @@ fi
 # Export the kube-router container image
 echo "INFO: Exporting your kube-router container image."
 mkdir -p "${HACK_IMG_CACHE_DIR}"
-"${docker}" tag cloudnativelabs/kube-router-git:latest "${KR_IMAGE_TAG}"
-"${docker}" save "${KR_IMAGE_TAG}" -o "${HACK_IMG_CACHE_DIR}/kube-router.docker"
+eval "${docker} tag ${DEV_IMG} ${KR_IMAGE_TAG}"
+eval "${docker} save ${KR_IMAGE_TAG} -o ${HACK_IMG_CACHE_DIR}/kube-router.docker"
 
 # Copy cached images to Bootkube local-images directory
 echo "INFO: Caching hyperkube images to Bootkube local-images directory."
