@@ -8,17 +8,14 @@ export HACK_DIR
 # shellcheck source=vagrant-common.sh
 . "${HACK_DIR}/vagrant-common.sh"
 
-if [ ! -d "${BK_SHORTCUT_DIR}" ]; then
-  echo "INFO: bootkube hack shortcut not found."
-  exit 0
-fi
+for i in "${BK_CLONE_DIR}/hack/single-node" "${BK_CLONE_DIR}/hack/multi-node"; do
+  echo "INFO: Running vagrant destroy -f in ${i}"
+  cd "${i}"
+  vagrant destroy -f
 
-echo "INFO: Running vagrant destroy -f"
-cd "${BK_SHORTCUT_DIR}"
-vagrant destroy -f
-
-echo "INFO: Removing cluster assets."
-rm -rf "${BK_SHORTCUT_DIR}/cluster"
+  echo "INFO: Removing cluster assets in ${i}"
+  rm -rf "${i}/cluster"
+done
 
 echo "INFO: Removing symbolic link to Bootkube hack directory"
 rm -rf "${BK_SHORTCUT_DIR}"
