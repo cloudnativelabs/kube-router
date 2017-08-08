@@ -23,11 +23,15 @@ kube-router: $(shell find . -name \*.go) ## Builds kube-router.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 
-vagrant-up-single-node: all vagrant-destroy ## Test the current codebase in a local VM single-node cluster
-	@docker="$(DOCKER)" hack/vagrant-up.sh
+vagrant-up: export docker=$(DOCKER)
+vagrant-up: export DEV_IMG=$(REGISTRY_DEV):$(IMG_TAG)
+vagrant-up: all vagrant-destroy
+	@hack/vagrant-up.sh
 
-vagrant-up-multi-node: all vagrant-destroy ## Test the current codebase in a local VM multi-node cluster
-	@docker="$(DOCKER)" HACK_MULTI_NODE="true" hack/vagrant-up.sh
+vagrant-up-single-node: vagrant-up ## Test the current codebase in a local VM single-node cluster
+
+vagrant-up-multi-node: export HACK_MULTI_NODE=true
+vagrant-up-multi-node: vagrant-up ## Test the current codebase in a local VM multi-node cluster
 
 vagrant: ## Run vagrant against a previously up'd cluster. Example: make vagrant status
 	@hack/vagrant.sh $(VAGRANT_RUN_ARGS)

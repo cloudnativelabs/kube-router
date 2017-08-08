@@ -18,6 +18,7 @@ HACK_TMP_DIR="${HACK_DIR}/_cache"
 HACK_MANIFEST_DIRS="${REPO_DIR}/contrib/bootkube"
 export HACK_MANIFEST_DIRS
 
+[ -z "${DEV_IMG}" ]      && DEV_IMG="cloudnativelabs/kube-router-git:latest"
 [ -z "${BK_VERSION}" ]   && BK_VERSION="v0.6.0_kube-router"
 [ -z "${BK_CLONE_URL}" ] && BK_CLONE_URL="https://github.com/bzub/bootkube.git"
 [ -z "${BK_CLONE_DIR}" ] && BK_CLONE_DIR="${HACK_TMP_DIR}/bootkube"
