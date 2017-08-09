@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+	"errors"
 
 	"github.com/cloudnativelabs/kube-router/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,7 +79,11 @@ func StartNetworkPolicyWatcher(clientset *kubernetes.Clientset, resyncPeriod tim
 	npw.clientset = clientset
 
 	v1NetworkPolicy := true
-	v, _ := clientset.Discovery().ServerVersion()
+	v, err := clientset.Discovery().ServerVersion()
+	if err != nil {
+       return nil, errors.New("Failed to get API server version due to " + err.Error()) 
+	}
+
 	minorVer, _ := strconv.Atoi(v.Minor)
 	if v.Major == "1" && minorVer < 7 {
 		v1NetworkPolicy = false
