@@ -69,25 +69,27 @@ Also you can choose to run kube-router as agent running on each cluster node. Al
 ### command line options
 
 ```
-  --run-firewall                    If false, kube-router won't setup iptables to provide ingress firewall for pods. true by default.
-  --run-router                      If true each node advertise routes the rest of the nodes and learn the routes for the pods. false by default
-  --run-service-proxy               If false, kube-router won't setup IPVS for services proxy. true by default.
-  --cleanup-config                  If true cleanup iptables rules, ipvs, ipset configuration and exit.
-  --masquerade-all                  SNAT all traffic to cluster IP/node port. False by default
-  --cluster-cidr                    CIDR range of pods in the cluster. If specified external traffic from the pods will be masquraded
-  --config-sync-period duration     How often configuration from the apiserver is refreshed. Must be greater than 0. (default 1m0s)
-  --iptables-sync-period duration   The maximum interval of how often iptables rules are refreshed (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
-  --ipvs-sync-period duration       The maximum interval of how often ipvs config is refreshed (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
-  --kubeconfig string               Path to kubeconfig file with authorization information (the master location is set by the master flag).
-  --master string                   The address of the Kubernetes API server (overrides any value in kubeconfig)
-  --routes-sync-period duration     The maximum interval of how often routes are advertised and learned (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
-  --advertise-cluster-ip            If true then cluster IP will be added into the RIB and will be advertised to the peers. False by default.
-  --cluster-asn                     ASN number under which cluster nodes will run iBGP
-  --peer-asn                        ASN number of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr
-  --peer-router                     The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's
-  --nodes-full-mesh                 When enabled each node in the cluster will setup BGP peer with rest of the nodes. True by default
-  --hostname-override               If non-empty, this string will be used as identification of node name instead of the actual hostname.
-  --hairpin-mode                    Adds iptable rules for every ClusterIP Service Endpoint to support hairpin traffic. False by default
+Usage of ./kube-router:
+    --advertise-cluster-ip            Add Cluster IP to the RIB and advertise to peers.
+    --cleanup-config                  Cleanup iptables rules, ipvs, ipset configuration and exit.
+    --cluster-asn string              ASN number under which cluster nodes will run iBGP.
+    --config-sync-period duration     The delay between apiserver configuration synchronizations (e.g. '5s', '1m').  Must be greater than 0. (default 1m0s)
+    --enable-pod-egress               SNAT traffic from Pods to destinations outside the cluster. (default true)
+    --hairpin-mode                    Add iptable rules for every Service Endpoint to support hairpin traffic.
+-h, --help                            Print usage information.
+    --hostname-override string        Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
+    --iptables-sync-period duration   The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
+    --ipvs-sync-period duration       The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
+    --kubeconfig string               Path to kubeconfig file with authorization information (the master location is set by the master flag).
+    --masquerade-all                  SNAT all traffic to cluster IP/node port.
+    --master string                   The address of the Kubernetes API server (overrides any value in kubeconfig).
+    --nodes-full-mesh                 Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
+    --peer-asn string                 ASN number of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr.
+    --peer-router string              The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's.
+    --routes-sync-period duration     The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
+    --run-firewall                    Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
+    --run-router                      Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
+    --run-service-proxy               Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
 ```
 
 ### requirements
