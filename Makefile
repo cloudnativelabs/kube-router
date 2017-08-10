@@ -43,6 +43,11 @@ vagrant-destroy: ## Destroy a previously created local VM cluster
 vagrant-clean: vagrant-destroy ## Destroy a previously created local VM cluster and remove all downloaded/generated assets
 	@rm -rf hack/_output
 
+vagrant-image-update: export docker=$(DOCKER)
+vagrant-image-update: export DEV_IMG=$(REGISTRY_DEV):$(IMG_TAG)
+vagrant-image-update: all ## Rebuild kube-router, update image in local VMs, and restart kube-router pods.
+	@hack/vagrant-image-update.sh
+
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 

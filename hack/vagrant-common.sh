@@ -50,3 +50,22 @@ HACK_ACI_CACHE_FILE="${HACK_IMG_CACHE_DIR}/hyperkube-${HYPERKUBE_IMG_TAG}.aci"
 export HACK_ACI_CACHE_FILE
 HACK_DOCKER_CACHE_FILE="${HACK_IMG_CACHE_DIR}/hyperkube-${HYPERKUBE_IMG_TAG}.docker"
 export HACK_DOCKER_CACHE_FILE
+
+# Export the kube-router container image
+export_latest_image() {
+  mkdir -p "${HACK_IMG_CACHE_DIR}"
+  eval "${docker}" tag ${DEV_IMG} "${KR_IMAGE_TAG}"
+  eval "${docker}" save "${KR_IMAGE_TAG}" -o "${HACK_IMG_CACHE_DIR}/kube-router.docker"
+}
+
+# Re-pull the kube-router container image file within the VM
+# Usage: update_image_in_vm() VM_NAME
+update_image_in_vm() {
+  if [ -z "${1}" ]; then
+    echo "ERROR: VM name required."
+    echo "Usage: update_image_in_vm() VM_NAME"
+    return 1
+  fi
+
+  vagrant ssh "${i}" -c "docker load -i /var/tmp/images/kube-router.docker"
+}
