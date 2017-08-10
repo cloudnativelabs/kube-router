@@ -36,9 +36,9 @@ else
     echo "INFO: Location: ${HACK_DOCKER_CACHE_FILE}"
   else
     echo "INFO: Fetching ${HYPERKUBE_IMG_URL} Docker image."
-    "${docker}" pull "${HYPERKUBE_IMG_URL}"
+    eval "${docker}" pull "${HYPERKUBE_IMG_URL}"
 
     echo "INFO: Saving ${HYPERKUBE_IMG_URL} Docker image to cache directory."
-    "${docker}" save "${HYPERKUBE_IMG_URL}" -o "${HACK_DOCKER_CACHE_FILE}"
+    eval "${docker}" save "${HYPERKUBE_IMG_URL}" -o "${HACK_DOCKER_CACHE_FILE}"
   fi
 fi

@@ -49,76 +49,6 @@ kube-router images, cloudnativelabs/kube-router. You can push to a different
 repository by changing a couple settings, as described in [Image Options](#image-options)
 below.
 
-## Testing Code Changes
-
-### Running Your Code On A Local VM Cluster
-
-Running your code changes in a real Kubernetes cluster is easy. Just make sure
-you have Virtualbox, VMware Fusion, or VMware Workstation installed and run:
-```
-make vagrant-up-single-node
-```
-
-Alternatively if you have 6GB RAM for the VMs, you can run a multi-node cluster
-that consists of a dedicated etcd node, a controller node, and a worker node:
-```
-make vagrant-up-multi-node
-```
-
-You will see lots of output as the VMs are provisioned, and the first run may
-take some time as VM and container images are downloaded. After the cluster is
-up you will recieve instructions for using kubectl and gaining ssh access:
-```
-  SUCCESS! The local cluster is ready.
-
-  ### kubectl usage ###
-  # Quickstart - Use this kubeconfig for individual commands
-  KUBECONFIG=/tmp/kr-vagrant-shortcut/cluster/auth/kubeconfig kubectl get pods --all-namespaces -o wide
-  #
-  ## OR ##
-  #
-  # Use this kubeconfig for the current terminal session
-  KUBECONFIG=/tmp/kr-vagrant-shortcut/cluster/auth/kubeconfig
-  export KUBECONFIG
-  kubectl get pods --all-namespaces -o wide
-  #
-  ## OR ##
-  #
-  # Backup and replace your default kubeconfig
-  # Note: This will continue to work on recreated local clusters
-  mv ~/.kube/config ~/.kube/config-backup
-  ln -s /tmp/kr-vagrant-shortcut/cluster/auth/kubeconfig ~/.kube/config
-
-  ### SSH ###
-  # Get node names
-  make vagrant status
-  # SSH into a the controller node (c1)
-  make vagrant ssh c1
-```
-
-#### Managing A Local VM Cluster
-
-You can use [Vagrant](https://www.vagrantup.com/docs/cli/) commands against the
-running cluster with `make vagrant COMMANDS`.
-
-For example, `make vagrant status` outputs:
-```
-Current machine states:
-
-e1                        not created (virtualbox)
-c1                        not created (virtualbox)
-w1                        not created (virtualbox)
-
-This environment represents multiple VMs. The VMs are all listed
-above with their current state. For more information about a specific
-VM, run `vagrant status NAME`.
-```
-
-With this information you can ssh into any of the VMs listed:
-```
-make vagrant ssh c1
-```
-
 ### Makefile Options
 
 There are several variables which can be modified in the Makefile to customize
@@ -168,6 +98,10 @@ Successfully tagged quay.io/bzub/kube-router-git:custom
   default these images get a name ending with `-git` to signify that they are
   for testing purposes.
   Example (DEV-SUFFIX=master-latest): quay.io/cloudnativelabs/kube-router-git:master-latest
+
+## Testing kube-router
+
+Please read the [testing documentation](testing.md) for details.
 
 ## Release Workflow
 
