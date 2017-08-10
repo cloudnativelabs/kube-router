@@ -40,6 +40,7 @@ type NetworkRoutingController struct {
 	clientset            *kubernetes.Clientset
 	bgpServer            *gobgp.BgpServer
 	syncPeriod           time.Duration
+	clusterCIDR          string
 	enablePodEgress      bool
 	hostnameOverride     string
 	advertiseClusterIp   bool
@@ -844,13 +845,19 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
 
-	// TODO: Add bitmap hashtype support to ipset package. It would work well here.
-	podSubnetIpSet, err := ipset.New(podSubnetIpSetName, "hash:net", &ipset.Params{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Pod subnet ipset: %s", err.Error())
-	}
+	if nrc.enablePodEgress || len(nrc.clusterCIDR) != 0 {
+		nrc.enablePodEgress = true
 
-	nrc.podSubnetsIpSet = podSubnetIpSet
+		// TODO: Add bitmap hashtype support to ipset package. It would work well here.
+		podSubnetIpSet, err := ipset.New(podSubnetIpSetName, "hash:net", &ipset.Params{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Pod subnet ipset: %s", err.Error())
+		}
+
+		nrc.podSubnetsIpSet = podSubnetIpSet
+	} else {
+		nrc.podSubnetsIpSet = nil
+	}
 
 	if len(kubeRouterConfig.ClusterAsn) != 0 {
 		asn, err := strconv.ParseUint(kubeRouterConfig.ClusterAsn, 0, 32)

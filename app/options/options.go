@@ -19,6 +19,7 @@ type KubeRouterConfig struct {
 	RunFirewall        bool
 	RunRouter          bool
 	MasqueradeAll      bool
+	ClusterCIDR        string
 	EnablePodEgress    bool
 	HostnameOverride   string
 	AdvertiseClusterIp bool
@@ -54,6 +55,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Cleanup iptables rules, ipvs, ipset configuration and exit.")
 	fs.BoolVar(&s.MasqueradeAll, "masquerade-all", false,
 		"SNAT all traffic to cluster IP/node port.")
+	fs.StringVar(&s.ClusterCIDR, "cluster-cidr", s.ClusterCIDR,
+		"CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.")
 	fs.BoolVar(&s.EnablePodEgress, "enable-pod-egress", true,
 		"SNAT traffic from Pods to destinations outside the cluster.")
 	fs.DurationVar(&s.ConfigSyncPeriod, "config-sync-period", s.ConfigSyncPeriod,
