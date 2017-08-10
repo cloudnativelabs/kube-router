@@ -20,6 +20,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
+	"github.com/janeczku/go-ipset/ipset"
 	bgpapi "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
@@ -48,18 +49,22 @@ type NetworkRoutingController struct {
 	nodePeerRouters      []string
 	globalPeerAsnNumber  uint32
 	bgpFullMeshMode      bool
+	podSubnetsIpSet      *ipset.IPSet
 }
 
 var (
-	activeNodes = make(map[string]bool)
+	activeNodes   = make(map[string]bool)
+	podEgressArgs = []string{"-m", "set", "--match-set", podSubnetIpSetName, "src",
+		"-m", "set", "!", "--match-set", podSubnetIpSetName, "dst",
+		"-j", "MASQUERADE"}
 )
 
 const (
 	clustetNieghboursSet = "clusterneighboursset"
+	podSubnetIpSetName   = "kube-router-pod-subnets"
 )
 
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
-
 	cidr, err := utils.GetPodCidrFromCniSpec("/etc/cni/net.d/10-kuberouter.conf")
 	if err != nil {
 		glog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err.Error())
@@ -91,28 +96,23 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	glog.Infof("Starting network route controller")
 
 	// Handle Pod egress masquerading configuration
-	args := []string{"-s", currentCidr, "!", "-d", currentCidr, "-j", "MASQUERADE"}
-	iptablesCmdHandler, err := iptables.New()
-	if err != nil {
-		glog.Errorf("Failed create iptables handler due to %s.", err.Error())
-	}
 	if nrc.enablePodEgress {
-		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
+		glog.Infoln("Enabling Pod egress.")
+		err = createPodEgressRule()
 		if err != nil {
-			glog.Errorf("Failed to add iptable rule to masqurade outbound traffic from pods due to %s. External connectivity will not work.", err.Error())
+			glog.Errorf("Error enabling Pod egress: %s", err.Error())
 		}
-		glog.Infof("Added iptables rule to masqurade outbound traffic from pods.")
 	} else {
-		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
+		glog.Infoln("Disabling Pod egress.")
+		err = deletePodEgressRule()
+		// TODO: Don't error if removing non-existant Pod egress rules/ipsets.
 		if err != nil {
-			glog.Errorf("Failed to lookup iptable rule to masqurade outbound traffic from pods due to %s.", err.Error())
+			glog.Infof("Error disabling Pod egress: %s", err.Error())
 		}
-		if exists {
-			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
-			if err != nil {
-				glog.Errorf("Failed to delete iptable rule to masqurade outbound traffic from pods due to %s. Pod egress might still work...", err.Error())
-			}
-			glog.Infof("Deleted iptables rule to masqurade outbound traffic from pods.")
+
+		err = deletePodSubnetIpSet()
+		if err != nil {
+			glog.Infof("Error disabling Pod egress: %s", err.Error())
 		}
 	}
 
@@ -143,6 +143,14 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		default:
 		}
 
+		// Update Pod subnet ipset entries
+		if nrc.enablePodEgress {
+			err := nrc.syncPodSubnetIpSet()
+			if err != nil {
+				glog.Errorf("Error synchronizing Pod subnet ipset: %s", err.Error())
+			}
+		}
+
 		// add the current set of nodes (excluding self) as BGP peers. Nodes form full mesh
 		nrc.syncPeers()
 
@@ -164,7 +172,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 
 		glog.Infof("Performing periodic syn of the routes")
-		err := nrc.advertiseRoute()
+		err = nrc.advertiseRoute()
 		if err != nil {
 			glog.Errorf("Failed to advertise route: %s", err.Error())
 		}
@@ -181,6 +189,43 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		case <-t.C:
 		}
 	}
+}
+
+func createPodEgressRule() error {
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed create iptables handler:" + err.Error())
+	}
+
+	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", podEgressArgs...)
+	if err != nil {
+		return errors.New("Failed to add iptable rule to masqurade outbound traffic from pods: " +
+			err.Error() + "External connectivity will not work.")
+
+	}
+	glog.Infof("Added iptables rule to masqurade outbound traffic from pods.")
+	return nil
+}
+
+func deletePodEgressRule() error {
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed create iptables handler:" + err.Error())
+	}
+
+	exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", podEgressArgs...)
+	if err != nil {
+		return errors.New("Failed to lookup iptable rule to masqurade outbound traffic from pods: " + err.Error())
+	}
+	if exists {
+		err = iptablesCmdHandler.Delete("nat", "POSTROUTING", podEgressArgs...)
+		if err != nil {
+			return errors.New("Failed to delete iptable rule to masqurade outbound traffic from pods: " +
+				err.Error() + ". Pod egress might still work...")
+		}
+		glog.Infof("Deleted iptables rule to masqurade outbound traffic from pods.")
+	}
+	return nil
 }
 
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
@@ -435,10 +480,33 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 }
 
 func (nrc *NetworkRoutingController) Cleanup() {
+	err := deletePodEgressRule()
+	if err != nil {
+		glog.Errorf("Error deleting Pod egress iptable rule: %s", err.Error())
+	}
+
+	err = deletePodSubnetIpSet()
+	if err != nil {
+		glog.Errorf("Error deleting Pod subnet ipset: %s", err.Error())
+	}
+}
+
+func deletePodSubnetIpSet() error {
+	_, err := exec.LookPath("ipset")
+	if err != nil {
+		return errors.New("Ensure ipset package is installed: " + err.Error())
+	}
+
+	podSubnetIpSet := ipset.IPSet{Name: podSubnetIpSetName, HashType: "bitmap:ip"}
+	err = podSubnetIpSet.Destroy()
+	if err != nil {
+		return errors.New("Failure deleting Pod egress ipset: " + err.Error())
+	}
+
+	return nil
 }
 
 func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
-
 	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
@@ -479,10 +547,33 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 	}
 }
 
+func (nrc *NetworkRoutingController) syncPodSubnetIpSet() error {
+	glog.Infof("Syncing Pod subnet ipset entries.")
+
+	// get the current list of the nodes from API server
+	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		return errors.New("Failed to list nodes from API server: " + err.Error())
+	}
+
+	// Collect active PodCIDR(s) from nodes
+	currentPodCidrs := make([]string, 0)
+	for _, node := range nodes.Items {
+		currentPodCidrs = append(currentPodCidrs, node.Spec.PodCIDR)
+	}
+
+	err = nrc.podSubnetsIpSet.Refresh(currentPodCidrs)
+	if err != nil {
+		return errors.New("Failed to update Pod subnet ipset: %s" + err.Error())
+	}
+
+	return nil
+}
+
 // Refresh the peer relationship rest of the nodes in the cluster. Node add/remove
 // events should ensure peer relationship with only currently active nodes. In case
 // we miss any events from API server this method which is called periodically
-// ensure peer relationship with removed nodes is deleted.
+// ensure peer relationship with removed nodes is deleted. Also update Pod subnet ipset.
 func (nrc *NetworkRoutingController) syncPeers() {
 
 	glog.Infof("Syncing BGP peers for the node.")
@@ -494,7 +585,7 @@ func (nrc *NetworkRoutingController) syncPeers() {
 		return
 	}
 
-	// establish peer with current set of nodes
+	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, node := range nodes.Items {
 		nodeIP, _ := getNodeIP(&node)
@@ -534,6 +625,7 @@ func (nrc *NetworkRoutingController) syncPeers() {
 				PeerAs:          nrc.defaultNodeAsnNumber,
 			},
 		}
+
 		// TODO: check if a node is alredy added as nieighbour in a better way than add and catch error
 		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
 			if !strings.Contains(err.Error(), "Can't overwrite the existing peer") {
@@ -739,6 +831,11 @@ func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
 }
 
 func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
+	// TODO: Remove lookup, ipset.New already does this.
+	_, err := exec.LookPath("ipset")
+	if err != nil {
+		return nil, errors.New("Ensure ipset package is installed: " + err.Error())
+	}
 
 	nrc := NetworkRoutingController{}
 
@@ -746,6 +843,14 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConf
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
+
+	// TODO: Add bitmap hashtype support to ipset package. It would work well here.
+	podSubnetIpSet, err := ipset.New(podSubnetIpSetName, "hash:net", &ipset.Params{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Pod subnet ipset: %s", err.Error())
+	}
+
+	nrc.podSubnetsIpSet = podSubnetIpSet
 
 	if len(kubeRouterConfig.ClusterAsn) != 0 {
 		asn, err := strconv.ParseUint(kubeRouterConfig.ClusterAsn, 0, 32)
