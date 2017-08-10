@@ -40,7 +40,7 @@ else
 fi
 
 echo "INFO: Exporting your kube-router container image."
-export-latest-image
+export_latest_image
 
 echo "INFO: Caching hyperkube images to Bootkube local-images directory."
 "${HACK_DIR}/sync-image-cache.sh"
