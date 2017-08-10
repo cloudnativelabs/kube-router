@@ -79,8 +79,6 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	}
 
 	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
-		glog.Infof("cidr.IP not found, or oldCidr/currentCidr don't match.")
-		glog.Infof("cidr.IP is %s\noldCidr is %s\ncurrentCidr is %s\n", cidr.IP.String(), oldCidr, currentCidr)
 		err = utils.InsertPodCidrInCniSpec("/etc/cni/net.d/10-kuberouter.conf", currentCidr)
 		if err != nil {
 			glog.Errorf("Failed to insert pod CIDR into CNI conf file: %s", err.Error())
@@ -175,12 +173,12 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		glog.Infof("Performing periodic syn of the routes")
 		err = nrc.advertiseRoute()
 		if err != nil {
-			glog.Errorf("Failed to advertise route: %s", err.Error())
+			glog.Errorf("Error advertising route: %s", err.Error())
 		}
 
 		err = nrc.addExportPolicies()
 		if err != nil {
-			glog.Errorf("Failed to add BGP export policies due to %s", err.Error())
+			glog.Errorf("Error adding BGP export policies: %s", err.Error())
 		}
 
 		select {
@@ -401,23 +399,32 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	policy, err := table.NewPolicy(definition)
 	if err != nil {
-		return err
+		return errors.New("Failed to create new policy: " + err.Error())
 	}
-	if err = nrc.bgpServer.AddPolicy(policy, false); err != nil {
-		return err
+
+	err = nrc.bgpServer.ReplacePolicy(policy, false, false)
+	if err != nil {
+		err = nrc.bgpServer.AddPolicy(policy, false)
+		if err != nil {
+			return errors.New("Failed to add policy: " + err.Error())
+		}
 	}
+
 	err = nrc.bgpServer.AddPolicyAssignment("",
 		table.POLICY_DIRECTION_EXPORT,
 		[]*config.PolicyDefinition{&definition},
 		table.ROUTE_TYPE_ACCEPT)
 	if err != nil {
-		return err
+		return errors.New("Failed to add policy assignment: " + err.Error())
 	}
 
 	// configure default BGP export policy to reject
 	pd := make([]*config.PolicyDefinition, 0)
 	pd = append(pd, &definition)
-	nrc.bgpServer.ReplacePolicyAssignment("", table.POLICY_DIRECTION_EXPORT, pd, table.ROUTE_TYPE_REJECT)
+	err = nrc.bgpServer.ReplacePolicyAssignment("", table.POLICY_DIRECTION_EXPORT, pd, table.ROUTE_TYPE_REJECT)
+	if err != nil {
+		return errors.New("Failed to replace policy assignment: " + err.Error())
+	}
 
 	return nil
 }
@@ -565,7 +572,7 @@ func (nrc *NetworkRoutingController) syncPodSubnetIpSet() error {
 
 	err = nrc.podSubnetsIpSet.Refresh(currentPodCidrs)
 	if err != nil {
-		return errors.New("Failed to update Pod subnet ipset: %s" + err.Error())
+		return errors.New("Failed to update Pod subnet ipset: " + err.Error())
 	}
 
 	return nil
