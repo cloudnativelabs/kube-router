@@ -60,6 +60,9 @@ Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/maste
 #### bootkube
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/master/contrib/bootkube) to deploy Kubernetes cluster with Kube-router using [bootkube](https://github.com/kubernetes-incubator/bootkube)
 
+#### kubeadm
+Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/kubeadm.md) to deploy Kubernetes cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/)
+
 ### deployment
 
 Depending on what functionality of kube-router you want to use, multiple deployment options are possible. You can use the flags `--run-firewall`, `--run-router`, `--run-service-proxy` to selectively enable only required functionality of kube-router.
