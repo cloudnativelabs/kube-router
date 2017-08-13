@@ -38,7 +38,6 @@ vagrant: ## Run vagrant against a previously up'd cluster. Example: make vagrant
 
 vagrant-destroy: ## Destroy a previously created local VM cluster
 	@hack/vagrant-destroy.sh
-	@HACK_MULTI_NODE="true" hack/vagrant-destroy.sh
 
 vagrant-clean: vagrant-destroy ## Destroy a previously created local VM cluster and remove all downloaded/generated assets
 	@rm -rf hack/_output
