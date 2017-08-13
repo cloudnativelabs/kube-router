@@ -1,5 +1,5 @@
-hash: 0b35e7130df3f81011b44875ba84fc444742e3ea71b5d5b8d6787938d2f1402b
-updated: 2017-08-04T01:06:37.90272016-05:00
+hash: dca664c88bf9e7943a14d9afc93b05acd235f7260e717e559dfbafc69c79177c
+updated: 2017-08-13T11:15:41.1230094-05:00
 imports:
 - name: github.com/armon/go-radix
   version: 1fca145dffbcaa8fe914309b1ec0cfc67500fe61
@@ -167,7 +167,7 @@ imports:
 - name: github.com/opencontainers/go-digest
   version: 279bed98673dd5bef374d3b6e4b09e2af76183bf
 - name: github.com/osrg/gobgp
-  version: 97063ee76decb4105ad3991dcf34432f5e009f9d
+  version: f615fa49a768bb358e6318e64dc42e9a6af10681
   subpackages:
   - api
   - config
