@@ -88,6 +88,12 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	// In case of cluster provisioned on AWS disable source-destination check
 	nrc.disableSourceDestinationCheck()
 
+	// enable IP forwarding for the packets coming in/out from ther pods
+	err = nrc.enableForwarding()
+	if err != nil {
+		glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
+	}
+
 	t := time.NewTicker(nrc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
@@ -672,6 +678,55 @@ func (nrc *NetworkRoutingController) syncPeers() {
 	}
 }
 
+// ensure there is rule in filter table and FORWARD chain to permit in/out traffic from pods
+// this rules will be appended so that any iptable rules for network policies will take
+// precedence
+func (nrc *NetworkRoutingController) enableForwarding() error {
+
+	iptablesCmdHandler, err := iptables.New()
+
+	comment := "allow outbound traffic from pods"
+	args := []string{"-m", "comment", "--comment", comment, "-i", "kube-bridge", "-j", "ACCEPT"}
+	exists, err := iptablesCmdHandler.Exists("filter", "FORWARD", args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err := iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	comment = "allow inbound traffic to pods"
+	args = []string{"-m", "comment", "--comment", comment, "-o", "kube-bridge", "-j", "ACCEPT"}
+	exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err = iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	comment = "allow outbound node port traffic on node interface with which node ip is associated"
+	args = []string{"-m", "comment", "--comment", comment, "-o", nrc.nodeInterface, "-j", "ACCEPT"}
+	exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err = iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
 // Handle updates from Node watcher. Node watcher calls this method whenever there is
 // new node is added or old node is deleted. So peer up with new node and drop peering
 // from old node
@@ -722,7 +777,8 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	} else {
 		nodeasn, ok := node.ObjectMeta.Annotations["net.kuberouter.nodeasn"]
 		if !ok {
-			return errors.New("Could not find ASN number for the node. Node need to be annotated with ASN number details to start BGP server.")
+			return errors.New("Could not find ASN number for the node. Node need to be annotated with ASN number " +
+				"details to start BGP server.")
 		} else {
 			glog.Infof("Found ASN for the node to be %s from the node annotations", nodeasn)
 			asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
@@ -838,7 +894,8 @@ func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
 	return net.IPNet{}, "", errors.New("Failed to find interface with specified node ip")
 }
 
-func NewNetworkRoutingController(clientset *kubernetes.Clientset, kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
+func NewNetworkRoutingController(clientset *kubernetes.Clientset,
+	kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
 	// TODO: Remove lookup, ipset.New already does this.
 	_, err := exec.LookPath("ipset")
 	if err != nil {
