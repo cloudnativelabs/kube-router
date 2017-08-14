@@ -19,7 +19,7 @@ import:
   subpackages:
   - ipvs
 - package: github.com/osrg/gobgp
-  version: master
+  version: f615fa49a768bb358e6318e64dc42e9a6af10681
   subpackages:
   - api
   - config
