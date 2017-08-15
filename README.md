@@ -1,5 +1,4 @@
-kube-router
-==========
+![logo](https://cdn.rawgit.com/cloudnativelabs/kube-router/64f7700e/Documentation/img/logo-full.svg)
 
 [![Build Status](https://travis-ci.org/cloudnativelabs/kube-router.svg?branch=master)](https://travis-ci.org/cloudnativelabs/kube-router)
 [![Gitter chat](http://badges.gitter.im/kube-router/Lobby.svg)](https://gitter.im/kube-router/Lobby)
