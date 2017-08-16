@@ -1,10 +1,10 @@
 FROM alpine:3.6
 
 COPY kube-router gobgp /usr/local/bin/
-COPY build/image-assets/bashrc /root/.bashrc
-COPY build/image-assets/profile /root/.profile
-COPY build/image-assets/vimrc /root/.vimrc
-COPY build/image-assets/motd-kube-router.sh /etc/motd-kube-router.sh
+COPY images/kube-router/bashrc /root/.bashrc
+COPY images/kube-router/profile /root/.profile
+COPY images/kube-router/vimrc /root/.vimrc
+COPY images/kube-router/motd-kube-router.sh /etc/motd-kube-router.sh
 
 RUN apk add --no-cache \
       iptables \
