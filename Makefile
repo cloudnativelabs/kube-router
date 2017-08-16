@@ -14,7 +14,7 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 
-all: test kube-router container ## Default target. Runs tests, builds binaries and images.
+all: test kube-router images/kube-router ## Default target. Runs tests, builds binaries and images.
 
 kube-router: $(shell find . -name \*.go) ## Builds kube-router.
 	@echo Starting kube-router binary build.
@@ -22,6 +22,15 @@ kube-router: $(shell find . -name \*.go) ## Builds kube-router.
 	@echo Finished kube-router binary build.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
+
+images/kube-router: kube-router gobgp $(shell find images/kube-router/*) ## Builds a kube-router Docker container
+	@echo Starting kube-router container image build.
+	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" --file=images/kube-router/Dockerfile .
+	@if [ "$(GIT_BRANCH)" = "master" ]; then \
+	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
+	fi
+	@echo Finished kube-router container image build.
+	@touch images/kube-router
 
 vagrant-up: export docker=$(DOCKER)
 vagrant-up: export DEV_IMG=$(REGISTRY_DEV):$(IMG_TAG)
@@ -50,14 +59,6 @@ vagrant-image-update: all ## Rebuild kube-router, update image in local VMs, and
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
-container: kube-router gobgp ## Builds a Docker container image.
-	@echo Starting kube-router container image build.
-	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" .
-	@if [ "$(GIT_BRANCH)" = "master" ]; then \
-	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
-	fi
-	@echo Finished kube-router container image build.
-
 docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSWORD} variables.
 	@echo Starting docker login target.
 	@if [ -n "$(DOCKER_USERNAME)" ] && [ -n "$(DOCKER_PASSWORD)" ]; then \
@@ -73,7 +74,7 @@ docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSW
 	fi
 	@echo Finished docker login target.
 
-push: container docker-login ## Pushes a Docker container image to a registry.
+push: images/kube-router docker-login ## Pushes a Docker container image to a registry.
 	@echo Starting kube-router container image push.
 	$(DOCKER) push "$(REGISTRY_DEV)"
 	@echo Finished kube-router container image push.
@@ -142,7 +143,7 @@ else
 	@echo
 endif
 
-gobgp: vendor/github.com/osrg/gobgp/gobgp
+gobgp: $(shell find vendor/github.com/osrg/gobgp/gobgp)
 	$(DOCKER) run -v $(PWD):/pwd golang:alpine \
 	    sh -c ' \
 	    apk add -U git && \
@@ -171,7 +172,7 @@ ifeq (vagrant,$(firstword $(MAKECMDGOALS)))
   $(eval $(VAGRANT_RUN_ARGS):;@:)
 endif
 
-.PHONY: build clean container run release goreleaser push gofmt gofmt-fix
+.PHONY: build clean run release goreleaser push gofmt gofmt-fix
 .PHONY: update-glide test docker-login push-release github-release help
 .PHONY: gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
