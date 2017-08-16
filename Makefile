@@ -13,6 +13,9 @@ IS_ROOT=$(filter 0,$(shell id -u))
 DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
+KUBERNETES_VERSION?=v1.7
+UID_CMD=id | sed 's/^uid=//;s/(.*$//'
+UID=$(shell $(value $(UID_CMD)))
 
 all: test kube-router images/kube-router ## Default target. Runs tests, builds binaries and images.
 
@@ -22,6 +25,45 @@ kube-router: $(shell find . -name \*.go) ## Builds kube-router.
 	@echo Finished kube-router binary build.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
+
+test-e2e: dind-up _cache/kubernetes
+	@cd _cache/kubernetes && \
+	  bash -c "\
+	  RUN_ON_BTRFS_ANYWAY=yes \
+	  DIND_IMAGE=mirantis/kubeadm-dind-cluster:$(KUBERNETES_VERSION) \
+	  ../dind/dind-cluster.sh e2e \"$(TEST_E2E)\""
+
+_cache/kubernetes: | _cache
+	@git clone --depth 1 https://github.com/kubernetes/kubernetes _cache/kubernetes
+	# @curl -L -o _cache/kubernetes.tar.gz http://gcsweb.k8s.io/gcs/kubernetes-release/release/v1.7.3/kubernetes.tar.gz
+	# @tar -zxf _cache/kubernetes.tar.gz -C _cache/
+	@touch _cache/kubernetes
+
+dind-up: all _cache/dind
+	@cd _cache/dind && \
+	  bash -c "\
+	  RUN_ON_BTRFS_ANYWAY=yes \
+	  DIND_IMAGE=mirantis/kubeadm-dind-cluster:$(KUBERNETES_VERSION) \
+	  ./dind-cluster.sh up"
+	@~/.kubeadm-dind-cluster/kubectl apply -f \
+	  https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kubeadm-kuberouter-all-features.yaml
+	@sleep 10s
+	@~/.kubeadm-dind-cluster/kubectl -n kube-system delete ds kube-proxy
+	@for i in kube-master kube-node-1 kube-node-2; do \
+	  $(DOCKER) exec "$${i}" docker run --privileged --net=host mirantis/hypokube:final /usr/local/bin/kube-proxy --cleanup-iptables &> /dev/null; \
+	  done
+
+_cache:
+	@mkdir _cache
+
+_cache/dind: images/cache-dind | _cache
+	@echo running \"docker run --rm -v $(MAKEFILE_DIR)/_cache/dind:/cache quay.io/cloudnativelabs/cache-dind\"
+	@$(DOCKER) run -e CHOWN_UID=$(UID) --rm -v $(MAKEFILE_DIR)/_cache/dind:/cache quay.io/cloudnativelabs/cache-dind
+	@touch _cache/dind
+
+images/cache-dind: $(shell find images/cache-dind/*)
+	@$(DOCKER) build -t quay.io/cloudnativelabs/cache-dind images/cache-dind
+	@touch images/cache-dind
 
 images/kube-router: kube-router gobgp $(shell find images/kube-router/*) ## Builds a kube-router Docker container
 	@echo Starting kube-router container image build.
@@ -176,5 +218,7 @@ endif
 .PHONY: update-glide test docker-login push-release github-release help
 .PHONY: gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
+.PHONY: dind-up test-e2e
+# .PHONY: _cache/dind images/cache-dind
 
 .DEFAULT: all
