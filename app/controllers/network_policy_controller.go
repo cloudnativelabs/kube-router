@@ -20,6 +20,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/janeczku/go-ipset/ipset"
 	"k8s.io/client-go/kubernetes"
+	api "k8s.io/client-go/pkg/api/v1"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 	apiextensions "k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	networking "k8s.io/client-go/pkg/apis/networking/v1"
@@ -252,6 +253,12 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
+		// From network policy spec: "If field 'Ingress' is empty then this NetworkPolicy does not allow any traffic "
+		// so no whitelist rules to be added to the network policy
+		if policy.ingressRules == nil {
+			continue
+		}
+
 		// run through all the ingress rules in the spec and create iptable rules
 		// in the chain for the network policy
 		for i, ingressRule := range policy.ingressRules {
@@ -325,13 +332,6 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 			// case where nether ports nor from details are speified in the ingress rule
 			// so match on all ports, protocol, source IP's
 			if ingressRule.matchAllSource && ingressRule.matchAllPorts {
-
-				// if no ports or source information is present in spec this is specical case
-				// where network policy does not allow any traffic
-				if npc.v1NetworkPolicy {
-					continue
-				}
-
 				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
@@ -660,7 +660,6 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 		}
 		matchingPods, err := watchers.PodWatcher.ListByNamespaceAndLabels(policy.Namespace, policy.Spec.PodSelector.MatchLabels)
 		newPolicy.destPods = make(map[string]podInfo)
-		newPolicy.ingressRules = make([]ingressRule, 0)
 		if err == nil {
 			for _, matchingPod := range matchingPods {
 				newPolicy.destPods[matchingPod.Status.PodIP] = podInfo{ip: matchingPod.Status.PodIP,
@@ -668,6 +667,12 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 					namespace: matchingPod.ObjectMeta.Namespace,
 					labels:    matchingPod.ObjectMeta.Labels}
 			}
+		}
+
+		if policy.Spec.Ingress == nil {
+			newPolicy.ingressRules = nil
+		} else {
+			newPolicy.ingressRules = make([]ingressRule, 0)
 		}
 
 		for _, specIngressRule := range policy.Spec.Ingress {
@@ -693,8 +698,26 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 				ingressRule.matchAllSource = true
 			} else {
 				ingressRule.matchAllSource = false
+				var matchingPods []*api.Pod
+				var err error
 				for _, peer := range specIngressRule.From {
-					matchingPods, err := watchers.PodWatcher.ListByNamespaceAndLabels(policy.Namespace, peer.PodSelector.MatchLabels)
+					// spec must have either of PodSelector or NamespaceSelector
+					if peer.PodSelector != nil {
+						matchingPods, err = watchers.PodWatcher.ListByNamespaceAndLabels(policy.Namespace,
+							peer.PodSelector.MatchLabels)
+					} else if peer.NamespaceSelector != nil {
+						namespaces, err := watchers.NamespaceWatcher.ListByLabels(peer.NamespaceSelector.MatchLabels)
+						if err != nil {
+							return nil, errors.New("Failed to build network policies info due to " + err.Error())
+						}
+						for _, namespace := range namespaces {
+							namespacePods, err := watchers.PodWatcher.ListByNamespaceAndLabels(namespace.Name, nil)
+							if err != nil {
+								return nil, errors.New("Failed to build network policies info due to " + err.Error())
+							}
+							matchingPods = append(matchingPods, namespacePods...)
+						}
+					}
 					if err == nil {
 						for _, matchingPod := range matchingPods {
 							ingressRule.srcPods = append(ingressRule.srcPods,

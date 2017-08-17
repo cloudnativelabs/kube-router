@@ -10,6 +10,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	api "k8s.io/client-go/pkg/api/v1"
 	cache "k8s.io/client-go/tools/cache"
+	listers "k8s.io/client-go/listers/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 type NamespaceUpdate struct {
@@ -66,6 +68,16 @@ func (nsw *namespaceWatcher) List() []*api.Namespace {
 		namespace_instances[i] = ins.(*api.Namespace)
 	}
 	return namespace_instances
+}
+
+func (nsw *namespaceWatcher) ListByLabels(set labels.Set) ([]*api.Namespace, error) {
+	namespaceLister := listers.NewNamespaceLister(nsw.namespaceLister)
+	matchedNamespaces, err := namespaceLister.List(set.AsSelector())
+	if err != nil {
+		return nil, err
+	} else {
+		return matchedNamespaces, nil
+	}
 }
 
 func (nsw *namespaceWatcher) RegisterHandler(handler NamespaceUpdatesHandler) {
