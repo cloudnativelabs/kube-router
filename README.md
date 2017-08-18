@@ -200,15 +200,6 @@ forming full mesh. Learned routes about the Pod CIDR from the other Nodes (BGP
 peers) are injected into local Node routing table. On the data path, inter Node
 Pod-to-Pod communication is done by the routing stack on the Node.
 
-## TODO
-- ~~convert Kube-router to docker image and run it as daemonset~~
-- heathcheck pods
-- explore integration of an ingress controller so Kube-router will be one complete solution for both east-west and north-south traffic
-- ~~get pod CIDR from node.PodCidr when kube-controller-manager is run with `--allocate-node-cidrs=true` option~~
-- explore the possibility of using IPVS direct routing mode
-- Explore the possibilities of making Kube-router on the node a Prometheus endpoint
-- ~~session persistence~~
-
 ## Acknowledgement
 
 Kube-router build upon following libraries:
@@ -217,5 +208,4 @@ Kube-router build upon following libraries:
 - GoBGP: https://github.com/osrg/gobgp
 - Netlink: https://github.com/vishvananda/netlink
 - Ipset: https://github.com/janeczku/go-ipset
-- IPVS: https://github.com/mqliang/libipvs
-
+- IPVS: https://github.com/docker/libnetwork/
