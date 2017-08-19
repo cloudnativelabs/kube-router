@@ -1,0 +1,49 @@
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: e2e-image-puller-installer
+  namespace: kube-system
+  labels:
+    name: e2e-image-puller-installer
+    tier: node
+spec:
+  selector:
+    matchLabels:
+      name: e2e-image-puller-installer
+      tier: node
+  template:
+    metadata:
+      annotations:
+        scheduler.alpha.kubernetes.io/critical-pod: ""
+      labels:
+        name: e2e-image-puller-installer
+        tier: node
+    spec:
+      containers:
+      - name: sleep
+        image: alpine
+        command:
+        - sleep
+        - 30d
+      initContainers:
+      - name: image-puller-installer
+        image: appropriate/curl
+        command:
+        - /bin/sh
+        - -c
+        - "curl -L https://raw.githubusercontent.com/kubernetes/kubernetes/v1.7.3/cluster/saltbase/salt/e2e-image-puller/e2e-image-puller.manifest -o /manifests/e2e-image-puller.yaml"
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /manifests
+          name: manifests
+      volumes:
+      - hostPath:
+          path: /etc/kubernetes/manifests
+        name: manifests
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
