@@ -107,8 +107,9 @@ func (kr *KubeRouter) stopApiWatchers() {
 func (kr *KubeRouter) Run() error {
 
 	var err error
-	var nscStopCh, npcStopCh, nrcStopCh chan struct{}
 	var wg sync.WaitGroup
+
+	stopCh := make(chan struct{})
 
 	err = kr.startApiWatchers()
 	if err != nil {
@@ -125,9 +126,9 @@ func (kr *KubeRouter) Run() error {
 		if err != nil {
 			return errors.New("Failed to create network policy controller: " + err.Error())
 		}
-		npcStopCh = make(chan struct{})
+
 		wg.Add(1)
-		go npc.Run(npcStopCh, &wg)
+		go npc.Run(stopCh, &wg)
 	}
 
 	if kr.Config.RunRouter {
@@ -135,9 +136,9 @@ func (kr *KubeRouter) Run() error {
 		if err != nil {
 			return errors.New("Failed to create network routing controller: " + err.Error())
 		}
-		nrcStopCh = make(chan struct{})
+
 		wg.Add(1)
-		go nrc.Run(nrcStopCh, &wg)
+		go nrc.Run(stopCh, &wg)
 	}
 
 	if kr.Config.RunServiceProxy {
@@ -145,9 +146,9 @@ func (kr *KubeRouter) Run() error {
 		if err != nil {
 			return errors.New("Failed to create network services controller: " + err.Error())
 		}
-		nscStopCh = make(chan struct{})
+
 		wg.Add(1)
-		go nsc.Run(nscStopCh, &wg)
+		go nsc.Run(stopCh, &wg)
 	}
 
 	// Handle SIGINT and SIGTERM
@@ -156,15 +157,7 @@ func (kr *KubeRouter) Run() error {
 	<-ch
 
 	glog.Infof("Shutting down the controllers")
-	if kr.Config.RunServiceProxy {
-		nscStopCh <- struct{}{}
-	}
-	if kr.Config.RunFirewall {
-		npcStopCh <- struct{}{}
-	}
-	if kr.Config.RunRouter {
-		nrcStopCh <- struct{}{}
-	}
+	close(stopCh)
 
 	kr.stopApiWatchers()
 
