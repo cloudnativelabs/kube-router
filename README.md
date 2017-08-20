@@ -3,24 +3,9 @@
 [![Build Status](https://travis-ci.org/cloudnativelabs/kube-router.svg?branch=master)](https://travis-ci.org/cloudnativelabs/kube-router)
 [![Gitter chat](http://badges.gitter.im/kube-router/Lobby.svg)](https://gitter.im/kube-router/Lobby)
 [![Docker Pulls kube-router](https://img.shields.io/docker/pulls/cloudnativelabs/kube-router.svg?label=docker+pulls)](https://hub.docker.com/r/cloudnativelabs/kube-router/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Kube-router is a distributed load balancer, firewall and router for Kubernetes. Kube-router can be configured to provide on each cluster node:
-
-- a IPVS/LVS based service proxy on each node for *ClusterIP*, *NodePort* and *LoadBalancer* service types, providing service discovery and load balancing
-- an ingress firewall for the pods running on the node as per the defined Kubernetes network policies using iptables and ipset
-- a BGP router to advertise and learn the routes to the pod IP's for cross-node pod-to-pod connectivity
-
-## Project status
-
-Project is in alpha stage. We are working towards beta release
-[milestone](https://github.com/cloudnativelabs/kube-router/milestone/2) and are
-activley incorporating users feedback.
-
-## Getting Started
-
-- [User Guide](./Documentation/README.md#user-guide)
-- [Developer Guide](./Documentation/developing.md)
-- [Architecture](./Documentation/README.md#architecture)
+Kube-router is a distributed load balancer, firewall and router designed for Kubernetes networking with aim to provide operational simplicity and high performance.
 
 ## Primary Features
 
@@ -80,10 +65,16 @@ modern BGP API platform as well right out of the box.
 
 For more details please refer to the [BGP documentation](Documentation/bgp.md).
 
+### Standard Linux Networking
+
+A key design tenet of Kube-router is to use standard Linux networking stack and toolset. There is no overlays or 
+SDN pixie dust, but just plain good old networking. You can use standard Linux networking tools like iptables, ipvsadm, ipset,
+iproute, traceroute, tcpdump etc. to troubleshoot or observe data path. When kube-router is ran as a daemonset, image also ships with these [tools](./Documentation/pod-toolbox.md#pod-toolbox) automatically configured for your cluster.
+
 ### Small Footprint
 
 Although it does the work of several of its peers in one binary, kube-router
-does it all with a relatively tiny codebase, partly because IPVS is already
+does it all with a relatively [tiny codebase](https://github.com/cloudnativelabs/kube-router/tree/master/app/controllers), partly because IPVS is already
 there on your Kuberneres nodes waiting to help you do amazing things.
 kube-router brings that and GoBGP's modern BGP interface to you in an elegant
 package designed from the ground up for Kubernetes.
@@ -95,6 +86,20 @@ inter-node Pod networking and IPVS for load balanced proxy Services is a perfect
 recipe for high-performance cluster networking at scale. BGP ensures that the
 data path is dynamic and efficient, and IPVS provides in-kernel load balancing
 that has been thouroughly tested and optimized.
+
+## Getting Started
+
+- [How it Works](./Documentation/how-it-works.md)
+- [Architecture](./Documentation/README.md#architecture)
+- [See Kube-router in action](./Documentation#see-kube-router-in-action)
+- [User Guide](./Documentation/README.md#user-guide)
+- [Developer Guide](./Documentation/developing.md)
+
+## Project status
+
+Project is in alpha stage. We are working towards beta release
+[milestone](https://github.com/cloudnativelabs/kube-router/milestone/2) and are
+activley incorporating users feedback.
 
 ## Contributing
 
@@ -108,111 +113,6 @@ If you experience any problems please reach us on our gitter
 for quick help. Feel free to leave feedback or raise questions at any time by
 opening an issue [here](https://github.com/cloudnativelabs/kube-router/issues).
 
-## See it in action
-
-<a href="https://asciinema.org/a/118056" target="_blank"><img src="https://asciinema.org/a/118056.png" /></a>
-
-
-## Theory of Operation
-
-Kube-router can be run as an agent or a Pod (via DaemonSet) on each node and
-leverages standard Linux technologies **iptables, ipvs/lvs, ipset, iproute2**
-
-### Service Proxy And Load Balancing
-
-[Kubernetes network services proxy with IPVS/LVS](https://cloudnativelabs.github.io/post/2017-05-10-kube-network-service-proxy/)
-
-Kube-router uses IPVS/LVS technology built in Linux to provide L4 load
-balancing. Each **ClusterIP**, **NodePort**, and **LoadBalancer** Kubernetes
-Service type is configured as an IPVS virtual service. Each Service Endpoint is
-configured as real server to the virtual service.  The standard **ipvsadm** tool
-can be used to verify the configuration and monitor the active connections.
-
-Below is example set of Services on Kubernetes:
-
-![Kube services](./Documentation/img/svc.jpg)
-
-and the Endpoints for the Services:
-
-![Kube services](./Documentation/img/ep.jpg)
-
-and how they got mapped to the IPVS by kube-router:
-
-![IPVS configuration](./Documentation/img/ipvs1.jpg)
-
-Kube-router watches the Kubernetes API server to get updates on the
-Services/Endpoints and automatically syncs the IPVS configuration to reflect the
-desired state of Services. Kube-router uses IPVS masquerading mode and uses
-round robin scheduling currently. Source pod IP is preserved so that appropriate
-network policies can be applied.
-
-### Pod Ingress Firewall
-
-[Enforcing Kubernetes network policies with iptables](https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/)
-
-Kube-router provides an implementation of Kubernetes Network Policies through
-the use of iptables, ipset and conntrack.  All the Pods in a Namespace with
-'DefaultDeny' ingress isolation policy has ingress blocked. Only traffic that
-matches whitelist rules specified in the network policies are permitted to reach
-those Pods. The following set of iptables rules and chains in the 'filter' table
-are used to achieve the Network Policies semantics.
-
-Each Pod running on the Node which needs ingress blocked by default is matched
-in FORWARD and OUTPUT chains of the fliter table and are sent to a pod specific
-firewall chain. Below rules are added to match various cases
-
-- Traffic getting switched between the Pods on the same Node through the local
-  bridge
-- Traffic getting routed between the Pods on different Nodes
-- Traffic originating from a Pod and going through the Service proxy and getting
-  routed to a Pod on the same Node
-
-![FORWARD/OUTPUT chain](./Documentation/img/forward.png)
-
-Each Pod specific firewall chain has default rule to block the traffic. Rules
-are added to jump traffic to the Network Policy specific policy chains. Rules
-cover only policies that apply to the destination pod ip. A rule is added to
-accept the the established traffic to permit the return traffic.
-
-![Pod firewall chain](./Documentation/img/podfw.png)
-
-Each policy chain has rules expressed through source and destination ipsets. Set
-of pods matching ingress rule in network policy spec forms a source Pod ip
-ipset. set of Pods matching pod selector (for destination Pods) in the Network
-Policy forms destination Pod ip ipset.
-
-![Policy chain](./Documentation/img/policyfw.png)
-
-Finally ipsets are created that are used in forming the rules in the Network
-Policy specific chain
-
-![ipset](./Documentation/img/ipset.jpg)
-
-Kube-router at runtime watches Kubernetes API server for changes in the
-namespace, network policy and pods and dynamically updates iptables and ipset
-configuration to reflect desired state of ingress firewall for the the pods.
-
-### Pod Networking
-
-[Kubernetes pod networking and beyond with BGP](https://cloudnativelabs.github.io/post/2017-05-22-kube-pod-networking)
-
-Kube-router is expected to run on each Node. The subnet of the Node is obtained
-from the CNI configuration file on the Node or through the Node.PodCidr. Each
-kube-router instance on the Node acts as a BGP router and advertises the Pod
-CIDR assigned to the Node. Each Node peers with rest of the Nodes in the cluster
-forming full mesh. Learned routes about the Pod CIDR from the other Nodes (BGP
-peers) are injected into local Node routing table. On the data path, inter Node
-Pod-to-Pod communication is done by the routing stack on the Node.
-
-## TODO
-- ~~convert Kube-router to docker image and run it as daemonset~~
-- heathcheck pods
-- explore integration of an ingress controller so Kube-router will be one complete solution for both east-west and north-south traffic
-- ~~get pod CIDR from node.PodCidr when kube-controller-manager is run with `--allocate-node-cidrs=true` option~~
-- explore the possibility of using IPVS direct routing mode
-- Explore the possibilities of making Kube-router on the node a Prometheus endpoint
-- ~~session persistence~~
-
 ## Acknowledgement
 
 Kube-router build upon following libraries:
@@ -221,5 +121,4 @@ Kube-router build upon following libraries:
 - GoBGP: https://github.com/osrg/gobgp
 - Netlink: https://github.com/vishvananda/netlink
 - Ipset: https://github.com/janeczku/go-ipset
-- IPVS: https://github.com/mqliang/libipvs
-
+- IPVS: https://github.com/docker/libnetwork/

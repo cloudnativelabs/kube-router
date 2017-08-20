@@ -8,6 +8,8 @@ Kube-router consists of 3 core controllers and multiple watchers as depicted in 
 
 ![Arch](./img/kube-router-arch.png)
 
+## See Kube-router in action
+
 #### Network Services Controller
 
 Network services controller is responsible for reading the services and endpoints information from Kubernetes API server and configure IPVS on each cluster node accordingly.
@@ -45,7 +47,7 @@ Network routes controller is responsible for reading pod CIDR allocated by contr
 
 [![asciicast](https://asciinema.org/a/120885.png)](https://asciinema.org/a/120885)
 
-However BGP can be leveraged to other use cases like advertising the cluster ip, routable pod ip etc. Only in such use-cases understanding of BGP and configuration is required. Please see below demo how kube-router advertises cluster IP and pod codes to external BGP router
+However BGP can be leveraged to other use cases like advertising the cluster ip, routable pod ip etc. Only in such use-cases understanding of BGP and configuration is required. Please see below demo how kube-router advertises cluster IP and pod cidrs to external BGP router
 [![asciicast](https://asciinema.org/a/121635.png)](https://asciinema.org/a/121635)
 
 ## User Guide
@@ -88,7 +90,7 @@ Usage of ./kube-router:
     --master string                   The address of the Kubernetes API server (overrides any value in kubeconfig).
     --nodes-full-mesh                 Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
     --peer-asn string                 ASN number of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr.
-    --peer-router string              The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's.
+    --peer-router string              Comma sepereated list of ip address of the external routers to which all nodes will peer and advertise the cluster ip and pod cidr's.
     --routes-sync-period duration     The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
     --run-firewall                    Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
     --run-router                      Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
@@ -97,7 +99,7 @@ Usage of ./kube-router:
 
 ### requirements
 
-- Kube-router need to access kubernetes API server to get information on pods, services, endpoints, network policies etc. The very minimum information it requires is the details on where to access the kubernetes API server. This information can be passed as `kube-router --master=http://192.168.1.99:8080/` or `kube-router --kubeconfig=<path to kubeconfig file>`. If neither `--master` nor `--kubeconfig` option is specified then kube-router will look for kubeconfig at `/var/lib/kube-router/kubeconfig` location.
+- Kube-router need to access kubernetes API server to get information on pods, services, endpoints, network policies etc. The very minimum information it requires is the details on where to access the kubernetes API server. This information can be passed as `kube-router --master=http://192.168.1.99:8080/` or `kube-router --kubeconfig=<path to kubeconfig file>`.
 
 - If you run kube-router as agent on the node, ipset package must be installed on each of the nodes (when run as daemonset, container image is prepackaged with ipset)
 
