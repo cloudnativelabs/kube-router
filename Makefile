@@ -75,6 +75,14 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
 	  hashicorp/terraform \
+	    get \
+	    --update=true \
+	    /tf
+	@$(DOCKER) run \
+	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
+	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
+	  --volume $(GOPATH):/go \
+	  hashicorp/terraform \
 	    apply \
 	    --input=false \
 	    --auto-approve=true \
