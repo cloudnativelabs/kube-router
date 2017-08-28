@@ -91,8 +91,7 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal _cache/.terraformrc 
 	    --var 'project_id=$(PACKET_PROJECT_ID)' \
 	    --var 'controller_count=1' \
 	    --var 'worker_count=1' \
-	    --var 'server_domain=test.kube-router.io' \
-	    --var 'use_kube_router=true'
+	    --var 'server_domain=test.kube-router.io'
 
 _cache/kube-router/images: images/kube-router
 	@mkdir -p _cache/kube-router/images
