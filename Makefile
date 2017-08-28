@@ -46,7 +46,7 @@ _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
 	@cp /etc/hosts _cache/hosts
 
 $(GOPATH)/bin/terraform-provider-ct:
-	go get -v -u github.com/coreos/terraform-provider-ct
+	CGO_ENABLED=0 go get -v -u github.com/coreos/terraform-provider-ct
 
 tf-destroy:
 	$(DOCKER) run \
