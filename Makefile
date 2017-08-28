@@ -92,7 +92,6 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal _cache/.terraformrc 
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
 	  --workdir=/tf \
-	  --env TF_LOG=1 \
 	  hashicorp/terraform \
 	    apply \
 	    --input=false \
