@@ -87,11 +87,11 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    /tf
 	@$(DOCKER) run \
 	  --volume _cache/kube-metal:/tf \
-	  --volume _cache/hosts:/etc/hosts \
+	  --volume /etc/hosts:/etc/hosts \
 	  --volume _cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
-	  hashicorp/terraform \
-	    output hosts_file_entries > /etc/hosts
+	  --entrypoint="/tf/etc-hosts.sh"
+	  hashicorp/terraform
 
 /etc/hosts: _cache/kube-metal/assets/auth/kubeconfig
 	_cache/kube-metal/etc-hosts.sh
