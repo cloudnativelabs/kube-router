@@ -46,19 +46,19 @@ _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
 	@cp /etc/hosts _cache/hosts
 
 $(GOPATH)/bin/terraform-provider-ct:
-	@go get -u github.com/coreos/terraform-provider-ct
+	go get -v -u github.com/coreos/terraform-provider-ct
 
 tf-destroy:
-	@$(DOCKER) run \
+	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --workdir=/tf \
 	  hashicorp/terraform \
 	    destroy \
 	    --force
 
-_cache/kube-metal: _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
-	@git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
-	@$(DOCKER) run \
+_cache/kube-metal: _cache/.terraformrc _cache/kube-metal $(GOPATH)/bin/terraform-provider-ct
+	git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
+	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
@@ -69,8 +69,8 @@ _cache/kube-metal: _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
 	    --input=false \
 	    --upgrade=true
 
-_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
-	@$(DOCKER) run \
+_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
+	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
@@ -78,7 +78,7 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	  hashicorp/terraform \
 	    get \
 	    --update=true
-	@$(DOCKER) run \
+	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
