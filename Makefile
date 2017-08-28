@@ -30,20 +30,69 @@ kube-router: $(BUILD_FILES) ## Builds kube-router.
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 
 test-e2e: /etc/hosts _cache/kube-metal/assets/auth/kubeconfig
-	@$(KUBECTL) apply -f test/e2e/common/e2e-image-puller-ds.yaml
+	@_cache/kube-metal/kubectl.sh apply -f test/e2e/common/e2e-image-puller-ds.yaml
 	@E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) KUBECTL="" test/e2e/run-e2e.sh
 
 _cache:
 	@mkdir _cache
 
-_cache/kube-metal: | _cache
-	@git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
+_cache/.terraformrc: | _cache
+	@echo 'providers { ct = "${GOPATH}/bin/terraform-provider-ct" }' \
+	  > _cache/.terraformrc
 
-_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
-	@terraform apply -auto-approve=true -input=false \
-	  -var 'auth_token=$(PACKET_TOKEN)' -var 'project_id=$(PACKET_PROJECT_ID)' \
-	  -var 'controller_count=1' -var 'worker_count=1' \
-	  -var 'server_domain=test.kube-router.io' -var 'use_kube_router=true'
+_cache/hosts: | _cache
+	@touch _cache/hosts
+
+$(GOPATH)/bin/terraform-provider-ct:
+	@go get -u github.com/coreos/terraform-provider-ct
+
+tf-destroy:
+	@$(DOCKER) run \
+	  --volume _cache/kube-metal:/tf \
+	  hashicorp/terraform \
+	    destroy \
+	    --force \
+	    /tf
+
+_cache/kube-metal: _cache/.terraformrc
+	@git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
+	@$(DOCKER) run \
+	  --volume _cache/kube-metal:/tf \
+	  --volume _cache/.terraformrc:/root/.terraformrc \
+	  --volume $(GOPATH):/go \
+	  hashicorp/terraform \
+	    init \
+	    --force-copy \
+	    --input=false \
+	    --upgrade=true \
+	    --plugin-dir=/go/bin \
+	    /tf
+
+_cache/kube-metal/assets/auth/kubeccnfig: _cache/kube-metal
+	@$(DOCKER) run \
+	  --volume _cache/kube-metal:/tf \
+	  --volume _cache/hosts:/etc/hosts \
+	  --volume _cache/.terraformrc:/root/.terraformrc \
+	  --volume $(GOPATH):/go \
+	  hashicorp/terraform \
+	    apply \
+	    --input=false \
+	    --auto-approve=true \
+	    --var 'auth_token=$(PACKET_TOKEN)' \
+	    --var 'project_id=$(PACKET_PROJECT_ID)' \
+	    --var 'controller_count=1' \
+	    --var 'worker_count=1' \
+	    --var 'server_domain=test.kube-router.io' \
+	    --var 'use_kube_router=true' \
+	    /tf
+	@$(DOCKER) run \
+	  --volume _cache/kube-metal:/tf \
+	  --volume _cache/hosts:/etc/hosts \
+	  --volume _cache/.terraformrc:/root/.terraformrc \
+	  --volume $(GOPATH):/go \
+	  hashicorp/terraform \
+	    output \
+	    hosts_file_entries > /etc/hosts
 
 /etc/hosts: _cache/kube-metal/assets/auth/kubeconfig
 	_cache/kube-metal/etc-hosts.sh
