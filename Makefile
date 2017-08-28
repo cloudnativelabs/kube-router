@@ -70,6 +70,8 @@ $(GOPATH)/bin/terraform-provider-packet:
 tf-destroy:
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
+	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
+	  --volume $(GOPATH):/go \
 	  --workdir=/tf \
 	  hashicorp/terraform \
 	    destroy \
