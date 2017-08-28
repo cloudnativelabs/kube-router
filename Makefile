@@ -37,8 +37,8 @@ _cache:
 	@mkdir _cache
 
 _cache/.terraformrc: | _cache
-	echo 'providers { ct = "/go/bin/terraform-provider-ct" }' \
-	  > _cache/.terraformrc
+	echo 'providers { ct = "/go/bin/terraform-provider-ct"' > _cache/.terraformrc
+	echo 'packet = "/go/bin/terraform-provider-packet"}' >> _cache/.terraformrc
 
 _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
 	@cd _cache/kube-metal && \
@@ -46,7 +46,15 @@ _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
 	@cp /etc/hosts _cache/hosts
 
 $(GOPATH)/bin/terraform-provider-ct:
-	CGO_ENABLED=0 go get -v -u github.com/coreos/terraform-provider-ct
+	CGO_ENABLED=0 go get -u github.com/coreos/terraform-provider-ct
+
+$(GOPATH)/bin/terraform-provider-packet:
+	mkdir -p $(GOPATH)/src/github.com/terraform-providers
+	cd $(GOPATH)/src/github.com/terraform-providers && \
+	  git clone https://github.com/cloudnativelabs/terraform-provider-packet.git && \
+	  cd terraform-provider-packet && \
+	  git fetch && git checkout device-spot-market && \
+	  CGO_ENABLED=0 go install
 
 tf-destroy:
 	$(DOCKER) run \
@@ -57,6 +65,7 @@ tf-destroy:
 	    --force
 
 _cache/kube-metal: _cache/.terraformrc _cache/kube-metal $(GOPATH)/bin/terraform-provider-ct
+_cache/kube-metal: $(GOPATH)/bin/terraform-provider-packet
 	git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
@@ -70,19 +79,20 @@ _cache/kube-metal: _cache/.terraformrc _cache/kube-metal $(GOPATH)/bin/terraform
 	    --upgrade=true
 
 _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
+	# $(DOCKER) run \
+	#   --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
+	#   --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
+	#   --volume $(GOPATH):/go \
+	#   --workdir=/tf \
+	#   hashicorp/terraform \
+	#     get \
+	#     --update=true
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
 	  --workdir=/tf \
-	  hashicorp/terraform \
-	    get \
-	    --update=true
-	$(DOCKER) run \
-	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(GOPATH):/go \
-	  --workdir=/tf \
+	  --env TF_LOG=1 \
 	  hashicorp/terraform \
 	    apply \
 	    --input=false \
