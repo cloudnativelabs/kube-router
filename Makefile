@@ -48,7 +48,7 @@ $(GOPATH)/bin/terraform-provider-ct:
 
 tf-destroy:
 	@$(DOCKER) run \
-	  --volume _cache/kube-metal:/tf \
+	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  hashicorp/terraform \
 	    destroy \
 	    --force \
@@ -57,8 +57,8 @@ tf-destroy:
 _cache/kube-metal: _cache/.terraformrc
 	@git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
 	@$(DOCKER) run \
-	  --volume _cache/kube-metal:/tf \
-	  --volume _cache/.terraformrc:/root/.terraformrc \
+	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
+	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
 	  hashicorp/terraform \
 	    init \
@@ -70,9 +70,9 @@ _cache/kube-metal: _cache/.terraformrc
 
 _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	@$(DOCKER) run \
-	  --volume _cache/kube-metal:/tf \
-	  --volume _cache/hosts:/etc/hosts \
-	  --volume _cache/.terraformrc:/root/.terraformrc \
+	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
+	  --volume $(MAKEFILE_DIR)/_cache/hosts:/etc/hosts \
+	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
 	  hashicorp/terraform \
 	    apply \
@@ -86,9 +86,9 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    --var 'use_kube_router=true' \
 	    /tf
 	@$(DOCKER) run \
-	  --volume _cache/kube-metal:/tf \
+	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume /etc/hosts:/etc/hosts \
-	  --volume _cache/.terraformrc:/root/.terraformrc \
+	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
 	  --entrypoint="/tf/etc-hosts.sh"
 	  hashicorp/terraform
