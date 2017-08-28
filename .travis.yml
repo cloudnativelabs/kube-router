@@ -23,7 +23,7 @@ env:
     - REPO_PATH=$HOME/gopath/src/github.com/$REPO
     - GIT_BRANCH=$TRAVIS_BRANCH
   matrix:
-    - KUBE_VERSION=v1.6
+    # - KUBE_VERSION=v1.6
     - KUBE_VERSION=v1.7
 
 before_script:
