@@ -91,8 +91,7 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	  --volume _cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
 	  hashicorp/terraform \
-	    output \
-	    hosts_file_entries > /etc/hosts
+	    'output hosts_file_entries > /etc/hosts'
 
 /etc/hosts: _cache/kube-metal/assets/auth/kubeconfig
 	_cache/kube-metal/etc-hosts.sh
