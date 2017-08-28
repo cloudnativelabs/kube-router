@@ -29,7 +29,7 @@ kube-router: $(BUILD_FILES) ## Builds kube-router.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 
-test-e2e: /etc/hosts _cache/kube-metal/assets/auth/kubeconfig
+test-e2e: _cache/hosts _cache/kube-metal/assets/auth/kubeconfig
 	@_cache/kube-metal/kubectl.sh apply -f test/e2e/common/e2e-image-puller-ds.yaml
 	@E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) KUBECTL="" test/e2e/run-e2e.sh
 
@@ -40,8 +40,10 @@ _cache/.terraformrc: | _cache
 	echo 'providers { ct = "/go/bin/terraform-provider-ct" }' \
 	  > _cache/.terraformrc
 
-_cache/hosts: | _cache
-	@touch _cache/hosts
+_cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
+	@cd _cache/kube-metal && \
+	  ./etc-hosts.sh
+	@cp /etc/hosts _cache/hosts
 
 $(GOPATH)/bin/terraform-provider-ct:
 	@go get -u github.com/coreos/terraform-provider-ct
@@ -70,7 +72,6 @@ _cache/kube-metal: _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
 _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	@$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	  --volume $(MAKEFILE_DIR)/_cache/hosts:/etc/hosts \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
 	  hashicorp/terraform \
@@ -84,16 +85,6 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    --var 'server_domain=test.kube-router.io' \
 	    --var 'use_kube_router=true' \
 	    /tf
-	@$(DOCKER) run \
-	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume /etc/hosts:/etc/hosts \
-	  --volume $(GOPATH):/go \
-	  --entrypoint="/tf/etc-hosts.sh"
-	  hashicorp/terraform
-
-/etc/hosts: _cache/kube-metal/assets/auth/kubeconfig
-	_cache/kube-metal/etc-hosts.sh
 
 _cache/kube-router/images: images/kube-router
 	@mkdir -p _cache/kube-router/images
