@@ -37,7 +37,7 @@ _cache:
 	@mkdir _cache
 
 _cache/.terraformrc: | _cache
-	echo 'providers { ct = "$(GOPATH)/bin/terraform-provider-ct" }' \
+	echo 'providers { ct = "/go/bin/terraform-provider-ct" }' \
 	  > _cache/.terraformrc
 
 _cache/hosts: | _cache
