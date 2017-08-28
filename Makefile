@@ -65,7 +65,6 @@ _cache/kube-metal: _cache/.terraformrc
 	    --force-copy \
 	    --input=false \
 	    --upgrade=true \
-	    --plugin-dir=/go/bin \
 	    /tf
 
 _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
