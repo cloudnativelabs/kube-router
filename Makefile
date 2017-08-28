@@ -13,15 +13,54 @@ IS_ROOT=$(filter 0,$(shell id -u))
 DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
+KUBE_VERSION?=v1.7
+KUBE_V=$(shell echo $(KUBE_VERSION)|sed -e 's/^v//')
+UID_CMD=id | sed 's/^uid=//;s/(.*$//'
+UID=$(shell $(value $(UID_CMD)))
+BUILD_FILES=$(shell find app vendor kube-router.go -name \*.go)
+FMT_FILES=$(shell find app kube-router.go -name \*.go)
 
-all: test kube-router container ## Default target. Runs tests, builds binaries and images.
+all: test kube-router images/kube-router ## Default target. Runs tests, builds binaries and images.
 
-kube-router: $(shell find . -name \*.go) ## Builds kube-router.
+kube-router: $(BUILD_FILES) ## Builds kube-router.
 	@echo Starting kube-router binary build.
 	CGO_ENABLED=0 go build -o kube-router kube-router.go
 	@echo Finished kube-router binary build.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
+
+test-e2e: /etc/hosts _cache/kube-metal/assets/auth/kubeconfig
+	@$(KUBECTL) apply -f test/e2e/common/e2e-image-puller-ds.yaml
+	@E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) KUBECTL="" test/e2e/run-e2e.sh
+
+_cache:
+	@mkdir _cache
+
+_cache/kube-metal: | _cache
+	@git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
+
+_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
+	@terraform apply -auto-approve=true -input=false \
+	  -var 'auth_token=$(PACKET_TOKEN)' -var 'project_id=$(PACKET_PROJECT_ID)' \
+	  -var 'controller_count=1' -var 'worker_count=1' \
+	  -var 'server_domain=test.kube-router.io' -var 'use_kube_router=true'
+
+/etc/hosts: _cache/kube-metal/assets/auth/kubeconfig
+	_cache/kube-metal/etc-hosts.sh
+
+_cache/kube-router/images: images/kube-router
+	@mkdir -p _cache/kube-router/images
+	@$(DOCKER) save test.kube-router.io -o _cache/kube-router/images/kube-router.docker
+
+images/kube-router: kube-router gobgp $(shell find images/kube-router/*) ## Builds a kube-router Docker container
+	@echo Starting kube-router container image build.
+	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" --file=images/kube-router/Dockerfile .
+	@$(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" test.kube-router.io
+	@if [ "$(GIT_BRANCH)" = "master" ]; then \
+	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
+	fi
+	@echo Finished kube-router container image build.
+	@touch images/kube-router
 
 vagrant-up: export docker=$(DOCKER)
 vagrant-up: export DEV_IMG=$(REGISTRY_DEV):$(IMG_TAG)
@@ -50,14 +89,6 @@ vagrant-image-update: all ## Rebuild kube-router, update image in local VMs, and
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
-container: kube-router gobgp ## Builds a Docker container image.
-	@echo Starting kube-router container image build.
-	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" .
-	@if [ "$(GIT_BRANCH)" = "master" ]; then \
-	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
-	fi
-	@echo Finished kube-router container image build.
-
 docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSWORD} variables.
 	@echo Starting docker login target.
 	@if [ -n "$(DOCKER_USERNAME)" ] && [ -n "$(DOCKER_PASSWORD)" ]; then \
@@ -73,7 +104,7 @@ docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSW
 	fi
 	@echo Finished docker login target.
 
-push: container docker-login ## Pushes a Docker container image to a registry.
+push: images/kube-router docker-login ## Pushes a Docker container image to a registry.
 	@echo Starting kube-router container image push.
 	$(DOCKER) push "$(REGISTRY_DEV)"
 	@echo Finished kube-router container image push.
@@ -101,10 +132,10 @@ clean: ## Removes the kube-router binary and Docker images
 	$(DOCKER) rmi $(REGISTRY_DEV)
 
 gofmt: ## Tells you what files need to be gofmt'd.
-	@build/verify-gofmt.sh
+	gofmt -l -s $(FMT_FILES)
 
 gofmt-fix: ## Fixes files that need to be gofmt'd.
-	gofmt -s -w $(LOCAL_PACKAGES)
+	gofmt -w -s $(FMT_FILES)
 
 gopath: ## Warns about issues building from a directory that does not match upstream.
 	@echo 'Checking project path for import issues...'
@@ -142,7 +173,7 @@ else
 	@echo
 endif
 
-gobgp: vendor/github.com/osrg/gobgp/gobgp
+gobgp: $(shell find vendor/github.com/osrg/gobgp/gobgp)
 	$(DOCKER) run -v $(PWD):/pwd golang:alpine \
 	    sh -c ' \
 	    apk add -U git && \
@@ -171,9 +202,10 @@ ifeq (vagrant,$(firstword $(MAKECMDGOALS)))
   $(eval $(VAGRANT_RUN_ARGS):;@:)
 endif
 
-.PHONY: build clean container run release goreleaser push gofmt gofmt-fix
+.PHONY: build clean run release goreleaser push gofmt gofmt-fix
 .PHONY: update-glide test docker-login push-release github-release help
 .PHONY: gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
+.PHONY: tf-destroy
 
 .DEFAULT: all
