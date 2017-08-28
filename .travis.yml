@@ -6,7 +6,7 @@ go:
   - 1.8.x
 
 branches:
-  only: 
+  only:
     - master
     - /^bzub-.*$/
     - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
@@ -36,7 +36,7 @@ script:
   - travis_wait make test-e2e E2E_FOCUS="Network" E2E_SKIP="Disruptive|Kubectl|Conformance|Networking"
   - travis_wait make test-e2e E2E_FOCUS="Feature:NetworkPolicy" E2E_SKIP="Disruptive|Kubectl|Conformance|Networking|Network"
   - travis_wait make test-e2e E2E_FOCUS="Feature:NoSNAT" E2E_SKIP="Disruptive|Kubectl|Conformance|Networking|Network|Feature:NetworkPolicy"
-  - travis_wait make test-e2e E2E_FOCUS="Network.*" E2E_SKIP="Kubectl|Conformance|Networking|Network|Feature:NetworkPolicy"
+  # - travis_wait make test-e2e E2E_FOCUS="Network.*" E2E_SKIP="Kubectl|Conformance|Networking|Network|Feature:NetworkPolicy"
   - make tf-destroy
 
 after_failure:

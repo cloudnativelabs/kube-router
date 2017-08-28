@@ -41,9 +41,20 @@ _cache/.terraformrc: | _cache
 	echo 'packet = "/go/bin/terraform-provider-packet"}' >> _cache/.terraformrc
 
 _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
-	@cd _cache/kube-metal && \
-	  ./etc-hosts.sh
 	@cp /etc/hosts _cache/hosts
+	$(DOCKER) run \
+	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
+	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
+	  --volume $(MAKEFILE_DIR)/_cache/hosts:/etc/hosts \
+	  --volume $(GOPATH):/go \
+	  --workdir "/tf" \
+	  --entrypoint "/tf/etc-hosts.sh" \
+	  hashicorp/terraform \
+	    init \
+	    --force-copy \
+	    --input=false \
+	    --upgrade=true
+	echo _cache/hosts | sudo tee /etc/hosts
 
 $(GOPATH)/bin/terraform-provider-ct:
 	CGO_ENABLED=0 go get -u github.com/coreos/terraform-provider-ct
