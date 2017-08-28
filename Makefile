@@ -54,7 +54,7 @@ tf-destroy:
 	    --force \
 	    /tf
 
-_cache/kube-metal: _cache/.terraformrc
+_cache/kube-metal: _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
 	@git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
 	@$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
