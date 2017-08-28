@@ -30,8 +30,22 @@ kube-router: $(BUILD_FILES) ## Builds kube-router.
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 
 test-e2e: _cache/hosts _cache/kube-metal/assets/auth/kubeconfig
-	@_cache/kube-metal/kubectl.sh apply -f test/e2e/common/e2e-image-puller-ds.yaml
-	@E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) KUBECTL="" test/e2e/run-e2e.sh
+	$(DOCKER) run \
+	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
+	  --volume="$(MAKEFILE_DIR)/_cache/hosts:/etc/hosts" \
+	  --volume="$(MAKEFILE_DIR)/test/e2e:/e2e" \
+	  --workdir="/e2e" \
+	  --env="KUBECONFIG=/tf/assets/auth/kubeconfig" \
+	  lachlanevenson/k8s-kubectl \
+	    apply -f /e2e/common
+	$(DOCKER) run \
+	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
+	  --volume="$(MAKEFILE_DIR)/_cache/hosts:/etc/hosts" \
+	  --volume="$(MAKEFILE_DIR)/test/e2e:/e2e" \
+	  --workdir="/e2e" \
+	  --env="KUBECONFIG=/tf/assets/auth/kubeconfig" \
+	  lachlanevenson/k8s-kubectl \
+	    E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) KUBECTL="" /e2e/run-e2e.sh
 
 _cache:
 	@mkdir _cache
@@ -41,17 +55,15 @@ _cache/.terraformrc: | _cache
 	echo 'packet = "/go/bin/terraform-provider-packet"}' >> _cache/.terraformrc
 
 _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
-	@cp /etc/hosts _cache/hosts
+	cp /etc/hosts _cache/hosts
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(MAKEFILE_DIR)/_cache/hosts:/hosts \
+	  --volume $(MAKEFILE_DIR)/_cache/hosts:/etc/hosts \
 	  --volume $(GOPATH):/go \
-	  --env "HOSTS_FILE=/hosts" \
 	  --workdir "/tf" \
 	  --entrypoint "/tf/etc-hosts.sh" \
 	  hashicorp/terraform
-	echo _cache/hosts | sudo tee /etc/hosts
 
 $(GOPATH)/bin/terraform-provider-ct:
 	CGO_ENABLED=0 go get -u github.com/coreos/terraform-provider-ct
