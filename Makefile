@@ -51,10 +51,10 @@ $(GOPATH)/bin/terraform-provider-ct:
 tf-destroy:
 	@$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
+	  --workdir=/tf \
 	  hashicorp/terraform \
 	    destroy \
-	    --force \
-	    /tf
+	    --force
 
 _cache/kube-metal: _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
 	@git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
@@ -62,26 +62,27 @@ _cache/kube-metal: _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
+	  --workdir=/tf \
 	  hashicorp/terraform \
 	    init \
 	    --force-copy \
 	    --input=false \
-	    --upgrade=true \
-	    /tf
+	    --upgrade=true
 
 _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	@$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
+	  --workdir=/tf \
 	  hashicorp/terraform \
 	    get \
-	    --update=true \
-	    /tf
+	    --update=true
 	@$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(GOPATH):/go \
+	  --workdir=/tf \
 	  hashicorp/terraform \
 	    apply \
 	    --input=false \
@@ -91,8 +92,7 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    --var 'controller_count=1' \
 	    --var 'worker_count=1' \
 	    --var 'server_domain=test.kube-router.io' \
-	    --var 'use_kube_router=true' \
-	    /tf
+	    --var 'use_kube_router=true'
 
 _cache/kube-router/images: images/kube-router
 	@mkdir -p _cache/kube-router/images
