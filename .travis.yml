@@ -45,7 +45,8 @@ after_failure:
 # All successfully built commits get an image placed in the kube-router-git
 # image repo and tagged with the commit hash.
 deploy:
-  - build/travis-deploy.sh
+  provider: script
+  script: build/travis-deploy.sh
 
 # This fixes issues when a contributor uses their own Travis CI account to test
 # code/CI changes.
