@@ -45,15 +45,12 @@ _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(MAKEFILE_DIR)/_cache/hosts:/etc/hosts \
+	  --volume $(MAKEFILE_DIR)/_cache/hosts:/hosts \
 	  --volume $(GOPATH):/go \
+	  --env "HOSTS_FILE=/hosts" \
 	  --workdir "/tf" \
 	  --entrypoint "/tf/etc-hosts.sh" \
-	  hashicorp/terraform \
-	    init \
-	    --force-copy \
-	    --input=false \
-	    --upgrade=true
+	  hashicorp/terraform
 	echo _cache/hosts | sudo tee /etc/hosts
 
 $(GOPATH)/bin/terraform-provider-ct:
@@ -75,6 +72,11 @@ tf-destroy:
 	  --workdir=/tf \
 	  hashicorp/terraform \
 	    destroy \
+	    --var 'auth_token=$(PACKET_TOKEN)' \
+	    --var 'project_id=$(PACKET_PROJECT_ID)' \
+	    --var 'controller_count=1' \
+	    --var 'worker_count=1' \
+	    --var 'server_domain=test.kube-router.io' \
 	    --force
 
 _cache/kube-metal: _cache/.terraformrc _cache/kube-metal $(GOPATH)/bin/terraform-provider-ct
@@ -92,14 +94,6 @@ _cache/kube-metal: $(GOPATH)/bin/terraform-provider-packet
 	    --upgrade=true
 
 _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
-	# $(DOCKER) run \
-	#   --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	#   --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	#   --volume $(GOPATH):/go \
-	#   --workdir=/tf \
-	#   hashicorp/terraform \
-	#     get \
-	#     --update=true
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
