@@ -68,7 +68,7 @@ _cache/kube-metal: _cache/.terraformrc
 	    --plugin-dir=/go/bin \
 	    /tf
 
-_cache/kube-metal/assets/auth/kubeccnfig: _cache/kube-metal
+_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	@$(DOCKER) run \
 	  --volume _cache/kube-metal:/tf \
 	  --volume _cache/hosts:/etc/hosts \
