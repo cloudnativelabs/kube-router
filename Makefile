@@ -44,7 +44,7 @@ test-e2e: _cache/hosts _cache/kube-metal/assets/auth/kubeconfig
 	E2E_FOCUS="$(E2E_FOCUS)" \
 	E2E_SKIP="$(E2E_SKIP)" \
 	KUBECTL='' \
-	NODE_COUNT="2" \
+	NODE_COUNT="1" \
 	test/e2e/run-e2e.sh --clean-start
 
 _cache:
@@ -106,7 +106,7 @@ tf-destroy:
 	    --var 'auth_token=$(PACKET_TOKEN)' \
 	    --var 'project_id=$(PACKET_PROJECT_ID)' \
 	    --var 'controller_count=1' \
-	    --var 'worker_count=2' \
+	    --var 'worker_count=1' \
 	    --var 'server_domain=test.kube-router.io' \
 	    --var 'spot_instance=true' \
 	    --var 'spot_price_max=.02' \
@@ -118,6 +118,8 @@ _cache/go:
 _cache/kube-metal: _cache/.terraformrc _cache/go/bin/terraform-provider-ct
 _cache/kube-metal: _cache/go/bin/terraform-provider-packet
 	git clone --branch=spot-market https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
+
+_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
@@ -128,8 +130,14 @@ _cache/kube-metal: _cache/go/bin/terraform-provider-packet
 	    --force-copy \
 	    --input=false \
 	    --upgrade=true
-
-_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
+	$(DOCKER) run \
+	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
+	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
+	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
+	  --workdir=/tf \
+	  hashicorp/terraform \
+	    get \
+	    --update=true
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
@@ -142,11 +150,10 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    --var 'auth_token=$(PACKET_TOKEN)' \
 	    --var 'project_id=$(PACKET_PROJECT_ID)' \
 	    --var 'controller_count=1' \
-	    --var 'worker_count=2' \
+	    --var 'worker_count=1' \
 	    --var 'server_domain=test.kube-router.io' \
 	    --var 'spot_instance=true' \
 	    --var 'spot_price_max=.02'
-	sleep 15s
 
 _cache/kube-router/images: images/kube-router
 	@mkdir -p _cache/kube-router/images
