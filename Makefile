@@ -15,6 +15,7 @@ MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 KUBE_VERSION?=v1.7
 KUBE_V=$(shell echo $(KUBE_VERSION)|sed -e 's/^v//')
+kube_version_full = $(shell curl -Ss https://storage.googleapis.com/kubernetes-release/release/stable-$(KUBE_V).txt)
 UID_CMD=id | sed 's/^uid=//;s/(.*$//'
 UID=$(shell $(value $(UID_CMD)))
 BUILD_FILES=$(shell find app vendor kube-router.go -name \*.go)
@@ -32,20 +33,18 @@ test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 test-e2e: _cache/hosts _cache/kube-metal/assets/auth/kubeconfig
 	$(DOCKER) run \
 	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
-	  --volume="$(MAKEFILE_DIR)/_cache/hosts:/etc/hosts" \
 	  --volume="$(MAKEFILE_DIR)/test/e2e:/e2e" \
+	  --add-host=$(file < _cache/hosts) \
 	  --workdir="/e2e" \
 	  --env="KUBECONFIG=/tf/assets/auth/kubeconfig" \
-	  lachlanevenson/k8s-kubectl \
+	  lachlanevenson/k8s-kubectl:$(kube_version_full) \
 	    apply -f /e2e/common
-	$(DOCKER) run \
-	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
-	  --volume="$(MAKEFILE_DIR)/_cache/hosts:/etc/hosts" \
-	  --volume="$(MAKEFILE_DIR)/test/e2e:/e2e" \
-	  --workdir="/e2e" \
-	  --env="KUBECONFIG=/tf/assets/auth/kubeconfig" \
-	  lachlanevenson/k8s-kubectl \
-	    E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) KUBECTL="" /e2e/run-e2e.sh
+	ADD_HOSTS=$(file < _cache/hosts) \
+	KUBECONFIG="$(MAKEFILE_DIR)/_cache/kube-metal/assets/auth/kubeconfig" \
+	E2E_FOCUS="$(E2E_FOCUS)" \
+	E2E_SKIP="$(E2E_SKIP)" \
+	KUBECTL='' \
+	test/e2e/run-e2e.sh
 
 _cache:
 	@mkdir _cache
@@ -55,32 +54,51 @@ _cache/.terraformrc: | _cache
 	echo 'packet = "/go/bin/terraform-provider-packet"}' >> _cache/.terraformrc
 
 _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
-	cp /etc/hosts _cache/hosts
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(MAKEFILE_DIR)/_cache/hosts:/etc/hosts \
-	  --volume $(GOPATH):/go \
+	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
+	  --env="FORMAT=docker" \
 	  --workdir "/tf" \
 	  --entrypoint "/tf/etc-hosts.sh" \
-	  hashicorp/terraform
+	  hashicorp/terraform > _cache/hosts
 
-$(GOPATH)/bin/terraform-provider-ct:
-	CGO_ENABLED=0 go get -u github.com/coreos/terraform-provider-ct
+_cache/go/src/github.com/coreos/terraform-provider-ct: | _cache/go
+	mkdir -p _cache/go/src/github.com/coreos
+	git clone \
+	  https://github.com/coreos/terraform-provider-ct.git \
+	  _cache/go/src/github.com/coreos/terraform-provider-ct
 
-$(GOPATH)/bin/terraform-provider-packet:
-	mkdir -p $(GOPATH)/src/github.com/terraform-providers
-	cd $(GOPATH)/src/github.com/terraform-providers && \
-	  git clone https://github.com/cloudnativelabs/terraform-provider-packet.git && \
-	  cd terraform-provider-packet && \
-	  git fetch && git checkout device-spot-market && \
-	  CGO_ENABLED=0 go install
+_cache/go/bin/terraform-provider-ct: _cache/go/src/github.com/coreos/terraform-provider-ct
+	$(DOCKER) run \
+	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
+	  --env="CGO_ENABLED=0" \
+	  golang:alpine \
+	    sh -c ' \
+	      go install github.com/coreos/terraform-provider-ct \
+	    '
+
+_cache/go/src/github.com/terraform-providers/terraform-provider-packet: | _cache/go
+	mkdir -p _cache/go/src/github.com/terraform-providers
+	git clone \
+	  --branch=device-spot-market \
+	  https://github.com/cloudnativelabs/terraform-provider-packet.git \
+	  _cache/go/src/github.com/terraform-providers/terraform-provider-packet
+
+_cache/go/bin/terraform-provider-packet: _cache/go/src/github.com/terraform-providers/terraform-provider-packet
+	$(DOCKER) run \
+	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
+	  --env="CGO_ENABLED=0" \
+	  golang:alpine \
+	    sh -c ' \
+	      go install github.com/terraform-providers/terraform-provider-packet \
+	    '
 
 tf-destroy:
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(GOPATH):/go \
+	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
 	  --workdir=/tf \
 	  hashicorp/terraform \
 	    destroy \
@@ -89,15 +107,20 @@ tf-destroy:
 	    --var 'controller_count=1' \
 	    --var 'worker_count=1' \
 	    --var 'server_domain=test.kube-router.io' \
+	    --var 'spot_instance=true' \
+	    --var 'spot_price_max=.02' \
 	    --force
 
-_cache/kube-metal: _cache/.terraformrc _cache/kube-metal $(GOPATH)/bin/terraform-provider-ct
-_cache/kube-metal: $(GOPATH)/bin/terraform-provider-packet
-	git clone https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
+_cache/go:
+	@mkdir -p _cache/go/bin _cache/go/src
+
+_cache/kube-metal: _cache/.terraformrc _cache/go/bin/terraform-provider-ct
+_cache/kube-metal: _cache/go/bin/terraform-provider-packet
+	git clone --branch=spot-market https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(GOPATH):/go \
+	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
 	  --workdir=/tf \
 	  hashicorp/terraform \
 	    init \
@@ -105,11 +128,11 @@ _cache/kube-metal: $(GOPATH)/bin/terraform-provider-packet
 	    --input=false \
 	    --upgrade=true
 
-_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal _cache/.terraformrc $(GOPATH)/bin/terraform-provider-ct
+_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(GOPATH):/go \
+	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
 	  --workdir=/tf \
 	  hashicorp/terraform \
 	    apply \
@@ -119,7 +142,9 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal _cache/.terraformrc 
 	    --var 'project_id=$(PACKET_PROJECT_ID)' \
 	    --var 'controller_count=1' \
 	    --var 'worker_count=1' \
-	    --var 'server_domain=test.kube-router.io'
+	    --var 'server_domain=test.kube-router.io' \
+	    --var 'spot_instance=true' \
+	    --var 'spot_price_max=.02'
 
 _cache/kube-router/images: images/kube-router
 	@mkdir -p _cache/kube-router/images
