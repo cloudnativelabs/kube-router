@@ -44,6 +44,7 @@ test-e2e: _cache/hosts _cache/kube-metal/assets/auth/kubeconfig
 	E2E_FOCUS="$(E2E_FOCUS)" \
 	E2E_SKIP="$(E2E_SKIP)" \
 	KUBECTL='' \
+	NODE_COUNT="2" \
 	test/e2e/run-e2e.sh
 
 _cache:
@@ -105,7 +106,7 @@ tf-destroy:
 	    --var 'auth_token=$(PACKET_TOKEN)' \
 	    --var 'project_id=$(PACKET_PROJECT_ID)' \
 	    --var 'controller_count=1' \
-	    --var 'worker_count=1' \
+	    --var 'worker_count=2' \
 	    --var 'server_domain=test.kube-router.io' \
 	    --var 'spot_instance=true' \
 	    --var 'spot_price_max=.02' \
@@ -141,7 +142,7 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    --var 'auth_token=$(PACKET_TOKEN)' \
 	    --var 'project_id=$(PACKET_PROJECT_ID)' \
 	    --var 'controller_count=1' \
-	    --var 'worker_count=1' \
+	    --var 'worker_count=2' \
 	    --var 'server_domain=test.kube-router.io' \
 	    --var 'spot_instance=true' \
 	    --var 'spot_price_max=.02'

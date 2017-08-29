@@ -35,7 +35,7 @@ docker run \
         --ginkgo.skip="${E2E_SKIP}" \
         --ginkgo.focus="${E2E_FOCUS}" \
         --provider="${E2E_PROVIDER}" \
-        --num-nodes=1 \
+        --num-nodes="${NODE_COUNT}" \
         --report-dir="/pwd/e2e-logs" \
         --ginkgo.noColor="true" \
         --output-print-type="hr" \
