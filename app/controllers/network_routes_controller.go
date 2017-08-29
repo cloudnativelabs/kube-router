@@ -3,6 +3,7 @@ package controllers
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/url"
 	"os/exec"
@@ -92,6 +93,14 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	err = nrc.enableForwarding()
 	if err != nil {
 		glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
+	}
+
+	// enable netfilter for the bridge
+	if _, err := exec.Command("modprobe", "br_netfilter").CombinedOutput(); err != nil {
+		glog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may not work: %s", err.Error())
+	}
+	if err = ioutil.WriteFile("/proc/sys/net/bridge/bridge-nf-call-iptables", []byte(strconv.Itoa(1)), 0640); err != nil {
+		glog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may not work: %s", err.Error())
 	}
 
 	t := time.NewTicker(nrc.syncPeriod)
