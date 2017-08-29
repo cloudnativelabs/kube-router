@@ -45,7 +45,7 @@ test-e2e: _cache/hosts _cache/kube-metal/assets/auth/kubeconfig
 	E2E_SKIP="$(E2E_SKIP)" \
 	KUBECTL='' \
 	NODE_COUNT="2" \
-	test/e2e/run-e2e.sh
+	test/e2e/run-e2e.sh --clean-start
 
 _cache:
 	@mkdir _cache
@@ -146,6 +146,7 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    --var 'server_domain=test.kube-router.io' \
 	    --var 'spot_instance=true' \
 	    --var 'spot_price_max=.02'
+	sleep 15s
 
 _cache/kube-router/images: images/kube-router
 	@mkdir -p _cache/kube-router/images
