@@ -56,7 +56,7 @@ type networkPolicyInfo struct {
 	// set of pods matching network policy spec podselector label selector
 	destPods map[string]podInfo
 
-	// whitelist ingress rules from the netwrok policy spec
+	// whitelist ingress rules from the network policy spec
 	ingressRules []ingressRule
 }
 
@@ -120,7 +120,7 @@ func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
 		if err != nil {
-			glog.Errorf("Error syncing on pod update: ", err)
+			glog.Errorf("Error syncing on pod update: %s", err)
 		}
 	} else {
 		glog.Infof("Received pod update, but controller not in sync")
@@ -131,7 +131,7 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(networkPolicyUpdate *w
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
 		if err != nil {
-			glog.Errorf("Error syncing on network policy update: ", err)
+			glog.Errorf("Error syncing on network policy update: %s", err)
 		}
 	} else {
 		glog.Infof("Received network policy update, but controller not in sync")
@@ -149,7 +149,7 @@ func (npc *NetworkPolicyController) OnNamespaceUpdate(namespaceUpdate *watchers.
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
 		if err != nil {
-			glog.Errorf("Error syncing on namespace update: ", err)
+			glog.Errorf("Error syncing on namespace update: %s", err)
 		}
 	} else {
 		glog.Infof("Received namspace update, but controller not in sync")
@@ -372,7 +372,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains() (map[string]bool, er
 			continue
 		}
 
-		// ensure pod specfic firewall chain exist for all the pods that need ingress firewall
+		// ensure pod specific firewall chain exist for all the pods that need ingress firewall
 		podFwChainName := podFirewallChainName(pod.namespace, pod.name)
 		err = iptablesCmdHandler.NewChain("filter", podFwChainName)
 		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
