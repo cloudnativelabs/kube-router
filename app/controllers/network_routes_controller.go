@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/url"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -93,6 +94,12 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	err = nrc.enableForwarding()
 	if err != nil {
 		glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
+	}
+
+	// enable policy based routing rules
+	err = nrc.enablePolicyBasedRouting()
+	if err != nil {
+		glog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 	}
 
 	// enable netfilter for the bridge
@@ -481,6 +488,17 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 		} else {
 			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop.String() + " already exists.")
 		}
+
+		out, err := exec.Command("ip", "route", "list", "table", "kube-router").Output()
+		if err != nil {
+			return errors.New("Failed to verify if route already exists in kube-router table due to " + err.Error())
+		}
+		if !strings.Contains(string(out), tunnelName) {
+			if err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table", "kube-router").Run(); err != nil {
+				return errors.New("Failed to add route in custom route table due to: " + err.Error())
+			}
+		}
+
 		route = &netlink.Route{
 			LinkIndex: link.Attrs().Index,
 			Dst:       dst,
@@ -730,6 +748,45 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		err = iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
+// setup a custom routing table that will be used for policy based routing to ensure traffic originating
+// on tunnel interface only leaves through tunnel interface irrespective rp_filter enabled/disabled
+func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
+	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
+	if err != nil {
+		return fmt.Errorf("Failed to enable required policy based routing due to: %s", err.Error())
+	}
+
+	if !strings.Contains(string(b), "kube-router") {
+		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			return fmt.Errorf("Failed to enable required policy based routing. Failed to create custom route table to route tunneled traffic properly due to: %s", err.Error())
+		} else {
+			if _, err = f.WriteString("77 kube-router"); err != nil {
+				return fmt.Errorf("Failed to enable required policy based routing.Failed to add custom router table entry in /etc/iproute2/rt_tables due to: %s", err.Error())
+			}
+		}
+	}
+
+	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
+	if err != nil {
+		return fmt.Errorf("Failed to enable required policy based routing.Failed to get the pod CIDR allocated for the node due to: %s", err.Error())
+	}
+
+	out, err := exec.Command("ip", "rule", "list").Output()
+	if err != nil {
+		return fmt.Errorf("Failed to enable required policy based routing as failed to verify if `ip rule` exists due to %s", err.Error())
+	}
+
+	if !strings.Contains(string(out), cidr) {
+		err = exec.Command("ip", "rule", "add", "from", cidr, "table", "kube-router").Run()
+		if err != nil {
+			return fmt.Errorf("Failed to add ip rule due to: %s", err.Error())
 		}
 	}
 
