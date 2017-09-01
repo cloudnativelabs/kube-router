@@ -251,7 +251,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		// create IPVS service for the service to be exposed through the cluster ip
 		ipvs_cluster_vip_svc, err := ipvsAddService(svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity)
 		if err != nil {
-			glog.Errorf("Failed to create ipvs service for cluster ip: ", err.Error())
+			glog.Errorf("Failed to create ipvs service for cluster ip: %s", err.Error())
 			continue
 		}
 		var clusterServiceId = generateIpPortId(svc.clusterIP.String(), svc.protocol, strconv.Itoa(svc.port))
@@ -319,7 +319,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			glog.Infof("Found a IPVS service %s:%s:%s which is no longer needed so cleaning up", ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
 			err := h.DelService(ipvsSvc)
 			if err != nil {
-				glog.Errorf("Failed to delete stale IPVS service: ", err.Error())
+				glog.Errorf("Failed to delete stale IPVS service: %s", err.Error())
 				continue
 			}
 		} else {
@@ -786,7 +786,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 
 	handle, err := ipvs.New("")
 	if err != nil {
-		glog.Errorf("Failed to cleanup ipvs rules: ", err.Error())
+		glog.Errorf("Failed to cleanup ipvs rules: %s", err.Error())
 		return
 	}
 
@@ -795,14 +795,14 @@ func (nsc *NetworkServicesController) Cleanup() {
 	// cleanup iptable masqurade rule
 	err = deleteMasqueradeIptablesRule()
 	if err != nil {
-		glog.Errorf("Failed to cleanup iptable masquerade rule due to: ", err.Error())
+		glog.Errorf("Failed to cleanup iptable masquerade rule due to: %s", err.Error())
 		return
 	}
 
 	// cleanup iptable hairpin rules
 	err = deleteHairpinIptablesRules()
 	if err != nil {
-		glog.Errorf("Failed to cleanup iptable hairpin rules: ", err.Error())
+		glog.Errorf("Failed to cleanup iptable hairpin rules: %s", err.Error())
 		return
 	}
 
@@ -815,7 +815,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 	} else {
 		err = netlink.LinkDel(dummyVipInterface)
 		if err != nil {
-			glog.Errorf("Could not delete dummy interface: "+KUBE_DUMMY_IF, err.Error())
+			glog.Errorf("Could not delete dummy interface " + KUBE_DUMMY_IF + " due to " + err.Error())
 			return
 		}
 	}

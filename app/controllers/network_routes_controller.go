@@ -89,7 +89,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	// In case of cluster provisioned on AWS disable source-destination check
 	nrc.disableSourceDestinationCheck()
 
-	// enable IP forwarding for the packets coming in/out from ther pods
+	// enable IP forwarding for the packets coming in/out from the pods
 	err = nrc.enableForwarding()
 	if err != nil {
 		glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
@@ -119,7 +119,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	} else {
 		glog.Infoln("Disabling Pod egress.")
 		err = deletePodEgressRule()
-		// TODO: Don't error if removing non-existant Pod egress rules/ipsets.
+		// TODO: Don't error if removing non-existent Pod egress rules/ipsets.
 		if err != nil {
 			glog.Infof("Error disabling Pod egress: %s", err.Error())
 		}
@@ -273,7 +273,7 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 
 	cidrStr := strings.Split(cidr, "/")
 	subnet := cidrStr[0]
-	cidrLen, err := strconv.Atoi(cidrStr[1])
+	cidrLen, _ := strconv.Atoi(cidrStr[1])
 	attrs := []bgp.PathAttributeInterface{
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
@@ -318,7 +318,7 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 // Each node advertises its pod CIDR to the nodes with same ASN (iBGP peers) and to the global BGP peer
 // or per node BGP peer. Each node ends up advertising not only pod CIDR assigned to the self but other
 // routers learned to the node pod CIDR's as well to global BGP peer or per node BGP peers. external BGP
-// peer will randomly (since all path have equal selection atributes) select the routes from multiple
+// peer will randomly (since all path have equal selection attributes) select the routes from multiple
 // routes to a pod CIDR which will result in extra hop. To prevent this behaviour this methods add
 // defult export policy to reject. and explicit policy is added so that each node only advertised the
 // pod CIDR assigned to it. Additionally export policy is added so that a node advertises cluster IP's
