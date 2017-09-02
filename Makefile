@@ -61,7 +61,7 @@ test-e2e: _cache/hosts _cache/kube-router/images
 	  --rm \
 	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
 	  --volume="$(MAKEFILE_DIR)/test/e2e:/e2e" \
-	  --add-host=$(file < _cache/hosts) \
+	  --add-host="$(shell cat _cache/hosts)" \
 	  --workdir="/e2e" \
 	  --env="KUBECONFIG=/tf/assets/auth/kubeconfig" \
 	  --entrypoint="/bin/sh" \
@@ -72,7 +72,7 @@ test-e2e: _cache/hosts _cache/kube-router/images
 	    kubectl apply -f /e2e/common \
 	    '
 
-	ADD_HOSTS=$(file < _cache/hosts) \
+	ADD_HOSTS="$(shell cat _cache/hosts)" \
 	KUBECONFIG="$(MAKEFILE_DIR)/_cache/kube-metal/assets/auth/kubeconfig" \
 	E2E_FOCUS="$(E2E_FOCUS)" \
 	E2E_SKIP="$(E2E_SKIP)" \
@@ -155,6 +155,7 @@ _cache/kube-metal: _cache/go/bin/terraform-provider-packet
 
 _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	$(DOCKER) run \
+	  --rm \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
@@ -164,6 +165,7 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    --force-copy \
 	    --input=false
 	$(DOCKER) run \
+	  --rm \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
 	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
