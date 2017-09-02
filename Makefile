@@ -95,7 +95,7 @@ _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
 	  --env="FORMAT=docker" \
 	  --workdir "/tf" \
 	  --entrypoint "/tf/etc-hosts.sh" \
-	  hashicorp/terraform > _cache/hosts
+	  hashicorp/terraform | tee _cache/hosts
 
 _cache/go/src/github.com/coreos/terraform-provider-ct: | _cache/go
 	mkdir -p _cache/go/src/github.com/coreos
