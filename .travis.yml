@@ -26,14 +26,18 @@ env:
 
 before_script:
   - make test
-  - make --dry-run _cache/kube-metal/assets/auth/kubeconfig # terraform apply
+  - make _cache/kube-metal/assets/auth/kubeconfig # terraform apply
 
 script:
-  - echo "!!! Starting e2e test [Feature:NetworkPolicy]"
-  - make --dry-run test-e2e E2E_FOCUS="Feature:NetworkPolicy" E2E_SKIP="${E2E_SKIP_COMMON}"
-  - echo "!!! Starting e2e test [Conformance]"
-  - make --dry-run test-e2e E2E_FOCUS="Conformance" E2E_SKIP="${E2E_SKIP_COMMON}|Feature:NetworkPolicy"
-  - eval false
+  - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  - echo "Starting e2e test [Feature:NetworkPolicy]"
+  - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  - make test-e2e E2E_FOCUS="Feature:NetworkPolicy" E2E_SKIP="${E2E_SKIP_COMMON}"
+  - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  - echo "Starting e2e test [Conformance]"
+  - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  - make test-e2e E2E_FOCUS="Conformance" E2E_SKIP="${E2E_SKIP_COMMON}Feature:NetworkPolicy"
+  #
   # - make test-e2e E2E_FOCUS="Networking" E2E_SKIP="${E2E_SKIP_COMMON}"
   # - make test-e2e E2E_FOCUS="Network" E2E_SKIP="${E2E_SKIP_COMMON}|Networking"
   # - make test-e2e E2E_FOCUS="Feature:NetworkPolicy" E2E_SKIP="${E2E_SKIP_COMMON}|Networking|Network"
