@@ -30,11 +30,11 @@ before_script:
 
 script:
   - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-  - echo "Starting e2e test: [Feature:NetworkPolicy]"
+  - echo "Starting e2e test [Feature:NetworkPolicy]"
   - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   - make test-e2e E2E_FOCUS="Feature:NetworkPolicy" E2E_SKIP="${E2E_SKIP_COMMON}"
   - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-  - echo "Starting e2e test: [Conformance]"
+  - echo "Starting e2e test [Conformance]"
   - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   - make test-e2e E2E_FOCUS="Conformance" E2E_SKIP="${E2E_SKIP_COMMON}Feature:NetworkPolicy"
   #
