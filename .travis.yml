@@ -26,16 +26,16 @@ env:
 
 before_script:
   - make test
-  - make _cache/kube-metal/assets/auth/kubeconfig # terraform apply
 
 script:
-  - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  - echo "Starting test cluster"
+  - make _cache/kube-metal/assets/auth/kubeconfig # terraform apply
+  - cat _cache/hosts
   - echo "Starting e2e test [Feature:NetworkPolicy]"
-  - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  - cat _cache/hosts
   - make test-e2e E2E_FOCUS="Feature:NetworkPolicy" E2E_SKIP="${E2E_SKIP_COMMON}"
-  - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   - echo "Starting e2e test [Conformance]"
-  - echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+  - cat _cache/hosts
   - make test-e2e E2E_FOCUS="Conformance" E2E_SKIP="${E2E_SKIP_COMMON}Feature:NetworkPolicy"
   #
   # - make test-e2e E2E_FOCUS="Networking" E2E_SKIP="${E2E_SKIP_COMMON}"
