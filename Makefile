@@ -21,6 +21,18 @@ UID=$(shell $(value $(UID_CMD)))
 BUILD_FILES=$(shell find app vendor kube-router.go -name \*.go)
 FMT_FILES=$(shell find app kube-router.go -name \*.go)
 
+# e2e
+CONTROLLER_COUNT?="1"
+WORKER_COUNT?="1"
+OPERATING_SYSTEM?="custom_ipxe"
+IPXE_SCRIPT_URL?="https://raw.githubusercontent.com/cloudnativelabs/pxe/master/packet/coreos-alpha-packet.ipxe"
+ALWAYS_PXE?="true"
+
+# packet.net
+SPOT_INSTANCE?="true"
+SPOT_PRICE_MAX?=".01"
+PACKET_FACILITY?="nrt1"
+
 all: test kube-router images/kube-router ## Default target. Runs tests, builds binaries and images.
 
 kube-router: $(BUILD_FILES) ## Builds kube-router.
@@ -30,21 +42,42 @@ kube-router: $(BUILD_FILES) ## Builds kube-router.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 
-test-e2e: _cache/hosts _cache/kube-metal/assets/auth/kubeconfig
+test-e2e: _cache/kube-metal/assets/auth/kubeconfig
+test-e2e: _cache/hosts _cache/kube-router/images
 	$(DOCKER) run \
+	  --rm \
+	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
+	  --volume="$(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc" \
+	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
+	  --volume="$(MAKEFILE_DIR)/_cache/kube-router/images:/images" \
+	  --workdir="/tf" \
+	  --entrypoint="/bin/sh" \
+	  hashicorp/terraform \
+	    -c ' \
+	      apk add -U rsync; \
+	      /tf/load-image.sh /images'
+
+	$(DOCKER) run \
+	  --rm \
 	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
 	  --volume="$(MAKEFILE_DIR)/test/e2e:/e2e" \
 	  --add-host=$(file < _cache/hosts) \
 	  --workdir="/e2e" \
 	  --env="KUBECONFIG=/tf/assets/auth/kubeconfig" \
+	  --entrypoint="/bin/sh" \
 	  lachlanevenson/k8s-kubectl:$(kube_version_full) \
-	    apply -f /e2e/common
+	    -c ' \
+	    kubectl -n kube-system set image ds/kube-router kube-router=test.kube-router.io; \
+	    kubectl -n kube-system delete pods -l k8s-app=kube-router; \
+	    kubectl apply -f /e2e/common \
+	    '
+
 	ADD_HOSTS=$(file < _cache/hosts) \
 	KUBECONFIG="$(MAKEFILE_DIR)/_cache/kube-metal/assets/auth/kubeconfig" \
 	E2E_FOCUS="$(E2E_FOCUS)" \
 	E2E_SKIP="$(E2E_SKIP)" \
 	KUBECTL='' \
-	NODE_COUNT="1" \
+	NODE_COUNT="$(shell expr $(CONTROLLER_COUNT) + $(WORKER_COUNT) )" \
 	test/e2e/run-e2e.sh --clean-start
 
 _cache:
@@ -82,7 +115,7 @@ _cache/go/bin/terraform-provider-ct: _cache/go/src/github.com/coreos/terraform-p
 _cache/go/src/github.com/terraform-providers/terraform-provider-packet: | _cache/go
 	mkdir -p _cache/go/src/github.com/terraform-providers
 	git clone \
-	  --branch=device-spot-market \
+	  --branch=kube-metal \
 	  https://github.com/cloudnativelabs/terraform-provider-packet.git \
 	  _cache/go/src/github.com/terraform-providers/terraform-provider-packet
 
@@ -105,11 +138,12 @@ tf-destroy:
 	    destroy \
 	    --var 'auth_token=$(PACKET_TOKEN)' \
 	    --var 'project_id=$(PACKET_PROJECT_ID)' \
-	    --var 'controller_count=1' \
-	    --var 'worker_count=1' \
+	    --var 'facility=$(PACKET_FACILITY)' \
+	    --var 'controller_count=$(CONTROLLER_COUNT)' \
+	    --var 'worker_count=$(WORKER_COUNT)' \
 	    --var 'server_domain=test.kube-router.io' \
-	    --var 'spot_instance=true' \
-	    --var 'spot_price_max=.02' \
+	    --var 'spot_instance=$(SPOT_INSTANCE)' \
+	    --var 'spot_price_max=$(SPOT_PRICE_MAX)' \
 	    --force
 
 _cache/go:
@@ -117,7 +151,7 @@ _cache/go:
 
 _cache/kube-metal: _cache/.terraformrc _cache/go/bin/terraform-provider-ct
 _cache/kube-metal: _cache/go/bin/terraform-provider-packet
-	git clone --branch=spot-market https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
+	git clone --branch=kube-router https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
 
 _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	$(DOCKER) run \
@@ -128,16 +162,7 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	  hashicorp/terraform \
 	    init \
 	    --force-copy \
-	    --input=false \
-	    --upgrade=true
-	$(DOCKER) run \
-	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
-	  --workdir=/tf \
-	  hashicorp/terraform \
-	    get \
-	    --update=true
+	    --input=false
 	$(DOCKER) run \
 	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
 	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
@@ -149,20 +174,21 @@ _cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
 	    --auto-approve=true \
 	    --var 'auth_token=$(PACKET_TOKEN)' \
 	    --var 'project_id=$(PACKET_PROJECT_ID)' \
-	    --var 'controller_count=1' \
-	    --var 'worker_count=1' \
+	    --var 'facility=$(PACKET_FACILITY)' \
+	    --var 'controller_count=$(CONTROLLER_COUNT)' \
+	    --var 'worker_count=$(WORKER_COUNT)' \
 	    --var 'server_domain=test.kube-router.io' \
-	    --var 'spot_instance=true' \
-	    --var 'spot_price_max=.02'
+	    --var 'spot_instance=$(SPOT_INSTANCE)' \
+	    --var 'spot_price_max=$(SPOT_PRICE_MAX)'
 
 _cache/kube-router/images: images/kube-router
 	@mkdir -p _cache/kube-router/images
-	@$(DOCKER) save test.kube-router.io -o _cache/kube-router/images/kube-router.docker
+	$(DOCKER) save test.kube-router.io -o _cache/kube-router/images/kube-router.docker
 
 images/kube-router: kube-router gobgp $(shell find images/kube-router/*) ## Builds a kube-router Docker container
 	@echo Starting kube-router container image build.
 	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" --file=images/kube-router/Dockerfile .
-	@$(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" test.kube-router.io
+	$(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" test.kube-router.io
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
 	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
 	fi
