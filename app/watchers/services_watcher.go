@@ -65,12 +65,12 @@ func (svcw *serviceWatcher) RegisterHandler(handler ServiceUpdatesHandler) {
 }
 
 func (svcw *serviceWatcher) List() []*api.Service {
-	obj_list := svcw.serviceLister.List()
-	svc_instances := make([]*api.Service, len(obj_list))
-	for i, ins := range obj_list {
-		svc_instances[i] = ins.(*api.Service)
+	objList := svcw.serviceLister.List()
+	svcInstances := make([]*api.Service, len(objList))
+	for i, ins := range objList{
+		svcInstances[i] = ins.(*api.Service)
 	}
-	return svc_instances
+	return svcInstances
 }
 
 func (svcw *serviceWatcher) HasSynced() bool {
@@ -79,6 +79,7 @@ func (svcw *serviceWatcher) HasSynced() bool {
 
 var servicesStopCh chan struct{}
 
+// StartServiceWatcher: start watching updates for services from Kuberentes API server
 func StartServiceWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Duration) (*serviceWatcher, error) {
 
 	svcw := serviceWatcher{}

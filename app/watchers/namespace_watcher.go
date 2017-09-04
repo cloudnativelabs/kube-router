@@ -7,11 +7,11 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
+	listers "k8s.io/client-go/listers/core/v1"
 	api "k8s.io/client-go/pkg/api/v1"
 	cache "k8s.io/client-go/tools/cache"
-	listers "k8s.io/client-go/listers/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
 )
 
 type NamespaceUpdate struct {
@@ -62,12 +62,12 @@ func (nsw *namespaceWatcher) namespaceUpdateEventHandler(oldObj, newObj interfac
 }
 
 func (nsw *namespaceWatcher) List() []*api.Namespace {
-	obj_list := nsw.namespaceLister.List()
-	namespace_instances := make([]*api.Namespace, len(obj_list))
-	for i, ins := range obj_list {
-		namespace_instances[i] = ins.(*api.Namespace)
+	objList := nsw.namespaceLister.List()
+	namespaceInstances := make([]*api.Namespace, len(objList))
+	for i, ins := range objList {
+		namespaceInstances[i] = ins.(*api.Namespace)
 	}
-	return namespace_instances
+	return namespaceInstances
 }
 
 func (nsw *namespaceWatcher) ListByLabels(set labels.Set) ([]*api.Namespace, error) {
@@ -75,9 +75,8 @@ func (nsw *namespaceWatcher) ListByLabels(set labels.Set) ([]*api.Namespace, err
 	matchedNamespaces, err := namespaceLister.List(set.AsSelector())
 	if err != nil {
 		return nil, err
-	} else {
-		return matchedNamespaces, nil
 	}
+	return matchedNamespaces, nil
 }
 
 func (nsw *namespaceWatcher) RegisterHandler(handler NamespaceUpdatesHandler) {

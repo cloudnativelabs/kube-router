@@ -76,12 +76,12 @@ func (ew *endpointsWatcher) RegisterHandler(handler EndpointsUpdatesHandler) {
 }
 
 func (ew *endpointsWatcher) List() []*api.Endpoints {
-	obj_list := ew.endpointsLister.List()
-	ep_instances := make([]*api.Endpoints, len(obj_list))
-	for i, ins := range obj_list {
-		ep_instances[i] = ins.(*api.Endpoints)
+	objList := ew.endpointsLister.List()
+	epInstances := make([]*api.Endpoints, len(objList))
+	for i, ins := range objList {
+		epInstances[i] = ins.(*api.Endpoints)
 	}
-	return ep_instances
+	return epInstances 
 }
 
 func (ew *endpointsWatcher) HasSynced() bool {

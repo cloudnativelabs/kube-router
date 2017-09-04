@@ -59,12 +59,12 @@ func (nw *nodeWatcher) RegisterHandler(handler NodeUpdatesHandler) {
 }
 
 func (nw *nodeWatcher) List() []*api.Node {
-	obj_list := nw.nodeLister.List()
-	node_instances := make([]*api.Node, len(obj_list))
-	for i, ins := range obj_list {
-		node_instances[i] = ins.(*api.Node)
+	objList := nw.nodeLister.List()
+	nodeInstances := make([]*api.Node, len(objList))
+	for i, ins := range objList {
+		nodeInstances[i] = ins.(*api.Node)
 	}
-	return node_instances
+	return nodeInstances 
 }
 
 func (nw *nodeWatcher) HasSynced() bool {
