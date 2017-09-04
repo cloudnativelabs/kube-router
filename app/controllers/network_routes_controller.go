@@ -33,7 +33,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// struct to hold necessary information required by controller
+// NetworkRoutingController is struct to hold necessary information required by controller
 type NetworkRoutingController struct {
 	nodeIP               net.IP
 	nodeHostName         string
@@ -68,7 +68,7 @@ const (
 	podSubnetIpSetName   = "kube-router-pod-subnets"
 )
 
-// Run: run forever till until we are notified on stop channel
+// Run runs forever till until we are notified on stop channel
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	cidr, err := utils.GetPodCidrFromCniSpec("/etc/cni/net.d/10-kuberouter.conf")
 	if err != nil {
@@ -310,7 +310,7 @@ func (nrc *NetworkRoutingController) getClusterIps() ([]string, error) {
 	return clusterIpList, nil
 }
 
-// AdvertiseClusterIp:  advertises the service cluster ip the configured peers
+// AdvertiseClusterIp  advertises the service cluster ip the configured peers
 func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error {
 
 	attrs := []bgp.PathAttributeInterface{
@@ -523,7 +523,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	return netlink.RouteReplace(route)
 }
 
-// Cleanup: performs the cleanup of configurations done
+// Cleanup performs the cleanup of configurations done
 func (nrc *NetworkRoutingController) Cleanup() {
 	err := deletePodEgressRule()
 	if err != nil {
@@ -770,10 +770,9 @@ func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return fmt.Errorf("Failed to enable required policy based routing. Failed to create custom route table to route tunneled traffic properly due to: %s", err.Error())
-		} else {
-			if _, err = f.WriteString("77 kube-router"); err != nil {
-				return fmt.Errorf("Failed to enable required policy based routing.Failed to add custom router table entry in /etc/iproute2/rt_tables due to: %s", err.Error())
-			}
+		}
+		if _, err = f.WriteString("77 kube-router"); err != nil {
+			return fmt.Errorf("Failed to enable required policy based routing.Failed to add custom router table entry in /etc/iproute2/rt_tables due to: %s", err.Error())
 		}
 	}
 
@@ -797,7 +796,7 @@ func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 	return nil
 }
 
-// OnNodeUpdate: Handle updates from Node watcher. Node watcher calls this method whenever there is
+// OnNodeUpdate Handle updates from Node watcher. Node watcher calls this method whenever there is
 // new node is added or old node is deleted. So peer up with new node and drop peering
 // from old node
 func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdate) {
@@ -849,14 +848,13 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		if !ok {
 			return errors.New("Could not find ASN number for the node. Node need to be annotated with ASN number " +
 				"details to start BGP server.")
-		} else {
-			glog.Infof("Found ASN for the node to be %s from the node annotations", nodeasn)
-			asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
-			if err != nil {
-				return errors.New("Failed to parse ASN number specified for the the node")
-			}
-			nodeAsnNumber = uint32(asnNo)
 		}
+		glog.Infof("Found ASN for the node to be %s from the node annotations", nodeasn)
+		asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
+		if err != nil {
+			return errors.New("Failed to parse ASN number specified for the the node")
+		}
+		nodeAsnNumber = uint32(asnNo)
 		nrc.nodeAsnNumber = nodeAsnNumber
 	}
 
@@ -964,6 +962,7 @@ func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
 	return net.IPNet{}, "", errors.New("Failed to find interface with specified node ip")
 }
 
+// NewNetworkRoutingController returns new NetworkRoutingController object
 func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
 	// TODO: Remove lookup, ipset.New already does this.

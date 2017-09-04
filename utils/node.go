@@ -9,6 +9,7 @@ import (
 	apiv1 "k8s.io/client-go/pkg/api/v1"
 )
 
+// GetNodeObject returns the node API object for the node
 func GetNodeObject(clientset *kubernetes.Clientset, hostnameOverride string) (*apiv1.Node, error) {
 
 	// assuming kube-router is running as pod, first check env NODE_NAME

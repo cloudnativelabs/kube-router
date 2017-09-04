@@ -81,7 +81,7 @@ func (ew *endpointsWatcher) List() []*api.Endpoints {
 	for i, ins := range objList {
 		epInstances[i] = ins.(*api.Endpoints)
 	}
-	return epInstances 
+	return epInstances
 }
 
 func (ew *endpointsWatcher) HasSynced() bool {

@@ -36,7 +36,7 @@ import (
 // by one or more network policy chains, till there is a match which will accept the packet, or gets
 // dropped by the rule in the pod chain, if there is no match.
 
-// strcut to hold information required by NetworkPolicyController
+// NetworkPolicyController strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
 	nodeIP          net.IP
 	nodeHostName    string
@@ -81,7 +81,7 @@ type protocolAndPort struct {
 	port     string
 }
 
-// Run: runs forver till we recive notification on stopCh
+// Run runs forver till we recive notification on stopCh
 func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
@@ -117,7 +117,7 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 	}
 }
 
-// OnPodUpdate: handles updates to pods from the Kubernetes api server
+// OnPodUpdate handles updates to pods from the Kubernetes api server
 func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
 	glog.Infof("Received pod update namspace:%s pod name:%s", podUpdate.Pod.Namespace, podUpdate.Pod.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
@@ -130,7 +130,7 @@ func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
 	}
 }
 
-// OnNetworkPolicyUpdate: handles updates to network policy from the kubernetes api server
+// OnNetworkPolicyUpdate handles updates to network policy from the kubernetes api server
 func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(networkPolicyUpdate *watchers.NetworkPolicyUpdate) {
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
@@ -142,7 +142,7 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(networkPolicyUpdate *w
 	}
 }
 
-// OnNamespaceUpdate: handles updates to namespace from kubernetes api server
+// OnNamespaceUpdate handles updates to namespace from kubernetes api server
 func (npc *NetworkPolicyController) OnNamespaceUpdate(namespaceUpdate *watchers.NamespaceUpdate) {
 
 	// namespace (and annotations on it) has no significance in GA ver of network policy
@@ -598,7 +598,7 @@ func (npc *NetworkPolicyController) getFirewallEnabledPods(nodeIp string) (*map[
 		}
 		if npc.v1NetworkPolicy {
 			podNeedsFirewall := false
-			for _, policyObj:= range watchers.NetworkPolicyWatcher.List() {
+			for _, policyObj := range watchers.NetworkPolicyWatcher.List() {
 				policy, _ := policyObj.(*networking.NetworkPolicy)
 
 				// we are only interested in the network policies in same namespace that of pod
@@ -652,7 +652,7 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
 
-	for _, policyObj:= range watchers.NetworkPolicyWatcher.List() {
+	for _, policyObj := range watchers.NetworkPolicyWatcher.List() {
 
 		policy, ok := policyObj.(*networking.NetworkPolicy)
 		if !ok {
@@ -747,7 +747,7 @@ func buildBetaNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
 
-	for _, policyObj:= range watchers.NetworkPolicyWatcher.List() {
+	for _, policyObj := range watchers.NetworkPolicyWatcher.List() {
 
 		policy, _ := policyObj.(*apiextensions.NetworkPolicy)
 		newPolicy := networkPolicyInfo{
@@ -806,13 +806,11 @@ func getNameSpaceDefaultPolicy(namespace string) (string, error) {
 				err := json.Unmarshal([]byte(networkPolicyAnnotation), &annot)
 				if err == nil {
 					return annot["ingress"]["isolation"], nil
-				} else {
-					glog.Errorf("Skipping invalid network-policy for namespace \"%s\": %s", namespace, err)
-					return "DefaultAllow", errors.New("Invalid NetworkPolicy.")
 				}
-			} else {
-				return "DefaultAllow", nil
+				glog.Errorf("Skipping invalid network-policy for namespace \"%s\": %s", namespace, err)
+				return "DefaultAllow", errors.New("Invalid NetworkPolicy.")
 			}
+			return "DefaultAllow", nil
 		}
 	}
 	return "", errors.New("Failed to get the default ingress policy for the namespace: " + namespace)
@@ -857,7 +855,7 @@ func getNodeIP(node *apiv1.Node) (net.IP, error) {
 	return nil, errors.New("host IP unknown")
 }
 
-// Cleanup: cleanup configurations done
+// Cleanup cleanup configurations done
 func (npc *NetworkPolicyController) Cleanup() {
 
 	glog.Infof("Cleaning up iptables configuration permanently done by kube-router")
@@ -941,6 +939,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	glog.Infof("Successfully cleaned the iptables configuration done by kube-router")
 }
 
+// NewNetworkPolicyController returns new NetworkPolicyController object
 func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkPolicyController, error) {
 
 	npc := NetworkPolicyController{}

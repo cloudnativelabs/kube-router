@@ -72,7 +72,7 @@ func (pw *podWatcher) List() []*api.Pod {
 	for i, ins := range objList {
 		podInstances[i] = ins.(*api.Pod)
 	}
-	return podInstances 
+	return podInstances
 }
 
 func (pw *podWatcher) ListByNamespaceAndLabels(namespace string, labelsToMatch labels.Set) (ret []*api.Pod, err error) {

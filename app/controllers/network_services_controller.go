@@ -27,7 +27,6 @@ import (
 )
 
 const (
-	// name of the dummy interface to which cluster ip are assigned
 	KUBE_DUMMY_IF      = "kube-dummy-if"
 	IFACE_NOT_FOUND    = "Link not found"
 	IFACE_HAS_ADDR     = "file exists"
@@ -66,7 +65,7 @@ var (
 // the kubernetes api server and syncs the ipvs configuration to reflect state of services
 // and endpoints
 
-// struct for storing information needed by the controller
+// NetworkServicesController struct stores information needed by the controller
 type NetworkServicesController struct {
 	nodeIP        net.IP
 	nodeHostName  string
@@ -104,7 +103,7 @@ type endpointsInfo struct {
 // map of all endpoints, with unique service id(namespace name, service name, port) as key
 type endpointsInfoMap map[string][]endpointsInfo
 
-// Run: periodically sync ipvs configuration to reflect desired state of services and endpoints
+// Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 
 	t := time.NewTicker(nsc.syncPeriod)
@@ -172,7 +171,7 @@ func (nsc *NetworkServicesController) sync() {
 	nsc.publishMetrics(nsc.serviceMap)
 }
 
-// OnEndpointsUpdate:  handle change in endpoints update from the API server
+// OnEndpointsUpdate handle change in endpoints update from the API server
 func (nsc *NetworkServicesController) OnEndpointsUpdate(endpointsUpdate *watchers.EndpointsUpdate) {
 
 	nsc.mu.Lock()
@@ -194,7 +193,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(endpointsUpdate *watcher
 	}
 }
 
-// OnServiceUpdate: handle change in service update from the API server
+// OnServiceUpdate handle change in service update from the API server
 func (nsc *NetworkServicesController) OnServiceUpdate(serviceUpdate *watchers.ServiceUpdate) {
 
 	nsc.mu.Lock()
@@ -260,7 +259,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		activeServiceEndpointMap[clusterServiceId] = make([]string, 0)
 
 		// create IPVS service for the service to be exposed through the nodeport
-		var ipvsNodeportSvc*ipvs.Service
+		var ipvsNodeportSvc *ipvs.Service
 		var nodeServiceId string
 		if svc.nodePort != 0 {
 			ipvsNodeportSvc, err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity)
@@ -436,7 +435,7 @@ func shuffle(endPoints []endpointsInfo) []endpointsInfo {
 func buildEndpointsInfo() endpointsInfoMap {
 	endpointsMap := make(endpointsInfoMap)
 	for _, ep := range watchers.EndpointsWatcher.List() {
-		for _, epSubset:= range ep.Subsets {
+		for _, epSubset := range ep.Subsets {
 			for _, port := range epSubset.Ports {
 				svcId := generateServiceId(ep.Namespace, ep.Name, port.Name)
 				endpoints := make([]endpointsInfo, 0)
@@ -781,7 +780,7 @@ func getKubeDummyInterface() (netlink.Link, error) {
 	return dummyVipInterface, nil
 }
 
-// Cleanup: clean all the configurations (IPVS, iptables, links) done
+// Cleanup cleans all the configurations (IPVS, iptables, links) done
 func (nsc *NetworkServicesController) Cleanup() {
 	// cleanup ipvs rules by flush
 	glog.Infof("Cleaning up IPVS configuration permanently")
@@ -824,6 +823,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 	glog.Infof("Successfully cleaned the ipvs configuration done by kube-router")
 }
 
+// NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
 
 	var err error

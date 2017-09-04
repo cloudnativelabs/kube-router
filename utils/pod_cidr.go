@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// GetPodCidrFromCniSpec gets pod CIDR allocated to the node from CNI spec file and returns it
 func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 	netconfig, err := libcni.ConfFromFile(cniConfFilePath)
 	if err != nil {
@@ -25,6 +26,8 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 	return net.IPNet(ipamConfig.Subnet), nil
 }
 
+// InsertPodCidrInCniSpec inserts the pod CIDR allocated to the node by kubernetes controlller manager
+// and stored it in the CNI specification
 func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 	file, err := ioutil.ReadFile(cniConfFilePath)
 	if err != nil {
@@ -45,6 +48,7 @@ func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 	return nil
 }
 
+// GetPodCidrFromNodeSpec reads the pod CIDR allocated to the node from API node object and returns it
 func GetPodCidrFromNodeSpec(clientset *kubernetes.Clientset, hostnameOverride string) (string, error) {
 	node, err := GetNodeObject(clientset, hostnameOverride)
 	if err != nil {

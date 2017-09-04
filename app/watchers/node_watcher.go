@@ -64,7 +64,7 @@ func (nw *nodeWatcher) List() []*api.Node {
 	for i, ins := range objList {
 		nodeInstances[i] = ins.(*api.Node)
 	}
-	return nodeInstances 
+	return nodeInstances
 }
 
 func (nw *nodeWatcher) HasSynced() bool {

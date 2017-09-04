@@ -67,7 +67,7 @@ func (svcw *serviceWatcher) RegisterHandler(handler ServiceUpdatesHandler) {
 func (svcw *serviceWatcher) List() []*api.Service {
 	objList := svcw.serviceLister.List()
 	svcInstances := make([]*api.Service, len(objList))
-	for i, ins := range objList{
+	for i, ins := range objList {
 		svcInstances[i] = ins.(*api.Service)
 	}
 	return svcInstances

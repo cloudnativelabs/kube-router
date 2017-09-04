@@ -16,11 +16,13 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// KubeRouter holds the information needed to run server
 type KubeRouter struct {
 	Client *kubernetes.Clientset
 	Config *options.KubeRouterConfig
 }
 
+// NewKubeRouterDefault returns a KubeRouter object
 func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error) {
 
 	var clientconfig *rest.Config
@@ -46,6 +48,7 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 	return &KubeRouter{Client: clientset, Config: config}, nil
 }
 
+// CleanupConfigAndExit performs Cleanup on all three controllers
 func CleanupConfigAndExit() {
 	npc := controllers.NetworkPolicyController{}
 	npc.Cleanup()
@@ -104,6 +107,7 @@ func (kr *KubeRouter) stopApiWatchers() {
 	watchers.StopNodeWatcher()
 }
 
+// Run starts the controllers and waits forever till we get SIGINT or SIGTERM
 func (kr *KubeRouter) Run() error {
 
 	var err error
