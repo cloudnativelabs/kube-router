@@ -27,6 +27,7 @@ import (
 )
 
 const (
+	// name of the dummy interface to which cluster ip are assigned
 	KUBE_DUMMY_IF      = "kube-dummy-if"
 	IFACE_NOT_FOUND    = "Link not found"
 	IFACE_HAS_ADDR     = "file exists"
@@ -58,13 +59,14 @@ var (
 	}, []string{"namespace", "service_name", "backend"})
 )
 
-// Network services controller enables local node as network service proxy through IPVS/LVS.
+// NetworkServicesController enables local node as network service proxy through IPVS/LVS.
 // Support only Kubernetes network services of type NodePort, ClusterIP, and LoadBalancer. For each service a
 // IPVS service is created and for each service endpoint a server is added to the IPVS service.
 // As services and endpoints are updated, network service controller gets the updates from
 // the kubernetes api server and syncs the ipvs configuration to reflect state of services
 // and endpoints
 
+// struct for storing information needed by the controller
 type NetworkServicesController struct {
 	nodeIP        net.IP
 	nodeHostName  string
@@ -102,7 +104,7 @@ type endpointsInfo struct {
 // map of all endpoints, with unique service id(namespace name, service name, port) as key
 type endpointsInfoMap map[string][]endpointsInfo
 
-// periodically sync ipvs configuration to reflect desired state of services and endpoints
+// Run: periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 
 	t := time.NewTicker(nsc.syncPeriod)
@@ -170,7 +172,7 @@ func (nsc *NetworkServicesController) sync() {
 	nsc.publishMetrics(nsc.serviceMap)
 }
 
-// handle change in endpoints update from the API server
+// OnEndpointsUpdate:  handle change in endpoints update from the API server
 func (nsc *NetworkServicesController) OnEndpointsUpdate(endpointsUpdate *watchers.EndpointsUpdate) {
 
 	nsc.mu.Lock()
@@ -192,7 +194,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(endpointsUpdate *watcher
 	}
 }
 
-// handle change in service update from the API server
+// OnServiceUpdate: handle change in service update from the API server
 func (nsc *NetworkServicesController) OnServiceUpdate(serviceUpdate *watchers.ServiceUpdate) {
 
 	nsc.mu.Lock()
@@ -241,7 +243,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
-		vip := &netlink.Addr{IPNet: &net.IPNet{svc.clusterIP, net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
+		vip := &netlink.Addr{IPNet: &net.IPNet{IP: svc.clusterIP, Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 		err := netlink.AddrAdd(dummyVipInterface, vip)
 		if err != nil && err.Error() != IFACE_HAS_ADDR {
 			glog.Errorf("Failed to assign cluster ip to dummy interface %s", err)
@@ -249,7 +251,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// create IPVS service for the service to be exposed through the cluster ip
-		ipvs_cluster_vip_svc, err := ipvsAddService(svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity)
+		ipvsClusterVipSvc, err := ipvsAddService(svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity)
 		if err != nil {
 			glog.Errorf("Failed to create ipvs service for cluster ip: %s", err.Error())
 			continue
@@ -258,10 +260,10 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		activeServiceEndpointMap[clusterServiceId] = make([]string, 0)
 
 		// create IPVS service for the service to be exposed through the nodeport
-		var ipvs_nodeport_svc *ipvs.Service
+		var ipvsNodeportSvc*ipvs.Service
 		var nodeServiceId string
 		if svc.nodePort != 0 {
-			ipvs_nodeport_svc, err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity)
+			ipvsNodeportSvc, err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity)
 			if err != nil {
 				glog.Errorf("Failed to create ipvs service for node port")
 				continue
@@ -280,7 +282,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				Weight:        1,
 			}
 
-			err := ipvsAddServer(ipvs_cluster_vip_svc, &dst)
+			err := ipvsAddServer(ipvsClusterVipSvc, &dst)
 			if err != nil {
 				glog.Errorf(err.Error())
 			}
@@ -289,7 +291,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 
 			if svc.nodePort != 0 {
-				err := ipvsAddServer(ipvs_nodeport_svc, &dst)
+				err := ipvsAddServer(ipvsNodeportSvc, &dst)
 				if err != nil {
 					glog.Errorf(err.Error())
 				}
@@ -434,11 +436,11 @@ func shuffle(endPoints []endpointsInfo) []endpointsInfo {
 func buildEndpointsInfo() endpointsInfoMap {
 	endpointsMap := make(endpointsInfoMap)
 	for _, ep := range watchers.EndpointsWatcher.List() {
-		for _, ep_subset := range ep.Subsets {
-			for _, port := range ep_subset.Ports {
+		for _, epSubset:= range ep.Subsets {
+			for _, port := range epSubset.Ports {
 				svcId := generateServiceId(ep.Namespace, ep.Name, port.Name)
 				endpoints := make([]endpointsInfo, 0)
-				for _, addr := range ep_subset.Addresses {
+				for _, addr := range epSubset.Addresses {
 					endpoints = append(endpoints, endpointsInfo{ip: addr.IP, port: int(port.Port)})
 				}
 				endpointsMap[svcId] = shuffle(endpoints)
@@ -726,7 +728,7 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 		svc.Timeout = 180 * 60
 	}
 	if err := h.NewService(&svc); err != nil {
-		return nil, fmt.Errorf("Failed to create service: %s:%s:%s", vip.String(), protocol, strconv.Itoa(int(port)))
+		return nil, fmt.Errorf("Failed to create service: %s:%s:%s", vip.String(), strconv.Itoa(int(protocol)), strconv.Itoa(int(port)))
 	}
 	glog.Infof("Successfully added service: %s:%s:%s", vip.String(), protocol, strconv.Itoa(int(port)))
 	return &svc, nil
@@ -743,10 +745,10 @@ func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination) error {
 
 	if strings.Contains(err.Error(), IPVS_SERVER_EXISTS) {
 		glog.Infof("ipvs destination %s:%s already exists in the ipvs service %s:%s:%s so not adding destination", dest.Address,
-			strconv.Itoa(int(dest.Port)), service.Address, service.Protocol, strconv.Itoa(int(service.Port)))
+			strconv.Itoa(int(dest.Port)), service.Address, strconv.Itoa(int(service.Protocol)), strconv.Itoa(int(service.Port)))
 	} else {
 		return fmt.Errorf("Failed to add ipvs destination %s:%s to the ipvs service %s:%s:%s due to : %s", dest.Address,
-			strconv.Itoa(int(dest.Port)), service.Address, service.Protocol, strconv.Itoa(int(service.Port)), err.Error())
+			strconv.Itoa(int(dest.Port)), service.Address, strconv.Itoa(int(service.Protocol)), strconv.Itoa(int(service.Port)), err.Error())
 	}
 	return nil
 }
@@ -779,7 +781,7 @@ func getKubeDummyInterface() (netlink.Link, error) {
 	return dummyVipInterface, nil
 }
 
-// clean up all the configurations (IPVS, iptables, links)
+// Cleanup: clean all the configurations (IPVS, iptables, links) done
 func (nsc *NetworkServicesController) Cleanup() {
 	// cleanup ipvs rules by flush
 	glog.Infof("Cleaning up IPVS configuration permanently")

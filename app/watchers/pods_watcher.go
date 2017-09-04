@@ -67,12 +67,12 @@ func (pw *podWatcher) RegisterHandler(handler PodUpdatesHandler) {
 }
 
 func (pw *podWatcher) List() []*api.Pod {
-	obj_list := pw.podLister.List()
-	pod_instances := make([]*api.Pod, len(obj_list))
-	for i, ins := range obj_list {
-		pod_instances[i] = ins.(*api.Pod)
+	objList := pw.podLister.List()
+	podInstances := make([]*api.Pod, len(objList))
+	for i, ins := range objList {
+		podInstances[i] = ins.(*api.Pod)
 	}
-	return pod_instances
+	return podInstances 
 }
 
 func (pw *podWatcher) ListByNamespaceAndLabels(namespace string, labelsToMatch labels.Set) (ret []*api.Pod, err error) {

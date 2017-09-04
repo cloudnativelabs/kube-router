@@ -33,6 +33,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// struct to hold necessary information required by controller
 type NetworkRoutingController struct {
 	nodeIP               net.IP
 	nodeHostName         string
@@ -67,6 +68,7 @@ const (
 	podSubnetIpSetName   = "kube-router-pod-subnets"
 )
 
+// Run: run forever till until we are notified on stop channel
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	cidr, err := utils.GetPodCidrFromCniSpec("/etc/cni/net.d/10-kuberouter.conf")
 	if err != nil {
@@ -308,6 +310,7 @@ func (nrc *NetworkRoutingController) getClusterIps() ([]string, error) {
 	return clusterIpList, nil
 }
 
+// AdvertiseClusterIp:  advertises the service cluster ip the configured peers
 func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error {
 
 	attrs := []bgp.PathAttributeInterface{
@@ -520,6 +523,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	return netlink.RouteReplace(route)
 }
 
+// Cleanup: performs the cleanup of configurations done
 func (nrc *NetworkRoutingController) Cleanup() {
 	err := deletePodEgressRule()
 	if err != nil {
@@ -793,7 +797,7 @@ func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 	return nil
 }
 
-// Handle updates from Node watcher. Node watcher calls this method whenever there is
+// OnNodeUpdate: Handle updates from Node watcher. Node watcher calls this method whenever there is
 // new node is added or old node is deleted. So peer up with new node and drop peering
 // from old node
 func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdate) {

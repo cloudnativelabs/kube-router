@@ -36,6 +36,7 @@ import (
 // by one or more network policy chains, till there is a match which will accept the packet, or gets
 // dropped by the rule in the pod chain, if there is no match.
 
+// strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
 	nodeIP          net.IP
 	nodeHostName    string
@@ -80,6 +81,7 @@ type protocolAndPort struct {
 	port     string
 }
 
+// Run: runs forver till we recive notification on stopCh
 func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
@@ -115,6 +117,7 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 	}
 }
 
+// OnPodUpdate: handles updates to pods from the Kubernetes api server
 func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
 	glog.Infof("Received pod update namspace:%s pod name:%s", podUpdate.Pod.Namespace, podUpdate.Pod.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
@@ -127,6 +130,7 @@ func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
 	}
 }
 
+// OnNetworkPolicyUpdate: handles updates to network policy from the kubernetes api server
 func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(networkPolicyUpdate *watchers.NetworkPolicyUpdate) {
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
@@ -138,6 +142,7 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(networkPolicyUpdate *w
 	}
 }
 
+// OnNamespaceUpdate: handles updates to namespace from kubernetes api server
 func (npc *NetworkPolicyController) OnNamespaceUpdate(namespaceUpdate *watchers.NamespaceUpdate) {
 
 	// namespace (and annotations on it) has no significance in GA ver of network policy
@@ -511,7 +516,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool) er
 		}
 
 		// TODO delete rule by spec, than rule number to avoid extra loop
-		var realRuleNo int = 0
+		var realRuleNo int
 		for i, rule := range forwardChainRules {
 			if strings.Contains(rule, chain) {
 				err = iptablesCmdHandler.Delete("filter", "FORWARD", strconv.Itoa(i-realRuleNo))
@@ -593,8 +598,8 @@ func (npc *NetworkPolicyController) getFirewallEnabledPods(nodeIp string) (*map[
 		}
 		if npc.v1NetworkPolicy {
 			podNeedsFirewall := false
-			for _, policy_obj := range watchers.NetworkPolicyWatcher.List() {
-				policy, _ := policy_obj.(*networking.NetworkPolicy)
+			for _, policyObj:= range watchers.NetworkPolicyWatcher.List() {
+				policy, _ := policyObj.(*networking.NetworkPolicy)
 
 				// we are only interested in the network policies in same namespace that of pod
 				if policy.Namespace != pod.ObjectMeta.Namespace {
@@ -627,11 +632,11 @@ func (npc *NetworkPolicyController) getFirewallEnabledPods(nodeIp string) (*map[
 				continue
 			}
 		} else {
-			default_policy, err := getNameSpaceDefaultPolicy(pod.ObjectMeta.Namespace)
+			defaultPolicy, err := getNameSpaceDefaultPolicy(pod.ObjectMeta.Namespace)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to get the namespace default ingress policy %s", err.Error())
 			}
-			if strings.Compare(default_policy, "DefaultDeny") != 0 {
+			if strings.Compare(defaultPolicy, "DefaultDeny") != 0 {
 				continue
 			}
 		}
@@ -647,9 +652,9 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
 
-	for _, policy_obj := range watchers.NetworkPolicyWatcher.List() {
+	for _, policyObj:= range watchers.NetworkPolicyWatcher.List() {
 
-		policy, ok := policy_obj.(*networking.NetworkPolicy)
+		policy, ok := policyObj.(*networking.NetworkPolicy)
 		if !ok {
 			return nil, fmt.Errorf("Failed to convert")
 		}
@@ -742,9 +747,9 @@ func buildBetaNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
 
-	for _, policy_obj := range watchers.NetworkPolicyWatcher.List() {
+	for _, policyObj:= range watchers.NetworkPolicyWatcher.List() {
 
-		policy, _ := policy_obj.(*apiextensions.NetworkPolicy)
+		policy, _ := policyObj.(*apiextensions.NetworkPolicy)
 		newPolicy := networkPolicyInfo{
 			name:      policy.Name,
 			namespace: policy.Namespace,
@@ -852,6 +857,7 @@ func getNodeIP(node *apiv1.Node) (net.IP, error) {
 	return nil, errors.New("host IP unknown")
 }
 
+// Cleanup: cleanup configurations done
 func (npc *NetworkPolicyController) Cleanup() {
 
 	glog.Infof("Cleaning up iptables configuration permanently done by kube-router")
@@ -869,7 +875,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	// TODO: need a better way to delte rule with out using number
-	var realRuleNo int = 0
+	var realRuleNo int
 	for i, rule := range forwardChainRules {
 		if strings.Contains(rule, "KUBE-POD-FW-") {
 			err = iptablesCmdHandler.Delete("filter", "FORWARD", strconv.Itoa(i-realRuleNo))
