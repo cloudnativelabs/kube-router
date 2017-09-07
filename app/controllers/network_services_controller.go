@@ -67,16 +67,17 @@ var (
 
 // NetworkServicesController struct stores information needed by the controller
 type NetworkServicesController struct {
-	nodeIP        net.IP
-	nodeHostName  string
-	syncPeriod    time.Duration
-	mu            sync.Mutex
-	serviceMap    serviceInfoMap
-	endpointsMap  endpointsInfoMap
-	podCidr       string
-	masqueradeAll bool
-	globalHairpin bool
-	client        *kubernetes.Clientset
+	nodeIP              net.IP
+	nodeHostName        string
+	syncPeriod          time.Duration
+	mu                  sync.Mutex
+	serviceMap          serviceInfoMap
+	endpointsMap        endpointsInfoMap
+	podCidr             string
+	masqueradeAll       bool
+	globalHairpin       bool
+	client              *kubernetes.Clientset
+	nodeportBindOnAllIp bool
 }
 
 // internal representation of kubernetes service
@@ -262,12 +263,20 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		var ipvsNodeportSvc *ipvs.Service
 		var nodeServiceId string
 		if svc.nodePort != 0 {
-			ipvsNodeportSvc, err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity)
+			var vip net.IP
+			if vip = nsc.nodeIP; nsc.nodeportBindOnAllIp {
+				vip = net.ParseIP("127.0.0.1")
+			}
+			ipvsNodeportSvc, err = ipvsAddService(vip, protocol, uint16(svc.nodePort), svc.sessionAffinity)
 			if err != nil {
 				glog.Errorf("Failed to create ipvs service for node port")
 				continue
 			}
-			nodeServiceId = generateIpPortId(nsc.nodeIP.String(), svc.protocol, strconv.Itoa(svc.nodePort))
+			if nsc.nodeportBindOnAllIp {
+				nodeServiceId = generateIpPortId("127.0.0.1", svc.protocol, strconv.Itoa(svc.nodePort))
+			} else {
+				nodeServiceId = generateIpPortId(nsc.nodeIP.String(), svc.protocol, strconv.Itoa(svc.nodePort))
+			}
 			activeServiceEndpointMap[nodeServiceId] = make([]string, 0)
 		}
 
@@ -843,6 +852,10 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 	nsc.masqueradeAll = false
 	if config.MasqueradeAll {
 		nsc.masqueradeAll = true
+	}
+
+	if config.NodePortBindOnAllIp {
+		nsc.nodeportBindOnAllIp = true
 	}
 
 	if config.RunRouter {

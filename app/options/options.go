@@ -7,27 +7,28 @@ import (
 )
 
 type KubeRouterConfig struct {
-	HelpRequested      bool
-	Kubeconfig         string
-	Master             string
-	ConfigSyncPeriod   time.Duration
-	CleanupConfig      bool
-	IPTablesSyncPeriod time.Duration
-	IpvsSyncPeriod     time.Duration
-	RoutesSyncPeriod   time.Duration
-	RunServiceProxy    bool
-	RunFirewall        bool
-	RunRouter          bool
-	MasqueradeAll      bool
-	ClusterCIDR        string
-	EnablePodEgress    bool
-	HostnameOverride   string
-	AdvertiseClusterIp bool
-	PeerRouter         string
-	ClusterAsn         string
-	PeerAsn            string
-	FullMeshMode       bool
-	GlobalHairpinMode  bool
+	HelpRequested       bool
+	Kubeconfig          string
+	Master              string
+	ConfigSyncPeriod    time.Duration
+	CleanupConfig       bool
+	IPTablesSyncPeriod  time.Duration
+	IpvsSyncPeriod      time.Duration
+	RoutesSyncPeriod    time.Duration
+	RunServiceProxy     bool
+	RunFirewall         bool
+	RunRouter           bool
+	MasqueradeAll       bool
+	ClusterCIDR         string
+	EnablePodEgress     bool
+	HostnameOverride    string
+	AdvertiseClusterIp  bool
+	PeerRouter          string
+	ClusterAsn          string
+	PeerAsn             string
+	FullMeshMode        bool
+	GlobalHairpinMode   bool
+	NodePortBindOnAllIp bool
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
@@ -81,4 +82,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.")
 	fs.BoolVar(&s.GlobalHairpinMode, "hairpin-mode", false,
 		"Add iptable rules for every Service Endpoint to support hairpin traffic.")
+	fs.BoolVar(&s.NodePortBindOnAllIp, "nodeport-bindon-all-ip", false,
+		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
 }
