@@ -117,6 +117,7 @@ Usage of ./kube-router:
     --run-firewall                    Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
     --run-router                      Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
     --run-service-proxy               Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
+    --nodeport-bindon-all-ip          For service of NodePort type create IPVS service that listens on all IP's of the node. (default false)
 ```
 
 ### requirements
