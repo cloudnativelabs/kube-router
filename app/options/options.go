@@ -29,6 +29,7 @@ type KubeRouterConfig struct {
 	FullMeshMode        bool
 	GlobalHairpinMode   bool
 	NodePortBindOnAllIp bool
+	EnableOverlay       bool
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
@@ -36,6 +37,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IpvsSyncPeriod:     1 * time.Minute,
 		IPTablesSyncPeriod: 1 * time.Minute,
 		RoutesSyncPeriod:   1 * time.Minute,
+		EnableOverlay:      true,
 	}
 }
 
@@ -84,4 +86,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Add iptable rules for every Service Endpoint to support hairpin traffic.")
 	fs.BoolVar(&s.NodePortBindOnAllIp, "nodeport-bindon-all-ip", false,
 		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
+	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,
+		"When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. "+
+			"When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets")
 }

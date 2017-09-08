@@ -54,6 +54,7 @@ type NetworkRoutingController struct {
 	globalPeerAsnNumber  uint32
 	bgpFullMeshMode      bool
 	podSubnetsIpSet      *ipset.IPSet
+	enableOverlays       bool
 }
 
 var (
@@ -464,6 +465,24 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	if !nrc.nodeSubnet.Contains(nexthop) {
 		tunnelName := "tun-" + strings.Replace(nexthop.String(), ".", "", -1)
 		glog.Infof("Found node: " + nexthop.String() + " to be in different subnet.")
+
+		// if overlay is not enabled then skip creating tunnels and adding route
+		if !nrc.enableOverlays {
+			glog.Infof("Found node: " + nexthop.String() + " to be in different subnet but overlays are " +
+				"disabled so not creating any tunnel and injecting route for the node's pod CIDR.")
+			glog.Infof("Cleaning up if there is any existing tunnel interface for the node")
+			link, err := netlink.LinkByName(tunnelName)
+			if err != nil {
+				return nil
+			}
+			err = netlink.LinkDel(link)
+			if err != nil {
+				glog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
+			}
+			return nil
+		}
+
+		// create ip-in-ip tunnel and inject route as overlay is enabled
 		var link netlink.Link
 		var err error
 		link, err = netlink.LinkByName(tunnelName)
@@ -1006,6 +1025,8 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	}
 
 	nrc.advertiseClusterIp = kubeRouterConfig.AdvertiseClusterIp
+
+	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 
 	if (len(kubeRouterConfig.PeerRouter) != 0 && len(kubeRouterConfig.PeerAsn) == 0) ||
 		(len(kubeRouterConfig.PeerRouter) == 0 && len(kubeRouterConfig.PeerAsn) != 0) {
