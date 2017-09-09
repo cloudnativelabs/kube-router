@@ -69,7 +69,7 @@ const (
 	podSubnetIpSetName   = "kube-router-pod-subnets"
 )
 
-// Run runs forever till until we are notified on stop channel
+// Run runs forever until we are notified on stop channel
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	cidr, err := utils.GetPodCidrFromCniSpec("/etc/cni/net.d/10-kuberouter.conf")
 	if err != nil {
