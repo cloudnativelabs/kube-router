@@ -883,10 +883,21 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	g := bgpapi.NewGrpcServer(nrc.bgpServer, ":50051")
 	go g.Serve()
 
+	var localAddressList []string
+
+	if ipv4IsEnabled() {
+		localAddressList = append(localAddressList, "0.0.0.0")
+	}
+
+	if ipv6IsEnabled() {
+		localAddressList = append(localAddressList, "::")
+	}
+
 	global := &config.Global{
 		Config: config.GlobalConfig{
-			As:       nodeAsnNumber,
-			RouterId: nrc.nodeIP.String(),
+			As:               nodeAsnNumber,
+			RouterId:         nrc.nodeIP.String(),
+			LocalAddressList: localAddressList,
 		},
 	}
 
@@ -960,6 +971,26 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	return nil
+}
+
+func ipv4IsEnabled() bool {
+	l, err := net.Listen("tcp4", "")
+	if err != nil {
+		return false
+	}
+	l.Close()
+
+	return true
+}
+
+func ipv6IsEnabled() bool {
+	l, err := net.Listen("tcp6", "")
+	if err != nil {
+		return false
+	}
+	l.Close()
+
+	return true
 }
 
 func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
