@@ -158,6 +158,8 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 	}
 
+	defer nrc.bgpServer.Stop()
+
 	// loop forever till notified to stop on stopCh
 	for {
 		select {
@@ -918,6 +920,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 				},
 			}
 			if err := nrc.bgpServer.AddNeighbor(n); err != nil {
+				nrc.bgpServer.Stop()
 				return errors.New("Failed to peer with global peer router \"" + peer + "\" due to: " + err.Error())
 			}
 		}
@@ -929,6 +932,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 		asnNo, err := strconv.ParseUint(nodeBgpPeerAsn, 0, 32)
 		if err != nil {
+			nrc.bgpServer.Stop()
 			return errors.New("Failed to parse ASN number specified for the the node in the annotations")
 		}
 		peerAsnNo := uint32(asnNo)
@@ -943,12 +947,14 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			ips := strings.Split(nodeBgpPeersAnnotation, ",")
 			for _, ip := range ips {
 				if net.ParseIP(ip) == nil {
+					nrc.bgpServer.Stop()
 					return errors.New("Invalid node BGP peer router ip in the annotation: " + ip)
 				}
 			}
 			nodePeerRouters = append(nodePeerRouters, ips...)
 		} else {
 			if net.ParseIP(nodeBgpPeersAnnotation) == nil {
+				nrc.bgpServer.Stop()
 				return errors.New("Invalid node BGP peer router ip: " + nodeBgpPeersAnnotation)
 			}
 			nodePeerRouters = append(nodePeerRouters, nodeBgpPeersAnnotation)
@@ -962,6 +968,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 				},
 			}
 			if err := nrc.bgpServer.AddNeighbor(n); err != nil {
+				nrc.bgpServer.Stop()
 				return errors.New("Failed to peer with node specific BGP peer router: " + peer + " due to " + err.Error())
 			}
 		}
