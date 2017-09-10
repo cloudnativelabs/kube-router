@@ -350,6 +350,6 @@ endif
 .PHONY: update-glide test docker-login push-release github-release help
 .PHONY: gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
-.PHONY: tf-destroy
+.PHONY: tf-destroy _cache/kube-metal/assets/auth/kubeconfig
 
 .DEFAULT: all

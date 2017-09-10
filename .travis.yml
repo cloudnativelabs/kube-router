@@ -35,14 +35,14 @@ jobs:
   include:
     - stage: e2e-setup
       script: make _cache/kube-metal/assets/auth/kubeconfig
-    - stage: e2e-run
-      script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}" E2E_FOCUS="(?i)networking"
-    - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)networking" E2E_FOCUS="(?i)network"
-    - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)network" E2E_FOCUS="(?i)proxy"
-    - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)(network|proxy)" E2E_FOCUS="(?i)readiness probe"
-    - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)(network|proxy|readiness probe)" E2E_FOCUS="(?i)\[k8s.io\] services"
-    - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)(network|proxy|readiness probe)|\[k8s.io\] services" E2E_FOCUS="endpoint"
-    - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)(network|proxy|readiness probe|endpoint)|\[k8s.io\] services" E2E_FOCUS="(?i)\[k8s.io\] port forwarding"
+    # - stage: e2e-run
+    #   script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}" E2E_FOCUS="(?i)networking"
+    # - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)networking" E2E_FOCUS="(?i)network"
+    # - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)network" E2E_FOCUS="(?i)proxy"
+    # - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)(network|proxy)" E2E_FOCUS="(?i)readiness probe"
+    # - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)(network|proxy|readiness probe)" E2E_FOCUS="(?i)\[k8s.io\] services"
+    # - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)(network|proxy|readiness probe)|\[k8s.io\] services" E2E_FOCUS="endpoint"
+    # - script: make test-e2e E2E_SKIP="${E2E_SKIP_COMMON}|(?i)(network|proxy|readiness probe|endpoint)|\[k8s.io\] services" E2E_FOCUS="(?i)\[k8s.io\] port forwarding"
     # - stage: deploy
     #   provider: script
     #   script: build/travis-deploy.sh
