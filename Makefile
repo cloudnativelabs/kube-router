@@ -42,8 +42,23 @@ kube-router: $(BUILD_FILES) ## Builds kube-router.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 
-test-e2e: _cache/kube-metal/assets/auth/kubeconfig
-test-e2e: _cache/hosts _cache/kube-router/images
+test-e2e: _cache/hosts _cache/.load_image_tf_packet
+	ADD_HOSTS="$(shell cat _cache/hosts)" \
+	KUBECONFIG="$(MAKEFILE_DIR)/_cache/kube-metal/assets/auth/kubeconfig" \
+	KUBECTL='' \
+	E2E_FOCUS="$(E2E_FOCUS)" \
+	E2E_SKIP="$(E2E_SKIP)" \
+	NODE_COUNT="$(shell expr $(CONTROLLER_COUNT) + $(WORKER_COUNT) )" \
+	E2E_PROVIDER="skeleton" \
+	test/e2e/run-e2e.sh
+	  # --ginkgo.dryRun
+	  # --clean-start
+
+_cache:
+	@mkdir _cache
+
+_cache/.load_image_tf_packet: _cache/kube-metal/assets/auth/kubeconfig
+_cache/.load_image_tf_packet: _cache/kube-router/images
 	$(DOCKER) run \
 	  --rm \
 	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
@@ -56,7 +71,6 @@ test-e2e: _cache/hosts _cache/kube-router/images
 	    -c ' \
 	      apk add -U rsync; \
 	      /tf/load-image.sh /images'
-
 	$(DOCKER) run \
 	  --rm \
 	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
@@ -71,17 +85,7 @@ test-e2e: _cache/hosts _cache/kube-router/images
 	    kubectl -n kube-system delete pods -l k8s-app=kube-router; \
 	    kubectl apply -f /e2e/common \
 	    '
-
-	ADD_HOSTS="$(shell cat _cache/hosts)" \
-	KUBECONFIG="$(MAKEFILE_DIR)/_cache/kube-metal/assets/auth/kubeconfig" \
-	E2E_FOCUS="$(E2E_FOCUS)" \
-	E2E_SKIP="$(E2E_SKIP)" \
-	KUBECTL='' \
-	NODE_COUNT="$(shell expr $(CONTROLLER_COUNT) + $(WORKER_COUNT) )" \
-	test/e2e/run-e2e.sh --clean-start
-
-_cache:
-	@mkdir _cache
+	touch _cache/.load_image_tf_packet
 
 _cache/.terraformrc: | _cache
 	echo 'providers { ct = "/go/bin/terraform-provider-ct"' > _cache/.terraformrc
@@ -89,30 +93,32 @@ _cache/.terraformrc: | _cache
 
 _cache/hosts: _cache/kube-metal/assets/auth/kubeconfig | _cache
 	$(DOCKER) run \
-	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
+	  --rm \
+	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
+	  --volume="$(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc" \
+	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
 	  --env="FORMAT=docker" \
-	  --workdir "/tf" \
-	  --entrypoint "/tf/etc-hosts.sh" \
+	  --workdir="/tf" \
+	  --entrypoint="/tf/etc-hosts.sh" \
 	  hashicorp/terraform | tee _cache/hosts
 
-_cache/go/src/github.com/coreos/terraform-provider-ct: | _cache/go
+_cache/go/src/github.com/coreos/terraform-provider-ct/.git: | _cache/go
 	mkdir -p _cache/go/src/github.com/coreos
 	git clone \
 	  https://github.com/coreos/terraform-provider-ct.git \
 	  _cache/go/src/github.com/coreos/terraform-provider-ct
 
-_cache/go/bin/terraform-provider-ct: _cache/go/src/github.com/coreos/terraform-provider-ct
+_cache/go/bin/terraform-provider-ct: _cache/go/src/github.com/coreos/terraform-provider-ct/.git
 	$(DOCKER) run \
+	  --rm \
 	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
 	  --env="CGO_ENABLED=0" \
-	  golang:alpine \
+	  golang:1.9-alpine \
 	    sh -c ' \
 	      go install github.com/coreos/terraform-provider-ct \
 	    '
 
-_cache/go/src/github.com/terraform-providers/terraform-provider-packet: | _cache/go
+_cache/go/src/github.com/terraform-providers/terraform-provider-packet/.git: | _cache/go
 	mkdir -p _cache/go/src/github.com/terraform-providers
 	git clone \
 	  --branch=kube-metal \
@@ -121,19 +127,21 @@ _cache/go/src/github.com/terraform-providers/terraform-provider-packet: | _cache
 
 _cache/go/bin/terraform-provider-packet: _cache/go/src/github.com/terraform-providers/terraform-provider-packet
 	$(DOCKER) run \
+	  --rm \
 	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
 	  --env="CGO_ENABLED=0" \
-	  golang:alpine \
+	  golang:1.9-alpine \
 	    sh -c ' \
 	      go install github.com/terraform-providers/terraform-provider-packet \
 	    '
 
 tf-destroy:
 	$(DOCKER) run \
-	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
-	  --workdir=/tf \
+	  --rm \
+	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
+	  --volume="$(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc" \
+	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
+	  --workdir="/tf" \
 	  hashicorp/terraform \
 	    destroy \
 	    --var 'auth_token=$(PACKET_TOKEN)' \
@@ -149,27 +157,28 @@ tf-destroy:
 _cache/go:
 	@mkdir -p _cache/go/bin _cache/go/src
 
-_cache/kube-metal: _cache/.terraformrc _cache/go/bin/terraform-provider-ct
-_cache/kube-metal: _cache/go/bin/terraform-provider-packet
-	git clone --branch=kube-router https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal
+_cache/kube-metal/.git: _cache/.terraformrc _cache/go/bin/terraform-provider-ct
+_cache/kube-metal/.git: _cache/go/bin/terraform-provider-packet
+	git clone --branch=kube-router https://github.com/cloudnativelabs/kube-metal.git _cache/kube-metal || \
+	  (cd _cache/kube-metal && git pull)
 
-_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal
+_cache/kube-metal/assets/auth/kubeconfig: _cache/kube-metal/.git
 	$(DOCKER) run \
 	  --rm \
-	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
-	  --workdir=/tf \
+	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
+	  --volume="$(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc" \
+	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
+	  --workdir="/tf" \
 	  hashicorp/terraform \
 	    init \
 	    --force-copy \
 	    --input=false
 	$(DOCKER) run \
 	  --rm \
-	  --volume $(MAKEFILE_DIR)/_cache/kube-metal:/tf \
-	  --volume $(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc \
-	  --volume $(MAKEFILE_DIR)/_cache/go:/go \
-	  --workdir=/tf \
+	  --volume="$(MAKEFILE_DIR)/_cache/kube-metal:/tf" \
+	  --volume="$(MAKEFILE_DIR)/_cache/.terraformrc:/root/.terraformrc" \
+	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
+	  --workdir="/tf" \
 	  hashicorp/terraform \
 	    apply \
 	    --input=false \
@@ -309,7 +318,7 @@ else
 endif
 
 gobgp: $(shell find vendor/github.com/osrg/gobgp/gobgp)
-	$(DOCKER) run -v $(PWD):/pwd golang:alpine \
+	$(DOCKER) run -v $(PWD):/pwd golang:1.8-alpine \
 	    sh -c ' \
 	    apk add -U git && \
 	    ln -s /pwd/vendor /go/src && \

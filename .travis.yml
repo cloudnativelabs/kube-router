@@ -18,40 +18,31 @@ env:
     - PACKET_FACILITY=nrt1
     - SPOT_INSTANCE="true"
     - SPOT_PRICE_MAX=".01"
-    - E2E_SKIP_COMMON="Disruptive|Kubectl|Experimental"
+    - E2E_SKIP_COMMON="(?i)\[k8s.io\] (Kubectl)|\[Disruptive\]|\[Experimental\]|\[HPA\]|should check kube-proxy urls|should set TCP CLOSE_WAIT timeout|should be able to create a functioning NodePort service|should update endpoints: (http|udp)|should function for (node-Service|endpoint-Service|pod-Service): (http|udp)|should update nodePort: (http|udp) \[Slow\]"
   matrix:
     # TODO: support testing against different k8s versions
     # - KUBE_VERSION=v1.6
     - KUBE_VERSION=v1.7
 
-before_script:
-  - make test
+jobs:
+  include:
+    - stage: e2e-setup
+      script: make _cache/kube-metal/assets/auth/kubeconfig
+    # - stage: e2e-run
+    #   script: ls -l _cache/kube-metal
+    # - script: ls -l _cache/kube-metal/assets/auth/kubeconfig
+    # - stage: deploy
+    #   provider: script
+    #   script: build/travis-deploy.sh
 
-script:
-  - echo "Starting test cluster"
-  - make _cache/kube-metal/assets/auth/kubeconfig # terraform apply
-  - echo "Starting e2e test [Feature:NetworkPolicy]"
-  - make test-e2e E2E_FOCUS="Feature:NetworkPolicy" E2E_SKIP="${E2E_SKIP_COMMON}"
-  - echo "Starting e2e test [Conformance]"
-  - make test-e2e E2E_FOCUS="Conformance" E2E_SKIP="${E2E_SKIP_COMMON}"
-  #
-  # - make test-e2e E2E_FOCUS="Networking" E2E_SKIP="${E2E_SKIP_COMMON}"
-  # - make test-e2e E2E_FOCUS="Network" E2E_SKIP="${E2E_SKIP_COMMON}|Networking"
-  # - make test-e2e E2E_FOCUS="Feature:NetworkPolicy" E2E_SKIP="${E2E_SKIP_COMMON}|Networking|Network"
-  # - make test-e2e E2E_FOCUS="Feature:NoSNAT" E2E_SKIP="${E2E_SKIP_COMMON}|Networking|Network|Feature:NetworkPolicy"
-  # - make test-e2e E2E_FOCUS="Conformance" E2E_SKIP="${E2E_SKIP_COMMON}|Networking|Network|Feature:NetworkPolicy|Feature:NoSNAT"
+# before_script:
+#   - make test
 
-after_failure:
-  - make tf-destroy
+# after_failure:
+#   - make tf-destroy
 
-after_success:
-  - make tf-destroy
-
-# All successfully built commits get an image placed in the kube-router-git
-# image repo and tagged with the commit hash.
-deploy:
-  provider: script
-  script: build/travis-deploy.sh
+# after_success:
+#   - make tf-destroy
 
 # This fixes issues when a contributor uses their own Travis CI account to test
 # code/CI changes.
