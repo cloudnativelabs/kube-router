@@ -22,7 +22,7 @@ env:
     - PACKET_FACILITY=nrt1
     - SPOT_INSTANCE="true"
     - SPOT_PRICE_MAX=".01"
-    - E2E_SKIP_COMMON="(?i)\[k8s.io\] (Kubectl)|\[Disruptive\]|\[Experimental\]|\[HPA\]|should check kube-proxy urls|should set TCP CLOSE_WAIT timeout|should be able to create a functioning NodePort service|should update endpoints: (http|udp)|should function for (node-Service|endpoint-Service|pod-Service): (http|udp)|should update nodePort: (http|udp) \[Slow\]"
+    - 'E2E_SKIP_COMMON=(?i)\[k8s.io\] (Kubectl)|\[Disruptive\]|\[Experimental\]|\[HPA\]|should check kube-proxy urls|should set TCP CLOSE_WAIT timeout|should be able to create a functioning NodePort service|should update endpoints: (http|udp)|should function for (node-Service|endpoint-Service|pod-Service): (http|udp)|should update nodePort: (http|udp) \[Slow\]'
   matrix:
     # TODO: support testing against different k8s versions
     # - KUBE_VERSION=v1.6
