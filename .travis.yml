@@ -10,6 +10,10 @@ branches:
     - master
     - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
 
+cache:
+  directories:
+    - _cache
+
 env:
   global:
     - REPO=cloudnativelabs/kube-router
