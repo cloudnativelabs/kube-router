@@ -125,7 +125,7 @@ _cache/go/src/github.com/terraform-providers/terraform-provider-packet/.git: | _
 	  https://github.com/cloudnativelabs/terraform-provider-packet.git \
 	  _cache/go/src/github.com/terraform-providers/terraform-provider-packet
 
-_cache/go/bin/terraform-provider-packet: _cache/go/src/github.com/terraform-providers/terraform-provider-packet
+_cache/go/bin/terraform-provider-packet: _cache/go/src/github.com/terraform-providers/terraform-provider-packet/.git
 	$(DOCKER) run \
 	  --rm \
 	  --volume="$(MAKEFILE_DIR)/_cache/go:/go" \
