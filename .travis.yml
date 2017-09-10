@@ -14,6 +14,9 @@ cache:
   directories:
     - _cache
 
+before_cache:
+  - sudo chown -R travis _cache
+
 env:
   global:
     - REPO=cloudnativelabs/kube-router
