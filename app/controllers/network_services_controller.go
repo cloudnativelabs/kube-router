@@ -730,7 +730,7 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 
 	if persistent {
 		// set bit to enable service persistence
-		svc.Flags |= (1 << 24)
+		svc.Flags = 1
 		svc.Netmask |= 0xFFFFFFFF
 		// TODO: once service manifest supports timeout time remove hardcoding
 		svc.Timeout = 180 * 60
