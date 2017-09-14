@@ -234,7 +234,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	activeServiceEndpointMap := make(map[string][]string)
 
 	for k, svc := range serviceInfoMap {
-
 		var protocol uint16
 		if svc.protocol == "tcp" {
 			protocol = syscall.IPPROTO_TCP
@@ -269,7 +268,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			}
 			ipvsNodeportSvc, err = ipvsAddService(vip, protocol, uint16(svc.nodePort), svc.sessionAffinity)
 			if err != nil {
-				glog.Errorf("Failed to create ipvs service for node port")
+				glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
 				continue
 			}
 			if nsc.nodeportBindOnAllIp {
@@ -326,10 +325,12 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		key := generateIpPortId(ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
 		endpoints, ok := activeServiceEndpointMap[key]
 		if !ok {
-			glog.Infof("Found a IPVS service %s:%s:%s which is no longer needed so cleaning up", ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
+			glog.Infof("Found a IPVS service %s which is no longer needed so cleaning up",
+				ipvsServiceString(ipvsSvc))
 			err := h.DelService(ipvsSvc)
 			if err != nil {
-				glog.Errorf("Failed to delete stale IPVS service: %s", err.Error())
+				glog.Errorf("Failed to delete stale IPVS service %s due to:",
+					ipvsServiceString(ipvsSvc), err.Error())
 				continue
 			}
 		} else {
@@ -346,11 +347,12 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 					}
 				}
 				if !validEp {
-					glog.Infof("Found a IPVS service %s:%s:%s, destination %s which is no longer needed so cleaning up",
-						ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)), dst.Address.String())
+					glog.Infof("Found a destination %s in service %s which is no longer needed so cleaning up",
+						ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
 					err := h.DelDestination(ipvsSvc, dst)
 					if err != nil {
-						glog.Errorf("Failed to delete server from ipvs service")
+						glog.Errorf("Failed to delete destination %s from ipvs service %s",
+							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
 					}
 				}
 			}
@@ -707,11 +709,42 @@ func deleteMasqueradeIptablesRule() error {
 	return nil
 }
 
+func ipvsServiceString(s *ipvs.Service) string {
+	var flags, protocol string
+
+	switch s.Protocol {
+	case syscall.IPPROTO_TCP:
+		protocol = "TCP"
+	case syscall.IPPROTO_UDP:
+		protocol = "UDP"
+	default:
+		protocol = "UNKNOWN"
+	}
+
+	switch s.Flags {
+	case 0x0001:
+		flags = "persistent port"
+	case 0x0002:
+		flags = "hashed entry"
+	case 0x0004:
+		flags = "one-packet scheduling"
+	default:
+		flags = "none"
+	}
+
+	return fmt.Sprintf("%s:%s:%v (Flags: %s)", protocol, s.Address, s.Port, flags)
+}
+
+func ipvsDestinationString(d *ipvs.Destination) string {
+	return fmt.Sprintf("%s:%s (Weight: %v)", d.Address, d.Port, d.Weight)
+}
+
 func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.Service, error) {
 	svcs, err := h.GetServices()
 	if err != nil {
 		return nil, err
 	}
+
 	for _, svc := range svcs {
 		if strings.Compare(vip.String(), svc.Address.String()) == 0 &&
 			protocol == svc.Protocol && port == svc.Port {
@@ -720,6 +753,7 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 			return svc, nil
 		}
 	}
+
 	svc := ipvs.Service{
 		Address:       vip,
 		AddressFamily: syscall.AF_INET,
@@ -738,7 +772,7 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 	if err := h.NewService(&svc); err != nil {
 		return nil, fmt.Errorf("Failed to create service: %s:%s:%s", vip.String(), strconv.Itoa(int(protocol)), strconv.Itoa(int(port)))
 	}
-	glog.Infof("Successfully added service: %s:%s:%s", vip.String(), protocol, strconv.Itoa(int(port)))
+	glog.Infof("Successfully added service: %s", ipvsServiceString(&svc))
 	return &svc, nil
 }
 
@@ -746,17 +780,18 @@ func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination) error {
 
 	err := h.NewDestination(service, dest)
 	if err == nil {
-		glog.Infof("Successfully added destination %s:%s to the service %s:%s:%s", dest.Address,
-			strconv.Itoa(int(dest.Port)), service.Address, service.Protocol, strconv.Itoa(int(service.Port)))
+		glog.Infof("Successfully added destination %s to the service %s",
+			ipvsDestinationString(dest), ipvsServiceString(service))
 		return nil
 	}
 
 	if strings.Contains(err.Error(), IPVS_SERVER_EXISTS) {
-		glog.Infof("ipvs destination %s:%s already exists in the ipvs service %s:%s:%s so not adding destination", dest.Address,
-			strconv.Itoa(int(dest.Port)), service.Address, strconv.Itoa(int(service.Protocol)), strconv.Itoa(int(service.Port)))
+		// TODO: Make this debug output when we get log levels
+		// glog.Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
+		// 	ipvsDestinationString(dest), ipvsServiceString(service))
 	} else {
-		return fmt.Errorf("Failed to add ipvs destination %s:%s to the ipvs service %s:%s:%s due to : %s", dest.Address,
-			strconv.Itoa(int(dest.Port)), service.Address, strconv.Itoa(int(service.Protocol)), strconv.Itoa(int(service.Port)), err.Error())
+		return fmt.Errorf("Failed to add ipvs destination %s to the ipvs service %s due to : %s", dest.Address,
+			ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 	}
 	return nil
 }
