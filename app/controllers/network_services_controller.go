@@ -736,7 +736,20 @@ func ipvsServiceString(s *ipvs.Service) string {
 }
 
 func ipvsDestinationString(d *ipvs.Destination) string {
-	return fmt.Sprintf("%s:%s (Weight: %v)", d.Address, d.Port, d.Weight)
+	return fmt.Sprintf("%s:%v (Weight: %v)", d.Address, d.Port, d.Weight)
+}
+
+func ipvsSetPersistence(svc *ipvs.Service, p bool) {
+	if p {
+		svc.Flags = 0x0001
+		svc.Netmask |= 0xFFFFFFFF
+		// TODO: once service manifest supports timeout time remove hardcoding
+		svc.Timeout = 180 * 60
+	} else {
+		svc.Flags = 0
+		svc.Netmask = 0
+		svc.Timeout = 0
+	}
 }
 
 func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.Service, error) {
