@@ -721,15 +721,16 @@ func ipvsServiceString(s *ipvs.Service) string {
 		protocol = "UNKNOWN"
 	}
 
-	switch s.Flags {
-	case 0x0001:
-		flags = "persistent port"
-	case 0x0002:
-		flags = "hashed entry"
-	case 0x0004:
-		flags = "one-packet scheduling"
-	default:
-		flags = "none"
+	if s.Flags&0x0001 != 0 {
+		flags = flags + "[persistent port]"
+	}
+
+	if s.Flags&0x0002 != 0 {
+		flags = flags + "[hashed entry]"
+	}
+
+	if s.Flags&0x0004 != 0 {
+		flags = flags + "[one-packet scheduling]"
 	}
 
 	return fmt.Sprintf("%s:%s:%v (Flags: %s)", protocol, s.Address, s.Port, flags)
@@ -741,13 +742,13 @@ func ipvsDestinationString(d *ipvs.Destination) string {
 
 func ipvsSetPersistence(svc *ipvs.Service, p bool) {
 	if p {
-		svc.Flags = 0x0001
+		svc.Flags |= 0x0001
 		svc.Netmask |= 0xFFFFFFFF
 		// TODO: once service manifest supports timeout time remove hardcoding
 		svc.Timeout = 180 * 60
 	} else {
-		svc.Flags = 0
-		svc.Netmask = 0
+		svc.Flags &^= 0x0001
+		svc.Netmask &^= 0xFFFFFFFF
 		svc.Timeout = 0
 	}
 }
@@ -759,10 +760,21 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 	}
 
 	for _, svc := range svcs {
-		if strings.Compare(vip.String(), svc.Address.String()) == 0 &&
-			protocol == svc.Protocol && port == svc.Port {
-			glog.Infof("ipvs service %s:%s:%s already exists so returning", vip.String(),
-				protocol, strconv.Itoa(int(port)))
+		if vip.Equal(svc.Address) && protocol == svc.Protocol && port == svc.Port {
+			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) {
+				ipvsSetPersistence(svc, persistent)
+
+				err = h.UpdateService(svc)
+				if err != nil {
+					return nil, err
+				}
+				glog.Infof("Updated persistence/session-affinity for service: %s", ipvsServiceString(svc))
+			}
+
+			// TODO: Make this debug output when we get log levels
+			// glog.Fatal("ipvs service %s:%s:%s already exists so returning", vip.String(),
+			// 	protocol, strconv.Itoa(int(port)))
+
 			return svc, nil
 		}
 	}
@@ -775,15 +787,11 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 		SchedName:     ipvs.RoundRobin,
 	}
 
-	if persistent {
-		// set bit to enable service persistence
-		svc.Flags = 1
-		svc.Netmask |= 0xFFFFFFFF
-		// TODO: once service manifest supports timeout time remove hardcoding
-		svc.Timeout = 180 * 60
-	}
-	if err := h.NewService(&svc); err != nil {
-		return nil, fmt.Errorf("Failed to create service: %s:%s:%s", vip.String(), strconv.Itoa(int(protocol)), strconv.Itoa(int(port)))
+	ipvsSetPersistence(&svc, persistent)
+
+	err = h.NewService(&svc)
+	if err != nil {
+		return nil, err
 	}
 	glog.Infof("Successfully added service: %s", ipvsServiceString(&svc))
 	return &svc, nil
