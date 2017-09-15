@@ -102,6 +102,7 @@ Usage of ./kube-router:
     --cluster-asn string              ASN number under which cluster nodes will run iBGP.
     --config-sync-period duration     The delay between apiserver configuration synchronizations (e.g. '5s', '1m').  Must be greater than 0. (default 1m0s)
     --enable-pod-egress               SNAT traffic from Pods to destinations outside the cluster. (default true)
+    --enable-overlay                  When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
     --hairpin-mode                    Add iptable rules for every Service Endpoint to support hairpin traffic.
 -h, --help                            Print usage information.
     --hostname-override string        Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
