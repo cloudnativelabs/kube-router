@@ -69,7 +69,7 @@ const (
 	podSubnetIpSetName   = "kube-router-pod-subnets"
 )
 
-// Run runs forever till until we are notified on stop channel
+// Run runs forever until we are notified on stop channel
 func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	cidr, err := utils.GetPodCidrFromCniSpec("/etc/cni/net.d/10-kuberouter.conf")
 	if err != nil {
@@ -157,6 +157,8 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			break
 		}
 	}
+
+	defer nrc.bgpServer.Stop()
 
 	// loop forever till notified to stop on stopCh
 	for {
@@ -883,10 +885,21 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	g := bgpapi.NewGrpcServer(nrc.bgpServer, ":50051")
 	go g.Serve()
 
+	var localAddressList []string
+
+	if ipv4IsEnabled() {
+		localAddressList = append(localAddressList, "0.0.0.0")
+	}
+
+	if ipv6IsEnabled() {
+		localAddressList = append(localAddressList, "::")
+	}
+
 	global := &config.Global{
 		Config: config.GlobalConfig{
-			As:       nodeAsnNumber,
-			RouterId: nrc.nodeIP.String(),
+			As:               nodeAsnNumber,
+			RouterId:         nrc.nodeIP.String(),
+			LocalAddressList: localAddressList,
 		},
 	}
 
@@ -907,6 +920,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 				},
 			}
 			if err := nrc.bgpServer.AddNeighbor(n); err != nil {
+				nrc.bgpServer.Stop()
 				return errors.New("Failed to peer with global peer router \"" + peer + "\" due to: " + err.Error())
 			}
 		}
@@ -918,6 +932,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 		asnNo, err := strconv.ParseUint(nodeBgpPeerAsn, 0, 32)
 		if err != nil {
+			nrc.bgpServer.Stop()
 			return errors.New("Failed to parse ASN number specified for the the node in the annotations")
 		}
 		peerAsnNo := uint32(asnNo)
@@ -932,12 +947,14 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			ips := strings.Split(nodeBgpPeersAnnotation, ",")
 			for _, ip := range ips {
 				if net.ParseIP(ip) == nil {
+					nrc.bgpServer.Stop()
 					return errors.New("Invalid node BGP peer router ip in the annotation: " + ip)
 				}
 			}
 			nodePeerRouters = append(nodePeerRouters, ips...)
 		} else {
 			if net.ParseIP(nodeBgpPeersAnnotation) == nil {
+				nrc.bgpServer.Stop()
 				return errors.New("Invalid node BGP peer router ip: " + nodeBgpPeersAnnotation)
 			}
 			nodePeerRouters = append(nodePeerRouters, nodeBgpPeersAnnotation)
@@ -951,6 +968,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 				},
 			}
 			if err := nrc.bgpServer.AddNeighbor(n); err != nil {
+				nrc.bgpServer.Stop()
 				return errors.New("Failed to peer with node specific BGP peer router: " + peer + " due to " + err.Error())
 			}
 		}
@@ -960,6 +978,26 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	return nil
+}
+
+func ipv4IsEnabled() bool {
+	l, err := net.Listen("tcp4", "")
+	if err != nil {
+		return false
+	}
+	l.Close()
+
+	return true
+}
+
+func ipv6IsEnabled() bool {
+	l, err := net.Listen("tcp6", "")
+	if err != nil {
+		return false
+	}
+	l.Close()
+
+	return true
 }
 
 func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
