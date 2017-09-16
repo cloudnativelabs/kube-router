@@ -49,9 +49,8 @@ type NetworkRoutingController struct {
 	advertiseClusterIp   bool
 	defaultNodeAsnNumber uint32
 	nodeAsnNumber        uint32
-	globalPeerRouters    []string
+	globalPeerRouters    []*config.NeighborConfig
 	nodePeerRouters      []string
-	globalPeerAsnNumber  uint32
 	bgpFullMeshMode      bool
 	podSubnetsIpSet      *ipset.IPSet
 	enableOverlays       bool
@@ -277,7 +276,6 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 }
 
 func (nrc *NetworkRoutingController) advertiseRoute() error {
-
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
 		return err
@@ -290,11 +288,14 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
+
 	glog.Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
+
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrLen),
 		subnet), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
 	}
+
 	return nil
 }
 
@@ -389,10 +390,14 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	externalBgpPeers := make([]string, 0)
 	if len(nrc.globalPeerRouters) != 0 {
-		externalBgpPeers = append(externalBgpPeers, nrc.globalPeerRouters...)
+		for _, peer := range nrc.globalPeerRouters {
+			externalBgpPeers = append(externalBgpPeers, peer.NeighborAddress)
+		}
 	}
 	if len(nrc.nodePeerRouters) != 0 {
-		externalBgpPeers = append(externalBgpPeers, nrc.nodePeerRouters...)
+		for _, peer := range nrc.nodePeerRouters {
+			externalBgpPeers = append(externalBgpPeers, peer)
+		}
 	}
 	if len(externalBgpPeers) > 0 {
 		ns, _ := table.NewNeighborSet(config.NeighborSet{
@@ -661,24 +666,27 @@ func (nrc *NetworkRoutingController) syncPeers() {
 			continue
 		}
 
-		// if node full mesh is not requested then just peer with nodes with same ASN (run iBGP among same ASN peers)
+		// if node full mesh is not requested then just peer with nodes with same ASN
+		// (run iBGP among same ASN peers)
 		if !nrc.bgpFullMeshMode {
-			// if the node is not annotated with ASN number or with invalid ASN skip peering
 			nodeasn, ok := node.ObjectMeta.Annotations["net.kuberouter.nodeasn"]
 			if !ok {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is unknown.", nodeIP.String())
+				glog.Infof("Not peering with the Node %s as ASN number of the node is unknown.",
+					nodeIP.String())
 				continue
 			}
 
 			asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
 			if err != nil {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is invalid.", nodeIP.String())
+				glog.Infof("Not peering with the Node %s as ASN number of the node is invalid.",
+					nodeIP.String())
 				continue
 			}
 
-			// if the nodes ASN number is different from ASN number of current node skipp peering
+			// if the nodes ASN number is different from ASN number of current node skip peering
 			if nrc.nodeAsnNumber != uint32(asnNo) {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is different.", nodeIP.String())
+				glog.Infof("Not peering with the Node %s as ASN number of the node is different.",
+					nodeIP.String())
 				continue
 			}
 		}
@@ -715,7 +723,7 @@ func (nrc *NetworkRoutingController) syncPeers() {
 		}
 	}
 
-	// delete the neighbor for the node that is removed
+	// delete the neighbor for the nodes that are removed
 	for _, ip := range removedNodes {
 		n := &config.Neighbor{
 			Config: config.NeighborConfig{
@@ -855,7 +863,6 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 }
 
 func (nrc *NetworkRoutingController) startBgpServer() error {
-
 	var nodeAsnNumber uint32
 	node, err := utils.GetNodeObject(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
@@ -867,8 +874,8 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	} else {
 		nodeasn, ok := node.ObjectMeta.Annotations["net.kuberouter.nodeasn"]
 		if !ok {
-			return errors.New("Could not find ASN number for the node. Node need to be annotated with ASN number " +
-				"details to start BGP server.")
+			return errors.New("Could not find ASN number for the node. " +
+				"Node needs to be annotated with ASN number details to start BGP server.")
 		}
 		glog.Infof("Found ASN for the node to be %s from the node annotations", nodeasn)
 		asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
@@ -909,19 +916,17 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 
 	go nrc.watchBgpUpdates()
 
-	// if the global routing peer is configured then peer with it
+	// If the global routing peer is configured then peer with it
 	// else peer with node specific BGP peer
-	if len(nrc.globalPeerRouters) != 0 && nrc.globalPeerAsnNumber != 0 {
+	if len(nrc.globalPeerRouters) != 0 {
 		for _, peer := range nrc.globalPeerRouters {
 			n := &config.Neighbor{
-				Config: config.NeighborConfig{
-					NeighborAddress: peer,
-					PeerAs:          nrc.globalPeerAsnNumber,
-				},
+				Config: *peer,
 			}
-			if err := nrc.bgpServer.AddNeighbor(n); err != nil {
-				nrc.bgpServer.Stop()
-				return errors.New("Failed to peer with global peer router \"" + peer + "\" due to: " + err.Error())
+			err = nrc.bgpServer.AddNeighbor(n)
+			if err != nil {
+				return errors.New("Failed to peer with global peer router \"" +
+					peer.NeighborAddress + "\" due to: " + err.Error())
 			}
 		}
 	} else {
@@ -942,7 +947,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			glog.Infof("Could not find BGP peer info for the node in the node annotations so skipping configuring peer.")
 			return nil
 		}
-		nodePeerRouters := make([]string, 0)
+		nodePeerRouterIPs := make([]string, 0)
 		if strings.Contains(nodeBgpPeersAnnotation, ",") {
 			ips := strings.Split(nodeBgpPeersAnnotation, ",")
 			for _, ip := range ips {
@@ -951,15 +956,15 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 					return errors.New("Invalid node BGP peer router ip in the annotation: " + ip)
 				}
 			}
-			nodePeerRouters = append(nodePeerRouters, ips...)
+			nodePeerRouterIPs = append(nodePeerRouterIPs, ips...)
 		} else {
 			if net.ParseIP(nodeBgpPeersAnnotation) == nil {
 				nrc.bgpServer.Stop()
 				return errors.New("Invalid node BGP peer router ip: " + nodeBgpPeersAnnotation)
 			}
-			nodePeerRouters = append(nodePeerRouters, nodeBgpPeersAnnotation)
+			nodePeerRouterIPs = append(nodePeerRouterIPs, nodeBgpPeersAnnotation)
 		}
-		for _, peer := range nodePeerRouters {
+		for _, peer := range nodePeerRouterIPs {
 			glog.Infof("Node is configured to peer with %s in ASN %v from the node annotations", peer, peerAsnNo)
 			n := &config.Neighbor{
 				Config: config.NeighborConfig{
@@ -969,11 +974,12 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			}
 			if err := nrc.bgpServer.AddNeighbor(n); err != nil {
 				nrc.bgpServer.Stop()
-				return errors.New("Failed to peer with node specific BGP peer router: " + peer + " due to " + err.Error())
+				return errors.New("Failed to peer with node specific BGP peer router: " +
+					peer + " due to " + err.Error())
 			}
 		}
 
-		nrc.nodePeerRouters = nodePeerRouters
+		nrc.nodePeerRouters = nodePeerRouterIPs
 		glog.Infof("Successfully configured  %s in ASN %v as BGP peer to the node", nodeBgpPeersAnnotation, peerAsnNo)
 	}
 
@@ -1049,15 +1055,11 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 		nrc.podSubnetsIpSet = nil
 	}
 
-	if len(kubeRouterConfig.ClusterAsn) != 0 {
-		asn, err := strconv.ParseUint(kubeRouterConfig.ClusterAsn, 0, 32)
-		if err != nil {
-			return nil, errors.New("Invalid cluster ASN: " + err.Error())
-		}
-		if asn > 65534 || asn < 64512 {
+	if kubeRouterConfig.ClusterAsn != 0 {
+		if kubeRouterConfig.ClusterAsn > 65534 || kubeRouterConfig.ClusterAsn < 64512 {
 			return nil, errors.New("Invalid ASN number for cluster ASN")
 		}
-		nrc.defaultNodeAsnNumber = uint32(asn)
+		nrc.defaultNodeAsnNumber = uint32(kubeRouterConfig.ClusterAsn)
 	} else {
 		nrc.defaultNodeAsnNumber = 64512 // this magic number is first of the private ASN range, use it as default
 	}
@@ -1066,37 +1068,32 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 
-	if (len(kubeRouterConfig.PeerRouter) != 0 && len(kubeRouterConfig.PeerAsn) == 0) ||
-		(len(kubeRouterConfig.PeerRouter) == 0 && len(kubeRouterConfig.PeerAsn) != 0) {
-		return nil, errors.New("Either both or none of the params --peer-asn, --peer-router must be specified")
+	if len(kubeRouterConfig.PeerRouters) != len(kubeRouterConfig.PeerASNs) {
+		return nil, errors.New("--peer-routers, --peer-asns must contain equal " +
+			"numbers of items.")
 	}
 
-	if len(kubeRouterConfig.PeerRouter) != 0 && len(kubeRouterConfig.PeerAsn) != 0 {
+	if len(kubeRouterConfig.PeerRouters) != len(kubeRouterConfig.PeerRouterPasswords) &&
+		len(kubeRouterConfig.PeerRouterPasswords) != 0 {
+		return nil, errors.New("--peer-router-passwords must be empty, or contain a " +
+			"password for each \"--peer-routers\". Use \"\" if a router doesn't expect a password.")
+	}
 
-		if strings.Contains(kubeRouterConfig.PeerRouter, ",") {
-			ips := strings.Split(kubeRouterConfig.PeerRouter, ",")
-			for _, ip := range ips {
-				if net.ParseIP(ip) == nil {
-					return nil, errors.New("Invalid global BGP peer router ip: " + kubeRouterConfig.PeerRouter)
-				}
-			}
-			nrc.globalPeerRouters = append(nrc.globalPeerRouters, ips...)
-
-		} else {
-			if net.ParseIP(kubeRouterConfig.PeerRouter) == nil {
-				return nil, errors.New("Invalid global BGP peer router ip: " + kubeRouterConfig.PeerRouter)
-			}
-			nrc.globalPeerRouters = append(nrc.globalPeerRouters, kubeRouterConfig.PeerRouter)
-		}
-
-		asn, err := strconv.ParseUint(kubeRouterConfig.PeerAsn, 0, 32)
-		if err != nil {
-			return nil, errors.New("Invalid global BGP peer ASN: " + err.Error())
-		}
-		if asn > 65534 {
+	for i := 0; i < len(kubeRouterConfig.PeerASNs); i++ {
+		if kubeRouterConfig.PeerASNs[i] > 65534 {
 			return nil, errors.New("Invalid ASN number for global BGP peer")
 		}
-		nrc.globalPeerAsnNumber = uint32(asn)
+
+		peer := &config.NeighborConfig{
+			NeighborAddress: kubeRouterConfig.PeerRouters[i].String(),
+			PeerAs:          uint32(kubeRouterConfig.PeerASNs[i]),
+		}
+
+		if len(kubeRouterConfig.PeerRouterPasswords) != 0 {
+			peer.AuthPassword = kubeRouterConfig.PeerRouterPasswords[i]
+		}
+
+		nrc.globalPeerRouters = append(nrc.globalPeerRouters, peer)
 	}
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
