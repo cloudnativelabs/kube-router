@@ -23,7 +23,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
-	"github.com/janeczku/go-ipset/ipset"
 	bgpapi "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
@@ -53,7 +52,7 @@ type NetworkRoutingController struct {
 	globalPeerRouters    []*config.NeighborConfig
 	nodePeerRouters      []string
 	bgpFullMeshMode      bool
-	podSubnetsIpSet      *ipset.IPSet
+	podSubnetsIpSet      *utils.Set
 	enableOverlays       bool
 }
 
@@ -673,8 +672,14 @@ func deletePodSubnetIpSet() error {
 		return errors.New("Ensure ipset package is installed: " + err.Error())
 	}
 
-	podSubnetIpSet := ipset.IPSet{Name: podSubnetIpSetName, HashType: "bitmap:ip"}
-	err = podSubnetIpSet.Destroy()
+	ipset, err := utils.NewIPSet()
+	if err != nil {
+		return err
+	}
+	ipset.Sets = append(ipset.Sets, &utils.Set{
+		Name: podSubnetIpSetName,
+	})
+	err = ipset.Destroy()
 	if err != nil {
 		return errors.New("Failure deleting Pod egress ipset: " + err.Error())
 	}
@@ -738,7 +743,7 @@ func (nrc *NetworkRoutingController) syncPodSubnetIpSet() error {
 		currentPodCidrs = append(currentPodCidrs, node.Spec.PodCIDR)
 	}
 
-	err = nrc.podSubnetsIpSet.Refresh(currentPodCidrs)
+	err = nrc.podSubnetsIpSet.Refresh(currentPodCidrs, utils.OptionTimeout, "0")
 	if err != nil {
 		return errors.New("Failed to update Pod subnet ipset: " + err.Error())
 	}
@@ -1143,19 +1148,19 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
+	ipset, err := utils.NewIPSet()
+	if err != nil {
+		return nil, err
+	}
 
 	if nrc.enablePodEgress || len(nrc.clusterCIDR) != 0 {
 		nrc.enablePodEgress = true
 
 		// TODO: Add bitmap hashtype support to ipset package. It would work well here.
-		podSubnetIpSet, err := ipset.New(podSubnetIpSetName, "hash:net", &ipset.Params{})
+		nrc.podSubnetsIpSet, err = ipset.Create(podSubnetIpSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Pod subnet ipset: %s", err.Error())
 		}
-
-		nrc.podSubnetsIpSet = podSubnetIpSet
-	} else {
-		nrc.podSubnetsIpSet = nil
 	}
 
 	if kubeRouterConfig.ClusterAsn != 0 {

@@ -6,12 +6,6 @@ import:
   - iptables
 - package: github.com/golang/glog
   version: master
-- package: github.com/janeczku/go-ipset
-  version: master
-  repo: git@github.com:/bzub/go-ipset
-  vcs: git
-  subpackages:
-  - ipset
 - package: github.com/docker/libnetwork
   repo: git@github.com:/cloudnativelabs/libnetwork
   vcs: git
