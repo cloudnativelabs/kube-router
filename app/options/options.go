@@ -31,7 +31,7 @@ type KubeRouterConfig struct {
 	GlobalHairpinMode   bool
 	NodePortBindOnAllIp bool
 	EnableOverlay       bool
-	PeerRouterPasswords []string
+	PeerPasswords       []string
 	// FullMeshPassword    string
 }
 
@@ -75,11 +75,11 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
 		"Add Cluster IP to the RIB and advertise to peers.")
-	fs.IPSliceVar(&s.PeerRouters, "peer-router", s.PeerRouters,
+	fs.IPSliceVar(&s.PeerRouters, "peer-router-ips", s.PeerRouters,
 		"The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's.")
 	fs.UintVar(&s.ClusterAsn, "cluster-asn", s.ClusterAsn,
 		"ASN number under which cluster nodes will run iBGP.")
-	fs.UintSliceVar(&s.PeerASNs, "peer-asn", s.PeerASNs,
+	fs.UintSliceVar(&s.PeerASNs, "peer-router-asns", s.PeerASNs,
 		"ASN numbers of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr.")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
@@ -92,8 +92,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,
 		"When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. "+
 			"When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets")
-	fs.StringSliceVar(&s.PeerRouterPasswords, "peer-router-password", s.PeerRouterPasswords,
-		"Password for authenticating against the BGP peer defined with \"--peer-router\".")
+	fs.StringSliceVar(&s.PeerPasswords, "peer-router-passwords", s.PeerPasswords,
+		"Password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
 }
