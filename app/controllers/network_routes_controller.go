@@ -1047,6 +1047,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		ipStrings := stringToSlice(nodeBgpPeersAnnotation, ",")
 		peerIPs, err := stringSliceToIPs(ipStrings)
 		if err != nil {
+			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to parse node's Peer Addresses Annotation: %s", err)
 		}
 
@@ -1059,6 +1060,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			passStrings := stringToSlice(nodeBGPPasswordsAnnotation, ",")
 			peerPasswords, err = stringSliceB64Decode(passStrings)
 			if err != nil {
+				nrc.bgpServer.Stop()
 				return fmt.Errorf("Failed to parse node's Peer Passwords Annotation: %s", err)
 			}
 		}
@@ -1066,6 +1068,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		// Create and set Global Peer Router complete configs
 		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerASNs, peerPasswords)
 		if err != nil {
+			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to process Global Peer Router configs: %s", err)
 		}
 
@@ -1075,6 +1078,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	if len(nrc.globalPeerRouters) != 0 {
 		err := connectToPeers(nrc.bgpServer, nrc.globalPeerRouters)
 		if err != nil {
+			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
 				err)
 		}
