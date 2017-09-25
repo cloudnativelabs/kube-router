@@ -23,8 +23,8 @@ spec:
           - "--kubeconfig=/var/lib/kube-router/kubeconfig"
           - "--advertise-cluster-ip=true"
           - "--cluster-asn=64512"
-          - "--peer-router=192.168.1.99"
-          - "--peer-asn=64513"
+          - "--peer-router-ips=192.168.1.99"
+          - "--peer-router-asns=64513"
         securityContext:
           privileged: true
         imagePullPolicy: Always
