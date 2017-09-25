@@ -1,10 +1,11 @@
-## Configuring BGP Peers
+# Configuring BGP Peers
 
 When kube-router is used to provide pod-to-pod networking, BGP is used to exchange routes across the nodes. Kube-router
 provides flexible networking models to support different deployments (public vs private cloud, routable vs non-routable
 pod IP's, service ip's etc).
 
-### Full node-to-node mesh
+## Peering Within The Cluster
+### Full Node-To-Node Mesh
 
 This is the default mode. All nodes in the clusters form iBGP peering
 relationship with rest of the nodes forming full node-to-node mesh. Each node
@@ -15,15 +16,15 @@ configured with `--cluster-asn` flag). Users are transparent to use of iBGP.
 This mode is suitable in public cloud environments or small cluster deployments.
 In this mode all the nodes are expected to be L2 adjacent.
 
-### Node specific BGP peers
+### Node-To-Node Peering Without Full Mesh
 
 This model support more than a single AS per cluster to allow AS per rack or AS
 per node models. Nodes in the cluster does not form full node-to-node mesh.
 Users has to explicitly select this mode by specifying `--nodes-full-mesh=false`
 when launching kube-router. In this mode kube-router expects each node is
-configured with ASN number to be used for the node from the nodes API object
-annoations. Kube-router will use the configured value for the key
-`io.kube-router.net.node.asn` in the node object as the ASN number for the node.
+configured with an ASN number from the node's API object annoations. Kube-router
+will use the node's `io.kube-router.net.node.asn` annotation value as the ASN
+number for the node.
 
 Users can annotate node objects with the following command:
 
@@ -32,9 +33,10 @@ kubectl annotate node <kube-node> "io.kube-router.net.node.asn=64512"
 ```
 
 Only nodes with in same ASN form full mesh. Two nodes with different ASNs never
-gets peered.
+get peered.
 
-### Global BGP Peer
+## Peering Outside The Cluster
+### Global External BGP Peers
 
 An optional global BGP peer can be configured by specifying `--peer-router-asns`
 and `--peer-router-ips` parameters. When configured each node in the cluster
@@ -48,7 +50,7 @@ For example:
 --peer-router-asns="65000,65000"
 ```
 
-### Node specific BGP peer
+### Node Specific External BGP Peers
 
 Alternativley, each node can be configured with one or more node specific BGP
 peers. Information regarding node specific BGP peer is read from node API object
