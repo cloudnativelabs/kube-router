@@ -18,7 +18,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
-	"github.com/janeczku/go-ipset/ipset"
 	"k8s.io/client-go/kubernetes"
 	api "k8s.io/client-go/pkg/api/v1"
 	apiv1 "k8s.io/client-go/pkg/api/v1"
@@ -46,6 +45,7 @@ type NetworkPolicyController struct {
 
 	// list of all active network policies expressed as networkPolicyInfo
 	networkPoliciesInfo *[]networkPolicyInfo
+	ipset               *utils.IPSet
 }
 
 // internal structure to represent a network policy
@@ -192,7 +192,7 @@ func (npc *NetworkPolicyController) Sync() error {
 
 	}
 
-	activePolicyChains, err := npc.syncNetworkPolicyChains()
+	activePolicyChains, activePolicyIpSets, err := npc.syncNetworkPolicyChains()
 	if err != nil {
 		return errors.New("Aborting sync. Failed to sync network policy chains: " + err.Error())
 	}
@@ -202,7 +202,7 @@ func (npc *NetworkPolicyController) Sync() error {
 		return errors.New("Aborting sync. Failed to sync pod firewalls: " + err.Error())
 	}
 
-	err = cleanupStaleRules(activePolicyChains, activePodFwChains)
+	err = cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIpSets)
 	if err != nil {
 		return errors.New("Aborting sync. Failed to cleanup stale iptable rules: " + err.Error())
 	}
@@ -215,9 +215,10 @@ func (npc *NetworkPolicyController) Sync() error {
 // is used for matching destination ip address. Each ingress rule in the network
 // policyspec is evaluated to set of matching pods, which are grouped in to a
 // ipset used for source ip addr matching.
-func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, error) {
+func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, map[string]bool, error) {
 
 	activePolicyChains := make(map[string]bool)
+	activePolicyIpSets := make(map[string]bool)
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
@@ -231,31 +232,34 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 		policyChainName := networkPolicyChainName(policy.namespace, policy.name)
 		err := iptablesCmdHandler.NewChain("filter", policyChainName)
 		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return nil, nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
 		activePolicyChains[policyChainName] = true
 
 		// create a ipset for all destination pod ip's matched by the policy spec PodSelector
 		destPodIpSetName := policyDestinationPodIpSetName(policy.namespace, policy.name)
-		destPodIpSet, err := ipset.New(destPodIpSetName, "hash:ip", &ipset.Params{})
+		destPodIpSet, err := npc.ipset.Create(destPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
-			return nil, fmt.Errorf("failed to create ipset: %s", err.Error())
+			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 		}
 
 		// flush all entries in the set
 		if destPodIpSet.Flush() != nil {
-			return nil, fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
+			return nil, nil, fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
 		}
+
+		activePolicyIpSets[destPodIpSet.Name] = true
+
 		for k := range policy.destPods {
 			// TODO restrict ipset to ip's of pods running on the node
-			destPodIpSet.Add(k, 0)
+			destPodIpSet.Add(k, utils.OptionTimeout, "0")
 		}
 
 		// TODO use iptables-restore to better implement the logic, than flush and add rules
 		err = iptablesCmdHandler.ClearChain("filter", policyChainName)
 		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return nil, nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
 		// From network policy spec: "If field 'Ingress' is empty then this NetworkPolicy does not allow any traffic "
@@ -270,17 +274,19 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 
 			if len(ingressRule.srcPods) != 0 {
 				srcPodIpSetName := policySourcePodIpSetName(policy.namespace, policy.name, i)
-				srcPodIpSet, err := ipset.New(srcPodIpSetName, "hash:ip", &ipset.Params{})
+				srcPodIpSet, err := npc.ipset.Create(srcPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 				if err != nil {
-					return nil, fmt.Errorf("failed to create ipset: %s", err.Error())
+					return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 				}
 				// flush all entries in the set
 				if srcPodIpSet.Flush() != nil {
-					return nil, fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
+					return nil, nil, fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
 				}
 
+				activePolicyIpSets[srcPodIpSet.Name] = true
+
 				for _, pod := range ingressRule.srcPods {
-					srcPodIpSet.Add(pod.ip, 0)
+					srcPodIpSet.Add(pod.ip, utils.OptionTimeout, "0")
 				}
 
 				if len(ingressRule.ports) != 0 {
@@ -297,7 +303,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 							"-j", "ACCEPT"}
 						err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 						if err != nil {
-							return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+							return nil, nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 						}
 					}
 				} else {
@@ -311,7 +317,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 						"-j", "ACCEPT"}
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
-						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+						return nil, nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 					}
 				}
 			}
@@ -329,7 +335,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 						"-j", "ACCEPT"}
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
-						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+						return nil, nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 					}
 				}
 			}
@@ -344,7 +350,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
-					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+					return nil, nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 				}
 			}
 		}
@@ -352,7 +358,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 
 	glog.Infof("Iptables chains in the filter table are synchronized with the network policies.")
 
-	return activePolicyChains, nil
+	return activePolicyChains, activePolicyIpSets, nil
 }
 
 func (npc *NetworkPolicyController) syncPodFirewallChains() (map[string]bool, error) {
@@ -478,14 +484,23 @@ func (npc *NetworkPolicyController) syncPodFirewallChains() (map[string]bool, er
 	return activePodFwChains, nil
 }
 
-func cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool) error {
+func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets map[string]bool) error {
 
 	cleanupPodFwChains := make([]string, 0)
 	cleanupPolicyChains := make([]string, 0)
+	cleanupPolicyIPSets := make([]*utils.Set, 0)
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		glog.Fatalf("failed to initialize iptables command executor due to %s", err.Error())
+	}
+	ipsets, err := utils.NewIPSet()
+	if err != nil {
+		glog.Fatalf("failed to create ipsets command executor due to %s", err.Error())
+	}
+	err = ipsets.Save()
+	if err != nil {
+		glog.Fatalf("failed to initialize ipsets command executor due to %s", err.Error())
 	}
 
 	// get the list of chains created for pod firewall and network policies
@@ -499,6 +514,14 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool) er
 		if strings.HasPrefix(chain, "KUBE-POD-FW-") {
 			if _, ok := activePodFwChains[chain]; !ok {
 				cleanupPodFwChains = append(cleanupPodFwChains, chain)
+			}
+		}
+	}
+	for _, set := range ipsets.Sets {
+		if strings.HasPrefix(set.Name, "KUBE-SRC-") ||
+			strings.HasPrefix(set.Name, "KUBE-DST-") {
+			if _, ok := activePolicyIPSets[set.Name]; !ok {
+				cleanupPolicyIPSets = append(cleanupPolicyIPSets, set)
 			}
 		}
 	}
@@ -584,7 +607,13 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool) er
 		glog.Infof("Deleted network policy chain: %s from the filter table", policyChain)
 	}
 
-	// TODO delete unused ipsets
+	// cleanup network policy ipsets
+	for _, set := range cleanupPolicyIPSets {
+		err = set.Destroy()
+		if err != nil {
+			return fmt.Errorf("Failed to delete ipset %s due to %s", set.Name, err)
+		}
+	}
 	return nil
 }
 
@@ -932,7 +961,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	// delete all ipsets
-	err = ipset.DestroyAll()
+	err = npc.ipset.Destroy()
 	if err != nil {
 		glog.Errorf("Failed to clean up ipsets: " + err.Error())
 	}
@@ -965,6 +994,16 @@ func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options
 		return nil, err
 	}
 	npc.nodeIP = nodeIP
+
+	ipset, err := utils.NewIPSet()
+	if err != nil {
+		return nil, err
+	}
+	err = ipset.Save()
+	if err != nil {
+		return nil, err
+	}
+	npc.ipset = ipset
 
 	watchers.PodWatcher.RegisterHandler(&npc)
 	watchers.NetworkPolicyWatcher.RegisterHandler(&npc)
