@@ -61,8 +61,8 @@ annotations:
 
 For e.g users can annotate node object with below commands
 ```
-kubectl annotate node <kube-node> "io.kube-router.net.peer.ips=192.168.1.98,192.168.1.99"
-kubectl annotate node <kube-node> "io.kube-router.net.peer.asns=64513"
+kubectl annotate node <kube-node> "io.kube-router.net.peer.ips=192.168.1.99,192.168.1.100"
+kubectl annotate node <kube-node> "io.kube-router.net.peer.asns=65000,65000"
 ```
 
 ### BGP Peer Password Authentication
