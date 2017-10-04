@@ -62,11 +62,16 @@ var (
 		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
 		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
 		"-j", "MASQUERADE"}
+	podEgressArgsBad = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
+		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
+		"-j", "MASQUERADE"}}
 )
 
 const (
-	podSubnetsIPSetName = "kube-router-pod-subnets"
-	nodeAddrsIPSetName  = "kube-router-node-ips"
+	customRouteTableID   = 77
+	customRouteTableName = "kube-router"
+	podSubnetsIPSetName  = "kube-router-pod-subnets"
+	nodeAddrsIPSetName   = "kube-router-node-ips"
 )
 
 // Run runs forever until we are notified on stop channel
@@ -99,10 +104,52 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
 	}
 
+	// Update ipset entries
+	if nrc.enablePodEgress || nrc.enableOverlays {
+		glog.Info("Populating ipsets.")
+		err := nrc.syncNodeIPSets()
+		if err != nil {
+			glog.Errorf("Error synchronizing Pod subnet ipset: %s", err.Error())
+		}
+	}
+
+	// Handle ipip tunnel overlay
 	if nrc.enableOverlays {
+		glog.Info("IPIP Tunnel Overlay enabled in configuration.")
+		glog.Info("Setting up overlay networking.")
 		err = nrc.enablePolicyBasedRouting()
 		if err != nil {
 			glog.Errorf("Failed to enable required policy based routing: %s", err.Error())
+		}
+	} else {
+		glog.Info("IPIP Tunnel Overlay disabled in configuration.")
+		glog.Info("Cleaning up old overlay networking if needed.")
+		err = nrc.disablePolicyBasedRouting()
+		if err != nil {
+			glog.Errorf("Failed to disable policy based routing: %s", err.Error())
+		}
+	}
+
+	glog.Info("Performing cleanup of depreciated rules/ipsets (if needed).")
+	err = deleteBadPodEgressRules()
+	if err != nil {
+		glog.Errorf("Error cleaning up old/bad Pod egress rules: %s", err.Error())
+	}
+
+	// Handle Pod egress masquerading configuration
+	if nrc.enablePodEgress {
+		glog.Infoln("Enabling Pod egress.")
+
+		err = createPodEgressRule()
+		if err != nil {
+			glog.Errorf("Error enabling Pod egress: %s", err.Error())
+		}
+	} else {
+		glog.Infoln("Disabling Pod egress.")
+
+		err = deletePodEgressRule()
+		if err != nil {
+			glog.Warningf("Error cleaning up Pod Egress related networking: %s", err)
 		}
 	}
 
@@ -119,24 +166,6 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	defer wg.Done()
 
 	glog.Infof("Starting network route controller")
-
-	// Handle Pod egress masquerading configuration
-	if nrc.enablePodEgress {
-		glog.Infoln("Enabling Pod egress.")
-		err = createPodEgressRule()
-		if err != nil {
-			glog.Errorf("Error enabling Pod egress: %s", err.Error())
-		}
-	} else {
-		glog.Infoln("Disabling Pod egress.")
-		errs := cleanupPodEgressNetworking()
-		if len(errs) == 1 {
-			glog.Warningf("Error cleaning up Pod Egress related networking: %v", errs[0])
-		}
-		if len(errs) > 1 {
-			glog.Warningf("Errors cleaning up Pod Egress related networking: %v", errs)
-		}
-	}
 
 	// Wait till we are ready to launch BGP server
 	for {
@@ -169,6 +198,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 		// Update ipset entries
 		if nrc.enablePodEgress || nrc.enableOverlays {
+			glog.Info("Populating ipsets.")
 			err := nrc.syncNodeIPSets()
 			if err != nil {
 				glog.Errorf("Error synchronizing Pod subnet ipset: %s", err.Error())
@@ -227,6 +257,7 @@ func createPodEgressRule() error {
 			err.Error() + "External connectivity will not work.")
 
 	}
+
 	glog.Infof("Added iptables rule to masqurade outbound traffic from pods.")
 	return nil
 }
@@ -241,6 +272,7 @@ func deletePodEgressRule() error {
 	if err != nil {
 		return errors.New("Failed to lookup iptable rule to masqurade outbound traffic from pods: " + err.Error())
 	}
+
 	if exists {
 		err = iptablesCmdHandler.Delete("nat", "POSTROUTING", podEgressArgs...)
 		if err != nil {
@@ -249,6 +281,32 @@ func deletePodEgressRule() error {
 		}
 		glog.Infof("Deleted iptables rule to masqurade outbound traffic from pods.")
 	}
+
+	return nil
+}
+
+func deleteBadPodEgressRules() error {
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed create iptables handler:" + err.Error())
+	}
+
+	for _, args := range podEgressArgsBad {
+		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
+		if err != nil {
+			return errors.New("Failed to lookup iptable rule to masqurade outbound traffic from pods: " + err.Error())
+		}
+
+		if exists {
+			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
+			if err != nil {
+				return errors.New("Failed to delete old/bad iptable rule to masqurade outbound traffic from pods: " +
+					err.Error() + ". Pod egress might still work, or bugs may persist after upgrade...")
+			}
+			glog.Infof("Deleted old/bad iptables rule to masqurade outbound traffic from pods.")
+		}
+	}
+
 	return nil
 }
 
@@ -621,12 +679,14 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop.String() + " already exists.")
 		}
 
-		out, err := exec.Command("ip", "route", "list", "table", "kube-router").Output()
+		out, err := exec.Command("ip", "route", "list", "table", customRouteTableName).Output()
 		if err != nil {
-			return errors.New("Failed to verify if route already exists in kube-router table due to " + err.Error())
+			return fmt.Errorf("Failed to verify if route already exists in %s table: %s",
+				customRouteTableName, err.Error())
 		}
 		if !strings.Contains(string(out), tunnelName) {
-			if err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table", "kube-router").Run(); err != nil {
+			if err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table",
+				customRouteTableName).Run(); err != nil {
 				return errors.New("Failed to add route in custom route table due to: " + err.Error())
 			}
 		}
@@ -654,38 +714,27 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 
 // Cleanup performs the cleanup of configurations done
 func (nrc *NetworkRoutingController) Cleanup() {
-	errs := cleanupPodEgressNetworking()
-	if len(errs) == 1 {
-		glog.Warningf("Error cleaning up Pod Egress related networking: %v", errs[0])
-	}
-	if len(errs) > 1 {
-		glog.Warningf("Errors cleaning up Pod Egress related networking: %v", errs)
-	}
-}
-
-func cleanupPodEgressNetworking() []error {
-	// TODO: Don't error if removing non-existent Pod egress rules/ipsets.
-	errs := make([]error, 0)
+	// Pod egress cleanup
 	err := deletePodEgressRule()
 	if err != nil {
-		errs = append(errs, fmt.Errorf("Error deleting Pod egress iptable rule: %s", err.Error()))
+		glog.Warningf("Error deleting Pod egress iptable rule: %s", err.Error())
 	}
 
-	err = deletePodSubnetIpSet()
+	err = deleteBadPodEgressRules()
 	if err != nil {
-		errs = append(errs, fmt.Errorf("Error deleting Pod subnet ipset: %s", err.Error()))
+		glog.Warningf("Error deleting Pod egress iptable rule: %s", err.Error())
 	}
 
 	err = deleteNodeAddrIPSet()
 	if err != nil {
-		errs = append(errs, fmt.Errorf("Error deleting Pod subnet ipset: %s", err.Error()))
+		glog.Warningf("Error deleting Node IP ipset: %s", err.Error())
 	}
 
-	if len(errs) > 0 {
-		return errs
+	// Overlay cleanup
+	err = deletePodSubnetIpSet()
+	if err != nil {
+		glog.Warningf("Error deleting Pod subnet ipset: %s", err.Error())
 	}
-
-	return nil
 }
 
 func deletePodSubnetIpSet() error {
@@ -786,32 +835,47 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		currentNodeIPs = append(currentNodeIPs, nodeIP.String())
 	}
 
-	// TODO: Add bitmap hashtype support to ipset utils package.
-	var set *utils.Set
-	set = nrc.ipSetHandler.Get(podSubnetsIPSetName)
-	if set == nil {
-		_, err = nrc.ipSetHandler.Create(podSubnetsIPSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
+	err = nrc.createRefreshPermanentIPSet(podSubnetsIPSetName, utils.TypeHashNet, currentPodCidrs)
+	if err != nil {
+		return fmt.Errorf("Failed to create/update Pod subnet ipset: %s", err)
+	}
+
+	err = nrc.createRefreshPermanentIPSet(nodeAddrsIPSetName, utils.TypeHashIP, currentNodeIPs)
+	if err != nil {
+		return fmt.Errorf("Failed to create/update Node IPs ipset: %s", err)
+	}
+
+	return nil
+}
+
+func (nrc *NetworkRoutingController) createRefreshPermanentIPSet(name string,
+	setType string, entries []string) error {
+	var err error
+	if nrc.ipSetHandler.Get(name) == nil {
+		glog.Infof("ipset set \"%s\" not found. Creating.", name)
+
+		_, err = nrc.ipSetHandler.Create(name, setType, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("failed to create Pod subnet ipset: %s", err.Error())
+			return fmt.Errorf("Failed to create ipset set called \"%s\": %s",
+				name, err.Error())
 		}
-	} else {
-		err = set.Refresh(currentPodCidrs, utils.OptionTimeout, "0")
-		if err != nil {
-			return fmt.Errorf("Failed to update Pod subnet ipset: %s", err.Error())
+		nrc.ipSetHandler.Save()
+	}
+
+	// Debug
+	if len(nrc.ipSetHandler.Sets) == 0 {
+		return fmt.Errorf("Something went wrong. nrc ipset set slice is empty")
+	}
+	for _, set := range nrc.ipSetHandler.Sets {
+		if set.IPSet == nil {
+			return fmt.Errorf("Something went wrong. nrc set %s has no IPSet pointer.", set.Name)
 		}
 	}
 
-	set = nrc.ipSetHandler.Get(nodeAddrsIPSetName)
-	if set == nil {
-		_, err = nrc.ipSetHandler.Create(nodeAddrsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
-		if err != nil {
-			return fmt.Errorf("failed to create Node IP address ipset: %s", err.Error())
-		}
-	} else {
-		err = set.Refresh(currentNodeIPs, utils.OptionTimeout, "0")
-		if err != nil {
-			return fmt.Errorf("Failed to update Node IPs ipset: %s", err.Error())
-		}
+	err = nrc.ipSetHandler.Get(name).Refresh(entries, utils.OptionTimeout, "0")
+	if err != nil {
+		return fmt.Errorf("Failed to update entries in ipset set called \"%s\": %s",
+			name, err.Error())
 	}
 
 	return nil
@@ -966,35 +1030,73 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 // setup a custom routing table that will be used for policy based routing to ensure traffic originating
 // on tunnel interface only leaves through tunnel interface irrespective rp_filter enabled/disabled
 func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
-	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
+	err := rtTablesAdd(customRouteTableID, customRouteTableName)
 	if err != nil {
-		return fmt.Errorf("Failed to enable required policy based routing due to: %s", err.Error())
-	}
-
-	if !strings.Contains(string(b), "kube-router") {
-		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			return fmt.Errorf("Failed to enable required policy based routing. Failed to create custom route table to route tunneled traffic properly due to: %s", err.Error())
-		}
-		if _, err = f.WriteString("77 kube-router"); err != nil {
-			return fmt.Errorf("Failed to enable required policy based routing.Failed to add custom router table entry in /etc/iproute2/rt_tables due to: %s", err.Error())
-		}
+		return fmt.Errorf("Failed to update rt_tables file: %s", err)
 	}
 
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
-		return fmt.Errorf("Failed to enable required policy based routing.Failed to get the pod CIDR allocated for the node due to: %s", err.Error())
+		return fmt.Errorf("Failed to get the pod CIDR allocated for the node: %s", err.Error())
 	}
 
 	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
-		return fmt.Errorf("Failed to enable required policy based routing as failed to verify if `ip rule` exists due to %s", err.Error())
+		return fmt.Errorf("Failed to verify if `ip rule` exists: %s", err.Error())
 	}
 
 	if !strings.Contains(string(out), cidr) {
-		err = exec.Command("ip", "rule", "add", "from", cidr, "table", "kube-router").Run()
+		err = exec.Command("ip", "rule", "add", "from", cidr, "table", customRouteTableName).Run()
 		if err != nil {
 			return fmt.Errorf("Failed to add ip rule due to: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
+	err := rtTablesAdd(customRouteTableID, customRouteTableName)
+	if err != nil {
+		return fmt.Errorf("Failed to update rt_tables file: %s", err)
+	}
+
+	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
+	if err != nil {
+		return fmt.Errorf("Failed to get the pod CIDR allocated for the node: %s",
+			err.Error())
+	}
+
+	out, err := exec.Command("ip", "rule", "list").Output()
+	if err != nil {
+		return fmt.Errorf("Failed to verify if `ip rule` exists: %s",
+			err.Error())
+	}
+
+	if strings.Contains(string(out), cidr) {
+		err = exec.Command("ip", "rule", "del", "from", cidr, "table", customRouteTableName).Run()
+		if err != nil {
+			return fmt.Errorf("Failed to delete ip rule: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
+func rtTablesAdd(num uint, s string) error {
+	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
+	if err != nil {
+		return fmt.Errorf("Failed to read: %s", err.Error())
+	}
+
+	if !strings.Contains(string(b), s) {
+		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			return fmt.Errorf("Failed to open: %s", err.Error())
+		}
+		if _, err = f.WriteString(strconv.Itoa(int(num)) + " " + s); err != nil {
+			return fmt.Errorf("Failed to write: %s",
+				err.Error())
 		}
 	}
 
