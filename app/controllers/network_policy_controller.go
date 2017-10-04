@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +19,6 @@ import (
 	"github.com/golang/glog"
 	"k8s.io/client-go/kubernetes"
 	api "k8s.io/client-go/pkg/api/v1"
-	apiv1 "k8s.io/client-go/pkg/api/v1"
 	apiextensions "k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	networking "k8s.io/client-go/pkg/apis/networking/v1"
 )
@@ -167,11 +165,6 @@ func (npc *NetworkPolicyController) Sync() error {
 	var err error
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
-
-	_, err = exec.LookPath("ipset")
-	if err != nil {
-		return errors.New("Ensure ipset package is installed: " + err.Error())
-	}
 
 	start := time.Now()
 	defer func() {
@@ -869,21 +862,6 @@ func policySourcePodIpSetName(namespace, policyName string, ingressRuleNo int) s
 	return "KUBE-SRC-" + encoded[:16]
 }
 
-func getNodeIP(node *apiv1.Node) (net.IP, error) {
-	addresses := node.Status.Addresses
-	addressMap := make(map[apiv1.NodeAddressType][]apiv1.NodeAddress)
-	for i := range addresses {
-		addressMap[addresses[i].Type] = append(addressMap[addresses[i].Type], addresses[i])
-	}
-	if addresses, ok := addressMap[apiv1.NodeInternalIP]; ok {
-		return net.ParseIP(addresses[0].Address), nil
-	}
-	if addresses, ok := addressMap[apiv1.NodeExternalIP]; ok {
-		return net.ParseIP(addresses[0].Address), nil
-	}
-	return nil, errors.New("host IP unknown")
-}
-
 // Cleanup cleanup configurations done
 func (npc *NetworkPolicyController) Cleanup() {
 
@@ -989,7 +967,7 @@ func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options
 
 	npc.nodeHostName = node.Name
 
-	nodeIP, err := getNodeIP(node)
+	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {
 		return nil, err
 	}

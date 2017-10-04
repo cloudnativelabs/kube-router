@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,4 +39,23 @@ func GetNodeObject(clientset *kubernetes.Clientset, hostnameOverride string) (*a
 	}
 
 	return nil, fmt.Errorf("Failed to identify the node by NODE_NAME, hostname or --hostname-override")
+}
+
+// GetNodeIP returns the most valid external facing IP address for a node.
+// Order of preference:
+// 1. NodeInternalIP
+// 2. NodeExternalIP (Only set on cloud providers usually)
+func GetNodeIP(node *apiv1.Node) (net.IP, error) {
+	addresses := node.Status.Addresses
+	addressMap := make(map[apiv1.NodeAddressType][]apiv1.NodeAddress)
+	for i := range addresses {
+		addressMap[addresses[i].Type] = append(addressMap[addresses[i].Type], addresses[i])
+	}
+	if addresses, ok := addressMap[apiv1.NodeInternalIP]; ok {
+		return net.ParseIP(addresses[0].Address), nil
+	}
+	if addresses, ok := addressMap[apiv1.NodeExternalIP]; ok {
+		return net.ParseIP(addresses[0].Address), nil
+	}
+	return nil, errors.New("host IP unknown")
 }

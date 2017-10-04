@@ -53,6 +53,7 @@ type NetworkRoutingController struct {
 	nodePeerRouters      []string
 	bgpFullMeshMode      bool
 	podSubnetsIpSet      *utils.Set
+	nodeIPsIPSet         *utils.Set
 	enableOverlays       bool
 }
 
@@ -170,7 +171,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 		// Update Pod subnet ipset entries
 		if nrc.enablePodEgress {
-			err := nrc.syncPodSubnetIpSet()
+			err := nrc.syncNodeIPSets()
 			if err != nil {
 				glog.Errorf("Error synchronizing Pod subnet ipset: %s", err.Error())
 			}
@@ -728,7 +729,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 	}
 }
 
-func (nrc *NetworkRoutingController) syncPodSubnetIpSet() error {
+func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	glog.Infof("Syncing Pod subnet ipset entries.")
 
 	// get the current list of the nodes from API server
@@ -737,15 +738,26 @@ func (nrc *NetworkRoutingController) syncPodSubnetIpSet() error {
 		return errors.New("Failed to list nodes from API server: " + err.Error())
 	}
 
-	// Collect active PodCIDR(s) from nodes
+	// Collect active PodCIDR(s) and NodeIPs from nodes
 	currentPodCidrs := make([]string, 0)
+	currentNodeIPs := make([]string, 0)
 	for _, node := range nodes.Items {
 		currentPodCidrs = append(currentPodCidrs, node.Spec.PodCIDR)
+		nodeIP, err := utils.GetNodeIP(&node)
+		if err != nil {
+			return fmt.Errorf("Failed to find a node IP: %s", err)
+		}
+		currentNodeIPs = append(currentNodeIPs, nodeIP.String())
 	}
 
 	err = nrc.podSubnetsIpSet.Refresh(currentPodCidrs, utils.OptionTimeout, "0")
 	if err != nil {
 		return errors.New("Failed to update Pod subnet ipset: " + err.Error())
+	}
+
+	err = nrc.nodeIPsIPSet.Refresh(currentNodeIPs, utils.OptionTimeout, "0")
+	if err != nil {
+		return errors.New("Failed to update Node IPs ipset: " + err.Error())
 	}
 
 	return nil
@@ -769,7 +781,7 @@ func (nrc *NetworkRoutingController) syncPeers() {
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, node := range nodes.Items {
-		nodeIP, _ := getNodeIP(&node)
+		nodeIP, _ := utils.GetNodeIP(&node)
 
 		// skip self
 		if nodeIP.String() == nrc.nodeIP.String() {
@@ -943,7 +955,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 	defer nrc.mu.Unlock()
 
 	node := nodeUpdate.Node
-	nodeIP, _ := getNodeIP(node)
+	nodeIP, _ := utils.GetNodeIP(node)
 	if nodeUpdate.Op == watchers.ADD {
 		glog.Infof("Received node %s added update from watch API so peer with new node", nodeIP)
 		n := &config.Neighbor{
@@ -1133,6 +1145,8 @@ func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
 	return net.IPNet{}, "", errors.New("Failed to find interface with specified node ip")
 }
 
+// func (nrc *NetworkRoutingController) getExternalNodeIPs(
+
 // NewNetworkRoutingController returns new NetworkRoutingController object
 func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
@@ -1205,7 +1219,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 
 	nrc.nodeHostName = node.Name
 
-	nodeIP, err := getNodeIP(node)
+	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {
 		return nil, errors.New("Failed getting IP address from node object: " + err.Error())
 	}
