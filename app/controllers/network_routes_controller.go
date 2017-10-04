@@ -52,21 +52,21 @@ type NetworkRoutingController struct {
 	globalPeerRouters    []*config.NeighborConfig
 	nodePeerRouters      []string
 	bgpFullMeshMode      bool
-	podSubnetsIpSet      *utils.Set
-	nodeIPsIPSet         *utils.Set
+	ipSetHandler         *utils.IPSet
 	enableOverlays       bool
 }
 
 var (
 	activeNodes   = make(map[string]bool)
-	podEgressArgs = []string{"-m", "set", "--match-set", podSubnetIpSetName, "src",
-		"-m", "set", "!", "--match-set", podSubnetIpSetName, "dst",
+	podEgressArgs = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
+		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
+		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
 		"-j", "MASQUERADE"}
 )
 
 const (
-	clustetNeighborsSet = "clusterneighborsset"
-	podSubnetIpSetName  = "kube-router-pod-subnets"
+	podSubnetsIPSetName = "kube-router-pod-subnets"
+	nodeAddrsIPSetName  = "kube-router-node-ips"
 )
 
 // Run runs forever until we are notified on stop channel
@@ -99,10 +99,11 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
 	}
 
-	// enable policy based routing rules
-	err = nrc.enablePolicyBasedRouting()
-	if err != nil {
-		glog.Errorf("Failed to enable required policy based routing: %s", err.Error())
+	if nrc.enableOverlays {
+		err = nrc.enablePolicyBasedRouting()
+		if err != nil {
+			glog.Errorf("Failed to enable required policy based routing: %s", err.Error())
+		}
 	}
 
 	// enable netfilter for the bridge
@@ -128,15 +129,12 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 	} else {
 		glog.Infoln("Disabling Pod egress.")
-		err = deletePodEgressRule()
-		// TODO: Don't error if removing non-existent Pod egress rules/ipsets.
-		if err != nil {
-			glog.Infof("Error disabling Pod egress: %s", err.Error())
+		errs := cleanupPodEgressNetworking()
+		if len(errs) == 1 {
+			glog.Warningf("Error cleaning up Pod Egress related networking: %v", errs[0])
 		}
-
-		err = deletePodSubnetIpSet()
-		if err != nil {
-			glog.Infof("Error disabling Pod egress: %s", err.Error())
+		if len(errs) > 1 {
+			glog.Warningf("Errors cleaning up Pod Egress related networking: %v", errs)
 		}
 	}
 
@@ -169,8 +167,8 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		default:
 		}
 
-		// Update Pod subnet ipset entries
-		if nrc.enablePodEgress {
+		// Update ipset entries
+		if nrc.enablePodEgress || nrc.enableOverlays {
 			err := nrc.syncNodeIPSets()
 			if err != nil {
 				glog.Errorf("Error synchronizing Pod subnet ipset: %s", err.Error())
@@ -656,30 +654,68 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 
 // Cleanup performs the cleanup of configurations done
 func (nrc *NetworkRoutingController) Cleanup() {
+	errs := cleanupPodEgressNetworking()
+	if len(errs) == 1 {
+		glog.Warningf("Error cleaning up Pod Egress related networking: %v", errs[0])
+	}
+	if len(errs) > 1 {
+		glog.Warningf("Errors cleaning up Pod Egress related networking: %v", errs)
+	}
+}
+
+func cleanupPodEgressNetworking() []error {
+	// TODO: Don't error if removing non-existent Pod egress rules/ipsets.
+	errs := make([]error, 0)
 	err := deletePodEgressRule()
 	if err != nil {
-		glog.Errorf("Error deleting Pod egress iptable rule: %s", err.Error())
+		errs = append(errs, fmt.Errorf("Error deleting Pod egress iptable rule: %s", err.Error()))
 	}
 
 	err = deletePodSubnetIpSet()
 	if err != nil {
-		glog.Errorf("Error deleting Pod subnet ipset: %s", err.Error())
+		errs = append(errs, fmt.Errorf("Error deleting Pod subnet ipset: %s", err.Error()))
 	}
+
+	err = deleteNodeAddrIPSet()
+	if err != nil {
+		errs = append(errs, fmt.Errorf("Error deleting Pod subnet ipset: %s", err.Error()))
+	}
+
+	if len(errs) > 0 {
+		return errs
+	}
+
+	return nil
 }
 
 func deletePodSubnetIpSet() error {
-	_, err := exec.LookPath("ipset")
-	if err != nil {
-		return errors.New("Ensure ipset package is installed: " + err.Error())
-	}
-
 	ipset, err := utils.NewIPSet()
 	if err != nil {
 		return err
 	}
-	ipset.Sets[podSubnetIpSetName] = &utils.Set{
-		Name: podSubnetIpSetName,
+
+	ipset.Sets = append(ipset.Sets, &utils.Set{
+		Name: podSubnetsIPSetName,
+	})
+
+	err = ipset.Destroy()
+	if err != nil {
+		return errors.New("Failure deleting Pod egress ipset: " + err.Error())
 	}
+
+	return nil
+}
+
+func deleteNodeAddrIPSet() error {
+	ipset, err := utils.NewIPSet()
+	if err != nil {
+		return err
+	}
+
+	ipset.Sets = append(ipset.Sets, &utils.Set{
+		Name: nodeAddrsIPSetName,
+	})
+
 	err = ipset.Destroy()
 	if err != nil {
 		return errors.New("Failure deleting Pod egress ipset: " + err.Error())
@@ -750,14 +786,32 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		currentNodeIPs = append(currentNodeIPs, nodeIP.String())
 	}
 
-	err = nrc.podSubnetsIpSet.Refresh(currentPodCidrs, utils.OptionTimeout, "0")
-	if err != nil {
-		return errors.New("Failed to update Pod subnet ipset: " + err.Error())
+	// TODO: Add bitmap hashtype support to ipset utils package.
+	var set *utils.Set
+	set = nrc.ipSetHandler.Get(podSubnetsIPSetName)
+	if set == nil {
+		_, err = nrc.ipSetHandler.Create(podSubnetsIPSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
+		if err != nil {
+			return fmt.Errorf("failed to create Pod subnet ipset: %s", err.Error())
+		}
+	} else {
+		err = set.Refresh(currentPodCidrs, utils.OptionTimeout, "0")
+		if err != nil {
+			return fmt.Errorf("Failed to update Pod subnet ipset: %s", err.Error())
+		}
 	}
 
-	err = nrc.nodeIPsIPSet.Refresh(currentNodeIPs, utils.OptionTimeout, "0")
-	if err != nil {
-		return errors.New("Failed to update Node IPs ipset: " + err.Error())
+	set = nrc.ipSetHandler.Get(nodeAddrsIPSetName)
+	if set == nil {
+		_, err = nrc.ipSetHandler.Create(nodeAddrsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+		if err != nil {
+			return fmt.Errorf("failed to create Node IP address ipset: %s", err.Error())
+		}
+	} else {
+		err = set.Refresh(currentNodeIPs, utils.OptionTimeout, "0")
+		if err != nil {
+			return fmt.Errorf("Failed to update Node IPs ipset: %s", err.Error())
+		}
 	}
 
 	return nil
@@ -1150,31 +1204,20 @@ func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
 // NewNetworkRoutingController returns new NetworkRoutingController object
 func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
-	// TODO: Remove lookup, ipset.New already does this.
-	_, err := exec.LookPath("ipset")
-	if err != nil {
-		return nil, errors.New("Ensure ipset package is installed: " + err.Error())
-	}
-
 	nrc := NetworkRoutingController{}
-
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
-	ipset, err := utils.NewIPSet()
+
+	var err error
+	nrc.ipSetHandler, err = utils.NewIPSet()
 	if err != nil {
 		return nil, err
 	}
 
-	if nrc.enablePodEgress || len(nrc.clusterCIDR) != 0 {
+	if kubeRouterConfig.EnablePodEgress || len(nrc.clusterCIDR) != 0 {
 		nrc.enablePodEgress = true
-
-		// TODO: Add bitmap hashtype support to ipset package. It would work well here.
-		nrc.podSubnetsIpSet, err = ipset.Create(podSubnetIpSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Pod subnet ipset: %s", err.Error())
-		}
 	}
 
 	if kubeRouterConfig.ClusterAsn != 0 {
