@@ -10,6 +10,7 @@ branches:
     - master
     - /^bzub-.*$/
     - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
+    - /^PR\d*$/
 
 env:
   global:
