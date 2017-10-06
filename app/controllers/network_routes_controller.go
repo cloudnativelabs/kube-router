@@ -779,7 +779,7 @@ func (nrc *NetworkRoutingController) syncPeers() {
 		// if node full mesh is not requested then just peer with nodes with same ASN
 		// (run iBGP among same ASN peers)
 		if !nrc.bgpFullMeshMode {
-			nodeasn, ok := node.ObjectMeta.Annotations["io.kube-router.net.node.asn"]
+			nodeasn, ok := node.ObjectMeta.Annotations["kube-router.io/node.asn"]
 			if !ok {
 				glog.Infof("Not peering with the Node %s as ASN number of the node is unknown.",
 					nodeIP.String())
@@ -982,7 +982,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	if nrc.bgpFullMeshMode {
 		nodeAsnNumber = nrc.defaultNodeAsnNumber
 	} else {
-		nodeasn, ok := node.ObjectMeta.Annotations["io.kube-router.net.node.asn"]
+		nodeasn, ok := node.ObjectMeta.Annotations["kube-router.io/node.asn"]
 		if !ok {
 			return errors.New("Could not find ASN number for the node. " +
 				"Node needs to be annotated with ASN number details to start BGP server.")
@@ -1030,7 +1030,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	// else attempt to get peers from node specific BGP annotations.
 	if len(nrc.globalPeerRouters) == 0 {
 		// Get Global Peer Router ASN configs
-		nodeBgpPeerAsnsAnnotation, ok := node.ObjectMeta.Annotations["io.kube-router.net.peer.asns"]
+		nodeBgpPeerAsnsAnnotation, ok := node.ObjectMeta.Annotations["kube-router.io/peer.asns"]
 		if !ok {
 			glog.Infof("Could not find BGP peer info for the node in the node annotations so skipping configuring peer.")
 			return nil
@@ -1044,7 +1044,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 
 		// Get Global Peer Router IP Address configs
-		nodeBgpPeersAnnotation, ok := node.ObjectMeta.Annotations["io.kube-router.net.peer.ips"]
+		nodeBgpPeersAnnotation, ok := node.ObjectMeta.Annotations["kube-router.io/peer.ips"]
 		if !ok {
 			glog.Infof("Could not find BGP peer info for the node in the node annotations so skipping configuring peer.")
 			return nil
@@ -1058,7 +1058,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 
 		// Get Global Peer Router Password configs
 		peerPasswords := []string{}
-		nodeBGPPasswordsAnnotation, ok := node.ObjectMeta.Annotations["io.kube-router.net.peer.passwords"]
+		nodeBGPPasswordsAnnotation, ok := node.ObjectMeta.Annotations["kube-router.io/peer.passwords"]
 		if !ok {
 			glog.Infof("Could not find BGP peer password info in the node's annotations. Assuming no passwords.")
 		} else {

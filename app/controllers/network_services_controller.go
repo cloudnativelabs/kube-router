@@ -426,7 +426,7 @@ func buildServicesInfo() serviceInfoMap {
 			}
 
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
-			_, svcInfo.hairpin = svc.ObjectMeta.Annotations["io.kube-router.net.service.hairpin"]
+			_, svcInfo.hairpin = svc.ObjectMeta.Annotations["kube-router.io/service.hairpin"]
 
 			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
 			serviceMap[svcId] = &svcInfo

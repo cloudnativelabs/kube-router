@@ -95,13 +95,13 @@ CLI flag additions:
 
 Annotation key changes:
 - OLD: `kube-router.io/hairpin-mode=` -> NEW:
-  `io.kube-router.net.service.hairpin=`
-- OLD: `net.kuberouter.nodeasn=` -> NEW: `io.kube-router.net.node.asn=`
-- OLD: `net.kuberouter.node.bgppeer.address=` -> NEW: `io.kube-router.net.peer.ips`
-- OLD: `net.kuberouter.node.bgppeer.asn` -> NEW: `io.kube-router.net.peer.asns`
+  `kube-router.io/service.hairpin=`
+- OLD: `net.kuberouter.nodeasn=` -> NEW: `kube-router.io/node.asn=`
+- OLD: `net.kuberouter.node.bgppeer.address=` -> NEW: `kube-router.io/peer.ips`
+- OLD: `net.kuberouter.node.bgppeer.asn` -> NEW: `kube-router.io/peer.asns`
 
 Annotation key additions:
-- NEW: `io.kube-router.net.peer.passwords`
+- NEW: `kube-router.io/peer.passwords`
 
 #### v0.0.17 Upgrade Procedure
 
@@ -129,7 +129,7 @@ Annotations:       kube-router.io/hairpin-mode=
 
 You will then want to make a new annotation with the new key:
 ```sh
-kubectl annotate service hairpin-service "io.kube-router.net.service.hairpin="
+kubectl annotate service hairpin-service "kube-router.io/service.hairpin="
 ```
 
 Once all new annotations are created, proceed with the

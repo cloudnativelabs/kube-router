@@ -180,7 +180,7 @@ and run kube-proxy with the configuration you have.
 
 Communication from a Pod that is behind a Service to its own ClusterIP:Port is
 not supported by default.  However, It can be enabled per-service by adding the
-`io.kube-router.net.service.hairpin=` annotation, or for all Services in a cluster by
+`kube-router.io/service.hairpin=` annotation, or for all Services in a cluster by
 passing the flag `--hairpin-mode=true` to kube-router.
 
 Additionally, the `hairpin_mode` sysctl option must be set to `1` for all veth
@@ -209,7 +209,7 @@ Service ClusterIP if it is logging the source IP.
 
 To enable hairpin traffic for Service `my-service`:
 ```
-kubectl annotate service my-service "io.kube-router.net.service.hairpin="
+kubectl annotate service my-service "kube-router.io/service.hairpin="
 ```
 
 

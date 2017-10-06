@@ -23,13 +23,13 @@ per node models. Nodes in the cluster does not form full node-to-node mesh.
 Users has to explicitly select this mode by specifying `--nodes-full-mesh=false`
 when launching kube-router. In this mode kube-router expects each node is
 configured with an ASN number from the node's API object annoations. Kube-router
-will use the node's `io.kube-router.net.node.asn` annotation value as the ASN
+will use the node's `kube-router.io/node.asn` annotation value as the ASN
 number for the node.
 
 Users can annotate node objects with the following command:
 
 ```
-kubectl annotate node <kube-node> "io.kube-router.net.node.asn=64512"
+kubectl annotate node <kube-node> "kube-router.io/node.asn=64512"
 ```
 
 Only nodes with in same ASN form full mesh. Two nodes with different ASNs never
@@ -55,21 +55,21 @@ For example:
 Alternativley, each node can be configured with one or more node specific BGP
 peers. Information regarding node specific BGP peer is read from node API object
 annotations:
-- `io.kube-router.net.peer.ips`
-- `io.kube-router.net.peer.asns`
+- `kube-router.io/peer.ips`
+- `kube-router.io/peer.asns`
 
 
 For e.g users can annotate node object with below commands
 ```
-kubectl annotate node <kube-node> "io.kube-router.net.peer.ips=192.168.1.99,192.168.1.100"
-kubectl annotate node <kube-node> "io.kube-router.net.peer.asns=65000,65000"
+kubectl annotate node <kube-node> "kube-router.io/peer.ips=192.168.1.99,192.168.1.100"
+kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
 ```
 
 ### BGP Peer Password Authentication
 
 The examples above have assumed there is no password authentication with BGP
 peer routers. If you need to use a password for peering, you can use the
-`--peer-router-passwords` CLI flag or the `io.kube-router.net.peer.passwords` node
+`--peer-router-passwords` CLI flag or the `kube-router.io/peer.passwords` node
 annotation.
 
 #### Base64 Encoding Passwords
@@ -97,7 +97,7 @@ Note the comma indicating the end of the first password.
 
 Now here's the same example but configured as node annotations:
 ```
-kubectl annotate node <kube-node> "io.kube-router.net.peer.ips=192.168.1.99,192.168.1.100"
-kubectl annotate node <kube-node> "io.kube-router.net.peer.asns=65000,65000"
-kubectl annotate node <kube-node> "io.kube-router.net.peer.passwords=U2VjdXJlUGFzc3dvcmQK,"
+kubectl annotate node <kube-node> "kube-router.io/peer.ips=192.168.1.99,192.168.1.100"
+kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
+kubectl annotate node <kube-node> "kube-router.io/peer.passwords=U2VjdXJlUGFzc3dvcmQK,"
 ```
