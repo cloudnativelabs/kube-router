@@ -676,9 +676,9 @@ func deletePodSubnetIpSet() error {
 	if err != nil {
 		return err
 	}
-	ipset.Sets = append(ipset.Sets, &utils.Set{
+	ipset.Sets[podSubnetIpSetName] = &utils.Set{
 		Name: podSubnetIpSetName,
-	})
+	}
 	err = ipset.Destroy()
 	if err != nil {
 		return errors.New("Failure deleting Pod egress ipset: " + err.Error())
