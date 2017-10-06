@@ -161,6 +161,7 @@ func NewIPSet() (*IPSet, error) {
 	}
 	ipSet := &IPSet{
 		ipSetPath: ipSetPath,
+		Sets:      make(map[string]*Set),
 	}
 	return ipSet, nil
 }
