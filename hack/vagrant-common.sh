@@ -67,5 +67,6 @@ update_image_in_vm() {
     return 1
   fi
 
+  vagrant rsync "${i}"
   vagrant ssh "${i}" -c "docker load -i /var/tmp/images/kube-router.docker"
 }
