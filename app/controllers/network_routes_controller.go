@@ -743,9 +743,9 @@ func deletePodSubnetIpSet() error {
 		return err
 	}
 
-	ipset.Sets = append(ipset.Sets, &utils.Set{
+	ipset.Sets[podSubnetsIPSetName] = &utils.Set{
 		Name: podSubnetsIPSetName,
-	})
+	}
 
 	err = ipset.Destroy()
 	if err != nil {
@@ -761,9 +761,9 @@ func deleteNodeAddrIPSet() error {
 		return err
 	}
 
-	ipset.Sets = append(ipset.Sets, &utils.Set{
+	ipset.Sets[nodeAddrsIPSetName] = &utils.Set{
 		Name: nodeAddrsIPSetName,
-	})
+	}
 
 	err = ipset.Destroy()
 	if err != nil {
