@@ -636,7 +636,7 @@ func (npc *NetworkPolicyController) getFirewallEnabledPods(nodeIp string) (*map[
 				}
 
 				// An empty podSelector matches all pods in this namespace.
-				if len(policy.Spec.PodSelector.MatchLabels) == 0 || len(policy.Spec.PodSelector.MatchExpressions) == 0 {
+				if len(policy.Spec.PodSelector.MatchLabels) == 0 && len(policy.Spec.PodSelector.MatchExpressions) == 0 {
 					podNeedsFirewall = true
 					break
 				}
