@@ -43,7 +43,7 @@ type NetworkPolicyController struct {
 
 	// list of all active network policies expressed as networkPolicyInfo
 	networkPoliciesInfo *[]networkPolicyInfo
-	ipset               *utils.IPSet
+	ipSetHandler        *utils.IPSet
 }
 
 // internal structure to represent a network policy
@@ -232,7 +232,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 
 		// create a ipset for all destination pod ip's matched by the policy spec PodSelector
 		destPodIpSetName := policyDestinationPodIpSetName(policy.namespace, policy.name)
-		destPodIpSet, err := npc.ipset.Create(destPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+		destPodIpSet, err := npc.ipSetHandler.Create(destPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 		}
@@ -267,7 +267,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 
 			if len(ingressRule.srcPods) != 0 {
 				srcPodIpSetName := policySourcePodIpSetName(policy.namespace, policy.name, i)
-				srcPodIpSet, err := npc.ipset.Create(srcPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+				srcPodIpSet, err := npc.ipSetHandler.Create(srcPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 				}
@@ -939,7 +939,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	// delete all ipsets
-	err = npc.ipset.Destroy()
+	err = npc.ipSetHandler.DestroyAllWithin()
 	if err != nil {
 		glog.Errorf("Failed to clean up ipsets: " + err.Error())
 	}
@@ -981,7 +981,7 @@ func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options
 	if err != nil {
 		return nil, err
 	}
-	npc.ipset = ipset
+	npc.ipSetHandler = ipset
 
 	watchers.PodWatcher.RegisterHandler(&npc)
 	watchers.NetworkPolicyWatcher.RegisterHandler(&npc)
