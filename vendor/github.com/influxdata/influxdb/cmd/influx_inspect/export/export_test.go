@@ -36,6 +36,10 @@ var (
 			tsm1.NewValue(1000, "1k"),
 			tsm1.NewValue(2000, "2k"),
 		},
+		tsm1.SeriesFieldKey("uints,k=u", "u"): []tsm1.Value{
+			tsm1.NewValue(3000, uint64(45)),
+			tsm1.NewValue(4000, uint64(60)),
+		},
 	}
 
 	basicCorpusExpLines = []string{
@@ -47,6 +51,8 @@ var (
 		"bools,k=b b=false 200",
 		`strings,k=s s="1k" 1000`,
 		`strings,k=s s="2k" 2000`,
+		`uints,k=u u=45u 3000`,
+		`uints,k=u u=60u 4000`,
 	}
 
 	escapeStringCorpus = corpus{
@@ -95,6 +101,12 @@ func Test_exportWALFile(t *testing.T) {
 			}
 		}
 	}
+
+	// Missing .wal file should not cause a failure.
+	var out bytes.Buffer
+	if err := newCommand().exportWALFile("file-that-does-not-exist.wal", &out, func() {}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func Test_exportTSMFile(t *testing.T) {
@@ -127,6 +139,12 @@ func Test_exportTSMFile(t *testing.T) {
 				t.Fatalf("expected line %q to be in exported output:\n%s", exp, out.String())
 			}
 		}
+	}
+
+	// Missing .tsm file should not cause a failure.
+	var out bytes.Buffer
+	if err := newCommand().exportTSMFile("file-that-does-not-exist.tsm", &out); err != nil {
+		t.Fatal(err)
 	}
 }
 

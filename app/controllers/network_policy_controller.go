@@ -18,9 +18,9 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	"k8s.io/client-go/kubernetes"
-	api "k8s.io/client-go/pkg/api/v1"
-	apiextensions "k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	networking "k8s.io/client-go/pkg/apis/networking/v1"
+	api "k8s.io/api/core/v1"
+	apiextensions "k8s.io/api/extensions/v1beta1"
+	networking "k8s.io/api/networking/v1"
 )
 
 // Network policy controller provides an ingress firewall for the pods as per the defined network policies.

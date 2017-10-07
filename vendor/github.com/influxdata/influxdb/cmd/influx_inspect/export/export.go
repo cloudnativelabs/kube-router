@@ -261,6 +261,10 @@ func (cmd *Command) writeTsmFiles(w io.Writer, files []string) error {
 func (cmd *Command) exportTSMFile(tsmFilePath string, w io.Writer) error {
 	f, err := os.Open(tsmFilePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintf(w, "skipped missing file: %s", tsmFilePath)
+			return nil
+		}
 		return err
 	}
 	defer f.Close()
@@ -325,6 +329,10 @@ or manually editing the exported file.
 func (cmd *Command) exportWALFile(walFilePath string, w io.Writer, warnDelete func()) error {
 	f, err := os.Open(walFilePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Fprintf(w, "skipped missing file: %s", walFilePath)
+			return nil
+		}
 		return err
 	}
 	defer f.Close()
@@ -382,6 +390,9 @@ func (cmd *Command) writeValues(w io.Writer, seriesKey []byte, field string, val
 		case int64:
 			buf = strconv.AppendInt(buf, v, 10)
 			buf = append(buf, 'i')
+		case uint64:
+			buf = strconv.AppendUint(buf, v, 10)
+			buf = append(buf, 'u')
 		case bool:
 			buf = strconv.AppendBool(buf, v)
 		case string:

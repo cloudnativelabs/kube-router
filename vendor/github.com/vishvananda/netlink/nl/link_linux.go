@@ -231,7 +231,8 @@ const (
 	 * on/off switch
 	 */
 	IFLA_VF_STATS /* network device statistics */
-	IFLA_VF_MAX   = IFLA_VF_STATS
+	IFLA_VF_TRUST /* Trust state of VF */
+	IFLA_VF_MAX   = IFLA_VF_TRUST
 )
 
 const (
@@ -259,6 +260,7 @@ const (
 	SizeofVfSpoofchk   = 0x08
 	SizeofVfLinkState  = 0x08
 	SizeofVfRssQueryEn = 0x08
+	SizeofVfTrust      = 0x08
 )
 
 // struct ifla_vf_mac {
@@ -418,6 +420,35 @@ func DeserializeVfRssQueryEn(b []byte) *VfRssQueryEn {
 func (msg *VfRssQueryEn) Serialize() []byte {
 	return (*(*[SizeofVfRssQueryEn]byte)(unsafe.Pointer(msg)))[:]
 }
+
+// struct ifla_vf_trust {
+//   __u32 vf;
+//   __u32 setting;
+// };
+
+type VfTrust struct {
+	Vf      uint32
+	Setting uint32
+}
+
+func (msg *VfTrust) Len() int {
+	return SizeofVfTrust
+}
+
+func DeserializeVfTrust(b []byte) *VfTrust {
+	return (*VfTrust)(unsafe.Pointer(&b[0:SizeofVfTrust][0]))
+}
+
+func (msg *VfTrust) Serialize() []byte {
+	return (*(*[SizeofVfTrust]byte)(unsafe.Pointer(msg)))[:]
+}
+
+const (
+	XDP_FLAGS_UPDATE_IF_NOEXIST = 1 << iota
+	XDP_FLAGS_SKB_MODE
+	XDP_FLAGS_DRV_MODE
+	XDP_FLAGS_MASK = XDP_FLAGS_UPDATE_IF_NOEXIST | XDP_FLAGS_SKB_MODE | XDP_FLAGS_DRV_MODE
+)
 
 const (
 	IFLA_XDP_UNSPEC   = iota

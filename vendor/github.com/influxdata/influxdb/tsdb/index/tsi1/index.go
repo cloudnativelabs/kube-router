@@ -18,12 +18,18 @@ import (
 	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/pkg/estimator"
+	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxdb/tsdb"
 	"github.com/uber-go/zap"
 )
 
-// IndexName is the name of the index.
-const IndexName = "tsi1"
+const (
+	// IndexName is the name of the index.
+	IndexName = "tsi1"
+
+	// Version is the current version of the TSI index.
+	Version = 1
+)
 
 // Default compaction thresholds.
 const (
@@ -94,6 +100,9 @@ type Index struct {
 	CompactionMonitorInterval time.Duration
 
 	logger zap.Logger
+
+	// Index's version.
+	version int
 }
 
 // NewIndex returns a new instance of Index.
@@ -105,9 +114,14 @@ func NewIndex() *Index {
 		MaxLogFileSize:    DefaultMaxLogFileSize,
 		CompactionEnabled: true,
 
-		logger: zap.New(zap.NullEncoder()),
+		logger:  zap.New(zap.NullEncoder()),
+		version: Version,
 	}
 }
+
+// ErrIncompatibleVersion is returned when attempting to read from an
+// incompatible tsi1 manifest file.
+var ErrIncompatibleVersion = errors.New("incompatible tsi1 index MANIFEST")
 
 func (i *Index) Type() string { return IndexName }
 
@@ -130,6 +144,11 @@ func (i *Index) Open() error {
 	if os.IsNotExist(err) {
 		m = NewManifest()
 	} else if err != nil {
+		return err
+	}
+
+	// Check to see if the MANIFEST file is compatible with the current Index.
+	if err := m.Validate(); err != nil {
 		return err
 	}
 
@@ -165,7 +184,7 @@ func (i *Index) Open() error {
 			files = append(files, f)
 		}
 	}
-	fs, err := NewFileSet(i.levels, files)
+	fs, err := NewFileSet(i.Database, i.levels, files)
 	if err != nil {
 		return err
 	}
@@ -242,6 +261,11 @@ func (i *Index) deleteNonManifestFiles(m *Manifest) error {
 	return nil
 }
 
+// Wait returns once outstanding compactions have finished.
+func (i *Index) Wait() {
+	i.wg.Wait()
+}
+
 // Close closes the index.
 func (i *Index) Close() error {
 	// Wait for goroutines to finish.
@@ -281,8 +305,9 @@ func (i *Index) ManifestPath() string {
 // Manifest returns a manifest for the index.
 func (i *Index) Manifest() *Manifest {
 	m := &Manifest{
-		Levels: i.levels,
-		Files:  make([]string, len(i.fileSet.files)),
+		Levels:  i.levels,
+		Files:   make([]string, len(i.fileSet.files)),
+		Version: i.version,
 	}
 
 	for j, f := range i.fileSet.files {
@@ -336,11 +361,7 @@ func (i *Index) prependActiveLogFile() error {
 	i.activeLogFile = f
 
 	// Prepend and generate new fileset.
-	fs, err := i.fileSet.Prepend(f)
-	if err != nil {
-		return err
-	}
-	i.fileSet = fs
+	i.fileSet = i.fileSet.PrependLogFile(f)
 
 	// Write new manifest.
 	if err := i.writeManifestFile(); err != nil {
@@ -618,7 +639,7 @@ func (i *Index) MeasurementTagKeysByExpr(name []byte, expr influxql.Expr) (map[s
 //
 // See tsm1.Engine.MeasurementTagKeyValuesByExpr for a fuller description of this
 // method.
-func (i *Index) MeasurementTagKeyValuesByExpr(name []byte, keys []string, expr influxql.Expr, keysSorted bool) ([][]string, error) {
+func (i *Index) MeasurementTagKeyValuesByExpr(auth query.Authorizer, name []byte, keys []string, expr influxql.Expr, keysSorted bool) ([][]string, error) {
 	fs := i.RetainFileSet()
 	defer fs.Release()
 
@@ -637,8 +658,20 @@ func (i *Index) MeasurementTagKeyValuesByExpr(name []byte, keys []string, expr i
 	if expr == nil {
 		for ki, key := range keys {
 			itr := fs.TagValueIterator(name, []byte(key))
-			for val := itr.Next(); val != nil; val = itr.Next() {
-				results[ki] = append(results[ki], string(val.Value()))
+			if auth != nil {
+				for val := itr.Next(); val != nil; val = itr.Next() {
+					si := fs.TagValueSeriesIterator(name, []byte(key), val.Value())
+					for se := si.Next(); se != nil; se = si.Next() {
+						if auth.AuthorizeSeriesRead(i.Database, se.Name(), se.Tags()) {
+							results[ki] = append(results[ki], string(val.Value()))
+							break
+						}
+					}
+				}
+			} else {
+				for val := itr.Next(); val != nil; val = itr.Next() {
+					results[ki] = append(results[ki], string(val.Value()))
+				}
 			}
 		}
 		return results, nil
@@ -647,7 +680,7 @@ func (i *Index) MeasurementTagKeyValuesByExpr(name []byte, keys []string, expr i
 	// This is the case where we have filtered series by some WHERE condition.
 	// We only care about the tag values for the keys given the
 	// filtered set of series ids.
-	resultSet, err := fs.tagValuesByKeyAndExpr(name, keys, expr, i.fieldset)
+	resultSet, err := fs.tagValuesByKeyAndExpr(auth, name, keys, expr, i.fieldset)
 	if err != nil {
 		return nil, err
 	}
@@ -662,27 +695,6 @@ func (i *Index) MeasurementTagKeyValuesByExpr(name []byte, keys []string, expr i
 		results[i] = values
 	}
 	return results, nil
-}
-
-// ForEachMeasurementSeriesByExpr iterates over all series in a measurement filtered by an expression.
-func (i *Index) ForEachMeasurementSeriesByExpr(name []byte, condition influxql.Expr, fn func(tags models.Tags) error) error {
-	fs := i.RetainFileSet()
-	defer fs.Release()
-
-	itr, err := fs.MeasurementSeriesByExprIterator(name, condition, i.fieldset)
-	if err != nil {
-		return err
-	} else if itr == nil {
-		return nil
-	}
-
-	for e := itr.Next(); e != nil; e = itr.Next() {
-		if err := fn(e.Tags()); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // ForEachMeasurementTagKey iterates over all tag keys in a measurement.
@@ -719,7 +731,7 @@ func (i *Index) MeasurementSeriesKeysByExpr(name []byte, expr influxql.Expr) ([]
 
 // TagSets returns an ordered list of tag sets for a measurement by dimension
 // and filtered by an optional conditional expression.
-func (i *Index) TagSets(name []byte, opt influxql.IteratorOptions) ([]*influxql.TagSet, error) {
+func (i *Index) TagSets(name []byte, opt query.IteratorOptions) ([]*query.TagSet, error) {
 	fs := i.RetainFileSet()
 	defer fs.Release()
 
@@ -734,10 +746,14 @@ func (i *Index) TagSets(name []byte, opt influxql.IteratorOptions) ([]*influxql.
 	// dimensions. This is the TagSet for that series. Series with the same
 	// TagSet are then grouped together, because for the purpose of GROUP BY
 	// they are part of the same composite series.
-	tagSets := make(map[string]*influxql.TagSet, 64)
+	tagSets := make(map[string]*query.TagSet, 64)
 
 	if itr != nil {
 		for e := itr.Next(); e != nil; e = itr.Next() {
+			if opt.Authorizer != nil && !opt.Authorizer.AuthorizeSeriesRead(i.Database, name, e.Tags()) {
+				continue
+			}
+
 			tags := make(map[string]string, len(opt.Dimensions))
 
 			// Build the TagSet for this series.
@@ -751,7 +767,7 @@ func (i *Index) TagSets(name []byte, opt influxql.IteratorOptions) ([]*influxql.
 			tagSet, ok := tagSets[string(tagsAsKey)]
 			if !ok {
 				// This TagSet is new, create a new entry for it.
-				tagSet = &influxql.TagSet{
+				tagSet = &query.TagSet{
 					Tags: tags,
 					Key:  tagsAsKey,
 				}
@@ -771,7 +787,7 @@ func (i *Index) TagSets(name []byte, opt influxql.IteratorOptions) ([]*influxql.
 
 	// The TagSets have been created, as a map of TagSets. Just send
 	// the values back as a slice, sorting for consistency.
-	sortedTagsSets := make([]*influxql.TagSet, 0, len(tagSets))
+	sortedTagsSets := make([]*query.TagSet, 0, len(tagSets))
 	for _, v := range tagSets {
 		sortedTagsSets = append(sortedTagsSets, v)
 	}
@@ -822,7 +838,7 @@ func (i *Index) UnassignShard(k string, shardID uint64) error {
 }
 
 // SeriesPointIterator returns an influxql iterator over all series.
-func (i *Index) SeriesPointIterator(opt influxql.IteratorOptions) (influxql.Iterator, error) {
+func (i *Index) SeriesPointIterator(opt query.IteratorOptions) (query.Iterator, error) {
 	// NOTE: The iterator handles releasing the file set.
 	fs := i.RetainFileSet()
 	return newSeriesPointIterator(fs, i.fieldset, opt), nil
@@ -987,6 +1003,8 @@ func (i *Index) compactToLevel(files []*IndexFile, level int) {
 	}
 }
 
+func (i *Index) Rebuild() {}
+
 func (i *Index) CheckLogFile() error {
 	// Check log file size under read lock.
 	if size := func() int64 {
@@ -1119,18 +1137,18 @@ type seriesPointIterator struct {
 	fieldset *tsdb.MeasurementFieldSet
 	mitr     MeasurementIterator
 	sitr     SeriesIterator
-	opt      influxql.IteratorOptions
+	opt      query.IteratorOptions
 
-	point influxql.FloatPoint // reusable point
+	point query.FloatPoint // reusable point
 }
 
 // newSeriesPointIterator returns a new instance of seriesPointIterator.
-func newSeriesPointIterator(fs *FileSet, fieldset *tsdb.MeasurementFieldSet, opt influxql.IteratorOptions) *seriesPointIterator {
+func newSeriesPointIterator(fs *FileSet, fieldset *tsdb.MeasurementFieldSet, opt query.IteratorOptions) *seriesPointIterator {
 	return &seriesPointIterator{
 		fs:       fs,
 		fieldset: fieldset,
 		mitr:     fs.MeasurementIterator(),
-		point: influxql.FloatPoint{
+		point: query.FloatPoint{
 			Aux: make([]interface{}, len(opt.Aux)),
 		},
 		opt: opt,
@@ -1138,7 +1156,7 @@ func newSeriesPointIterator(fs *FileSet, fieldset *tsdb.MeasurementFieldSet, opt
 }
 
 // Stats returns stats about the points processed.
-func (itr *seriesPointIterator) Stats() influxql.IteratorStats { return influxql.IteratorStats{} }
+func (itr *seriesPointIterator) Stats() query.IteratorStats { return query.IteratorStats{} }
 
 // Close closes the iterator.
 func (itr *seriesPointIterator) Close() error {
@@ -1147,7 +1165,7 @@ func (itr *seriesPointIterator) Close() error {
 }
 
 // Next emits the next point in the iterator.
-func (itr *seriesPointIterator) Next() (*influxql.FloatPoint, error) {
+func (itr *seriesPointIterator) Next() (*query.FloatPoint, error) {
 	for {
 		// Create new series iterator, if necessary.
 		// Exit if there are no measurements remaining.
@@ -1234,12 +1252,16 @@ func ParseFilename(name string) (level, id int) {
 type Manifest struct {
 	Levels []CompactionLevel `json:"levels,omitempty"`
 	Files  []string          `json:"files,omitempty"`
+
+	// Version should be updated whenever the TSI format has changed.
+	Version int `json:"version,omitempty"`
 }
 
 // NewManifest returns a new instance of Manifest with default compaction levels.
 func NewManifest() *Manifest {
 	m := &Manifest{
-		Levels: make([]CompactionLevel, len(DefaultCompactionLevels)),
+		Levels:  make([]CompactionLevel, len(DefaultCompactionLevels)),
+		Version: Version,
 	}
 	copy(m.Levels, DefaultCompactionLevels[:])
 	return m
@@ -1253,6 +1275,17 @@ func (m *Manifest) HasFile(name string) bool {
 		}
 	}
 	return false
+}
+
+// Validate checks if the Manifest's version is compatible with this version
+// of the tsi1 index.
+func (m *Manifest) Validate() error {
+	// If we don't have an explicit version in the manifest file then we know
+	// it's not compatible with the latest tsi1 Index.
+	if m.Version != Version {
+		return ErrIncompatibleVersion
+	}
+	return nil
 }
 
 // ReadManifestFile reads a manifest from a file path.
