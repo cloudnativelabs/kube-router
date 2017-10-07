@@ -81,29 +81,21 @@ const (
 
 // IPSet represent ipset sets managed by.
 type IPSet struct {
-	// ipset bianry path.
 	ipSetPath *string
-	// Sets maintainted by ipset.
-	Sets map[string]*Set
+	Sets      map[string]*Set
 }
 
 // Set reprensent a ipset set entry.
 type Set struct {
-	// ipset parent to get ipSetPath.
-	IPSet *IPSet
-	// set name.
-	Name string
-	// set entries.
+	Parent  *IPSet
+	Name    string
 	Entries []*Entry
-	// set created options.
 	Options []string
 }
 
 // Entry of ipset Set.
 type Entry struct {
-	// set parent to get ipSetPath.
-	Set *Set
-	// entry created options.
+	Set     *Set
 	Options []string
 }
 
@@ -117,12 +109,12 @@ func getIPSetPath() (*string, error) {
 }
 
 // Used to run ipset binary with args and return stdout.
-func (set *IPSet) run(args ...string) (string, error) {
+func (ipset *IPSet) run(args ...string) (string, error) {
 	var stderr bytes.Buffer
 	var stdout bytes.Buffer
 	cmd := exec.Cmd{
-		Path:   *set.ipSetPath,
-		Args:   append([]string{*set.ipSetPath}, args...),
+		Path:   *ipset.ipSetPath,
+		Args:   append([]string{*ipset.ipSetPath}, args...),
 		Stderr: &stderr,
 		Stdout: &stdout,
 	}
@@ -135,12 +127,12 @@ func (set *IPSet) run(args ...string) (string, error) {
 }
 
 // Used to run ipset binary with arg and inject stdin buffer and return stdout.
-func (set *IPSet) runWithStdin(stdin *bytes.Buffer, args ...string) (string, error) {
+func (ipset *IPSet) runWithStdin(stdin *bytes.Buffer, args ...string) (string, error) {
 	var stderr bytes.Buffer
 	var stdout bytes.Buffer
 	cmd := exec.Cmd{
-		Path:   *set.ipSetPath,
-		Args:   append([]string{*set.ipSetPath}, args...),
+		Path:   *ipset.ipSetPath,
+		Args:   append([]string{*ipset.ipSetPath}, args...),
 		Stderr: &stderr,
 		Stdout: &stdout,
 		Stdin:  stdin,
@@ -166,77 +158,150 @@ func NewIPSet() (*IPSet, error) {
 	return ipSet, nil
 }
 
-// Create a set identified with setname and specified type. The type may require type specific options. If the -exist option is specified, ipset ignores the error otherwise raised when the same set (setname and create parameters are identical) already exists.
-func (ipSet *IPSet) Create(setName string, createOptions ...string) (*Set, error) {
-	set := &Set{
-		Name:    setName,
-		Options: createOptions,
-		IPSet:   ipSet,
+// Create a set identified with setname and specified type. The type may
+// require type specific options. Does not create set on the system if it
+// already exists by the same name.
+func (ipset *IPSet) Create(setName string, createOptions ...string) (*Set, error) {
+	// Populate Set map if needed
+	if ipset.Get(setName) == nil {
+		ipset.Sets[setName] = &Set{
+			Name:    setName,
+			Options: createOptions,
+			Parent:  ipset,
+		}
 	}
-	ipSet.Sets[setName] = set
-	_, err := ipSet.run(append([]string{"create", "-exist", set.Name}, createOptions...)...)
+
+	// Determine if set with the same name is already active on the system
+	setIsActive, err := ipset.Sets[setName].IsActive()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to determine if ipset set %s exists: %s",
+			setName, err)
 	}
-	return set, nil
+
+	// Create set if missing from the system
+	if !setIsActive {
+		_, err := ipset.run(append([]string{"create", "-exist", setName},
+			createOptions...)...)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to create ipset set on system: %s", err)
+		}
+	}
+
+	return ipset.Sets[setName], nil
 }
 
-// Add a given entry to the set. If the -exist option is specified, ipset ignores if the entry already added to the set.
+// Adds a given Set to an IPSet
+func (ipset *IPSet) Add(set *Set) error {
+	_, err := ipset.Create(set.Name, set.Options...)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range set.Entries {
+		_, err := ipset.Get(set.Name).Add(entry.Options...)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Add a given entry to the set. If the -exist option is specified, ipset
+// ignores if the entry already added to the set.
 func (set *Set) Add(addOptions ...string) (*Entry, error) {
 	entry := &Entry{
 		Set:     set,
 		Options: addOptions,
 	}
 	set.Entries = append(set.Entries, entry)
-	_, err := set.IPSet.run(append([]string{"add", "-exist", entry.Set.Name}, addOptions...)...)
+	_, err := set.Parent.run(append([]string{"add", "-exist", entry.Set.Name}, addOptions...)...)
 	if err != nil {
 		return nil, err
 	}
 	return entry, nil
 }
 
-// Del an entry from a set. If the -exist option is specified and the entry is not in the set (maybe already expired), then the command is ignored.
+// Del an entry from a set. If the -exist option is specified and the entry is
+// not in the set (maybe already expired), then the command is ignored.
 func (entry *Entry) Del() error {
-	_, err := entry.Set.IPSet.run(append([]string{"del", entry.Set.Name}, entry.Options...)...)
+	_, err := entry.Set.Parent.run(append([]string{"del", entry.Set.Name}, entry.Options...)...)
 	if err != nil {
 		return err
 	}
-	entry.Set.IPSet.Save()
+	entry.Set.Parent.Save()
 	return nil
 }
 
-// Test wether an entry is in a set or not. Exit status number is zero if the tested entry is in the set and nonzero if it is missing from the set.
+// Test wether an entry is in a set or not. Exit status number is zero if the
+// tested entry is in the set and nonzero if it is missing from the set.
 func (set *Set) Test(testOptions ...string) (bool, error) {
-	_, err := set.IPSet.run(append([]string{"test", set.Name}, testOptions...)...)
+	_, err := set.Parent.run(append([]string{"test", set.Name}, testOptions...)...)
 	if err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-// Destroy the specified set or all the sets if none is given. If the set has got reference(s), nothing is done and no set destroyed.
+// Destroy the specified set or all the sets if none is given. If the set has
+// got reference(s), nothing is done and no set destroyed.
 func (set *Set) Destroy() error {
-	_, err := set.IPSet.run("destroy", set.Name)
+	_, err := set.Parent.run("destroy", set.Name)
 	if err != nil {
 		return err
 	}
+
+	delete(set.Parent.Sets, set.Name)
+
 	return nil
 }
 
-// Destroy the specified set or all the sets if none is given. If the set has got reference(s), nothing is done and no set destroyed.
-func (set *IPSet) Destroy() error {
-	_, err := set.run("destroy")
+// Destroy the specified set by name. If the set has got reference(s), nothing
+// is done and no set destroyed. If the IPSet does not contain the named set
+// then Destroy is a no-op.
+func (ipset *IPSet) Destroy(setName string) error {
+	set := ipset.Get(setName)
+	if set == nil {
+		return nil
+	}
+
+	err := set.Destroy()
 	if err != nil {
 		return err
 	}
+
 	return nil
+}
+
+// DestroyAllWithin destroys all sets contained within the IPSet's Sets.
+func (ipset *IPSet) DestroyAllWithin() error {
+	for _, v := range ipset.Sets {
+		err := v.Destroy()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// IsActive checks if a set exists on the system with the same name.
+func (set *Set) IsActive() (bool, error) {
+	_, err := set.Parent.run("list", set.Name)
+	if err != nil {
+		if strings.Contains(err.Error(), "name does not exist") {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // Parse ipset save stdout.
 // ex:
 // create KUBE-DST-3YNVZWWGX3UQQ4VQ hash:ip family inet hashsize 1024 maxelem 65536 timeout 0
 // add KUBE-DST-3YNVZWWGX3UQQ4VQ 100.96.1.6 timeout 0
-func parseIPSetSave(ipSet *IPSet, result string) map[string]*Set {
+func parseIPSetSave(ipset *IPSet, result string) map[string]*Set {
 	sets := make(map[string]*Set)
 	// Save is always in order
 	lines := strings.Split(result, "\n")
@@ -244,7 +309,7 @@ func parseIPSetSave(ipSet *IPSet, result string) map[string]*Set {
 		content := strings.Split(line, " ")
 		if content[0] == "create" {
 			sets[content[1]] = &Set{
-				IPSet:   ipSet,
+				Parent:  ipset,
 				Name:    content[1],
 				Options: content[2:],
 			}
@@ -264,9 +329,9 @@ func parseIPSetSave(ipSet *IPSet, result string) map[string]*Set {
 // ex:
 // create KUBE-DST-3YNVZWWGX3UQQ4VQ hash:ip family inet hashsize 1024 maxelem 65536 timeout 0
 // add KUBE-DST-3YNVZWWGX3UQQ4VQ 100.96.1.6 timeout 0
-func buildIPSetRestore(ipSet *IPSet) string {
+func buildIPSetRestore(ipset *IPSet) string {
 	ipSetRestore := ""
-	for _, set := range ipSet.Sets {
+	for _, set := range ipset.Sets {
 		ipSetRestore += fmt.Sprintf("create %s %s\n", set.Name, strings.Join(set.Options[:], " "))
 		for _, entry := range set.Entries {
 			ipSetRestore += fmt.Sprintf("add %s %s\n", set.Name, strings.Join(entry.Options[:], " "))
@@ -275,22 +340,28 @@ func buildIPSetRestore(ipSet *IPSet) string {
 	return ipSetRestore
 }
 
-// Save the given set, or all sets if none is given to stdout in a format that restore can read. The option -file can be used to specify a filename instead of stdout.
+// Save the given set, or all sets if none is given to stdout in a format that
+// restore can read. The option -file can be used to specify a filename instead
+// of stdout.
 // save "ipset save" command output to ipset.sets.
-func (set *IPSet) Save() error {
-	stdout, err := set.run("save")
+func (ipset *IPSet) Save() error {
+	stdout, err := ipset.run("save")
 	if err != nil {
 		return err
 	}
-	set.Sets = parseIPSetSave(set, stdout)
+	ipset.Sets = parseIPSetSave(ipset, stdout)
 	return nil
 }
 
-// Restore a saved session generated by save. The saved session can be fed from stdin or the option -file can be used to specify a filename instead of stdin. Please note, existing sets and elements are not erased by restore unless specified so in the restore file. All commands are allowed in restore mode except list, help, version, interactive mode and restore itself.
+// Restore a saved session generated by save. The saved session can be fed from
+// stdin or the option -file can be used to specify a filename instead of
+// stdin. Please note, existing sets and elements are not erased by restore
+// unless specified so in the restore file. All commands are allowed in restore
+// mode except list, help, version, interactive mode and restore itself.
 // Send formated ipset.sets into stdin of "ipset restore" command.
-func (set *IPSet) Restore() error {
-	stdin := bytes.NewBufferString(buildIPSetRestore(set))
-	_, err := set.runWithStdin(stdin, "restore", "-exist")
+func (ipset *IPSet) Restore() error {
+	stdin := bytes.NewBufferString(buildIPSetRestore(ipset))
+	_, err := ipset.runWithStdin(stdin, "restore", "-exist")
 	if err != nil {
 		return err
 	}
@@ -299,7 +370,7 @@ func (set *IPSet) Restore() error {
 
 // Flush all entries from the specified set or flush all sets if none is given.
 func (set *Set) Flush() error {
-	_, err := set.IPSet.run("flush", set.Name)
+	_, err := set.Parent.run("flush", set.Name)
 	if err != nil {
 		return err
 	}
@@ -307,8 +378,8 @@ func (set *Set) Flush() error {
 }
 
 // Flush all entries from the specified set or flush all sets if none is given.
-func (set *IPSet) Flush() error {
-	_, err := set.run("flush")
+func (ipset *IPSet) Flush() error {
+	_, err := ipset.run("flush")
 	if err != nil {
 		return err
 	}
@@ -317,21 +388,28 @@ func (set *IPSet) Flush() error {
 
 // Get Set by Name.
 func (ipset *IPSet) Get(setName string) *Set {
-	return ipset.Sets[setName]
+	set, ok := ipset.Sets[setName]
+	if !ok {
+		return nil
+	}
+
+	return set
 }
 
 // Rename a set. Set identified by SETNAME-TO must not exist.
 func (set *Set) Rename(newName string) error {
-	_, err := set.IPSet.run("rename", set.Name, newName)
+	_, err := set.Parent.run("rename", set.Name, newName)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// Swap the content of two sets, or in another words, exchange the name of two sets. The referred sets must exist and compatible type of sets can be swapped only.
+// Swap the content of two sets, or in another words, exchange the name of two
+// sets. The referred sets must exist and compatible type of sets can be
+// swapped only.
 func (set *Set) Swap(setTo *Set) error {
-	_, err := set.IPSet.run("rename", set.Name, setTo.Name)
+	_, err := set.Parent.run("swap", set.Name, setTo.Name)
 	if err != nil {
 		return err
 	}
@@ -340,38 +418,36 @@ func (set *Set) Swap(setTo *Set) error {
 
 // Refresh a Set with new entries.
 func (set *Set) Refresh(entries []string, extraOptions ...string) error {
+	var err error
 	tempName := set.Name + "-temp"
-	s := &Set{
-		IPSet:   set.IPSet,
+
+	newSet := &Set{
+		Parent:  set.Parent,
 		Name:    tempName,
 		Options: set.Options,
 	}
 
+	err = set.Parent.Add(newSet)
+	if err != nil {
+		return err
+	}
+
 	for _, entry := range entries {
-		s.Entries = append(s.Entries, &Entry{
-			Set:     s,
-			Options: append([]string{entry}, extraOptions...),
-		})
+		_, err = newSet.Add(entry)
+		if err != nil {
+			return err
+		}
 	}
-	set.IPSet.Sets[tempName] = s
-	err := set.IPSet.Restore()
+
+	err = set.Swap(newSet)
 	if err != nil {
 		return err
 	}
 
-	err = set.Swap(s)
+	err = set.Parent.Destroy(tempName)
 	if err != nil {
 		return err
 	}
-
-	err = s.Destroy()
-	if err != nil {
-		return err
-	}
-
-	s.Name = set.Name
-	set.IPSet.Sets[set.Name] = s
-	delete(set.IPSet.Sets, tempName)
 
 	return nil
 }

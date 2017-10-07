@@ -928,7 +928,7 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 	}
 
 	nsc.nodeHostName = node.Name
-	nodeIP, err := getNodeIP(node)
+	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {
 		return nil, err
 	}
