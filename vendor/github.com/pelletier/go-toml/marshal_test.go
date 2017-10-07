@@ -177,25 +177,6 @@ func TestDocUnmarshal(t *testing.T) {
 	}
 }
 
-func ExampleUnmarshal() {
-	type Postgres struct {
-		User     string
-		Password string
-	}
-	type Config struct {
-		Postgres Postgres
-	}
-
-	doc := []byte(`
-	[postgres]
-	user = "pelletier"
-	password = "mypassword"`)
-
-	config := Config{}
-	Unmarshal(doc, &config)
-	fmt.Println("user=", config.Postgres.User)
-}
-
 func TestDocPartialUnmarshal(t *testing.T) {
 	result := testDocSubs{}
 
@@ -615,5 +596,56 @@ func TestNestedCustomMarshaler(t *testing.T) {
 	expected := nestedCustomMarshalerToml
 	if !bytes.Equal(result, expected) {
 		t.Errorf("Bad nested custom marshaler: expected\n-----\n%s\n-----\ngot\n-----\n%s\n-----\n", expected, result)
+	}
+}
+
+var commentTestToml = []byte(`
+# it's a comment on type
+[postgres]
+  # isCommented = "dvalue"
+  noComment = "cvalue"
+
+  # A comment on AttrB with a
+  # break line
+  password = "bvalue"
+
+  # A comment on AttrA
+  user = "avalue"
+
+  [[postgres.My]]
+
+    # a comment on my on typeC
+    My = "Foo"
+
+  [[postgres.My]]
+
+    # a comment on my on typeC
+    My = "Baar"
+`)
+
+func TestMarshalComment(t *testing.T) {
+	type TypeC struct {
+		My string `comment:"a comment on my on typeC"`
+	}
+	type TypeB struct {
+		AttrA string `toml:"user" comment:"A comment on AttrA"`
+		AttrB string `toml:"password" comment:"A comment on AttrB with a\n break line"`
+		AttrC string `toml:"noComment"`
+		AttrD string `toml:"isCommented" commented:"true"`
+		My    []TypeC
+	}
+	type TypeA struct {
+		TypeB TypeB `toml:"postgres" comment:"it's a comment on type"`
+	}
+
+	ta := []TypeC{{My: "Foo"}, {My: "Baar"}}
+	config := TypeA{TypeB{AttrA: "avalue", AttrB: "bvalue", AttrC: "cvalue", AttrD: "dvalue", My: ta}}
+	result, err := Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := commentTestToml
+	if !bytes.Equal(result, expected) {
+		t.Errorf("Bad marshal: expected\n-----\n%s\n-----\ngot\n-----\n%s\n-----\n", expected, result)
 	}
 }

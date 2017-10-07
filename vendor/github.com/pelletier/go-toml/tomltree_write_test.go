@@ -161,13 +161,13 @@ func TestTreeWriteToInvalidTreeSimpleValue(t *testing.T) {
 }
 
 func TestTreeWriteToInvalidTreeTomlValue(t *testing.T) {
-	tree := Tree{values: map[string]interface{}{"foo": &tomlValue{int8(1), Position{}}}}
+	tree := Tree{values: map[string]interface{}{"foo": &tomlValue{value: int8(1), comment: "", position: Position{}}}}
 	_, err := tree.ToTomlString()
 	assertErrorString(t, "unsupported value type int8: 1", err)
 }
 
 func TestTreeWriteToInvalidTreeTomlValueArray(t *testing.T) {
-	tree := Tree{values: map[string]interface{}{"foo": &tomlValue{[]interface{}{int8(1)}, Position{}}}}
+	tree := Tree{values: map[string]interface{}{"foo": &tomlValue{value: int8(1), comment: "", position: Position{}}}}
 	_, err := tree.ToTomlString()
 	assertErrorString(t, "unsupported value type int8: 1", err)
 }

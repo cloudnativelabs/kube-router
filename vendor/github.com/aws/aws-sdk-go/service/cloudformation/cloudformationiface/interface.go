@@ -21,7 +21,7 @@ import (
 //
 // The best way to use this interface is so the SDK's service client's calls
 // can be stubbed out for unit testing your code with the SDK without needing
-// to inject custom request handlers into the the SDK's request pipeline.
+// to inject custom request handlers into the SDK's request pipeline.
 //
 //    // myFunc uses an SDK service client to make a request to
 //    // AWS CloudFormation.
@@ -229,6 +229,10 @@ type CloudFormationAPI interface {
 	UpdateStackSet(*cloudformation.UpdateStackSetInput) (*cloudformation.UpdateStackSetOutput, error)
 	UpdateStackSetWithContext(aws.Context, *cloudformation.UpdateStackSetInput, ...request.Option) (*cloudformation.UpdateStackSetOutput, error)
 	UpdateStackSetRequest(*cloudformation.UpdateStackSetInput) (*request.Request, *cloudformation.UpdateStackSetOutput)
+
+	UpdateTerminationProtection(*cloudformation.UpdateTerminationProtectionInput) (*cloudformation.UpdateTerminationProtectionOutput, error)
+	UpdateTerminationProtectionWithContext(aws.Context, *cloudformation.UpdateTerminationProtectionInput, ...request.Option) (*cloudformation.UpdateTerminationProtectionOutput, error)
+	UpdateTerminationProtectionRequest(*cloudformation.UpdateTerminationProtectionInput) (*request.Request, *cloudformation.UpdateTerminationProtectionOutput)
 
 	ValidateTemplate(*cloudformation.ValidateTemplateInput) (*cloudformation.ValidateTemplateOutput, error)
 	ValidateTemplateWithContext(aws.Context, *cloudformation.ValidateTemplateInput, ...request.Option) (*cloudformation.ValidateTemplateOutput, error)

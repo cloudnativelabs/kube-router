@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type tomlOpts struct {
 	name      string
+	comment   string
+	commented bool
 	include   bool
 	omitempty bool
 }
@@ -94,6 +97,13 @@ encoder, except that there is no concept of a Marshaler interface or MarshalTOML
 function for sub-structs, and currently only definite types can be marshaled
 (i.e. no `interface{}`).
 
+The following struct annotations are supported:
+
+  toml:"Field"      Overrides the field's name to output.
+  omitempty         When set, empty values and groups are not emitted.
+  comment:"comment" Emits a # comment on the same line. This supports new lines.
+  commented:"true"  Emits the value as commented.
+
 Note that pointers are automatically assigned the "omitempty" option, as TOML
 explicity does not handle null values (saying instead the label should be
 dropped).
@@ -147,7 +157,7 @@ func valueToTree(mtype reflect.Type, mval reflect.Value) (*Tree, error) {
 				if err != nil {
 					return nil, err
 				}
-				tval.Set(opts.name, val)
+				tval.Set(opts.name, opts.comment, opts.commented, val)
 			}
 		}
 	case reflect.Map:
@@ -157,7 +167,7 @@ func valueToTree(mtype reflect.Type, mval reflect.Value) (*Tree, error) {
 			if err != nil {
 				return nil, err
 			}
-			tval.Set(key.String(), val)
+			tval.Set(key.String(), "", false, val)
 		}
 	}
 	return tval, nil
@@ -245,6 +255,10 @@ func (t *Tree) Unmarshal(v interface{}) error {
 // is no concept of an Unmarshaler interface or UnmarshalTOML function for
 // sub-structs, and currently only definite types can be unmarshaled to (i.e. no
 // `interface{}`).
+//
+// The following struct annotations are supported:
+//
+//   toml:"Field" Overrides the field's name to map to.
 //
 // See Marshal() documentation for types mapping table.
 func Unmarshal(data []byte, v interface{}) error {
@@ -448,7 +462,12 @@ func unwrapPointer(mtype reflect.Type, tval interface{}) (reflect.Value, error) 
 func tomlOptions(vf reflect.StructField) tomlOpts {
 	tag := vf.Tag.Get("toml")
 	parse := strings.Split(tag, ",")
-	result := tomlOpts{vf.Name, true, false}
+	var comment string
+	if c := vf.Tag.Get("comment"); c != "" {
+		comment = c
+	}
+	commented, _ := strconv.ParseBool(vf.Tag.Get("commented"))
+	result := tomlOpts{name: vf.Name, comment: comment, commented: commented, include: true, omitempty: false}
 	if parse[0] != "" {
 		if parse[0] == "-" && len(parse) == 1 {
 			result.include = false

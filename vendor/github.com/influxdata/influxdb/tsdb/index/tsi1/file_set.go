@@ -12,19 +12,26 @@ import (
 	"github.com/influxdata/influxdb/pkg/bytesutil"
 	"github.com/influxdata/influxdb/pkg/estimator"
 	"github.com/influxdata/influxdb/pkg/estimator/hll"
+	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxdb/tsdb"
 )
 
 // FileSet represents a collection of files.
 type FileSet struct {
-	levels  []CompactionLevel
-	files   []File
-	filters []*bloom.Filter // per-level filters
+	levels   []CompactionLevel
+	files    []File
+	filters  []*bloom.Filter // per-level filters
+	database string
 }
 
 // NewFileSet returns a new instance of FileSet.
-func NewFileSet(levels []CompactionLevel, files []File) (*FileSet, error) {
-	fs := &FileSet{levels: levels, files: files}
+func NewFileSet(database string, levels []CompactionLevel, files []File) (*FileSet, error) {
+	fs := &FileSet{
+		levels:   levels,
+		files:    files,
+		filters:  make([]*bloom.Filter, len(levels)),
+		database: database,
+	}
 	if err := fs.buildFilters(); err != nil {
 		return nil, err
 	}
@@ -56,9 +63,14 @@ func (fs *FileSet) Release() {
 	}
 }
 
-// Prepend returns a new file set with f added at the beginning.
-func (fs *FileSet) Prepend(f File) (*FileSet, error) {
-	return NewFileSet(fs.levels, append([]File{f}, fs.files...))
+// PrependLogFile returns a new file set with f added at the beginning.
+// Filters do not need to be rebuilt because log files have no bloom filter.
+func (fs *FileSet) PrependLogFile(f *LogFile) *FileSet {
+	return &FileSet{
+		levels:  fs.levels,
+		files:   append([]File{f}, fs.files...),
+		filters: fs.filters,
+	}
 }
 
 // MustReplace swaps a list of files for a single file and returns a new file set.
@@ -89,11 +101,26 @@ func (fs *FileSet) MustReplace(oldFiles []File, newFile File) *FileSet {
 	other[i] = newFile
 	copy(other[i+1:], fs.files[i+len(oldFiles):])
 
-	fs, err := NewFileSet(fs.levels, other)
-	if err != nil {
+	// Copy existing bloom filters.
+	filters := make([]*bloom.Filter, len(fs.filters))
+	// copy(filters, fs.filters)
+
+	// Clear filters at replaced file levels.
+	filters[newFile.Level()] = nil
+	for _, f := range oldFiles {
+		filters[f.Level()] = nil
+	}
+
+	// Build new fileset and rebuild changed filters.
+	newFS := &FileSet{
+		levels:  fs.levels,
+		files:   other,
+		filters: filters,
+	}
+	if err := newFS.buildFilters(); err != nil {
 		panic("cannot build file set: " + err.Error())
 	}
-	return fs
+	return newFS
 }
 
 // MaxID returns the highest file identifier.
@@ -288,7 +315,7 @@ func (fs *FileSet) MeasurementTagKeysByExpr(name []byte, expr influxql.Expr) (ma
 //
 // N.B tagValuesByKeyAndExpr relies on keys being sorted in ascending
 // lexicographic order.
-func (fs *FileSet) tagValuesByKeyAndExpr(name []byte, keys []string, expr influxql.Expr, fieldset *tsdb.MeasurementFieldSet) ([]map[string]struct{}, error) {
+func (fs *FileSet) tagValuesByKeyAndExpr(auth query.Authorizer, name []byte, keys []string, expr influxql.Expr, fieldset *tsdb.MeasurementFieldSet) ([]map[string]struct{}, error) {
 	itr, err := fs.seriesByExprIterator(name, expr, fieldset.Fields(string(name)))
 	if err != nil {
 		return nil, err
@@ -313,6 +340,9 @@ func (fs *FileSet) tagValuesByKeyAndExpr(name []byte, keys []string, expr influx
 
 	// Iterate all series to collect tag values.
 	for e := itr.Next(); e != nil; e = itr.Next() {
+		if auth != nil && !auth.AuthorizeSeriesRead(fs.database, e.Name(), e.Tags()) {
+			continue
+		}
 		for _, t := range e.Tags() {
 			if idx, ok := keyIdxs[string(t.Key)]; ok {
 				resultSet[idx][string(t.Value)] = struct{}{}
@@ -702,6 +732,7 @@ func (fs *FileSet) FilterNamesTags(names [][]byte, tagsSlice []models.Tags) ([][
 			newTagsSlice = append(newTagsSlice, tags)
 		}
 	}
+
 	return newNames, newTagsSlice
 }
 
@@ -736,7 +767,7 @@ func (fs *FileSet) MeasurementsSketches() (estimator.Sketch, estimator.Sketch, e
 // call is equivalent to MeasurementSeriesIterator().
 func (fs *FileSet) MeasurementSeriesByExprIterator(name []byte, expr influxql.Expr, fieldset *tsdb.MeasurementFieldSet) (SeriesIterator, error) {
 	// Return all series for the measurement if there are no tag expressions.
-	if expr == nil || influxql.OnlyTimeExpr(expr) {
+	if expr == nil {
 		return fs.MeasurementSeriesIterator(name), nil
 	}
 	return fs.seriesByExprIterator(name, expr, fieldset.CreateFieldsIfNotExists(name))
@@ -758,7 +789,9 @@ func (fs *FileSet) MeasurementSeriesKeysByExpr(name []byte, expr influxql.Expr, 
 		// Check for unsupported field filters.
 		// Any remaining filters means there were fields (e.g., `WHERE value = 1.2`).
 		if e.Expr() != nil {
-			return nil, errors.New("fields not supported in WHERE clause during deletion")
+			if v, ok := e.Expr().(*influxql.BooleanLiteral); !ok || !v.Val {
+				return nil, errors.New("fields not supported in WHERE clause during deletion")
+			}
 		}
 
 		keys = append(keys, models.MakeKey(e.Name(), e.Tags()))
@@ -822,11 +855,6 @@ func (fs *FileSet) seriesByBinaryExprIterator(name []byte, n *influxql.BinaryExp
 			return nil, fmt.Errorf("invalid expression: %s", n.String())
 		}
 		value = n.LHS
-	}
-
-	// For time literals, return all series and "true" as the filter.
-	if _, ok := value.(*influxql.TimeLiteral); ok || key.Val == "time" {
-		return newSeriesExprIterator(fs.MeasurementSeriesIterator(name), &influxql.BooleanLiteral{Val: true}), nil
 	}
 
 	// For fields, return all series from this measurement.
@@ -918,31 +946,38 @@ func (fs *FileSet) seriesByBinaryExprVarRefIterator(name, key []byte, value *inf
 // buildFilters builds a series existence filter for each compaction level.
 func (fs *FileSet) buildFilters() error {
 	if len(fs.levels) == 0 {
-		fs.filters = nil
 		return nil
 	}
 
-	// Generate filters for each level.
-	fs.filters = make([]*bloom.Filter, len(fs.levels))
+	// Move past log files (level=0).
+	files := fs.files
+	for len(files) > 0 && files[0].Level() == 0 {
+		files = files[1:]
+	}
 
-	// Merge filters at each level.
-	for _, f := range fs.files {
-		level := f.Level()
-
-		// Skip if file has no bloom filter.
-		if f.Filter() == nil {
+	// Build filters for each level where the filter is non-existent.
+	for level := range fs.levels {
+		// Clear filter if no files remain or next file is at a higher level.
+		if len(files) == 0 || files[0].Level() > level {
+			fs.filters[level] = nil
 			continue
 		}
 
-		// Initialize a filter if it doesn't exist.
-		if fs.filters[level] == nil {
-			lvl := fs.levels[level]
-			fs.filters[level] = bloom.NewFilter(lvl.M, lvl.K)
+		// Skip files at this level if filter already exists.
+		if fs.filters[level] != nil {
+			for len(files) > 0 && files[0].Level() == level {
+				files = files[1:]
+			}
+			continue
 		}
 
-		// Merge filter.
-		if err := fs.filters[level].Merge(f.Filter()); err != nil {
-			return err
+		// Build new filter from files at this level.
+		fs.filters[level] = bloom.NewFilter(fs.levels[level].M, fs.levels[level].K)
+		for len(files) > 0 && files[0].Level() == level {
+			if err := fs.filters[level].Merge(files[0].Filter()); err != nil {
+				return err
+			}
+			files = files[1:]
 		}
 	}
 

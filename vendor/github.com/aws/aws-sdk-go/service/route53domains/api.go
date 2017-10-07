@@ -15,19 +15,18 @@ const opCheckDomainAvailability = "CheckDomainAvailability"
 
 // CheckDomainAvailabilityRequest generates a "aws/request.Request" representing the
 // client's request for the CheckDomainAvailability operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See CheckDomainAvailability for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the CheckDomainAvailability method directly
-// instead.
+// See CheckDomainAvailability for more information on using the CheckDomainAvailability
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the CheckDomainAvailabilityRequest method.
 //    req, resp := client.CheckDomainAvailabilityRequest(params)
@@ -70,11 +69,11 @@ func (c *Route53Domains) CheckDomainAvailabilityRequest(input *CheckDomainAvaila
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/CheckDomainAvailability
 func (c *Route53Domains) CheckDomainAvailability(input *CheckDomainAvailabilityInput) (*CheckDomainAvailabilityOutput, error) {
@@ -98,23 +97,106 @@ func (c *Route53Domains) CheckDomainAvailabilityWithContext(ctx aws.Context, inp
 	return out, req.Send()
 }
 
+const opCheckDomainTransferability = "CheckDomainTransferability"
+
+// CheckDomainTransferabilityRequest generates a "aws/request.Request" representing the
+// client's request for the CheckDomainTransferability operation. The "output" return
+// value will be populated with the request's response once the request complets
+// successfuly.
+//
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
+//
+// See CheckDomainTransferability for more information on using the CheckDomainTransferability
+// API call, and error handling.
+//
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
+//
+//    // Example sending a request using the CheckDomainTransferabilityRequest method.
+//    req, resp := client.CheckDomainTransferabilityRequest(params)
+//
+//    err := req.Send()
+//    if err == nil { // resp is now filled
+//        fmt.Println(resp)
+//    }
+//
+// Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/CheckDomainTransferability
+func (c *Route53Domains) CheckDomainTransferabilityRequest(input *CheckDomainTransferabilityInput) (req *request.Request, output *CheckDomainTransferabilityOutput) {
+	op := &request.Operation{
+		Name:       opCheckDomainTransferability,
+		HTTPMethod: "POST",
+		HTTPPath:   "/",
+	}
+
+	if input == nil {
+		input = &CheckDomainTransferabilityInput{}
+	}
+
+	output = &CheckDomainTransferabilityOutput{}
+	req = c.newRequest(op, input, output)
+	return
+}
+
+// CheckDomainTransferability API operation for Amazon Route 53 Domains.
+//
+// Checks whether a domain name can be transferred to Amazon Route 53.
+//
+// Returns awserr.Error for service API and SDK errors. Use runtime type assertions
+// with awserr.Error's Code and Message methods to get detailed information about
+// the error.
+//
+// See the AWS API reference guide for Amazon Route 53 Domains's
+// API operation CheckDomainTransferability for usage and error information.
+//
+// Returned Error Codes:
+//   * ErrCodeInvalidInput "InvalidInput"
+//   The requested item is not acceptable. For example, for an OperationId it
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
+//
+//   * ErrCodeUnsupportedTLD "UnsupportedTLD"
+//   Amazon Route 53 does not support this top-level domain (TLD).
+//
+// Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/CheckDomainTransferability
+func (c *Route53Domains) CheckDomainTransferability(input *CheckDomainTransferabilityInput) (*CheckDomainTransferabilityOutput, error) {
+	req, out := c.CheckDomainTransferabilityRequest(input)
+	return out, req.Send()
+}
+
+// CheckDomainTransferabilityWithContext is the same as CheckDomainTransferability with the addition of
+// the ability to pass a context and additional request options.
+//
+// See CheckDomainTransferability for details on how to use this API operation.
+//
+// The context must be non-nil and will be used for request cancellation. If
+// the context is nil a panic will occur. In the future the SDK may create
+// sub-contexts for http.Requests. See https://golang.org/pkg/context/
+// for more information on using Contexts.
+func (c *Route53Domains) CheckDomainTransferabilityWithContext(ctx aws.Context, input *CheckDomainTransferabilityInput, opts ...request.Option) (*CheckDomainTransferabilityOutput, error) {
+	req, out := c.CheckDomainTransferabilityRequest(input)
+	req.SetContext(ctx)
+	req.ApplyOptions(opts...)
+	return out, req.Send()
+}
+
 const opDeleteTagsForDomain = "DeleteTagsForDomain"
 
 // DeleteTagsForDomainRequest generates a "aws/request.Request" representing the
 // client's request for the DeleteTagsForDomain operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See DeleteTagsForDomain for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the DeleteTagsForDomain method directly
-// instead.
+// See DeleteTagsForDomain for more information on using the DeleteTagsForDomain
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the DeleteTagsForDomainRequest method.
 //    req, resp := client.DeleteTagsForDomainRequest(params)
@@ -145,8 +227,8 @@ func (c *Route53Domains) DeleteTagsForDomainRequest(input *DeleteTagsForDomainIn
 //
 // This operation deletes the specified tags for a domain.
 //
-// All tag operations are eventually consistent; subsequent operations may not
-// immediately represent all issued operations.
+// All tag operations are eventually consistent; subsequent operations might
+// not immediately represent all issued operations.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -158,15 +240,15 @@ func (c *Route53Domains) DeleteTagsForDomainRequest(input *DeleteTagsForDomainIn
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeOperationLimitExceeded "OperationLimitExceeded"
 //   The number of operations or jobs running exceeded the allowed threshold for
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/DeleteTagsForDomain
 func (c *Route53Domains) DeleteTagsForDomain(input *DeleteTagsForDomainInput) (*DeleteTagsForDomainOutput, error) {
@@ -194,19 +276,18 @@ const opDisableDomainAutoRenew = "DisableDomainAutoRenew"
 
 // DisableDomainAutoRenewRequest generates a "aws/request.Request" representing the
 // client's request for the DisableDomainAutoRenew operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See DisableDomainAutoRenew for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the DisableDomainAutoRenew method directly
-// instead.
+// See DisableDomainAutoRenew for more information on using the DisableDomainAutoRenew
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the DisableDomainAutoRenewRequest method.
 //    req, resp := client.DisableDomainAutoRenewRequest(params)
@@ -248,11 +329,11 @@ func (c *Route53Domains) DisableDomainAutoRenewRequest(input *DisableDomainAutoR
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/DisableDomainAutoRenew
 func (c *Route53Domains) DisableDomainAutoRenew(input *DisableDomainAutoRenewInput) (*DisableDomainAutoRenewOutput, error) {
@@ -280,19 +361,18 @@ const opDisableDomainTransferLock = "DisableDomainTransferLock"
 
 // DisableDomainTransferLockRequest generates a "aws/request.Request" representing the
 // client's request for the DisableDomainTransferLock operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See DisableDomainTransferLock for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the DisableDomainTransferLock method directly
-// instead.
+// See DisableDomainTransferLock for more information on using the DisableDomainTransferLock
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the DisableDomainTransferLockRequest method.
 //    req, resp := client.DisableDomainTransferLockRequest(params)
@@ -339,8 +419,8 @@ func (c *Route53Domains) DisableDomainTransferLockRequest(input *DisableDomainTr
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeDuplicateRequest "DuplicateRequest"
 //   The request is already in progress for the domain.
@@ -353,7 +433,7 @@ func (c *Route53Domains) DisableDomainTransferLockRequest(input *DisableDomainTr
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/DisableDomainTransferLock
 func (c *Route53Domains) DisableDomainTransferLock(input *DisableDomainTransferLockInput) (*DisableDomainTransferLockOutput, error) {
@@ -381,19 +461,18 @@ const opEnableDomainAutoRenew = "EnableDomainAutoRenew"
 
 // EnableDomainAutoRenewRequest generates a "aws/request.Request" representing the
 // client's request for the EnableDomainAutoRenew operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See EnableDomainAutoRenew for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the EnableDomainAutoRenew method directly
-// instead.
+// See EnableDomainAutoRenew for more information on using the EnableDomainAutoRenew
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the EnableDomainAutoRenewRequest method.
 //    req, resp := client.EnableDomainAutoRenewRequest(params)
@@ -443,11 +522,11 @@ func (c *Route53Domains) EnableDomainAutoRenewRequest(input *EnableDomainAutoRen
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 //   * ErrCodeTLDRulesViolation "TLDRulesViolation"
 //   The top-level domain does not support this operation.
@@ -478,19 +557,18 @@ const opEnableDomainTransferLock = "EnableDomainTransferLock"
 
 // EnableDomainTransferLockRequest generates a "aws/request.Request" representing the
 // client's request for the EnableDomainTransferLock operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See EnableDomainTransferLock for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the EnableDomainTransferLock method directly
-// instead.
+// See EnableDomainTransferLock for more information on using the EnableDomainTransferLock
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the EnableDomainTransferLockRequest method.
 //    req, resp := client.EnableDomainTransferLockRequest(params)
@@ -535,8 +613,8 @@ func (c *Route53Domains) EnableDomainTransferLockRequest(input *EnableDomainTran
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeDuplicateRequest "DuplicateRequest"
 //   The request is already in progress for the domain.
@@ -549,7 +627,7 @@ func (c *Route53Domains) EnableDomainTransferLockRequest(input *EnableDomainTran
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/EnableDomainTransferLock
 func (c *Route53Domains) EnableDomainTransferLock(input *EnableDomainTransferLockInput) (*EnableDomainTransferLockOutput, error) {
@@ -577,19 +655,18 @@ const opGetContactReachabilityStatus = "GetContactReachabilityStatus"
 
 // GetContactReachabilityStatusRequest generates a "aws/request.Request" representing the
 // client's request for the GetContactReachabilityStatus operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See GetContactReachabilityStatus for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the GetContactReachabilityStatus method directly
-// instead.
+// See GetContactReachabilityStatus for more information on using the GetContactReachabilityStatus
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the GetContactReachabilityStatusRequest method.
 //    req, resp := client.GetContactReachabilityStatusRequest(params)
@@ -635,15 +712,15 @@ func (c *Route53Domains) GetContactReachabilityStatusRequest(input *GetContactRe
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeOperationLimitExceeded "OperationLimitExceeded"
 //   The number of operations or jobs running exceeded the allowed threshold for
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/GetContactReachabilityStatus
 func (c *Route53Domains) GetContactReachabilityStatus(input *GetContactReachabilityStatusInput) (*GetContactReachabilityStatusOutput, error) {
@@ -671,19 +748,18 @@ const opGetDomainDetail = "GetDomainDetail"
 
 // GetDomainDetailRequest generates a "aws/request.Request" representing the
 // client's request for the GetDomainDetail operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See GetDomainDetail for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the GetDomainDetail method directly
-// instead.
+// See GetDomainDetail for more information on using the GetDomainDetail
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the GetDomainDetailRequest method.
 //    req, resp := client.GetDomainDetailRequest(params)
@@ -726,11 +802,11 @@ func (c *Route53Domains) GetDomainDetailRequest(input *GetDomainDetailInput) (re
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/GetDomainDetail
 func (c *Route53Domains) GetDomainDetail(input *GetDomainDetailInput) (*GetDomainDetailOutput, error) {
@@ -758,19 +834,18 @@ const opGetDomainSuggestions = "GetDomainSuggestions"
 
 // GetDomainSuggestionsRequest generates a "aws/request.Request" representing the
 // client's request for the GetDomainSuggestions operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See GetDomainSuggestions for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the GetDomainSuggestions method directly
-// instead.
+// See GetDomainSuggestions for more information on using the GetDomainSuggestions
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the GetDomainSuggestionsRequest method.
 //    req, resp := client.GetDomainSuggestionsRequest(params)
@@ -813,11 +888,11 @@ func (c *Route53Domains) GetDomainSuggestionsRequest(input *GetDomainSuggestions
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/GetDomainSuggestions
 func (c *Route53Domains) GetDomainSuggestions(input *GetDomainSuggestionsInput) (*GetDomainSuggestionsOutput, error) {
@@ -845,19 +920,18 @@ const opGetOperationDetail = "GetOperationDetail"
 
 // GetOperationDetailRequest generates a "aws/request.Request" representing the
 // client's request for the GetOperationDetail operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See GetOperationDetail for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the GetOperationDetail method directly
-// instead.
+// See GetOperationDetail for more information on using the GetOperationDetail
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the GetOperationDetailRequest method.
 //    req, resp := client.GetOperationDetailRequest(params)
@@ -898,8 +972,8 @@ func (c *Route53Domains) GetOperationDetailRequest(input *GetOperationDetailInpu
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/GetOperationDetail
 func (c *Route53Domains) GetOperationDetail(input *GetOperationDetailInput) (*GetOperationDetailOutput, error) {
@@ -927,19 +1001,18 @@ const opListDomains = "ListDomains"
 
 // ListDomainsRequest generates a "aws/request.Request" representing the
 // client's request for the ListDomains operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See ListDomains for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the ListDomains method directly
-// instead.
+// See ListDomains for more information on using the ListDomains
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the ListDomainsRequest method.
 //    req, resp := client.ListDomainsRequest(params)
@@ -987,8 +1060,8 @@ func (c *Route53Domains) ListDomainsRequest(input *ListDomainsInput) (req *reque
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/ListDomains
 func (c *Route53Domains) ListDomains(input *ListDomainsInput) (*ListDomainsOutput, error) {
@@ -1066,19 +1139,18 @@ const opListOperations = "ListOperations"
 
 // ListOperationsRequest generates a "aws/request.Request" representing the
 // client's request for the ListOperations operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See ListOperations for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the ListOperations method directly
-// instead.
+// See ListOperations for more information on using the ListOperations
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the ListOperationsRequest method.
 //    req, resp := client.ListOperationsRequest(params)
@@ -1125,8 +1197,8 @@ func (c *Route53Domains) ListOperationsRequest(input *ListOperationsInput) (req 
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/ListOperations
 func (c *Route53Domains) ListOperations(input *ListOperationsInput) (*ListOperationsOutput, error) {
@@ -1204,19 +1276,18 @@ const opListTagsForDomain = "ListTagsForDomain"
 
 // ListTagsForDomainRequest generates a "aws/request.Request" representing the
 // client's request for the ListTagsForDomain operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See ListTagsForDomain for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the ListTagsForDomain method directly
-// instead.
+// See ListTagsForDomain for more information on using the ListTagsForDomain
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the ListTagsForDomainRequest method.
 //    req, resp := client.ListTagsForDomainRequest(params)
@@ -1248,8 +1319,8 @@ func (c *Route53Domains) ListTagsForDomainRequest(input *ListTagsForDomainInput)
 // This operation returns all of the tags that are associated with the specified
 // domain.
 //
-// All tag operations are eventually consistent; subsequent operations may not
-// immediately represent all issued operations.
+// All tag operations are eventually consistent; subsequent operations might
+// not immediately represent all issued operations.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -1261,15 +1332,15 @@ func (c *Route53Domains) ListTagsForDomainRequest(input *ListTagsForDomainInput)
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeOperationLimitExceeded "OperationLimitExceeded"
 //   The number of operations or jobs running exceeded the allowed threshold for
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/ListTagsForDomain
 func (c *Route53Domains) ListTagsForDomain(input *ListTagsForDomainInput) (*ListTagsForDomainOutput, error) {
@@ -1297,19 +1368,18 @@ const opRegisterDomain = "RegisterDomain"
 
 // RegisterDomainRequest generates a "aws/request.Request" representing the
 // client's request for the RegisterDomain operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See RegisterDomain for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the RegisterDomain method directly
-// instead.
+// See RegisterDomain for more information on using the RegisterDomain
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the RegisterDomainRequest method.
 //    req, resp := client.RegisterDomainRequest(params)
@@ -1374,11 +1444,11 @@ func (c *Route53Domains) RegisterDomainRequest(input *RegisterDomainInput) (req 
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 //   * ErrCodeDuplicateRequest "DuplicateRequest"
 //   The request is already in progress for the domain.
@@ -1419,19 +1489,18 @@ const opRenewDomain = "RenewDomain"
 
 // RenewDomainRequest generates a "aws/request.Request" representing the
 // client's request for the RenewDomain operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See RenewDomain for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the RenewDomain method directly
-// instead.
+// See RenewDomain for more information on using the RenewDomain
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the RenewDomainRequest method.
 //    req, resp := client.RenewDomainRequest(params)
@@ -1479,11 +1548,11 @@ func (c *Route53Domains) RenewDomainRequest(input *RenewDomainInput) (req *reque
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 //   * ErrCodeDuplicateRequest "DuplicateRequest"
 //   The request is already in progress for the domain.
@@ -1521,19 +1590,18 @@ const opResendContactReachabilityEmail = "ResendContactReachabilityEmail"
 
 // ResendContactReachabilityEmailRequest generates a "aws/request.Request" representing the
 // client's request for the ResendContactReachabilityEmail operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See ResendContactReachabilityEmail for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the ResendContactReachabilityEmail method directly
-// instead.
+// See ResendContactReachabilityEmail for more information on using the ResendContactReachabilityEmail
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the ResendContactReachabilityEmailRequest method.
 //    req, resp := client.ResendContactReachabilityEmailRequest(params)
@@ -1576,15 +1644,15 @@ func (c *Route53Domains) ResendContactReachabilityEmailRequest(input *ResendCont
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeOperationLimitExceeded "OperationLimitExceeded"
 //   The number of operations or jobs running exceeded the allowed threshold for
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/ResendContactReachabilityEmail
 func (c *Route53Domains) ResendContactReachabilityEmail(input *ResendContactReachabilityEmailInput) (*ResendContactReachabilityEmailOutput, error) {
@@ -1612,19 +1680,18 @@ const opRetrieveDomainAuthCode = "RetrieveDomainAuthCode"
 
 // RetrieveDomainAuthCodeRequest generates a "aws/request.Request" representing the
 // client's request for the RetrieveDomainAuthCode operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See RetrieveDomainAuthCode for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the RetrieveDomainAuthCode method directly
-// instead.
+// See RetrieveDomainAuthCode for more information on using the RetrieveDomainAuthCode
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the RetrieveDomainAuthCodeRequest method.
 //    req, resp := client.RetrieveDomainAuthCodeRequest(params)
@@ -1666,11 +1733,11 @@ func (c *Route53Domains) RetrieveDomainAuthCodeRequest(input *RetrieveDomainAuth
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/RetrieveDomainAuthCode
 func (c *Route53Domains) RetrieveDomainAuthCode(input *RetrieveDomainAuthCodeInput) (*RetrieveDomainAuthCodeOutput, error) {
@@ -1698,19 +1765,18 @@ const opTransferDomain = "TransferDomain"
 
 // TransferDomainRequest generates a "aws/request.Request" representing the
 // client's request for the TransferDomain operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See TransferDomain for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the TransferDomain method directly
-// instead.
+// See TransferDomain for more information on using the TransferDomain
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the TransferDomainRequest method.
 //    req, resp := client.TransferDomainRequest(params)
@@ -1775,11 +1841,11 @@ func (c *Route53Domains) TransferDomainRequest(input *TransferDomainInput) (req 
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 //   * ErrCodeDuplicateRequest "DuplicateRequest"
 //   The request is already in progress for the domain.
@@ -1820,19 +1886,18 @@ const opUpdateDomainContact = "UpdateDomainContact"
 
 // UpdateDomainContactRequest generates a "aws/request.Request" representing the
 // client's request for the UpdateDomainContact operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See UpdateDomainContact for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the UpdateDomainContact method directly
-// instead.
+// See UpdateDomainContact for more information on using the UpdateDomainContact
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the UpdateDomainContactRequest method.
 //    req, resp := client.UpdateDomainContactRequest(params)
@@ -1880,8 +1945,8 @@ func (c *Route53Domains) UpdateDomainContactRequest(input *UpdateDomainContactIn
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeDuplicateRequest "DuplicateRequest"
 //   The request is already in progress for the domain.
@@ -1894,7 +1959,7 @@ func (c *Route53Domains) UpdateDomainContactRequest(input *UpdateDomainContactIn
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/UpdateDomainContact
 func (c *Route53Domains) UpdateDomainContact(input *UpdateDomainContactInput) (*UpdateDomainContactOutput, error) {
@@ -1922,19 +1987,18 @@ const opUpdateDomainContactPrivacy = "UpdateDomainContactPrivacy"
 
 // UpdateDomainContactPrivacyRequest generates a "aws/request.Request" representing the
 // client's request for the UpdateDomainContactPrivacy operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See UpdateDomainContactPrivacy for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the UpdateDomainContactPrivacy method directly
-// instead.
+// See UpdateDomainContactPrivacy for more information on using the UpdateDomainContactPrivacy
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the UpdateDomainContactPrivacyRequest method.
 //    req, resp := client.UpdateDomainContactPrivacyRequest(params)
@@ -1985,8 +2049,8 @@ func (c *Route53Domains) UpdateDomainContactPrivacyRequest(input *UpdateDomainCo
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeDuplicateRequest "DuplicateRequest"
 //   The request is already in progress for the domain.
@@ -1999,7 +2063,7 @@ func (c *Route53Domains) UpdateDomainContactPrivacyRequest(input *UpdateDomainCo
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/UpdateDomainContactPrivacy
 func (c *Route53Domains) UpdateDomainContactPrivacy(input *UpdateDomainContactPrivacyInput) (*UpdateDomainContactPrivacyOutput, error) {
@@ -2027,19 +2091,18 @@ const opUpdateDomainNameservers = "UpdateDomainNameservers"
 
 // UpdateDomainNameserversRequest generates a "aws/request.Request" representing the
 // client's request for the UpdateDomainNameservers operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See UpdateDomainNameservers for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the UpdateDomainNameservers method directly
-// instead.
+// See UpdateDomainNameservers for more information on using the UpdateDomainNameservers
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the UpdateDomainNameserversRequest method.
 //    req, resp := client.UpdateDomainNameserversRequest(params)
@@ -2087,8 +2150,8 @@ func (c *Route53Domains) UpdateDomainNameserversRequest(input *UpdateDomainNames
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeDuplicateRequest "DuplicateRequest"
 //   The request is already in progress for the domain.
@@ -2101,7 +2164,7 @@ func (c *Route53Domains) UpdateDomainNameserversRequest(input *UpdateDomainNames
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/UpdateDomainNameservers
 func (c *Route53Domains) UpdateDomainNameservers(input *UpdateDomainNameserversInput) (*UpdateDomainNameserversOutput, error) {
@@ -2129,19 +2192,18 @@ const opUpdateTagsForDomain = "UpdateTagsForDomain"
 
 // UpdateTagsForDomainRequest generates a "aws/request.Request" representing the
 // client's request for the UpdateTagsForDomain operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See UpdateTagsForDomain for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the UpdateTagsForDomain method directly
-// instead.
+// See UpdateTagsForDomain for more information on using the UpdateTagsForDomain
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the UpdateTagsForDomainRequest method.
 //    req, resp := client.UpdateTagsForDomainRequest(params)
@@ -2172,8 +2234,8 @@ func (c *Route53Domains) UpdateTagsForDomainRequest(input *UpdateTagsForDomainIn
 //
 // This operation adds or updates tags for a specified domain.
 //
-// All tag operations are eventually consistent; subsequent operations may not
-// immediately represent all issued operations.
+// All tag operations are eventually consistent; subsequent operations might
+// not immediately represent all issued operations.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -2185,15 +2247,15 @@ func (c *Route53Domains) UpdateTagsForDomainRequest(input *UpdateTagsForDomainIn
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 //   * ErrCodeOperationLimitExceeded "OperationLimitExceeded"
 //   The number of operations or jobs running exceeded the allowed threshold for
 //   the account.
 //
 //   * ErrCodeUnsupportedTLD "UnsupportedTLD"
-//   Amazon Route 53 does not support this top-level domain.
+//   Amazon Route 53 does not support this top-level domain (TLD).
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/UpdateTagsForDomain
 func (c *Route53Domains) UpdateTagsForDomain(input *UpdateTagsForDomainInput) (*UpdateTagsForDomainOutput, error) {
@@ -2221,19 +2283,18 @@ const opViewBilling = "ViewBilling"
 
 // ViewBillingRequest generates a "aws/request.Request" representing the
 // client's request for the ViewBilling operation. The "output" return
-// value can be used to capture response data after the request's "Send" method
-// is called.
+// value will be populated with the request's response once the request complets
+// successfuly.
 //
-// See ViewBilling for usage and error information.
+// Use "Send" method on the returned Request to send the API call to the service.
+// the "output" return value is not valid until after Send returns without error.
 //
-// Creating a request object using this method should be used when you want to inject
-// custom logic into the request's lifecycle using a custom handler, or if you want to
-// access properties on the request object before or after sending the request. If
-// you just want the service response, call the ViewBilling method directly
-// instead.
+// See ViewBilling for more information on using the ViewBilling
+// API call, and error handling.
 //
-// Note: You must call the "Send" method on the returned request object in order
-// to execute the request.
+// This method is useful when you want to inject custom logic or configuration
+// into the SDK's request lifecycle. Such as custom headers, or retry logic.
+//
 //
 //    // Example sending a request using the ViewBillingRequest method.
 //    req, resp := client.ViewBillingRequest(params)
@@ -2275,8 +2336,8 @@ func (c *Route53Domains) ViewBillingRequest(input *ViewBillingInput) (req *reque
 // Returned Error Codes:
 //   * ErrCodeInvalidInput "InvalidInput"
 //   The requested item is not acceptable. For example, for an OperationId it
-//   may refer to the ID of an operation that is already completed. For a domain
-//   name, it may not be a valid domain name or belong to the requester account.
+//   might refer to the ID of an operation that is already completed. For a domain
+//   name, it might not be a valid domain name or belong to the requester account.
 //
 // Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/ViewBilling
 func (c *Route53Domains) ViewBilling(input *ViewBillingInput) (*ViewBillingOutput, error) {
@@ -2427,7 +2488,7 @@ type CheckDomainAvailabilityOutput struct {
 
 	// Whether the domain name is available for registering.
 	//
-	// You can only register domains designated as AVAILABLE.
+	// You can register only domains designated as AVAILABLE.
 	//
 	// Valid values:
 	//
@@ -2471,6 +2532,89 @@ func (s CheckDomainAvailabilityOutput) GoString() string {
 // SetAvailability sets the Availability field's value.
 func (s *CheckDomainAvailabilityOutput) SetAvailability(v string) *CheckDomainAvailabilityOutput {
 	s.Availability = &v
+	return s
+}
+
+// The CheckDomainTransferability request contains the following elements.
+// Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/CheckDomainTransferabilityRequest
+type CheckDomainTransferabilityInput struct {
+	_ struct{} `type:"structure"`
+
+	// If the registrar for the top-level domain (TLD) requires an authorization
+	// code to transfer the domain, the code that you got from the current registrar
+	// for the domain.
+	AuthCode *string `type:"string"`
+
+	// The name of the domain that you want to transfer to Amazon Route 53.
+	//
+	// Constraints: The domain name can contain only the letters a through z, the
+	// numbers 0 through 9, and hyphen (-). Internationalized Domain Names are not
+	// supported.
+	//
+	// DomainName is a required field
+	DomainName *string `type:"string" required:"true"`
+}
+
+// String returns the string representation
+func (s CheckDomainTransferabilityInput) String() string {
+	return awsutil.Prettify(s)
+}
+
+// GoString returns the string representation
+func (s CheckDomainTransferabilityInput) GoString() string {
+	return s.String()
+}
+
+// Validate inspects the fields of the type to determine if they are valid.
+func (s *CheckDomainTransferabilityInput) Validate() error {
+	invalidParams := request.ErrInvalidParams{Context: "CheckDomainTransferabilityInput"}
+	if s.DomainName == nil {
+		invalidParams.Add(request.NewErrParamRequired("DomainName"))
+	}
+
+	if invalidParams.Len() > 0 {
+		return invalidParams
+	}
+	return nil
+}
+
+// SetAuthCode sets the AuthCode field's value.
+func (s *CheckDomainTransferabilityInput) SetAuthCode(v string) *CheckDomainTransferabilityInput {
+	s.AuthCode = &v
+	return s
+}
+
+// SetDomainName sets the DomainName field's value.
+func (s *CheckDomainTransferabilityInput) SetDomainName(v string) *CheckDomainTransferabilityInput {
+	s.DomainName = &v
+	return s
+}
+
+// The CheckDomainTransferability response includes the following elements.
+// Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/CheckDomainTransferabilityResponse
+type CheckDomainTransferabilityOutput struct {
+	_ struct{} `type:"structure"`
+
+	// A complex type that contains information about whether the specified domain
+	// can be transferred to Amazon Route 53.
+	//
+	// Transferability is a required field
+	Transferability *DomainTransferability `type:"structure" required:"true"`
+}
+
+// String returns the string representation
+func (s CheckDomainTransferabilityOutput) String() string {
+	return awsutil.Prettify(s)
+}
+
+// GoString returns the string representation
+func (s CheckDomainTransferabilityOutput) GoString() string {
+	return s.String()
+}
+
+// SetTransferability sets the Transferability field's value.
+func (s *CheckDomainTransferabilityOutput) SetTransferability(v *DomainTransferability) *CheckDomainTransferabilityOutput {
+	s.Transferability = v
 	return s
 }
 
@@ -2950,6 +3094,40 @@ func (s *DomainSummary) SetExpiry(v time.Time) *DomainSummary {
 // SetTransferLock sets the TransferLock field's value.
 func (s *DomainSummary) SetTransferLock(v bool) *DomainSummary {
 	s.TransferLock = &v
+	return s
+}
+
+// Please also see https://docs.aws.amazon.com/goto/WebAPI/route53domains-2014-05-15/DomainTransferability
+type DomainTransferability struct {
+	_ struct{} `type:"structure"`
+
+	// Whether the domain name can be transferred to Amazon Route 53.
+	//
+	// You can transfer only domains that have a value of TRANSFERABLE for Transferable.
+	//
+	// Valid values:
+	//
+	// TRANSFERABLEThe domain name can be transferred to Amazon Route 53.
+	//
+	// UNTRANSFERRABLEThe domain name can't be transferred to Amazon Route 53.
+	//
+	// DONT_KNOWReserved for future use.
+	Transferable *string `type:"string" enum:"Transferable"`
+}
+
+// String returns the string representation
+func (s DomainTransferability) String() string {
+	return awsutil.Prettify(s)
+}
+
+// GoString returns the string representation
+func (s DomainTransferability) GoString() string {
+	return s.String()
+}
+
+// SetTransferable sets the Transferable field's value.
+func (s *DomainTransferability) SetTransferable(v string) *DomainTransferability {
+	s.Transferable = &v
 	return s
 }
 
@@ -5001,7 +5179,7 @@ type UpdateDomainNameserversInput struct {
 	DomainName *string `type:"string" required:"true"`
 
 	// The authorization key for .fi domains
-	FIAuthKey *string `type:"string"`
+	FIAuthKey *string `deprecated:"true" type:"string"`
 
 	// A list of new name servers for the domain.
 	//
@@ -6037,8 +6215,17 @@ const (
 	// ExtraParamNameFiIdNumber is a ExtraParamName enum value
 	ExtraParamNameFiIdNumber = "FI_ID_NUMBER"
 
+	// ExtraParamNameFiNationality is a ExtraParamName enum value
+	ExtraParamNameFiNationality = "FI_NATIONALITY"
+
+	// ExtraParamNameFiOrganizationType is a ExtraParamName enum value
+	ExtraParamNameFiOrganizationType = "FI_ORGANIZATION_TYPE"
+
 	// ExtraParamNameItPin is a ExtraParamName enum value
 	ExtraParamNameItPin = "IT_PIN"
+
+	// ExtraParamNameItRegistrantEntityType is a ExtraParamName enum value
+	ExtraParamNameItRegistrantEntityType = "IT_REGISTRANT_ENTITY_TYPE"
 
 	// ExtraParamNameRuPassportData is a ExtraParamName enum value
 	ExtraParamNameRuPassportData = "RU_PASSPORT_DATA"
@@ -6051,6 +6238,12 @@ const (
 
 	// ExtraParamNameVatNumber is a ExtraParamName enum value
 	ExtraParamNameVatNumber = "VAT_NUMBER"
+
+	// ExtraParamNameUkContactType is a ExtraParamName enum value
+	ExtraParamNameUkContactType = "UK_CONTACT_TYPE"
+
+	// ExtraParamNameUkCompanyNumber is a ExtraParamName enum value
+	ExtraParamNameUkCompanyNumber = "UK_COMPANY_NUMBER"
 )
 
 const (
@@ -6091,6 +6284,33 @@ const (
 
 	// OperationTypeDomainLock is a OperationType enum value
 	OperationTypeDomainLock = "DOMAIN_LOCK"
+
+	// OperationTypeEnableAutorenew is a OperationType enum value
+	OperationTypeEnableAutorenew = "ENABLE_AUTORENEW"
+
+	// OperationTypeDisableAutorenew is a OperationType enum value
+	OperationTypeDisableAutorenew = "DISABLE_AUTORENEW"
+
+	// OperationTypeAddDnssec is a OperationType enum value
+	OperationTypeAddDnssec = "ADD_DNSSEC"
+
+	// OperationTypeRemoveDnssec is a OperationType enum value
+	OperationTypeRemoveDnssec = "REMOVE_DNSSEC"
+
+	// OperationTypeExpireDomain is a OperationType enum value
+	OperationTypeExpireDomain = "EXPIRE_DOMAIN"
+
+	// OperationTypeTransferOutDomain is a OperationType enum value
+	OperationTypeTransferOutDomain = "TRANSFER_OUT_DOMAIN"
+
+	// OperationTypeChangeDomainOwner is a OperationType enum value
+	OperationTypeChangeDomainOwner = "CHANGE_DOMAIN_OWNER"
+
+	// OperationTypeRenewDomain is a OperationType enum value
+	OperationTypeRenewDomain = "RENEW_DOMAIN"
+
+	// OperationTypePushDomain is a OperationType enum value
+	OperationTypePushDomain = "PUSH_DOMAIN"
 )
 
 const (
@@ -6102,4 +6322,26 @@ const (
 
 	// ReachabilityStatusExpired is a ReachabilityStatus enum value
 	ReachabilityStatusExpired = "EXPIRED"
+)
+
+// Whether the domain name can be transferred to Amazon Route 53.
+//
+// You can transfer only domains that have a value of TRANSFERABLE for Transferable.
+//
+// Valid values:
+//
+// TRANSFERABLEThe domain name can be transferred to Amazon Route 53.
+//
+// UNTRANSFERRABLEThe domain name can't be transferred to Amazon Route 53.
+//
+// DONT_KNOWReserved for future use.
+const (
+	// TransferableTransferable is a Transferable enum value
+	TransferableTransferable = "TRANSFERABLE"
+
+	// TransferableUntransferable is a Transferable enum value
+	TransferableUntransferable = "UNTRANSFERABLE"
+
+	// TransferableDontKnow is a Transferable enum value
+	TransferableDontKnow = "DONT_KNOW"
 )

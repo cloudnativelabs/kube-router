@@ -21,7 +21,7 @@ import (
 //
 // The best way to use this interface is so the SDK's service client's calls
 // can be stubbed out for unit testing your code with the SDK without needing
-// to inject custom request handlers into the the SDK's request pipeline.
+// to inject custom request handlers into the SDK's request pipeline.
 //
 //    // myFunc uses an SDK service client to make a request to
 //    // Amazon Kinesis Analytics.
@@ -68,6 +68,10 @@ type KinesisAnalyticsAPI interface {
 	AddApplicationInputWithContext(aws.Context, *kinesisanalytics.AddApplicationInputInput, ...request.Option) (*kinesisanalytics.AddApplicationInputOutput, error)
 	AddApplicationInputRequest(*kinesisanalytics.AddApplicationInputInput) (*request.Request, *kinesisanalytics.AddApplicationInputOutput)
 
+	AddApplicationInputProcessingConfiguration(*kinesisanalytics.AddApplicationInputProcessingConfigurationInput) (*kinesisanalytics.AddApplicationInputProcessingConfigurationOutput, error)
+	AddApplicationInputProcessingConfigurationWithContext(aws.Context, *kinesisanalytics.AddApplicationInputProcessingConfigurationInput, ...request.Option) (*kinesisanalytics.AddApplicationInputProcessingConfigurationOutput, error)
+	AddApplicationInputProcessingConfigurationRequest(*kinesisanalytics.AddApplicationInputProcessingConfigurationInput) (*request.Request, *kinesisanalytics.AddApplicationInputProcessingConfigurationOutput)
+
 	AddApplicationOutput(*kinesisanalytics.AddApplicationOutputInput) (*kinesisanalytics.AddApplicationOutputOutput, error)
 	AddApplicationOutputWithContext(aws.Context, *kinesisanalytics.AddApplicationOutputInput, ...request.Option) (*kinesisanalytics.AddApplicationOutputOutput, error)
 	AddApplicationOutputRequest(*kinesisanalytics.AddApplicationOutputInput) (*request.Request, *kinesisanalytics.AddApplicationOutputOutput)
@@ -87,6 +91,10 @@ type KinesisAnalyticsAPI interface {
 	DeleteApplicationCloudWatchLoggingOption(*kinesisanalytics.DeleteApplicationCloudWatchLoggingOptionInput) (*kinesisanalytics.DeleteApplicationCloudWatchLoggingOptionOutput, error)
 	DeleteApplicationCloudWatchLoggingOptionWithContext(aws.Context, *kinesisanalytics.DeleteApplicationCloudWatchLoggingOptionInput, ...request.Option) (*kinesisanalytics.DeleteApplicationCloudWatchLoggingOptionOutput, error)
 	DeleteApplicationCloudWatchLoggingOptionRequest(*kinesisanalytics.DeleteApplicationCloudWatchLoggingOptionInput) (*request.Request, *kinesisanalytics.DeleteApplicationCloudWatchLoggingOptionOutput)
+
+	DeleteApplicationInputProcessingConfiguration(*kinesisanalytics.DeleteApplicationInputProcessingConfigurationInput) (*kinesisanalytics.DeleteApplicationInputProcessingConfigurationOutput, error)
+	DeleteApplicationInputProcessingConfigurationWithContext(aws.Context, *kinesisanalytics.DeleteApplicationInputProcessingConfigurationInput, ...request.Option) (*kinesisanalytics.DeleteApplicationInputProcessingConfigurationOutput, error)
+	DeleteApplicationInputProcessingConfigurationRequest(*kinesisanalytics.DeleteApplicationInputProcessingConfigurationInput) (*request.Request, *kinesisanalytics.DeleteApplicationInputProcessingConfigurationOutput)
 
 	DeleteApplicationOutput(*kinesisanalytics.DeleteApplicationOutputInput) (*kinesisanalytics.DeleteApplicationOutputOutput, error)
 	DeleteApplicationOutputWithContext(aws.Context, *kinesisanalytics.DeleteApplicationOutputInput, ...request.Option) (*kinesisanalytics.DeleteApplicationOutputOutput, error)

@@ -658,6 +658,70 @@ func TestNormalizationFuncShouldChangeFlagName(t *testing.T) {
 	}
 }
 
+// Related to https://github.com/spf13/cobra/issues/521.
+func TestNormalizationSharedFlags(t *testing.T) {
+	f := NewFlagSet("set f", ContinueOnError)
+	g := NewFlagSet("set g", ContinueOnError)
+	nfunc := wordSepNormalizeFunc
+	testName := "valid_flag"
+	normName := nfunc(nil, testName)
+	if testName == string(normName) {
+		t.Error("TestNormalizationSharedFlags meaningless: the original and normalized flag names are identical:", testName)
+	}
+
+	f.Bool(testName, false, "bool value")
+	g.AddFlagSet(f)
+
+	f.SetNormalizeFunc(nfunc)
+	g.SetNormalizeFunc(nfunc)
+
+	if len(f.formal) != 1 {
+		t.Error("Normalizing flags should not result in duplications in the flag set:", f.formal)
+	}
+	if f.orderedFormal[0].Name != string(normName) {
+		t.Error("Flag name not normalized")
+	}
+	for k := range f.formal {
+		if k != "valid.flag" {
+			t.Errorf("The key in the flag map should have been normalized: wanted \"%s\", got \"%s\" instead", normName, k)
+		}
+	}
+
+	if !reflect.DeepEqual(f.formal, g.formal) || !reflect.DeepEqual(f.orderedFormal, g.orderedFormal) {
+		t.Error("Two flag sets sharing the same flags should stay consistent after being normalized. Original set:", f.formal, "Duplicate set:", g.formal)
+	}
+}
+
+func TestNormalizationSetFlags(t *testing.T) {
+	f := NewFlagSet("normalized", ContinueOnError)
+	nfunc := wordSepNormalizeFunc
+	testName := "valid_flag"
+	normName := nfunc(nil, testName)
+	if testName == string(normName) {
+		t.Error("TestNormalizationSetFlags meaningless: the original and normalized flag names are identical:", testName)
+	}
+
+	f.Bool(testName, false, "bool value")
+	f.Set(testName, "true")
+	f.SetNormalizeFunc(nfunc)
+
+	if len(f.formal) != 1 {
+		t.Error("Normalizing flags should not result in duplications in the flag set:", f.formal)
+	}
+	if f.orderedFormal[0].Name != string(normName) {
+		t.Error("Flag name not normalized")
+	}
+	for k := range f.formal {
+		if k != "valid.flag" {
+			t.Errorf("The key in the flag map should have been normalized: wanted \"%s\", got \"%s\" instead", normName, k)
+		}
+	}
+
+	if !reflect.DeepEqual(f.formal, f.actual) {
+		t.Error("The map of set flags should get normalized. Formal:", f.formal, "Actual:", f.actual)
+	}
+}
+
 // Declare a user-defined flag type.
 type flagVar []string
 
@@ -978,16 +1042,17 @@ const defaultOutput = `      --A                         for bootstrapping, allo
       --IP ip                     IP address with no default
       --IPMask ipMask             Netmask address with no default
       --IPNet ipNet               IP network with no default
-      --Ints intSlice             int slice with zero default
+      --Ints ints                 int slice with zero default
       --N int                     a non-zero int (default 27)
       --ND1 string[="bar"]        a string with NoOptDefVal (default "foo")
       --ND2 num[=4321]            a num with NoOptDefVal (default 1234)
       --StringArray stringArray   string array with zero default
-      --StringSlice stringSlice   string slice with zero default
+      --StringSlice strings       string slice with zero default
       --Z int                     an int that defaults to zero
       --custom custom             custom Value implementation
       --customP custom            a VarP with default (default 10)
       --maxT timeout              set timeout for dial
+  -v, --verbose count             verbosity
 `
 
 // Custom value that satisfies the Value interface.
@@ -1028,6 +1093,7 @@ func TestPrintDefaults(t *testing.T) {
 	fs.ShorthandLookup("E").NoOptDefVal = "1234"
 	fs.StringSlice("StringSlice", []string{}, "string slice with zero default")
 	fs.StringArray("StringArray", []string{}, "string array with zero default")
+	fs.CountP("verbose", "v", "verbosity")
 
 	var cv customValue
 	fs.Var(&cv, "custom", "custom Value implementation")

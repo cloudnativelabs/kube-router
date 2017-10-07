@@ -13,6 +13,7 @@ import (
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/pkg/estimator"
 	"github.com/influxdata/influxdb/pkg/limiter"
+	"github.com/influxdata/influxdb/query"
 	"github.com/uber-go/zap"
 )
 
@@ -42,7 +43,8 @@ type Engine interface {
 	Restore(r io.Reader, basePath string) error
 	Import(r io.Reader, basePath string) error
 
-	CreateIterator(measurement string, opt influxql.IteratorOptions) (influxql.Iterator, error)
+	CreateIterator(measurement string, opt query.IteratorOptions) (query.Iterator, error)
+	IteratorCost(measurement string, opt query.IteratorOptions) (query.IteratorCost, error)
 	WritePoints(points []models.Point) error
 
 	CreateSeriesIfNotExists(key, name []byte, tags models.Tags) error
@@ -63,20 +65,20 @@ type Engine interface {
 	// TagKeys(name []byte) ([][]byte, error)
 	HasTagKey(name, key []byte) (bool, error)
 	MeasurementTagKeysByExpr(name []byte, expr influxql.Expr) (map[string]struct{}, error)
-	MeasurementTagKeyValuesByExpr(name []byte, key []string, expr influxql.Expr, keysSorted bool) ([][]string, error)
+	MeasurementTagKeyValuesByExpr(auth query.Authorizer, name []byte, key []string, expr influxql.Expr, keysSorted bool) ([][]string, error)
 	ForEachMeasurementTagKey(name []byte, fn func(key []byte) error) error
 	TagKeyCardinality(name, key []byte) int
 
 	// InfluxQL iterators
 	MeasurementSeriesKeysByExpr(name []byte, condition influxql.Expr) ([][]byte, error)
-	ForEachMeasurementSeriesByExpr(name []byte, expr influxql.Expr, fn func(tags models.Tags) error) error
-	SeriesPointIterator(opt influxql.IteratorOptions) (influxql.Iterator, error)
+	SeriesPointIterator(opt query.IteratorOptions) (query.Iterator, error)
 
 	// Statistics will return statistics relevant to this engine.
 	Statistics(tags map[string]string) []models.Statistic
 	LastModified() time.Time
 	DiskSize() int64
 	IsIdle() bool
+	Free() error
 
 	io.WriterTo
 }
@@ -142,10 +144,11 @@ func NewEngine(id uint64, i Index, database, path string, walPath string, option
 
 // EngineOptions represents the options used to initialize the engine.
 type EngineOptions struct {
-	EngineVersion     string
-	IndexVersion      string
-	ShardID           uint64
-	InmemIndex        interface{} // shared in-memory index
+	EngineVersion string
+	IndexVersion  string
+	ShardID       uint64
+	InmemIndex    interface{} // shared in-memory index
+
 	CompactionLimiter limiter.Fixed
 
 	Config Config
