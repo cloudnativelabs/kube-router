@@ -95,6 +95,12 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 	}
 
+	glog.Info("Populating ipsets.")
+	err = nrc.syncNodeIPSets()
+	if err != nil {
+		glog.Errorf("Failed initial ipset setup: %s", err)
+	}
+
 	// In case of cluster provisioned on AWS disable source-destination check
 	nrc.disableSourceDestinationCheck()
 
@@ -102,15 +108,6 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	err = nrc.enableForwarding()
 	if err != nil {
 		glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
-	}
-
-	// Update ipset entries
-	if nrc.enablePodEgress || nrc.enableOverlays {
-		glog.Info("Populating ipsets.")
-		err := nrc.syncNodeIPSets()
-		if err != nil {
-			glog.Errorf("Error synchronizing Pod subnet ipset: %s", err.Error())
-		}
 	}
 
 	// Handle ipip tunnel overlay
@@ -198,10 +195,10 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 		// Update ipset entries
 		if nrc.enablePodEgress || nrc.enableOverlays {
-			glog.Info("Populating ipsets.")
+			glog.Info("Syncing ipsets.")
 			err := nrc.syncNodeIPSets()
 			if err != nil {
-				glog.Errorf("Error synchronizing Pod subnet ipset: %s", err.Error())
+				glog.Errorf("Error synchronizing ipsets: %s", err.Error())
 			}
 		}
 
@@ -294,14 +291,16 @@ func deleteBadPodEgressRules() error {
 	for _, args := range podEgressArgsBad {
 		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {
-			return errors.New("Failed to lookup iptable rule to masqurade outbound traffic from pods: " + err.Error())
+			return fmt.Errorf("Failed to lookup iptables rule: %s", err.Error())
 		}
 
 		if exists {
 			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
 			if err != nil {
-				return errors.New("Failed to delete old/bad iptable rule to masqurade outbound traffic from pods: " +
-					err.Error() + ". Pod egress might still work, or bugs may persist after upgrade...")
+				return fmt.Errorf("Failed to delete old/bad iptable rule to "+
+					"masqurade outbound traffic from pods: %s.\n"+
+					"Pod egress might still work, or bugs may persist after upgrade...",
+					err)
 			}
 			glog.Infof("Deleted old/bad iptables rule to masqurade outbound traffic from pods.")
 		}
@@ -725,52 +724,10 @@ func (nrc *NetworkRoutingController) Cleanup() {
 		glog.Warningf("Error deleting Pod egress iptable rule: %s", err.Error())
 	}
 
-	err = deleteNodeAddrIPSet()
+	err = nrc.ipSetHandler.DestroyAllWithin()
 	if err != nil {
-		glog.Warningf("Error deleting Node IP ipset: %s", err.Error())
+		glog.Warningf("Error deleting ipset: %s", err.Error())
 	}
-
-	// Overlay cleanup
-	err = deletePodSubnetIpSet()
-	if err != nil {
-		glog.Warningf("Error deleting Pod subnet ipset: %s", err.Error())
-	}
-}
-
-func deletePodSubnetIpSet() error {
-	ipset, err := utils.NewIPSet()
-	if err != nil {
-		return err
-	}
-
-	ipset.Sets[podSubnetsIPSetName] = &utils.Set{
-		Name: podSubnetsIPSetName,
-	}
-
-	err = ipset.Destroy()
-	if err != nil {
-		return errors.New("Failure deleting Pod egress ipset: " + err.Error())
-	}
-
-	return nil
-}
-
-func deleteNodeAddrIPSet() error {
-	ipset, err := utils.NewIPSet()
-	if err != nil {
-		return err
-	}
-
-	ipset.Sets[nodeAddrsIPSetName] = &utils.Set{
-		Name: nodeAddrsIPSetName,
-	}
-
-	err = ipset.Destroy()
-	if err != nil {
-		return errors.New("Failure deleting Pod egress ipset: " + err.Error())
-	}
-
-	return nil
 }
 
 func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
@@ -815,9 +772,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 }
 
 func (nrc *NetworkRoutingController) syncNodeIPSets() error {
-	glog.Infof("Syncing Pod subnet ipset entries.")
-
-	// get the current list of the nodes from API server
+	// Get the current list of the nodes from API server
 	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		return errors.New("Failed to list nodes from API server: " + err.Error())
@@ -835,47 +790,34 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		currentNodeIPs = append(currentNodeIPs, nodeIP.String())
 	}
 
-	err = nrc.createRefreshPermanentIPSet(podSubnetsIPSetName, utils.TypeHashNet, currentPodCidrs)
-	if err != nil {
-		return fmt.Errorf("Failed to create/update Pod subnet ipset: %s", err)
-	}
-
-	err = nrc.createRefreshPermanentIPSet(nodeAddrsIPSetName, utils.TypeHashIP, currentNodeIPs)
-	if err != nil {
-		return fmt.Errorf("Failed to create/update Node IPs ipset: %s", err)
-	}
-
-	return nil
-}
-
-func (nrc *NetworkRoutingController) createRefreshPermanentIPSet(name string,
-	setType string, entries []string) error {
-	var err error
-	if nrc.ipSetHandler.Get(name) == nil {
-		glog.Infof("ipset set \"%s\" not found. Creating.", name)
-
-		_, err = nrc.ipSetHandler.Create(name, setType, utils.OptionTimeout, "0")
+	// Syncing Pod subnet ipset entries
+	psSet := nrc.ipSetHandler.Get(podSubnetsIPSetName)
+	if psSet == nil {
+		glog.Infof("Creating missing ipset \"%s\"", podSubnetsIPSetName)
+		_, err = nrc.ipSetHandler.Create(podSubnetsIPSetName, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("Failed to create ipset set called \"%s\": %s",
-				name, err.Error())
-		}
-		nrc.ipSetHandler.Save()
-	}
-
-	// Debug
-	if len(nrc.ipSetHandler.Sets) == 0 {
-		return fmt.Errorf("Something went wrong. nrc ipset set slice is empty")
-	}
-	for _, set := range nrc.ipSetHandler.Sets {
-		if set.IPSet == nil {
-			return fmt.Errorf("Something went wrong. nrc set %s has no IPSet pointer.", set.Name)
+			return fmt.Errorf("ipset \"%s\" not found in controller instance.",
+				podSubnetsIPSetName)
 		}
 	}
-
-	err = nrc.ipSetHandler.Get(name).Refresh(entries, utils.OptionTimeout, "0")
+	err = psSet.Refresh(currentPodCidrs, psSet.Options...)
 	if err != nil {
-		return fmt.Errorf("Failed to update entries in ipset set called \"%s\": %s",
-			name, err.Error())
+		return fmt.Errorf("Failed to sync Pod Subnets ipset: %s", err)
+	}
+
+	// Syncing Node Addresses ipset entries
+	naSet := nrc.ipSetHandler.Get(nodeAddrsIPSetName)
+	if naSet == nil {
+		glog.Infof("Creating missing ipset \"%s\"", nodeAddrsIPSetName)
+		_, err = nrc.ipSetHandler.Create(nodeAddrsIPSetName, utils.OptionTimeout, "0")
+		if err != nil {
+			return fmt.Errorf("ipset \"%s\" not found in controller instance.",
+				nodeAddrsIPSetName)
+		}
+	}
+	err = naSet.Refresh(currentNodeIPs, naSet.Options...)
+	if err != nil {
+		return fmt.Errorf("Failed to sync Node Addresses ipset: %s", err)
 	}
 
 	return nil
@@ -1306,14 +1248,26 @@ func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
 // NewNetworkRoutingController returns new NetworkRoutingController object
 func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
+
+	var err error
+
 	nrc := NetworkRoutingController{}
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
 
-	var err error
 	nrc.ipSetHandler, err = utils.NewIPSet()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = nrc.ipSetHandler.Create(podSubnetsIPSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = nrc.ipSetHandler.Create(nodeAddrsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 	if err != nil {
 		return nil, err
 	}
