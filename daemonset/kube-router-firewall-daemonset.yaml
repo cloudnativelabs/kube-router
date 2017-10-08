@@ -1,3 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-router-cfg
+  namespace: kube-system
+  labels:
+    tier: node
+    k8s-app: kube-router
+data:
+  cni-conf.json: |
+    {
+      "name":"kubernetes",
+      "type":"bridge",
+      "bridge":"kube-bridge",
+      "isDefaultGateway":true,
+      "ipam": {
+        "type":"host-local"
+      }
+    }
+---
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
@@ -21,18 +41,37 @@ spec:
           privileged: true
         imagePullPolicy: Always
         env:
-          - name: NODE_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: spec.nodeName
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         volumeMounts:
-          - mountPath: /lib/modules
-            name: lib-modules
-            readOnly: true
-          - mountPath: /etc/cni/net.d/10-kuberouter.conf
-            name: cni-conf-dir
-          - mountPath: /var/lib/kube-router/kubeconfig
-            name: kubeconfig
+        - name: lib-modules
+          mountPath: /lib/modules
+          readOnly: true
+        - name: cni-conf-dir
+          mountPath: /etc/cni/net.d
+        - name: kubeconfig
+          mountPath: /var/lib/kube-router/kubeconfig
+          readOnly: true
+      initContainers:
+      - name: install-cni
+        image: busybox
+        imagePullPolicy: Always
+        command:
+        - /bin/sh
+        - -c
+        - set -e -x;
+          if [ ! -f /etc/cni/net.d/10-kuberouter.conf ]; then
+            TMP=/etc/cni/net.d/.tmp-kuberouter-cfg;
+            cp /etc/kube-router/cni-conf.json ${TMP};
+            mv ${TMP} /etc/cni/net.d/10-kuberouter.conf;
+          fi
+        volumeMounts:
+        - name: cni-conf-dir
+          mountPath: /etc/cni/net.d
+        - name: kube-router-cfg
+          mountPath: /etc/kube-router
       hostNetwork: true
       tolerations:
       - key: CriticalAddonsOnly
@@ -41,12 +80,15 @@ spec:
         key: node-role.kubernetes.io/master
         operator: Exists
       volumes:
-        - name: lib-modules
-          hostPath:
-              path: /lib/modules
-        - name: cni-conf-dir
-          hostPath:
-              path: /etc/cni/net.d/10-kuberouter.conf
-        - name: kubeconfig
-          hostPath:
-              path: /var/lib/kube-router/kubeconfig
+      - name: lib-modules
+        hostPath:
+          path: /lib/modules
+      - name: cni-conf-dir
+        hostPath:
+          path: /etc/cni/net.d
+      - name: kube-router-cfg
+        configMap:
+          name: kube-router-cfg
+      - name: kubeconfig
+        hostPath:
+          path: /var/lib/kube-router/kubeconfig

@@ -14,23 +14,6 @@ spec:
         tier: node
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ''
-        pod.beta.kubernetes.io/init-containers: '[
-            {
-                "name": "install-cni",
-                "image": "busybox",
-                "command": [ "/bin/sh", "-c", "set -e -x; if [ ! -f /etc/cni/net.d/10-kuberouter.conf ]; then TMP=/etc/cni/net.d/.tmp-kuberouter-cfg; cp /etc/kube-router/cni-conf.json ${TMP}; mv ${TMP} /etc/cni/net.d/10-kuberouter.conf; fi" ],
-                "volumeMounts": [
-                    {
-                        "name": "cni",
-                        "mountPath": "/etc/cni/net.d"
-                    },
-                    {
-                        "name": "kube-router-cfg",
-                        "mountPath": "/etc/kube-router"
-                    }
-                ]
-            }
-        ]'
     spec:
       containers:
       - name: kube-router
@@ -52,11 +35,29 @@ spec:
         - name: lib-modules
           mountPath: /lib/modules
           readOnly: true
-        - name: cni
+        - name: cni-conf-dir
           mountPath: /etc/cni/net.d
         - name: kubeconfig
           mountPath: /etc/kubernetes/kubeconfig
           readOnly: true
+      initContainers:
+      - name: install-cni
+        image: busybox
+        imagePullPolicy: Always
+        command:
+        - /bin/sh
+        - -c
+        - set -e -x;
+          if [ ! -f /etc/cni/net.d/10-kuberouter.conf ]; then
+            TMP=/etc/cni/net.d/.tmp-kuberouter-cfg;
+            cp /etc/kube-router/cni-conf.json ${TMP};
+            mv ${TMP} /etc/cni/net.d/10-kuberouter.conf;
+          fi
+        volumeMounts:
+        - name: cni-conf-dir
+          mountPath: /etc/cni/net.d
+        - name: kube-router-cfg
+          mountPath: /etc/kube-router
       hostNetwork: true
       tolerations:
       - key: CriticalAddonsOnly
@@ -65,15 +66,15 @@ spec:
         key: node-role.kubernetes.io/master
         operator: Exists
       volumes:
-      - hostPath:
-          path: /lib/modules
-        name: lib-modules
-      - hostPath:
-          path: /etc/kubernetes/cni/net.d
-        name: cni
-      - name: kubeconfig
+      - name: lib-modules
         hostPath:
-          path: /etc/kubernetes/kubeconfig
+          path: /lib/modules
+      - name: cni-conf-dir
+        hostPath:
+          path: /etc/kubernetes/cni/net.d
       - name: kube-router-cfg
         configMap:
           name: kube-router-cfg
+      - name: kubeconfig
+        hostPath:
+          path: /etc/kubernetes/kubeconfig
