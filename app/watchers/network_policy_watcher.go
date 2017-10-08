@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/utils"
+	apiextensions "k8s.io/api/extensions/v1beta1"
+	networking "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
-	apiextensions "k8s.io/api/extensions/v1beta1"
-	networking "k8s.io/api/networking/v1"
 	cache "k8s.io/client-go/tools/cache"
 )
 
