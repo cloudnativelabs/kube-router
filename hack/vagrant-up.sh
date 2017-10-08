@@ -59,7 +59,7 @@ do
     echo "Modifying image attribute in ${KR_MANIFEST_PATH}"
     sed -i -e "s/image: cloudnativelabs\/kube-router/image: ${KR_IMAGE_TAG}/" \
       "${KR_MANIFEST_PATH}"
-    sed -i -e "s/imagePullPolicy: Always/imagePullPolicy: Never/" "${KR_MANIFEST_PATH}"
+    sed -i -e "s/imagePullPolicy: Always/imagePullPolicy: IfNotPresent/" "${KR_MANIFEST_PATH}"
     echo "Verify modification:"
     grep -F "image: " "${KR_MANIFEST_PATH}"
     grep -F "imagePullPolicy: " "${KR_MANIFEST_PATH}"
