@@ -17,10 +17,10 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
-	"k8s.io/client-go/kubernetes"
 	api "k8s.io/api/core/v1"
 	apiextensions "k8s.io/api/extensions/v1beta1"
 	networking "k8s.io/api/networking/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Network policy controller provides an ingress firewall for the pods as per the defined network policies.

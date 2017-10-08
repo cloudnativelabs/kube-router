@@ -1,6 +1,6 @@
 NAME?=kube-router
 DEV_SUFFIX?=-git
-LOCAL_PACKAGES?=app app/controllers app/options app/watchers
+LOCAL_PACKAGES?=app app/controllers app/options app/watchers utils
 IMG_NAMESPACE?=cloudnativelabs
 GIT_COMMIT=$(shell git describe --tags --dirty)
 GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
