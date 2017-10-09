@@ -43,7 +43,7 @@ goes wrong.
 For example, we'll test upgrading kube-router on worker-01:
 ```sh
 TEST_NODE="worker-01"
-TEST_POD="$(kubectl -n kube-system get pods -o wide|grep -E "^kube-router.*${TEST_NODE}"|awk '{ print $1 }')
+TEST_POD="$(kubectl -n kube-system get pods -o wide|grep -E "^kube-router.*${TEST_NODE}"|awk '{ print $1 }')"
 
 kubectl -n kube-system delete pod "${TEST_POD}"
 ```
@@ -57,7 +57,7 @@ kubectl -n kube-system get pods -o wide -w
 Check the logs with:
 ```sh
 TEST_NODE="worker-01"
-TEST_POD="$(kubectl -n kube-system get pods -o wide|grep -E "^kube-router.*${TEST_NODE}"|awk '{ print $1 }')
+TEST_POD="$(kubectl -n kube-system get pods -o wide|grep -E "^kube-router.*${TEST_NODE}"|awk '{ print $1 }')"
 
 kubectl -n kube-system logs "${TEST_POD}"
 ```
