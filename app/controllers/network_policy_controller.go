@@ -604,12 +604,25 @@ func (npc *NetworkPolicyController) syncPodFirewallChains() (map[string]bool, er
 		}
 		activePodFwChains[podFwChainName] = true
 
+		comment := "rule to permit the traffic traffic to pods when source is the pod's local node"
+		args := []string{"-m", "comment", "--comment", comment, "-s", npc.nodeIP.String(), "-d", pod.ip, "-j", "ACCEPT"}
+		exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+		if !exists {
+			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
+		}
+
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting routed (coming for other node pods)
-		comment := "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
+		comment = "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
 			" to chain " + podFwChainName
-		args := []string{"-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName}
-		exists, err := iptablesCmdHandler.Exists("filter", "FORWARD", args...)
+		args = []string{"-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName}
+		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
