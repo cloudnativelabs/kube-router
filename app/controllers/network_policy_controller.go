@@ -80,6 +80,7 @@ type ingressRule struct {
 	ports          []protocolAndPort
 	matchAllSource bool
 	srcPods        []podInfo
+	cidrs          []string
 }
 
 // internal structure to represent NetworkPolicyEgressRule in the spec
@@ -88,6 +89,7 @@ type egressRule struct {
 	ports                []protocolAndPort
 	matchAllDestinations bool
 	dstPods              []podInfo
+	cidrs                []string
 }
 
 type protocolAndPort struct {
@@ -399,6 +401,37 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
+
+		for _, cidr := range ingressRule.cidrs {
+			if !ingressRule.matchAllPorts {
+				for _, portProtocol := range ingressRule.ports {
+					comment := "rule to ACCEPT traffic from specified CIDR's to dest pods selected by policy name: " +
+						policy.name + " namespace " + policy.namespace
+					args := []string{"-m", "comment", "--comment", comment,
+						"-m", "set", "--set", targetDestPodIpSetName, "dst",
+						"-p", portProtocol.protocol,
+						"--dport", portProtocol.port,
+						"-s", cidr,
+						"-j", "ACCEPT"}
+					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
+					if err != nil {
+						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+					}
+				}
+			}
+			if ingressRule.matchAllPorts {
+				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
+					policy.name + " namespace " + policy.namespace
+				args := []string{"-m", "comment", "--comment", comment,
+					"-m", "set", "--set", targetDestPodIpSetName, "dst",
+					"-s", cidr,
+					"-j", "ACCEPT"}
+				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
+				if err != nil {
+					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+				}
+			}
+		}
 	}
 
 	return nil
@@ -503,6 +536,37 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 			if err != nil {
 				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
+		}
+
+		for _, cidr := range egressRule.cidrs {
+			if !egressRule.matchAllPorts {
+				for _, portProtocol := range egressRule.ports {
+					comment := "rule to ACCEPT traffic from specified CIDR's to dest pods selected by policy name: " +
+						policy.name + " namespace " + policy.namespace
+					args := []string{"-m", "comment", "--comment", comment,
+						"-m", "set", "--set", targetSourcePodIpSetName, "src",
+						"-p", portProtocol.protocol,
+						"--dport", portProtocol.port,
+						"-d", cidr,
+						"-j", "ACCEPT"}
+					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
+					if err != nil {
+						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+					}
+				}
+			}
+			if egressRule.matchAllPorts {
+				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
+					policy.name + " namespace " + policy.namespace
+				args := []string{"-m", "comment", "--comment", comment,
+					"-m", "set", "--set", targetSourcePodIpSetName, "src",
+					"-d", cidr,
+					"-j", "ACCEPT"}
+				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
+				if err != nil {
+					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+				}
 			}
 		}
 	}
@@ -1001,6 +1065,7 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 			}
 
 			ingressRule.srcPods = make([]podInfo, 0)
+			ingressRule.cidrs = make([]string, 0)
 
 			// If this field is empty or missing in the spec, this rule matches all sources
 			if len(specIngressRule.From) == 0 {
@@ -1026,6 +1091,8 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 							}
 							matchingPods = append(matchingPods, namespacePods...)
 						}
+					} else if peer.IPBlock != nil {
+						ingressRule.cidrs = append(ingressRule.cidrs, peer.IPBlock.CIDR)
 					}
 					if err == nil {
 						for _, matchingPod := range matchingPods {
@@ -1059,6 +1126,7 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 			}
 
 			egressRule.dstPods = make([]podInfo, 0)
+			egressRule.cidrs = make([]string, 0)
 
 			// If this field is empty or missing in the spec, this rule matches all sources
 			if len(specEgressRule.To) == 0 {
@@ -1084,6 +1152,8 @@ func buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 							}
 							matchingPods = append(matchingPods, namespacePods...)
 						}
+					} else if peer.IPBlock != nil {
+						egressRule.cidrs = append(egressRule.cidrs, peer.IPBlock.CIDR)
 					}
 					if err == nil {
 						for _, matchingPod := range matchingPods {
