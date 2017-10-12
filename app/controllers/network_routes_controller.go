@@ -438,7 +438,8 @@ func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
 	}
 
 	for i := 0; i < len(ips); i++ {
-		if asns[i] > 65534 {
+		if !((asns[i] >= 64512 && asns[i] <= 65535) ||
+		    (asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
 			return nil, fmt.Errorf("Invalid ASN number \"%d\" for global BGP peer.",
 				asns[i])
 		}
@@ -1277,7 +1278,8 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	}
 
 	if kubeRouterConfig.ClusterAsn != 0 {
-		if kubeRouterConfig.ClusterAsn > 65534 || kubeRouterConfig.ClusterAsn < 64512 {
+		if !((kubeRouterConfig.ClusterAsn >= 64512 && kubeRouterConfig.ClusterAsn <= 65535) ||
+		    (kubeRouterConfig.ClusterAsn >= 4200000000 && kubeRouterConfig.ClusterAsn <= 4294967294)) {
 			return nil, errors.New("Invalid ASN number for cluster ASN")
 		}
 		nrc.defaultNodeAsnNumber = uint32(kubeRouterConfig.ClusterAsn)
