@@ -439,7 +439,7 @@ func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
 
 	for i := 0; i < len(ips); i++ {
 		if !((asns[i] >= 64512 && asns[i] <= 65535) ||
-		    (asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
+			(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
 			return nil, fmt.Errorf("Invalid ASN number \"%d\" for global BGP peer.",
 				asns[i])
 		}
@@ -492,12 +492,12 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 
 // Each node advertises its pod CIDR to the nodes with same ASN (iBGP peers) and to the global BGP peer
 // or per node BGP peer. Each node ends up advertising not only pod CIDR assigned to the self but other
-// routers learned to the node pod CIDR's as well to global BGP peer or per node BGP peers. external BGP
+// learned routes to the node pod CIDR's as well to global BGP peer or per node BGP peers. external BGP
 // peer will randomly (since all path have equal selection attributes) select the routes from multiple
 // routes to a pod CIDR which will result in extra hop. To prevent this behaviour this methods add
-// defult export policy to reject. and explicit policy is added so that each node only advertised the
-// pod CIDR assigned to it. Additionally export policy is added so that a node advertises cluster IP's
-// only to the external BGP peers.
+// defult export policy to reject everything and an explicit policy is added so that each node only
+// advertised the pod CIDR assigned to it. Additionally export policy is added so that each node
+// advertises cluster IP's ONLY to the external BGP peers (and not to iBGP peers).
 func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
@@ -596,20 +596,39 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		return errors.New("Failed to create new policy: " + err.Error())
 	}
 
-	err = nrc.bgpServer.ReplacePolicy(policy, false, false)
-	if err != nil {
+	policyAlreadyExists := false
+	policyList := nrc.bgpServer.GetPolicy()
+	for _, existingPolicy := range policyList {
+		if existingPolicy.Name == "kube_router" {
+			policyAlreadyExists = true
+		}
+	}
+
+	if !policyAlreadyExists {
 		err = nrc.bgpServer.AddPolicy(policy, false)
 		if err != nil {
 			return errors.New("Failed to add policy: " + err.Error())
 		}
 	}
 
-	err = nrc.bgpServer.AddPolicyAssignment("",
-		table.POLICY_DIRECTION_EXPORT,
-		[]*config.PolicyDefinition{&definition},
-		table.ROUTE_TYPE_ACCEPT)
-	if err != nil {
-		return errors.New("Failed to add policy assignment: " + err.Error())
+	policyAssignmentExists := false
+	_, existingPolicyAssignments, err := nrc.bgpServer.GetPolicyAssignment("", table.POLICY_DIRECTION_EXPORT)
+	if err == nil {
+		for _, existingPolicyAssignment := range existingPolicyAssignments {
+			if existingPolicyAssignment.Name == "kube_router" {
+				policyAssignmentExists = true
+			}
+		}
+	}
+
+	if !policyAssignmentExists {
+		err = nrc.bgpServer.AddPolicyAssignment("",
+			table.POLICY_DIRECTION_EXPORT,
+			[]*config.PolicyDefinition{&definition},
+			table.ROUTE_TYPE_ACCEPT)
+		if err != nil {
+			return errors.New("Failed to add policy assignment: " + err.Error())
+		}
 	}
 
 	// configure default BGP export policy to reject
@@ -1279,7 +1298,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 
 	if kubeRouterConfig.ClusterAsn != 0 {
 		if !((kubeRouterConfig.ClusterAsn >= 64512 && kubeRouterConfig.ClusterAsn <= 65535) ||
-		    (kubeRouterConfig.ClusterAsn >= 4200000000 && kubeRouterConfig.ClusterAsn <= 4294967294)) {
+			(kubeRouterConfig.ClusterAsn >= 4200000000 && kubeRouterConfig.ClusterAsn <= 4294967294)) {
 			return nil, errors.New("Invalid ASN number for cluster ASN")
 		}
 		nrc.defaultNodeAsnNumber = uint32(kubeRouterConfig.ClusterAsn)
