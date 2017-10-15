@@ -605,7 +605,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains() (map[string]bool, er
 		activePodFwChains[podFwChainName] = true
 
 		comment := "rule to permit the traffic traffic to pods when source is the pod's local node"
-		args := []string{"-m", "comment", "--comment", comment, "-s", npc.nodeIP.String(), "-d", pod.ip, "-j", "ACCEPT"}
+		args := []string{"-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT"}
 		exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
