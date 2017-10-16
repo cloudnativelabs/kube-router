@@ -90,6 +90,7 @@ type serviceInfo struct {
 	nodePort        int
 	sessionAffinity bool
 	hairpin         bool
+	externalIPs     []string
 }
 
 // map of all services, with unique service id(namespace name, service name, port) as key
@@ -245,8 +246,18 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		vip := &netlink.Addr{IPNet: &net.IPNet{IP: svc.clusterIP, Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 		err := netlink.AddrAdd(dummyVipInterface, vip)
 		if err != nil && err.Error() != IFACE_HAS_ADDR {
-			glog.Errorf("Failed to assign cluster ip to dummy interface %s", err)
+			glog.Errorf("Failed to assign cluster ip %s to dummy interface %s", svc.clusterIP.String(), err.Error())
 			continue
+		}
+
+		// assign external IP's of the service to the dummy interface
+		for _, externalIP := range svc.externalIPs {
+			vip := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(externalIP), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
+			err := netlink.AddrAdd(dummyVipInterface, vip)
+			if err != nil && err.Error() != IFACE_HAS_ADDR {
+				glog.Errorf("Failed to assign external ip: %s to dummy interface %s", externalIP, err.Error())
+				continue
+			}
 		}
 
 		// create IPVS service for the service to be exposed through the cluster ip
@@ -279,8 +290,26 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			activeServiceEndpointMap[nodeServiceId] = make([]string, 0)
 		}
 
-		// add IPVS remote server to the IPVS service
 		endpoints := endpointsInfoMap[k]
+
+		ipvsExternalIpServices := make([]*ipvs.Service, 0)
+		// create IPVS service for the service to be exposed through the
+		for _, externalIP := range svc.externalIPs {
+			ipvsExternalIPSvc, err := ipvsAddService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity)
+			if err != nil {
+				glog.Errorf("Failed to create ipvs service for External IP due to: %s", err.Error())
+				continue
+			}
+			ipvsExternalIpServices = append(ipvsExternalIpServices, ipvsExternalIPSvc)
+			externalIpServiceId := generateIpPortId(externalIP, svc.protocol, strconv.Itoa(svc.port))
+			activeServiceEndpointMap[externalIpServiceId] = make([]string, 0)
+			for _, endpoint := range endpoints {
+				activeServiceEndpointMap[externalIpServiceId] =
+					append(activeServiceEndpointMap[externalIpServiceId], endpoint.ip)
+			}
+		}
+
+		// add IPVS remote server to the IPVS service
 		for _, endpoint := range endpoints {
 			dst := ipvs.Destination{
 				Address:       net.ParseIP(endpoint.ip),
@@ -305,6 +334,13 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 				activeServiceEndpointMap[nodeServiceId] =
 					append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+			}
+
+			for _, ipvsExternalIpService := range ipvsExternalIpServices {
+				err := ipvsAddServer(ipvsExternalIpService, &dst)
+				if err != nil {
+					glog.Errorf(err.Error())
+				}
 			}
 		}
 	}
@@ -417,14 +453,15 @@ func buildServicesInfo() serviceInfoMap {
 
 		for _, port := range svc.Spec.Ports {
 			svcInfo := serviceInfo{
-				clusterIP: net.ParseIP(svc.Spec.ClusterIP),
-				port:      int(port.Port),
-				protocol:  strings.ToLower(string(port.Protocol)),
-				nodePort:  int(port.NodePort),
-				name:      svc.ObjectMeta.Name,
-				namespace: svc.ObjectMeta.Namespace,
+				clusterIP:   net.ParseIP(svc.Spec.ClusterIP),
+				port:        int(port.Port),
+				protocol:    strings.ToLower(string(port.Protocol)),
+				nodePort:    int(port.NodePort),
+				name:        svc.ObjectMeta.Name,
+				namespace:   svc.ObjectMeta.Namespace,
+				externalIPs: make([]string, len(svc.Spec.ExternalIPs)),
 			}
-
+			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations["kube-router.io/service.hairpin"]
 
