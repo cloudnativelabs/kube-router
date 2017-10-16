@@ -24,6 +24,7 @@ type KubeRouterConfig struct {
 	EnablePodEgress     bool
 	HostnameOverride    string
 	AdvertiseClusterIp  bool
+	AdvertiseExternalIp bool
 	PeerRouters         []net.IP
 	PeerASNs            []uint
 	ClusterAsn          uint
@@ -74,7 +75,9 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
-		"Add Cluster IP to the RIB and advertise to peers.")
+		"Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.")
+	fs.BoolVar(&s.AdvertiseExternalIp, "advertise-external-ip", false,
+		"Add External IP of service to the RIB so that it gets advertised to the BGP peers.")
 	fs.IPSliceVar(&s.PeerRouters, "peer-router-ips", s.PeerRouters,
 		"The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's.")
 	fs.UintVar(&s.ClusterAsn, "cluster-asn", s.ClusterAsn,

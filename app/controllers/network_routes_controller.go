@@ -47,6 +47,7 @@ type NetworkRoutingController struct {
 	enablePodEgress      bool
 	hostnameOverride     string
 	advertiseClusterIp   bool
+	advertiseExternalIp  bool
 	defaultNodeAsnNumber uint32
 	nodeAsnNumber        uint32
 	globalPeerRouters    []*config.NeighborConfig
@@ -207,7 +208,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 		// advertise cluster IP for the service to be reachable via host
 		if nrc.advertiseClusterIp {
-			glog.Infof("Advertising cluster ips")
+			glog.Infof("Advertising cluster ips of services to the external BGP peers")
 			for _, svc := range watchers.ServiceWatcher.List() {
 				if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
 
@@ -218,6 +219,22 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 					glog.Infof("found a service of cluster ip type")
 					nrc.AdvertiseClusterIp(svc.Spec.ClusterIP)
+				}
+			}
+		}
+
+		// advertise cluster IP for the service to be reachable via host
+		if nrc.advertiseExternalIp {
+			glog.Infof("Advertising external ips of the services to the external BGP peers")
+			for _, svc := range watchers.ServiceWatcher.List() {
+				if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
+					// skip headless services
+					if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
+						continue
+					}
+					for _, externalIP := range svc.Spec.ExternalIPs {
+						nrc.AdvertiseClusterIp(externalIP)
+					}
 				}
 			}
 		}
@@ -368,6 +385,21 @@ func (nrc *NetworkRoutingController) getClusterIps() ([]string, error) {
 		}
 	}
 	return clusterIpList, nil
+}
+
+func (nrc *NetworkRoutingController) getExternalIps() ([]string, error) {
+	externalIpList := make([]string, 0)
+	for _, svc := range watchers.ServiceWatcher.List() {
+		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
+
+			// skip headless services
+			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
+				continue
+			}
+			externalIpList = append(externalIpList, svc.Spec.ExternalIPs...)
+		}
+	}
+	return externalIpList, nil
 }
 
 // Used for processing Annotations that may contain multiple items
@@ -523,6 +555,10 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	clusterIpPrefixList := make([]config.Prefix, 0)
 	clusterIps, _ := nrc.getClusterIps()
 	for _, ip := range clusterIps {
+		clusterIpPrefixList = append(clusterIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
+	}
+	externalIps, _ := nrc.getExternalIps()
+	for _, ip := range externalIps {
 		clusterIpPrefixList = append(clusterIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
 	}
 	clusterIpPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
@@ -1307,6 +1343,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	}
 
 	nrc.advertiseClusterIp = kubeRouterConfig.AdvertiseClusterIp
+	nrc.advertiseExternalIp = kubeRouterConfig.AdvertiseExternalIp
 
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 

@@ -97,7 +97,8 @@ Also you can choose to run kube-router as agent running on each cluster node. Al
 
 ```
 Usage of ./kube-router:
-      --advertise-cluster-ip                Add Cluster IP to the RIB and advertise to peers.
+      --advertise-cluster-ip                Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.
+      --advertise-external-ip               Add External IP of service to the RIB so that it gets advertised to the BGP peers.
       --cleanup-config                      Cleanup iptables rules, ipvs, ipset configuration and exit.
       --cluster-asn uint                    ASN number under which cluster nodes will run iBGP.
       --cluster-cidr string                 CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.
