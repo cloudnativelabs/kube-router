@@ -1,3 +1,63 @@
+Release v1.12.12 (2017-10-17)
+===
+
+### Service Client Updates
+* `aws/endpoints`: Updated Regions and Endpoints metadata.
+* `service/es`: Updates service API and documentation
+  * This release adds support for VPC access to Amazon Elasticsearch Service.
+  * This release adds support for VPC access to Amazon Elasticsearch Service.
+
+Release v1.12.11 (2017-10-16)
+===
+
+### Service Client Updates
+* `service/cloudhsm`: Updates service API and documentation
+  * Documentation updates for AWS CloudHSM Classic.
+* `service/ec2`: Updates service API and documentation
+  * You can now change the tenancy of your VPC from dedicated to default with a single API operation. For more details refer to the documentation for changing VPC tenancy.
+* `service/es`: Updates service API and documentation
+  * AWS Elasticsearch adds support for enabling slow log publishing. Using slow log publishing options customers can configure and enable index/query slow log publishing of their domain to preferred AWS Cloudwatch log group.
+* `service/rds`: Updates service API and waiters
+  * Adds waiters for DBSnapshotAvailable and DBSnapshotDeleted.
+* `service/waf`: Updates service API and documentation
+  * This release adds support for regular expressions as match conditions in rules, and support for geographical location by country of request IP address as a match condition in rules.
+* `service/waf-regional`: Updates service API and documentation
+
+Release v1.12.10 (2017-10-12)
+===
+
+### Service Client Updates
+* `service/codecommit`: Updates service API and documentation
+  * This release includes the DeleteBranch API and a change to the contents of a Commit object.
+* `service/dms`: Updates service API and documentation
+  * This change includes addition of new optional parameter to an existing API
+* `service/elasticbeanstalk`: Updates service API and documentation
+  * Added the ability to add, delete or update Tags
+* `service/polly`: Updates service API
+  * Amazon Polly exposes two new voices: "Matthew" (US English) and "Takumi" (Japanese)
+* `service/rds`: Updates service API and documentation
+  * You can now call DescribeValidDBInstanceModifications to learn what modifications you can make to your DB instance. You can use this information when you call ModifyDBInstance.
+
+Release v1.12.9 (2017-10-11)
+===
+
+### Service Client Updates
+* `service/ecr`: Updates service API, documentation, and paginators
+  * Adds support for new API set used to manage Amazon ECR repository lifecycle policies. Amazon ECR lifecycle policies enable you to specify the lifecycle management of images in a repository. The configuration is a set of one or more rules, where each rule defines an action for Amazon ECR to apply to an image. This allows the automation of cleaning up unused images, for example expiring images based on age or status. A lifecycle policy preview API is provided as well, which allows you to see the impact of a lifecycle policy on an image repository before you execute it
+* `service/email`: Updates service API and documentation
+  * Added content related to email template management and templated email sending operations.
+* `aws/endpoints`: Updated Regions and Endpoints metadata.
+
+Release v1.12.8 (2017-10-10)
+===
+
+### Service Client Updates
+* `service/ec2`: Updates service API and documentation
+  * This release includes updates to AWS Virtual Private Gateway.
+* `service/elasticloadbalancingv2`: Updates service API and documentation
+* `service/opsworkscm`: Updates service API and documentation
+  * Provide engine specific information for node associations.
+
 Release v1.12.7 (2017-10-06)
 ===
 

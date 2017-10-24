@@ -3,10 +3,13 @@ package controllers
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,16 +21,20 @@ import (
 	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
+	"github.com/docker/docker/client"
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
+	"golang.org/x/net/context"
 	"k8s.io/client-go/kubernetes"
 )
 
 const (
 	KUBE_DUMMY_IF      = "kube-dummy-if"
+	KUBE_TUNNEL_IF     = "kube-tunnel-if"
 	IFACE_NOT_FOUND    = "Link not found"
 	IFACE_HAS_ADDR     = "file exists"
 	IPVS_SERVER_EXISTS = "file exists"
@@ -82,15 +89,17 @@ type NetworkServicesController struct {
 
 // internal representation of kubernetes service
 type serviceInfo struct {
-	name            string
-	namespace       string
-	clusterIP       net.IP
-	port            int
-	protocol        string
-	nodePort        int
-	sessionAffinity bool
-	hairpin         bool
-	externalIPs     []string
+	name                     string
+	namespace                string
+	clusterIP                net.IP
+	port                     int
+	protocol                 string
+	nodePort                 int
+	sessionAffinity          bool
+	directServerReturn       bool
+	directServerReturnMethod string
+	hairpin                  bool
+	externalIPs              []string
 }
 
 // map of all services, with unique service id(namespace name, service name, port) as key
@@ -217,6 +226,11 @@ func (nsc *NetworkServicesController) OnServiceUpdate(serviceUpdate *watchers.Se
 	}
 }
 
+type externalIPService struct {
+	ipvsSvc    *ipvs.Service
+	externalIp string
+}
+
 // sync the ipvs service and server details configured to reflect the desired state of services and endpoint
 // as learned from services and endpoints information from the api server
 func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap) error {
@@ -230,6 +244,13 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	if err != nil {
 		return errors.New("Failed creating dummy interface: " + err.Error())
 	}
+
+	glog.Infof("Setting up policy routing required for Direct Server Return functionality.")
+	err = setupPolicyRoutingForDSR()
+	if err != nil {
+		return errors.New("Failed setup PBR for DSR due to: " + err.Error())
+	}
+	glog.Infof("Custom routing table " + customDSRRouteTableName + "required for Direct Server Return is setup as expected.")
 
 	// map of active services and service endpoints
 	activeServiceEndpointMap := make(map[string][]string)
@@ -248,16 +269,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		if err != nil && err.Error() != IFACE_HAS_ADDR {
 			glog.Errorf("Failed to assign cluster ip %s to dummy interface %s", svc.clusterIP.String(), err.Error())
 			continue
-		}
-
-		// assign external IP's of the service to the dummy interface
-		for _, externalIP := range svc.externalIPs {
-			vip := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(externalIP), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
-			err := netlink.AddrAdd(dummyVipInterface, vip)
-			if err != nil && err.Error() != IFACE_HAS_ADDR {
-				glog.Errorf("Failed to assign external ip: %s to dummy interface %s", externalIP, err.Error())
-				continue
-			}
 		}
 
 		// create IPVS service for the service to be exposed through the cluster ip
@@ -292,16 +303,38 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 		endpoints := endpointsInfoMap[k]
 
-		ipvsExternalIpServices := make([]*ipvs.Service, 0)
-		// create IPVS service for the service to be exposed through the
+		externalIpServices := make([]externalIPService, 0)
+		// create IPVS service for the service to be exposed through the external IP's
+		// For external IP (which are meant for ingress traffic) Kube-router setsup IPVS services
+		// based on FWMARK to enable Direct server return functionality. DSR requires a director 
+		// without a VIP http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
+		// to avoid martian packets
 		for _, externalIP := range svc.externalIPs {
-			ipvsExternalIPSvc, err := ipvsAddService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity)
+			ipvsExternalIPSvc, err := ipvsAddFWMarkService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity)
 			if err != nil {
-				glog.Errorf("Failed to create ipvs service for External IP due to: %s", err.Error())
+				glog.Errorf("Failed to create ipvs service for External IP: %s due to: %s", externalIP, err.Error())
 				continue
 			}
-			ipvsExternalIpServices = append(ipvsExternalIpServices, ipvsExternalIPSvc)
-			externalIpServiceId := generateIpPortId(externalIP, svc.protocol, strconv.Itoa(svc.port))
+			externalIpServices = append(externalIpServices, externalIPService{ipvsSvc: ipvsExternalIPSvc, externalIp: externalIP})
+			fwMark := generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port))
+			externalIpServiceId := fmt.Sprint(fwMark)
+
+			// ensure there is iptable mangle table rule to FWMARK the packet
+			err = setupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), externalIpServiceId)
+			if err != nil {
+				glog.Errorf("Failed to setup mangle table rule to FMWARD the traffic to external IP")
+				continue
+			}
+
+			// in VIP less directory we dont assign VIP to any interface, so we do policy routing
+			// to deliver the packet locally so that IPVS can pick the packet
+			err = routeVIPTrafficToDirector("0x" + fmt.Sprintf("%x", fwMark))
+			if err != nil {
+				glog.Errorf("Failed to setup ip rule to lookup traffic to external IP: %s through custom " + 
+							"route table due to ", externalIP, err.Error())
+				continue
+			}
+
 			activeServiceEndpointMap[externalIpServiceId] = make([]string, 0)
 			for _, endpoint := range endpoints {
 				activeServiceEndpointMap[externalIpServiceId] =
@@ -336,8 +369,16 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 					append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 			}
 
-			for _, ipvsExternalIpService := range ipvsExternalIpServices {
-				err := ipvsAddServer(ipvsExternalIpService, &dst)
+			for _, externalIpService := range externalIpServices {
+				// For now just support IPVS tunnel mode, we can add other ways of DSR in future
+				if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
+					dst.ConnectionFlags = ipvs.ConnectionFlagTunnel
+					err := prepareEndpointForDsr(nsc.nodeIP.String(), endpoint.ip, externalIpService.externalIp)
+					if err != nil {
+						glog.Errorf("Failed to prepare endpoint %s to do direct server return due to %s", endpoint.ip, err.Error())
+					}
+				}
+				err := ipvsAddServer(externalIpService.ipvsSvc, &dst)
 				if err != nil {
 					glog.Errorf(err.Error())
 				}
@@ -358,7 +399,15 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		} else {
 			protocol = "udp"
 		}
-		key := generateIpPortId(ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
+		var key string
+		if ipvsSvc.Address != nil {
+			key = generateIpPortId(ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
+		} else if ipvsSvc.FWMark != 0 {
+			key = fmt.Sprint(ipvsSvc.FWMark)
+		} else {
+			continue
+		}
+
 		endpoints, ok := activeServiceEndpointMap[key]
 		if !ok {
 			glog.Infof("Found a IPVS service %s which is no longer needed so cleaning up",
@@ -395,6 +444,103 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 	}
 	glog.Infof("IPVS servers and services are synced to desired state!!")
+	return nil
+}
+
+// This function does the following
+// - get the pod corresponding to the endpoint ip
+// - get the container id from pod spec
+// - from the container id, use docker client to get the pid
+// - enter process network namespace and create ipip tunnel
+// - add VIP to the tunnel interface
+// - disable rp_filter
+func prepareEndpointForDsr(nodeip string, endpointIP string, vip string) error {
+
+	currentNamespaceHandle, err := netns.Get()
+	if err != nil {
+		return errors.New("Failed to get namespace due to " + err.Error())
+	}
+	defer netns.Set(currentNamespaceHandle)
+
+	containerID := ""
+	for _, pod := range watchers.PodWatcher.List() {
+		if strings.Compare(pod.Status.HostIP, nodeip) == 0 && strings.Compare(pod.Status.PodIP, endpointIP) == 0 {
+			containerID = strings.TrimPrefix(pod.Status.ContainerStatuses[0].ContainerID, "docker://")
+			break
+		}
+	}
+	if containerID == "" {
+		return errors.New("Failed to get container id, so not preparing endpoint for DSR")
+	}
+
+	client, err := client.NewEnvClient()
+	if err != nil {
+		return errors.New("Failed to get docker client due to " + err.Error())
+	}
+
+	containerSpec, err := client.ContainerInspect(context.Background(), containerID)
+	if err != nil {
+		return errors.New("Failed to get docker container spec due to " + err.Error())
+	}
+
+	pid := containerSpec.State.Pid
+	endpointNamespaceHandle, err := netns.GetFromPid(pid)
+	if err != nil {
+		return errors.New("Failed to get endpoint namespace due to " + err.Error())
+	}
+
+	err = netns.Set(endpointNamespaceHandle)
+	if err != nil {
+		return errors.New("Failed to enter to endpoint namespace due to " + err.Error())
+	}
+
+	// create a ipip tunnel interface inside the endpoint container
+	tunIf, err := netlink.LinkByName(KUBE_TUNNEL_IF)
+	if err != nil {
+		if err.Error() != IFACE_NOT_FOUND {
+			return errors.New("Failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
+		}
+
+		glog.Infof("Could not find tunnel interface " + KUBE_TUNNEL_IF + " in endpoint " + endpointIP + " so creating one.")
+		ipTunLink := netlink.Iptun{
+			LinkAttrs: netlink.LinkAttrs{Name: KUBE_TUNNEL_IF},
+			Local:     net.ParseIP(endpointIP),
+		}
+		err = netlink.LinkAdd(&ipTunLink)
+		if err != nil {
+			return errors.New("Failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
+		}
+		time.Sleep(1000 * time.Millisecond)
+		tunIf, err = netlink.LinkByName(KUBE_TUNNEL_IF)
+		if err != nil {
+			return errors.New("Failed to get " + KUBE_TUNNEL_IF + " tunnel interface handle due to " + err.Error())
+		}
+
+		glog.Infof("Successfully created tunnel interface " + KUBE_TUNNEL_IF + " in endpoint " + endpointIP + ".")
+	}
+
+	// bring the tunnel interface up
+	err = netlink.LinkSetUp(tunIf)
+	if err != nil {
+		return errors.New("Failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
+	}
+
+	// assign VIP to the KUBE_TUNNEL_IF interface
+	netlinkVip := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(vip),
+		Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
+	err = netlink.AddrAdd(tunIf, netlinkVip)
+	if err != nil && err.Error() != IFACE_HAS_ADDR {
+		return errors.New("Failed to assign vip " + vip + " to kube-tunnel-if interface ")
+	}
+	glog.Infof("Successfully assinged VIP: " + vip + " in endpoint " + endpointIP + ".")
+
+	// disable rp_filter on KUBE_TUNNEL_IF interface
+	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
+	if err != nil {
+		return errors.New("Failed to disable rp_filter in the endpoint container")
+	}
+	glog.Infof("Successfully disabled rp_filter in endpoint " + endpointIP + ".")
+
 	return nil
 }
 
@@ -460,6 +606,11 @@ func buildServicesInfo() serviceInfoMap {
 				name:        svc.ObjectMeta.Name,
 				namespace:   svc.ObjectMeta.Namespace,
 				externalIPs: make([]string, len(svc.Spec.ExternalIPs)),
+			}
+			dsrMethod, ok := svc.ObjectMeta.Annotations["kube-router.io/service.dsr"]
+			if ok {
+				svcInfo.directServerReturn = true
+				svcInfo.directServerReturnMethod = dsrMethod
 			}
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
@@ -834,6 +985,74 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 	return &svc, nil
 }
 
+// generateFwmark: generate a uint32 hash value using the IP address, port, protocol information
+// TODO: collision can rarely happen but still need to be ruled out
+// TODO: I ran into issues with FWMARK for any value above 2^15. Either policy 
+// routing and IPVS FWMARK service was not functioning with value above 2^15
+func generateFwmark(ip, protocol, port string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(ip + "-" + protocol + "-" + port))
+	return h.Sum32() & 0x3FFF
+}
+
+// ipvsAddFWMarkService: creates a IPVS service using FWMARK
+func ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.Service, error) {
+
+	var protocolStr string
+	if protocol == syscall.IPPROTO_TCP {
+		protocolStr = "tcp"
+	} else if protocol == syscall.IPPROTO_UDP {
+		protocolStr = "udp"
+	} else {
+		protocolStr = "unknown"
+	}
+
+	// generate a FWMARK value unique to the external IP + protocol+ port combination
+	fwmark := generateFwmark(vip.String(), protocolStr, fmt.Sprint(port))
+
+	svcs, err := h.GetServices()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, svc := range svcs {
+		if fwmark == svc.FWMark {
+			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) {
+				ipvsSetPersistence(svc, persistent)
+
+				err = h.UpdateService(svc)
+				if err != nil {
+					return nil, err
+				}
+				glog.Infof("Updated persistence/session-affinity for service: %s", ipvsServiceString(svc))
+			}
+
+			// TODO: Make this debug output when we get log levels
+			// glog.Fatal("ipvs service %s:%s:%s already exists so returning", vip.String(),
+			// 	protocol, strconv.Itoa(int(port)))
+
+			return svc, nil
+		}
+	}
+
+	svc := ipvs.Service{
+		FWMark:        fwmark,
+		AddressFamily: syscall.AF_INET,
+		Protocol:      protocol,
+		Port:          port,
+		SchedName:     ipvs.RoundRobin,
+	}
+
+	ipvsSetPersistence(&svc, persistent)
+
+	err = h.NewService(&svc)
+	if err != nil {
+		return nil, err
+	}
+	glog.Infof("Successfully added service: %s", ipvsServiceString(&svc))
+	return &svc, nil
+}
+
 func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination) error {
 
 	err := h.NewDestination(service, dest)
@@ -850,6 +1069,74 @@ func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination) error {
 	} else {
 		return fmt.Errorf("Failed to add ipvs destination %s to the ipvs service %s due to : %s", dest.Address,
 			ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
+	}
+	return nil
+}
+
+const (
+	customDSRRouteTableID   = "78"
+	customDSRRouteTableName = "kube-router-dsr"
+)
+
+// setupMangleTableRule: setsup iptable rule to FWMARK the traffic to exteranl IP vip
+func setupMangleTableRule(ip string, protocol string,  port string, fwmark string) error {
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed to initialize iptables executor" + err.Error())
+	}
+	args := []string{"-d", ip, "-m", protocol, "-p", protocol, "--dport", port, "-j", "MARK", "--set-mark", fwmark}
+	err = iptablesCmdHandler.AppendUnique("mangle", "PREROUTING", args...)
+	if err != nil {
+		return errors.New("Failed to run iptables command to set up FWMARK due to " + err.Error())
+	}
+	return nil
+}
+
+// For DSR it is required that we dont assign the VIP to any interface to avoid martian packets
+// http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
+// routeVIPTrafficToDirector: setups policy routing so that FWMARKed packets are deliverd locally
+func routeVIPTrafficToDirector(fwmark string) error {
+	out, err := exec.Command("ip", "rule", "list").Output()
+	if err != nil {
+		return errors.New("Failed to verify if `ip rule` exists due to: " + err.Error())
+	}
+	if !strings.Contains(string(out), fwmark) {
+		err = exec.Command("ip", "rule", "add", "fwmark", fwmark, "table", customDSRRouteTableID).Run()
+		if err != nil {
+			return errors.New("Failed to add policy rule to lookup traffic to VIP through the custom " + 
+					" routing table due to " + err.Error())
+		}
+	}
+	return nil
+}
+
+// For DSR it is required that we dont assign the VIP to any interface to avoid martian packets
+// http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
+// setupPolicyRoutingForDSR: setups policy routing so that FWMARKed packets are deliverd locally
+func setupPolicyRoutingForDSR() error {
+	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
+	if err != nil {
+		return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
+	}
+	if !strings.Contains(string(b), customDSRRouteTableName) {
+		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
+		}
+		if _, err = f.WriteString(customDSRRouteTableID + " " + customDSRRouteTableName); err != nil {
+			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
+		}
+	}
+	out, err := exec.Command("ip", "route", "list", "table", customDSRRouteTableID).Output()
+	if err != nil {
+		return errors.New("Failed to verify required default route exists. " +
+					"Failed to setup policy routing required for DSR due to " + err.Error())
+	}
+	if !strings.Contains(string(out), " lo ") {
+		if err = exec.Command("ip", "route", "add", "local", "default", "dev", "lo", "table",
+				customDSRRouteTableID).Run(); err != nil {
+			return errors.New("Failed to add route in custom route table due to: " + err.Error())
+		}
 	}
 	return nil
 }
