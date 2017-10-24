@@ -213,6 +213,22 @@ To enable hairpin traffic for Service `my-service`:
 kubectl annotate service my-service "kube-router.io/service.hairpin="
 ```
 
+### Direct server return
+
+You can enable DSR(Direct Server Return) functionality per service. When enabled service endpoint
+will directly respond to the client. When DSR is enabled Kube-router will uses LVS's tunneling mode to achive this.
+
+To enable DSR you need to annotate service with `kube-router.io/service.dsr=tunnel` annotation.
+
+In the current implementation althouh annotation is enabled, DSR will be applicable only to the external IP's.
+
+You will need to enable `hostIPC: true` and `hostPID: true` in kube-router daemonset manifest.
+Also host path `/var/run/docker.sock` must be made a volumemount to kube-router.
+
+Above changes are required for kube-router to enter pod namespeace and create ipip tunnel in the pod and to 
+assign the external IP to the VIP. 
+
+For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirments enabled.
 
 ## BGP configuration
 

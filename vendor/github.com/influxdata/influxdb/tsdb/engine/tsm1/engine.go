@@ -97,15 +97,11 @@ type Engine struct {
 
 	// The following group of fields is used to track the state of level compactions within the
 	// Engine. The WaitGroup is used to monitor the compaction goroutines, the 'done' channel is
-	// used to signal those goroutines to shutdown. Every request to disable level compactions will
-	// call 'Wait' on 'wg', with the first goroutine to arrive (levelWorkers == 0 while holding the
-	// lock) will close the done channel and re-assign 'nil' to the variable. Re-enabling will
-	// decrease 'levelWorkers', and when it decreases to zero, level compactions will be started
-	// back up again.
+	// used to signal those goroutines to shutdown.
 
-	wg           sync.WaitGroup // waitgroup for active level compaction goroutines
-	done         chan struct{}  // channel to signal level compactions to stop
-	levelWorkers int            // Number of "workers" that expect compactions to be in a disabled state
+	wg      sync.WaitGroup // waitgroup for active level compaction goroutines
+	done    chan struct{}  // channel to signal level compactions to stop
+	running int32          // running tracks whether compactions are being enabled or disabled
 
 	snapDone chan struct{}  // channel to signal snapshot compactions to stop
 	snapWG   sync.WaitGroup // waitgroup for running snapshot compactions
@@ -211,72 +207,63 @@ func (e *Engine) SetEnabled(enabled bool) {
 func (e *Engine) SetCompactionsEnabled(enabled bool) {
 	if enabled {
 		e.enableSnapshotCompactions()
-		e.enableLevelCompactions(false)
+		e.enableLevelCompactions()
 	} else {
 		e.disableSnapshotCompactions()
-		e.disableLevelCompactions(false)
+		e.disableLevelCompactions()
 	}
 }
 
 // enableLevelCompactions will request that level compactions start back up again
-//
-// 'wait' signifies that a corresponding call to disableLevelCompactions(true) was made at some
-// point, and the associated task that required disabled compactions is now complete
-func (e *Engine) enableLevelCompactions(wait bool) {
-	// If we don't need to wait, see if we're already enabled
-	if !wait {
-		e.mu.RLock()
-		if e.done != nil {
-			e.mu.RUnlock()
-			return
-		}
-		e.mu.RUnlock()
-	}
-
-	e.mu.Lock()
-	if wait {
-		e.levelWorkers -= 1
-	}
-	if e.levelWorkers != 0 || e.done != nil {
-		// still waiting on more workers or already enabled
-		e.mu.Unlock()
+func (e *Engine) enableLevelCompactions() {
+	// See if they are already enabled.  If we set this to one, they are disabled
+	// and we're the first to enable.
+	if !atomic.CompareAndSwapInt32(&e.running, 0, 1) {
 		return
 	}
 
-	// last one to enable, start things back up
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.done != nil {
+		return
+	}
+
+	// First one to enable, start things up
 	e.Compactor.EnableCompactions()
 	quit := make(chan struct{})
 	e.done = quit
 
 	e.wg.Add(1)
-	e.mu.Unlock()
 
 	go func() { defer e.wg.Done(); e.compact(quit) }()
 }
 
 // disableLevelCompactions will stop level compactions before returning.
-//
-// If 'wait' is set to true, then a corresponding call to enableLevelCompactions(true) will be
-// required before level compactions will start back up again.
-func (e *Engine) disableLevelCompactions(wait bool) {
+func (e *Engine) disableLevelCompactions() {
+	// Already disabled?
+	if atomic.LoadInt32(&e.running) == 0 {
+		return
+	}
+
 	e.mu.Lock()
-	old := e.levelWorkers
-	if wait {
-		e.levelWorkers += 1
+	if e.done == nil {
+		e.mu.Unlock()
+		return
 	}
 
-	if old == 0 && e.done != nil {
-		// Prevent new compactions from starting
-		e.Compactor.DisableCompactions()
+	// Interrupt and disable running compactions
+	e.Compactor.DisableCompactions()
 
-		// Stop all background compaction goroutines
-		close(e.done)
-		e.done = nil
+	// Stop all background compaction goroutines
+	close(e.done)
+	e.done = nil
 
-	}
-
+	// Allow goroutines to exit
 	e.mu.Unlock()
 	e.wg.Wait()
+
+	atomic.StoreInt32(&e.running, 0)
 }
 
 func (e *Engine) enableSnapshotCompactions() {
@@ -967,8 +954,8 @@ func (e *Engine) DeleteSeriesRange(seriesKeys [][]byte, min, max int64) error {
 	// so that snapshotting does not stop while writing out tombstones.  If it is stopped,
 	// and writing tombstones takes a long time, writes can get rejected due to the cache
 	// filling up.
-	e.disableLevelCompactions(true)
-	defer e.enableLevelCompactions(true)
+	e.disableLevelCompactions()
+	defer e.enableLevelCompactions()
 
 	tempKeys := seriesKeys[:]
 	deleteKeys := make([][]byte, 0, len(seriesKeys))
@@ -1308,7 +1295,7 @@ func (e *Engine) compact(quit <-chan struct{}) {
 			e.scheduler.setDepth(4, len(level4Groups))
 
 			// Find the next compaction that can run and try to kick it off
-			for level, runnable := e.scheduler.next(); runnable; level, runnable = e.scheduler.next() {
+			if level, runnable := e.scheduler.next(); runnable {
 				run1 := atomic.LoadInt64(&e.stats.TSMCompactionsActive[0])
 				run2 := atomic.LoadInt64(&e.stats.TSMCompactionsActive[1])
 				run3 := atomic.LoadInt64(&e.stats.TSMCompactionsActive[2])
@@ -1323,32 +1310,23 @@ func (e *Engine) compact(quit <-chan struct{}) {
 
 				switch level {
 				case 1:
-					if !e.compactHiPriorityLevel(level1Groups[0], 1) {
-						goto RELEASE
+					if e.compactHiPriorityLevel(level1Groups[0], 1) {
+						level1Groups = level1Groups[1:]
 					}
-					level1Groups = level1Groups[1:]
-					e.scheduler.setDepth(1, len(level1Groups))
 				case 2:
-					if !e.compactHiPriorityLevel(level2Groups[0], 2) {
-						goto RELEASE
+					if e.compactHiPriorityLevel(level2Groups[0], 2) {
+						level2Groups = level2Groups[1:]
 					}
-					level2Groups = level2Groups[1:]
-					e.scheduler.setDepth(2, len(level2Groups))
 				case 3:
-					if !e.compactLoPriorityLevel(level3Groups[0], 3) {
-						goto RELEASE
+					if e.compactLoPriorityLevel(level3Groups[0], 3) {
+						level3Groups = level3Groups[1:]
 					}
-					level3Groups = level3Groups[1:]
-					e.scheduler.setDepth(3, len(level3Groups))
 				case 4:
-					if !e.compactFull(level4Groups[0]) {
-						goto RELEASE
+					if e.compactFull(level4Groups[0]) {
+						level4Groups = level4Groups[1:]
 					}
-					level4Groups = level4Groups[1:]
-					e.scheduler.setDepth(4, len(level4Groups))
 				}
 			}
-		RELEASE:
 
 			// Release all the plans we didn't start.
 			e.CompactionPlan.Release(level1Groups)

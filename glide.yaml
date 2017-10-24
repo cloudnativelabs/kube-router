@@ -20,9 +20,13 @@ import:
   - packet/bgp
   - server
   - table
+- package: github.com/docker/docker
+  version: v17.05.0-ce
 - package: github.com/spf13/pflag
   version: master
 - package: github.com/vishvananda/netlink
+  version: master
+- package: github.com/vishvananda/netns
   version: master
 - package: k8s.io/apimachinery
   version: 9d38e20d609d27e00d4ec18f7b9db67105a2bde0
