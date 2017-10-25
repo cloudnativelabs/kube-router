@@ -216,11 +216,18 @@ kubectl annotate service my-service "kube-router.io/service.hairpin="
 ### Direct server return
 
 You can enable DSR(Direct Server Return) functionality per service. When enabled service endpoint
-will directly respond to the client. When DSR is enabled Kube-router will uses LVS's tunneling mode to achive this.
+will directly respond to the client by passign the service proxy. When DSR is enabled Kube-router 
+will uses LVS's tunneling mode to achieve this.
 
-To enable DSR you need to annotate service with `kube-router.io/service.dsr=tunnel` annotation.
+To enable DSR you need to annotate service with `kube-router.io/service.dsr=tunnel` annotation. For e.g.
 
-In the current implementation althouh annotation is enabled, DSR will be applicable only to the external IP's.
+```
+kubectl annotate service my-service "kube-router.io/service.dsr=tunnel"
+```
+
+**In the current implementation when annotation is applied on the service, DSR will be applicable only to the external IP's.**
+
+**Also when DSR is used, current implementation does not support port remapping. So you need to use same port and target port for the service**
 
 You will need to enable `hostIPC: true` and `hostPID: true` in kube-router daemonset manifest.
 Also host path `/var/run/docker.sock` must be made a volumemount to kube-router.
@@ -228,7 +235,26 @@ Also host path `/var/run/docker.sock` must be made a volumemount to kube-router.
 Above changes are required for kube-router to enter pod namespeace and create ipip tunnel in the pod and to 
 assign the external IP to the VIP. 
 
-For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirments enabled.
+For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirements enabled.
+
+### Load balancing Scheduling Algorithms
+
+Kube-router uses LVS for service proxy. LVS support rich set of [scheduling alogirthms](http://kb.linuxvirtualserver.org/wiki/IPVS#Job_Scheduling_Algorithms). You can annotate 
+the service to choose one of the scheduling alogirthms. When a service is not annotated `round-robin` scheduler is selected by default
+
+```
+For least connection scheduling use:
+kubectl annotate service my-service "kube-router.io/service.scheduler=lc"
+
+For round-robin scheduling use:
+kubectl annotate service my-service "kube-router.io/service.scheduler=rr"
+
+For source hashing scheduling use:
+kubectl annotate service my-service "kube-router.io/service.scheduler=sh"
+
+For destination hashing scheduling use:
+kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
+```
 
 ## BGP configuration
 
