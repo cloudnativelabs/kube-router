@@ -97,6 +97,7 @@ type serviceInfo struct {
 	nodePort                 int
 	sessionAffinity          bool
 	directServerReturn       bool
+	scheduler                string
 	directServerReturnMethod string
 	hairpin                  bool
 	externalIPs              []string
@@ -272,7 +273,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// create IPVS service for the service to be exposed through the cluster ip
-		ipvsClusterVipSvc, err := ipvsAddService(svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity)
+		ipvsClusterVipSvc, err := ipvsAddService(svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
 		if err != nil {
 			glog.Errorf("Failed to create ipvs service for cluster ip: %s", err.Error())
 			continue
@@ -288,7 +289,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			if vip = nsc.nodeIP; nsc.nodeportBindOnAllIp {
 				vip = net.ParseIP("127.0.0.1")
 			}
-			ipvsNodeportSvc, err = ipvsAddService(vip, protocol, uint16(svc.nodePort), svc.sessionAffinity)
+			ipvsNodeportSvc, err = ipvsAddService(vip, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
 			if err != nil {
 				glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
 				continue
@@ -310,7 +311,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		// without a VIP http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 		// to avoid martian packets
 		for _, externalIP := range svc.externalIPs {
-			ipvsExternalIPSvc, err := ipvsAddFWMarkService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity)
+			ipvsExternalIPSvc, err := ipvsAddFWMarkService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
 			if err != nil {
 				glog.Errorf("Failed to create ipvs service for External IP: %s due to: %s", externalIP, err.Error())
 				continue
@@ -611,6 +612,19 @@ func buildServicesInfo() serviceInfoMap {
 			if ok {
 				svcInfo.directServerReturn = true
 				svcInfo.directServerReturnMethod = dsrMethod
+			}
+			svcInfo.scheduler = ipvs.RoundRobin
+			schedulingMethod, ok := svc.ObjectMeta.Annotations["kube-router.io/service.scheduler"]
+			if ok {
+				if schedulingMethod == ipvs.RoundRobin {
+					svcInfo.scheduler = ipvs.RoundRobin
+				} else if schedulingMethod == ipvs.LeastConnection {
+					svcInfo.scheduler = ipvs.LeastConnection
+				} else if schedulingMethod == ipvs.DestinationHashing {
+					svcInfo.scheduler = ipvs.DestinationHashing
+				} else if schedulingMethod == ipvs.SourceHashing {
+					svcInfo.scheduler = ipvs.SourceHashing
+				}
 			}
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
@@ -941,7 +955,7 @@ func ipvsSetPersistence(svc *ipvs.Service, p bool) {
 	}
 }
 
-func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.Service, error) {
+func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
 	svcs, err := h.GetServices()
 	if err != nil {
 		return nil, err
@@ -959,6 +973,14 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 				glog.Infof("Updated persistence/session-affinity for service: %s", ipvsServiceString(svc))
 			}
 
+			if scheduler != svc.SchedName {
+				svc.SchedName = scheduler
+				err = h.UpdateService(svc)
+				if err != nil {
+					return nil, errors.New("Failed to update the scheduler for the service due to " + err.Error())
+				}
+				glog.Infof("Updated schedule for the service: %s", ipvsServiceString(svc))
+			}
 			// TODO: Make this debug output when we get log levels
 			// glog.Fatal("ipvs service %s:%s:%s already exists so returning", vip.String(),
 			// 	protocol, strconv.Itoa(int(port)))
@@ -972,7 +994,7 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.S
 		AddressFamily: syscall.AF_INET,
 		Protocol:      protocol,
 		Port:          port,
-		SchedName:     ipvs.RoundRobin,
+		SchedName:     scheduler,
 	}
 
 	ipvsSetPersistence(&svc, persistent)
@@ -996,7 +1018,7 @@ func generateFwmark(ip, protocol, port string) uint32 {
 }
 
 // ipvsAddFWMarkService: creates a IPVS service using FWMARK
-func ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool) (*ipvs.Service, error) {
+func ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
 
 	var protocolStr string
 	if protocol == syscall.IPPROTO_TCP {
@@ -1027,6 +1049,14 @@ func ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool) (*
 				glog.Infof("Updated persistence/session-affinity for service: %s", ipvsServiceString(svc))
 			}
 
+			if scheduler != svc.SchedName {
+				svc.SchedName = scheduler
+				err = h.UpdateService(svc)
+				if err != nil {
+					return nil, errors.New("Failed to update the scheduler for the service due to " + err.Error())
+				}
+				glog.Infof("Updated schedule for the service: %s", ipvsServiceString(svc))
+			}
 			// TODO: Make this debug output when we get log levels
 			// glog.Fatal("ipvs service %s:%s:%s already exists so returning", vip.String(),
 			// 	protocol, strconv.Itoa(int(port)))
