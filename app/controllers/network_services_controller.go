@@ -29,6 +29,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/net/context"
+	api "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -307,7 +308,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		externalIpServices := make([]externalIPService, 0)
 		// create IPVS service for the service to be exposed through the external IP's
 		// For external IP (which are meant for ingress traffic) Kube-router setsup IPVS services
-		// based on FWMARK to enable Direct server return functionality. DSR requires a director 
+		// based on FWMARK to enable Direct server return functionality. DSR requires a director
 		// without a VIP http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 		// to avoid martian packets
 		for _, externalIP := range svc.externalIPs {
@@ -331,8 +332,8 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			// to deliver the packet locally so that IPVS can pick the packet
 			err = routeVIPTrafficToDirector("0x" + fmt.Sprintf("%x", fwMark))
 			if err != nil {
-				glog.Errorf("Failed to setup ip rule to lookup traffic to external IP: %s through custom " + 
-							"route table due to ", externalIP, err.Error())
+				glog.Errorf("Failed to setup ip rule to lookup traffic to external IP: %s through custom "+
+					"route table due to ", externalIP, err.Error())
 				continue
 			}
 
@@ -371,17 +372,41 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			}
 
 			for _, externalIpService := range externalIpServices {
-				// For now just support IPVS tunnel mode, we can add other ways of DSR in future
+
 				if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
 					dst.ConnectionFlags = ipvs.ConnectionFlagTunnel
-					err := prepareEndpointForDsr(nsc.nodeIP.String(), endpoint.ip, externalIpService.externalIp)
-					if err != nil {
-						glog.Errorf("Failed to prepare endpoint %s to do direct server return due to %s", endpoint.ip, err.Error())
-					}
 				}
+
+				// add server to IPVS service
 				err := ipvsAddServer(externalIpService.ipvsSvc, &dst)
 				if err != nil {
 					glog.Errorf(err.Error())
+				}
+
+				// For now just support IPVS tunnel mode, we can add other ways of DSR in future
+				if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
+
+					podObj, err := getPodObjectForEndpoint(endpoint.ip)
+					if err != nil {
+						glog.Errorf("Failed to find endpoint with ip: " + endpoint.ip + ". so skipping peparing endpoint for DSR")
+						continue
+					}
+
+					// we are only concerned with endpoint pod running on current node
+					if strings.Compare(podObj.Status.HostIP, nsc.nodeIP.String()) != 0 {
+						continue
+					}
+
+					containerID := strings.TrimPrefix(podObj.Status.ContainerStatuses[0].ContainerID, "docker://")
+					if containerID == "" {
+						glog.Errorf("Failed to find container id for the endpoint with ip: " + endpoint.ip + " so skipping peparing endpoint for DSR")
+						continue
+					}
+
+					err = prepareEndpointForDsr(containerID, endpoint.ip, externalIpService.externalIp)
+					if err != nil {
+						glog.Errorf("Failed to prepare endpoint %s to do direct server return due to %s", endpoint.ip, err.Error())
+					}
 				}
 			}
 		}
@@ -448,6 +473,15 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	return nil
 }
 
+func getPodObjectForEndpoint(endpointIP string) (*api.Pod, error) {
+	for _, pod := range watchers.PodWatcher.List() {
+		if strings.Compare(pod.Status.PodIP, endpointIP) == 0 {
+			return pod, nil
+		}
+	}
+	return nil, errors.New("Failed to find pod with ip " + endpointIP)
+}
+
 // This function does the following
 // - get the pod corresponding to the endpoint ip
 // - get the container id from pod spec
@@ -455,23 +489,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 // - enter process network namespace and create ipip tunnel
 // - add VIP to the tunnel interface
 // - disable rp_filter
-func prepareEndpointForDsr(nodeip string, endpointIP string, vip string) error {
+func prepareEndpointForDsr(containerId string, endpointIP string, vip string) error {
 
 	currentNamespaceHandle, err := netns.Get()
 	if err != nil {
 		return errors.New("Failed to get namespace due to " + err.Error())
-	}
-	defer netns.Set(currentNamespaceHandle)
-
-	containerID := ""
-	for _, pod := range watchers.PodWatcher.List() {
-		if strings.Compare(pod.Status.HostIP, nodeip) == 0 && strings.Compare(pod.Status.PodIP, endpointIP) == 0 {
-			containerID = strings.TrimPrefix(pod.Status.ContainerStatuses[0].ContainerID, "docker://")
-			break
-		}
-	}
-	if containerID == "" {
-		return errors.New("Failed to get container id, so not preparing endpoint for DSR")
 	}
 
 	client, err := client.NewEnvClient()
@@ -479,7 +501,7 @@ func prepareEndpointForDsr(nodeip string, endpointIP string, vip string) error {
 		return errors.New("Failed to get docker client due to " + err.Error())
 	}
 
-	containerSpec, err := client.ContainerInspect(context.Background(), containerID)
+	containerSpec, err := client.ContainerInspect(context.Background(), containerId)
 	if err != nil {
 		return errors.New("Failed to get docker container spec due to " + err.Error())
 	}
@@ -495,10 +517,14 @@ func prepareEndpointForDsr(nodeip string, endpointIP string, vip string) error {
 		return errors.New("Failed to enter to endpoint namespace due to " + err.Error())
 	}
 
+	// TODO: fix boilerplate `netns.Set(currentNamespaceHandle)` code. Need a robust
+	// way to switch back to old namespace, pretty much many things will go wrong
+
 	// create a ipip tunnel interface inside the endpoint container
 	tunIf, err := netlink.LinkByName(KUBE_TUNNEL_IF)
 	if err != nil {
 		if err.Error() != IFACE_NOT_FOUND {
+			netns.Set(currentNamespaceHandle)
 			return errors.New("Failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
 		}
 
@@ -509,11 +535,22 @@ func prepareEndpointForDsr(nodeip string, endpointIP string, vip string) error {
 		}
 		err = netlink.LinkAdd(&ipTunLink)
 		if err != nil {
+			netns.Set(currentNamespaceHandle)
 			return errors.New("Failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
 		}
-		time.Sleep(1000 * time.Millisecond)
-		tunIf, err = netlink.LinkByName(KUBE_TUNNEL_IF)
+
+		// TODO: this is ugly, but ran into issue multiple times where interface did not come up quickly.
+		// need to find the root cause
+		for retry := 0; retry < 60; retry++ {
+			time.Sleep(1000 * time.Millisecond)
+			tunIf, err = netlink.LinkByName(KUBE_TUNNEL_IF)
+			if err != nil && err.Error() == IFACE_NOT_FOUND {
+				continue
+			}
+		}
+
 		if err != nil {
+			netns.Set(currentNamespaceHandle)
 			return errors.New("Failed to get " + KUBE_TUNNEL_IF + " tunnel interface handle due to " + err.Error())
 		}
 
@@ -523,6 +560,7 @@ func prepareEndpointForDsr(nodeip string, endpointIP string, vip string) error {
 	// bring the tunnel interface up
 	err = netlink.LinkSetUp(tunIf)
 	if err != nil {
+		netns.Set(currentNamespaceHandle)
 		return errors.New("Failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
 	}
 
@@ -531,17 +569,20 @@ func prepareEndpointForDsr(nodeip string, endpointIP string, vip string) error {
 		Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 	err = netlink.AddrAdd(tunIf, netlinkVip)
 	if err != nil && err.Error() != IFACE_HAS_ADDR {
+		netns.Set(currentNamespaceHandle)
 		return errors.New("Failed to assign vip " + vip + " to kube-tunnel-if interface ")
 	}
 	glog.Infof("Successfully assinged VIP: " + vip + " in endpoint " + endpointIP + ".")
 
-	// disable rp_filter on KUBE_TUNNEL_IF interface
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
+	// disable rp_filter on all interface
+	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
+		netns.Set(currentNamespaceHandle)
 		return errors.New("Failed to disable rp_filter in the endpoint container")
 	}
 	glog.Infof("Successfully disabled rp_filter in endpoint " + endpointIP + ".")
 
+	netns.Set(currentNamespaceHandle)
 	return nil
 }
 
@@ -1009,7 +1050,7 @@ func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool, schedule
 
 // generateFwmark: generate a uint32 hash value using the IP address, port, protocol information
 // TODO: collision can rarely happen but still need to be ruled out
-// TODO: I ran into issues with FWMARK for any value above 2^15. Either policy 
+// TODO: I ran into issues with FWMARK for any value above 2^15. Either policy
 // routing and IPVS FWMARK service was not functioning with value above 2^15
 func generateFwmark(ip, protocol, port string) uint32 {
 	h := fnv.New32a()
@@ -1093,6 +1134,11 @@ func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination) error {
 	}
 
 	if strings.Contains(err.Error(), IPVS_SERVER_EXISTS) {
+		err = h.UpdateDestination(service, dest)
+		if err != nil {
+			return fmt.Errorf("Failed to update ipvs destination %s to the ipvs service %s due to : %s", dest.Address,
+				ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
+		}
 		// TODO: Make this debug output when we get log levels
 		// glog.Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
 		// 	ipvsDestinationString(dest), ipvsServiceString(service))
@@ -1109,7 +1155,7 @@ const (
 )
 
 // setupMangleTableRule: setsup iptable rule to FWMARK the traffic to exteranl IP vip
-func setupMangleTableRule(ip string, protocol string,  port string, fwmark string) error {
+func setupMangleTableRule(ip string, protocol string, port string, fwmark string) error {
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
@@ -1133,8 +1179,8 @@ func routeVIPTrafficToDirector(fwmark string) error {
 	if !strings.Contains(string(out), fwmark) {
 		err = exec.Command("ip", "rule", "add", "fwmark", fwmark, "table", customDSRRouteTableID).Run()
 		if err != nil {
-			return errors.New("Failed to add policy rule to lookup traffic to VIP through the custom " + 
-					" routing table due to " + err.Error())
+			return errors.New("Failed to add policy rule to lookup traffic to VIP through the custom " +
+				" routing table due to " + err.Error())
 		}
 	}
 	return nil
@@ -1160,11 +1206,11 @@ func setupPolicyRoutingForDSR() error {
 	out, err := exec.Command("ip", "route", "list", "table", customDSRRouteTableID).Output()
 	if err != nil {
 		return errors.New("Failed to verify required default route exists. " +
-					"Failed to setup policy routing required for DSR due to " + err.Error())
+			"Failed to setup policy routing required for DSR due to " + err.Error())
 	}
 	if !strings.Contains(string(out), " lo ") {
 		if err = exec.Command("ip", "route", "add", "local", "default", "dev", "lo", "table",
-				customDSRRouteTableID).Run(); err != nil {
+			customDSRRouteTableID).Run(); err != nil {
 			return errors.New("Failed to add route in custom route table due to: " + err.Error())
 		}
 	}
