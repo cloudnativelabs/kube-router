@@ -253,14 +253,15 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	if err != nil {
 		return errors.New("Failed setup PBR for DSR due to: " + err.Error())
 	}
-	glog.Infof("Custom routing table " + customDSRRouteTableName + "required for Direct Server Return is setup as expected.")
+	glog.Infof("Custom routing table " + customDSRRouteTableName + " required for Direct Server Return is setup as expected.")
 
 	glog.Infof("Setting up custom route table required to add routes for external IP's.")
 	err = setupRoutesForExternalIPForDSR(serviceInfoMap)
 	if err != nil {
+		glog.Errorf("Failed setup custom routing table required to add routes for external IP's due to: " + err.Error())
 		return errors.New("Failed setup custom routing table required to add routes for external IP's due to: " + err.Error())
 	}
-	glog.Infof("Custom routing table " + externalIPRouteTableName + "required for Direct Server Return is setup as expected.")
+	glog.Infof("Custom routing table " + externalIPRouteTableName + " required for Direct Server Return is setup as expected.")
 
 	// map of active services and service endpoints
 	activeServiceEndpointMap := make(map[string][]string)
@@ -1255,7 +1256,7 @@ func routeVIPTrafficToDirector(fwmark string) error {
 		return errors.New("Failed to verify if `ip rule` exists due to: " + err.Error())
 	}
 	if !strings.Contains(string(out), fwmark) {
-		err = exec.Command("ip", "rule", "add", "fwmark", fwmark, "table", customDSRRouteTableID).Run()
+		err = exec.Command("ip", "rule", "add", "prio", "32764", "fwmark", fwmark, "table", customDSRRouteTableID).Run()
 		if err != nil {
 			return errors.New("Failed to add policy rule to lookup traffic to VIP through the custom " +
 				" routing table due to " + err.Error())
@@ -1272,12 +1273,13 @@ func setupPolicyRoutingForDSR() error {
 	if err != nil {
 		return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 	}
+
 	if !strings.Contains(string(b), customDSRRouteTableName) {
 		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 		}
-		if _, err = f.WriteString(customDSRRouteTableID + " " + customDSRRouteTableName); err != nil {
+		if _, err = f.WriteString(customDSRRouteTableID + " " + customDSRRouteTableName + "\n"); err != nil {
 			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 		}
 	}
@@ -1305,21 +1307,40 @@ func setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap) error {
 	if err != nil {
 		return errors.New("Failed to setup external ip routing table required for DSR due to " + err.Error())
 	}
+
 	if !strings.Contains(string(b), externalIPRouteTableName) {
 		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
-			return errors.New("Failed to setup external ip routing table required for DSR due to " + err.Error())
+			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
 		}
-		if _, err = f.WriteString(externalIPRouteTableId + " " + externalIPRouteTableName); err != nil {
-			return errors.New("Failed to setup external ip routing table required for DSR due to " + err.Error())
+		if _, err = f.WriteString(externalIPRouteTableId + " " + externalIPRouteTableName + "\n"); err != nil {
+			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
 		}
 	}
+
 	out, err := exec.Command("ip", "route", "list", "table", externalIPRouteTableId).Output()
 	if err != nil {
 		return errors.New("Failed to verify required routing table for external IP's exists. " +
 			"Failed to setup policy routing required for DSR due to " + err.Error())
 	}
 
+	out, err = exec.Command("ip", "rule", "list").Output()
+	if err != nil {
+		return errors.New("Failed to verify if `ip rule add prio 32765 from all lookup external_ip` exists due to: " + err.Error())
+	}
+
+	if ! (strings.Contains(string(out), externalIPRouteTableName) || strings.Contains(string(out), externalIPRouteTableId)) {
+		err = exec.Command("ip", "rule", "add", "prio", "32765", "from", "all", "lookup", externalIPRouteTableId).Run()
+		if err != nil {
+			glog.Infof("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to " + err.Error())
+			return errors.New("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to " + err.Error())
+		}
+	}
+
+	out, err = exec.Command("ip", "route", "list", "table", externalIPRouteTableId).Output()
+	if err != nil {
+		return errors.New("Failed to get routes in external_ip table due to: " + err.Error())
+	}
 	for _, svc := range serviceInfoMap {
 		for _, externalIP := range svc.externalIPs {
 			if !strings.Contains(string(out), externalIP) {
