@@ -62,7 +62,11 @@ will fit in perfectly. From a simple full node-to-node mesh to per-node peering
 configurations, most routing needs can be attained. The configuration is
 Kubernetes native (annotations) just like the rest of kube-router, so use the
 tools you already know! Since kube-router uses GoBGP, you have access to a
-modern BGP API platform as well right out of the box.
+modern BGP API platform as well right out of the box. Kube-router also provides
+a way to expose services outside the cluster by advertising ClusterIP and externalIPs to
+configured BGP peers. Kube-routes also support MD5 password based authentication and
+uses strict export policies so you can be assured routes are advertised to underlay
+only as you intended.
 
 For more details please refer to the [BGP documentation](Documentation/bgp.md).
 

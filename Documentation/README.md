@@ -215,6 +215,9 @@ kubectl annotate service my-service "kube-router.io/service.hairpin="
 
 ### Direct server return
 
+Please read below blog on how to user DSR in combination with `--advertise-external-ip` to build highly scalable and available ingress.
+https://cloudnativelabs.github.io/post/2017-11-01-kube-high-available-ingress/
+
 You can enable DSR(Direct Server Return) functionality per service. When enabled service endpoint
 will directly respond to the client by passign the service proxy. When DSR is enabled Kube-router 
 will uses LVS's tunneling mode to achieve this.
