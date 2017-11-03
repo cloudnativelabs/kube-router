@@ -22,7 +22,7 @@ For the step #3 **Installing a pod network** install a kube-router pod network a
 KUBECONFIG=/etc/kubernetes/admin.conf kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kubeadm-kuberouter-all-features.yaml
 ```
 
-Now since kube-router provides service proxy as well. Run below commands to remove kube-proxy and cleanup any iptables configuratin it may have done.
+Now since kube-router provides service proxy as well. Run below commands to remove kube-proxy and cleanup any iptables configuration it may have done.
 
 ```sh
 KUBECONFIG=/etc/kubernetes/admin.conf kubectl -n kube-system delete ds kube-proxy
