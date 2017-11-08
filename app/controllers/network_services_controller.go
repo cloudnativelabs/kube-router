@@ -1307,6 +1307,7 @@ func setupPolicyRoutingForDSR() error {
 		if err != nil {
 			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 		}
+		defer f.Close()
 		if _, err = f.WriteString(customDSRRouteTableID + " " + customDSRRouteTableName + "\n"); err != nil {
 			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 		}
@@ -1341,6 +1342,7 @@ func setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap) error {
 		if err != nil {
 			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
 		}
+		defer f.Close()
 		if _, err = f.WriteString(externalIPRouteTableId + " " + externalIPRouteTableName + "\n"); err != nil {
 			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
 		}
