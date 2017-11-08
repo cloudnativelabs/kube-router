@@ -11,7 +11,7 @@ Kube-router provides pod networking, network policy and high perfoming IPVS/LVS 
 For the step #3 **Installing a pod network** install a kube-router pod network and network policy add-on with the following command:
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kubeadm-kuberouter.yaml
+KUBECONFIG=/etc/kubernetes/admin.conf kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kubeadm-kuberouter.yaml
 ```
 
 ## kube-router providing service proxy, firewall and pod networking.
