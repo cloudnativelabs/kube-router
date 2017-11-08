@@ -292,24 +292,50 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		activeServiceEndpointMap[clusterServiceId] = make([]string, 0)
 
 		// create IPVS service for the service to be exposed through the nodeport
-		var ipvsNodeportSvc *ipvs.Service
-		var nodeServiceId string
+		var ipvsNodeportSvcs []*ipvs.Service
+
+		var nodeServiceIds []string
+
 		if svc.nodePort != 0 {
-			var vip net.IP
-			if vip = nsc.nodeIP; nsc.nodeportBindOnAllIp {
-				vip = net.ParseIP("127.0.0.1")
-			}
-			ipvsNodeportSvc, err = ipvsAddService(vip, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
-			if err != nil {
-				glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
-				continue
-			}
 			if nsc.nodeportBindOnAllIp {
-				nodeServiceId = generateIpPortId("127.0.0.1", svc.protocol, strconv.Itoa(svc.nodePort))
+				// bind on all interfaces instead
+				addrs, err := getAllLocalIPs()
+
+				if err != nil {
+					glog.Errorf("Could not get list of system addresses for ipvs services: %s", err.Error())
+					continue
+				}
+
+				if len(addrs) == 0 {
+					glog.Errorf("No IP addresses returned for nodeport service creation!")
+					continue
+				}
+
+				ipvsNodeportSvcs = make([]*ipvs.Service, len(addrs))
+				nodeServiceIds = make([]string, len(addrs))
+
+				for i, addr := range addrs {
+					ipvsNodeportSvcs[i], err = ipvsAddService(addr.IP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
+					if err != nil {
+						glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
+						continue
+					}
+
+					nodeServiceIds[i] = generateIpPortId(addr.IP.String(), svc.protocol, strconv.Itoa(svc.nodePort))
+					activeServiceEndpointMap[nodeServiceIds[i]] = make([]string, 0)
+				}
 			} else {
-				nodeServiceId = generateIpPortId(nsc.nodeIP.String(), svc.protocol, strconv.Itoa(svc.nodePort))
+				ipvsNodeportSvcs = make([]*ipvs.Service, 1)
+				ipvsNodeportSvcs[0], err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
+				if err != nil {
+					glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
+					continue
+				}
+
+				nodeServiceIds = make([]string, 1)
+				nodeServiceIds[0] = generateIpPortId(nsc.nodeIP.String(), svc.protocol, strconv.Itoa(svc.nodePort))
+				activeServiceEndpointMap[nodeServiceIds[0]] = make([]string, 0)
 			}
-			activeServiceEndpointMap[nodeServiceId] = make([]string, 0)
 		}
 
 		endpoints := endpointsInfoMap[k]
@@ -404,13 +430,15 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 
 			if svc.nodePort != 0 {
-				err := ipvsAddServer(ipvsNodeportSvc, &dst)
-				if err != nil {
-					glog.Errorf(err.Error())
-				}
+				for i := 0; i < len(ipvsNodeportSvcs); i++ {
+					err := ipvsAddServer(ipvsNodeportSvcs[i], &dst)
+					if err != nil {
+						glog.Errorf(err.Error())
+					}
 
-				activeServiceEndpointMap[nodeServiceId] =
-					append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+					activeServiceEndpointMap[nodeServiceIds[i]] =
+						append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+				}
 			}
 
 			for _, externalIpService := range externalIpServices {
@@ -1329,7 +1357,7 @@ func setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap) error {
 		return errors.New("Failed to verify if `ip rule add prio 32765 from all lookup external_ip` exists due to: " + err.Error())
 	}
 
-	if ! (strings.Contains(string(out), externalIPRouteTableName) || strings.Contains(string(out), externalIPRouteTableId)) {
+	if !(strings.Contains(string(out), externalIPRouteTableName) || strings.Contains(string(out), externalIPRouteTableId)) {
 		err = exec.Command("ip", "rule", "add", "prio", "32765", "from", "all", "lookup", externalIPRouteTableId).Run()
 		if err != nil {
 			glog.Infof("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to " + err.Error())
@@ -1365,6 +1393,36 @@ func generateServiceId(namespace, svcName, port string) string {
 // unique identfier for a load-balanced service (namespace + name + portname)
 func generateIpPortId(ip, protocol, port string) string {
 	return ip + "-" + protocol + "-" + port
+}
+
+// returns all IP addresses found on any network address in the system, excluding dummy and docker interfaces
+func getAllLocalIPs() ([]netlink.Addr, error) {
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, errors.New("Could not load list of net interfaces: " + err.Error())
+	}
+
+	addrs := make([]netlink.Addr, 0)
+	for _, link := range links {
+
+		// do not include IPs for any interface that calls itself "dummy"
+		// or any of the docker# interfaces
+		if strings.Contains(link.Attrs().Name, "dummy") ||
+			strings.Contains(link.Attrs().Name, "kube") ||
+			strings.Contains(link.Attrs().Name, "docker") {
+
+			continue
+		}
+
+		linkAddrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
+		if err != nil {
+			return nil, errors.New("Failed to get IPs for interface: " + err.Error())
+		}
+
+		addrs = append(addrs, linkAddrs...)
+	}
+
+	return addrs, nil
 }
 
 func getKubeDummyInterface() (netlink.Link, error) {
