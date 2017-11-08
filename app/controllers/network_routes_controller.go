@@ -69,7 +69,7 @@ var (
 )
 
 const (
-	customRouteTableID   = 77
+	customRouteTableID   = "77"
 	customRouteTableName = "kube-router"
 	podSubnetsIPSetName  = "kube-router-pod-subnets"
 	nodeAddrsIPSetName   = "kube-router-node-ips"
@@ -734,14 +734,14 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop.String() + " already exists.")
 		}
 
-		out, err := exec.Command("ip", "route", "list", "table", customRouteTableName).Output()
+		out, err := exec.Command("ip", "route", "list", "table", customRouteTableID).Output()
 		if err != nil {
 			return fmt.Errorf("Failed to verify if route already exists in %s table: %s",
 				customRouteTableName, err.Error())
 		}
 		if !strings.Contains(string(out), tunnelName) {
 			if err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table",
-				customRouteTableName).Run(); err != nil {
+				customRouteTableID).Run(); err != nil {
 				return errors.New("Failed to add route in custom route table due to: " + err.Error())
 			}
 		}
@@ -1044,7 +1044,7 @@ func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 	}
 
 	if !strings.Contains(string(out), cidr) {
-		err = exec.Command("ip", "rule", "add", "from", cidr, "table", customRouteTableName).Run()
+		err = exec.Command("ip", "rule", "add", "from", cidr, "lookup", customRouteTableID).Run()
 		if err != nil {
 			return fmt.Errorf("Failed to add ip rule due to: %s", err.Error())
 		}
@@ -1072,7 +1072,7 @@ func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
 	}
 
 	if strings.Contains(string(out), cidr) {
-		err = exec.Command("ip", "rule", "del", "from", cidr, "table", customRouteTableName).Run()
+		err = exec.Command("ip", "rule", "del", "from", cidr, "table", customRouteTableID).Run()
 		if err != nil {
 			return fmt.Errorf("Failed to delete ip rule: %s", err.Error())
 		}
@@ -1081,20 +1081,20 @@ func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
 	return nil
 }
 
-func rtTablesAdd(num uint, s string) error {
+func rtTablesAdd(tableNumber, tableName string) error {
 	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
 	if err != nil {
 		return fmt.Errorf("Failed to read: %s", err.Error())
 	}
 
-	if !strings.Contains(string(b), s) {
+	if !strings.Contains(string(b), tableName) {
 		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return fmt.Errorf("Failed to open: %s", err.Error())
 		}
-		if _, err = f.WriteString(strconv.Itoa(int(num)) + " " + s); err != nil {
-			return fmt.Errorf("Failed to write: %s",
-				err.Error())
+		defer f.Close()
+		if _, err = f.WriteString(tableNumber + " " + tableName + "\n"); err != nil {
+			return fmt.Errorf("Failed to write: %s", err.Error())
 		}
 	}
 
