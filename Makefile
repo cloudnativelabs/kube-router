@@ -16,7 +16,7 @@ UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 
 all: test kube-router container ## Default target. Runs tests, builds binaries and images.
 
-kube-router: $(shell find . -name \*.go) ## Builds kube-router.
+kube-router:
 	@echo Starting kube-router binary build.
 	CGO_ENABLED=0 go build -o kube-router kube-router.go
 	@echo Finished kube-router binary build.

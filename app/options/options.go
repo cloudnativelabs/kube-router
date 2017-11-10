@@ -29,6 +29,7 @@ type KubeRouterConfig struct {
 	PeerASNs            []uint
 	ClusterAsn          uint
 	FullMeshMode        bool
+	BGPGracefulRestart  bool
 	GlobalHairpinMode   bool
 	NodePortBindOnAllIp bool
 	EnableOverlay       bool
@@ -86,6 +87,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"ASN numbers of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr.")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
+	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
+		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
 	fs.StringVar(&s.HostnameOverride, "hostname-override", s.HostnameOverride,
 		"Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.")
 	fs.BoolVar(&s.GlobalHairpinMode, "hairpin-mode", false,
