@@ -151,6 +151,25 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 	}
 
+	// create 'kube-bridge' interface to which pods will be connected
+	_, err = netlink.LinkByName("kube-bridge")
+	if err != nil && err.Error() == IFACE_NOT_FOUND {
+		linkAttrs := netlink.NewLinkAttrs()
+		linkAttrs.Name = "kube-bridge"
+		bridge := &netlink.Bridge{LinkAttrs: linkAttrs}
+		if err = netlink.LinkAdd(bridge); err != nil {
+			glog.Errorf("Failed to create `kube-router` bridge due to %s. Will be created by CNI bridge plugin when pod is launched.", err.Error())
+		}
+		kubeBridgeIf, err := netlink.LinkByName("kube-bridge")
+		if err != nil {
+			glog.Errorf("Failed to find created `kube-router` bridge due to %s. Will be created by CNI bridge plugin when pod is launched.", err.Error())
+		}
+		err = netlink.LinkSetUp(kubeBridgeIf)
+		if err != nil {
+			glog.Errorf("Failed to bring `kube-router` bridge up due to %s. Will be created by CNI bridge plugin at later point when pod is launched.", err.Error())
+		}
+	}
+
 	// enable netfilter for the bridge
 	if _, err := exec.Command("modprobe", "br_netfilter").CombinedOutput(); err != nil {
 		glog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may not work: %s", err.Error())
