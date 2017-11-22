@@ -511,19 +511,23 @@ func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
 	return peers, nil
 }
 
-func connectToPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfig) error {
+func connectToPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfig, bgpGracefulRestart bool) error {
 	for _, peerConfig := range peerConfigs {
 		n := &config.Neighbor{
 			Config: *peerConfig,
-			GracefulRestart: config.GracefulRestart{
+		}
+
+		if bgpGracefulRestart {
+			n.GracefulRestart = config.GracefulRestart{
 				Config: config.GracefulRestartConfig{
 					Enabled: true,
 				},
 				State: config.GracefulRestartState{
 					LocalRestarting: true,
 				},
-			},
-			AfiSafis: []config.AfiSafi{
+			}
+
+			n.AfiSafis = []config.AfiSafi{
 				{
 					Config: config.AfiSafiConfig{
 						AfiSafiName: config.AFI_SAFI_TYPE_IPV4_UNICAST,
@@ -535,7 +539,7 @@ func connectToPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfi
 						},
 					},
 				},
-			},
+			}
 		}
 		err := server.AddNeighbor(n)
 		if err != nil {
@@ -1313,7 +1317,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	if len(nrc.globalPeerRouters) != 0 {
-		err := connectToPeers(nrc.bgpServer, nrc.globalPeerRouters)
+		err := connectToPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart)
 		if err != nil {
 			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
