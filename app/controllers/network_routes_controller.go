@@ -53,6 +53,7 @@ type NetworkRoutingController struct {
 	globalPeerRouters    []*config.NeighborConfig
 	nodePeerRouters      []string
 	bgpFullMeshMode      bool
+	bgpGracefulRestart   bool
 	ipSetHandler         *utils.IPSet
 	enableOverlays       bool
 }
@@ -202,7 +203,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 	}
 
-	defer nrc.bgpServer.Stop()
+	defer nrc.bgpServer.Shutdown()
 
 	// loop forever till notified to stop on stopCh
 	for {
@@ -258,7 +259,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			}
 		}
 
-		glog.Infof("Performing periodic syn of the routes")
+		glog.Infof("Performing periodic sync of the routes")
 		err = nrc.advertiseRoute()
 		if err != nil {
 			glog.Errorf("Error advertising route: %s", err.Error())
@@ -514,6 +515,27 @@ func connectToPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfi
 	for _, peerConfig := range peerConfigs {
 		n := &config.Neighbor{
 			Config: *peerConfig,
+			GracefulRestart: config.GracefulRestart{
+				Config: config.GracefulRestartConfig{
+					Enabled: true,
+				},
+				State: config.GracefulRestartState{
+					LocalRestarting: true,
+				},
+			},
+			AfiSafis: []config.AfiSafi{
+				{
+					Config: config.AfiSafiConfig{
+						AfiSafiName: config.AFI_SAFI_TYPE_IPV4_UNICAST,
+						Enabled:     true,
+					},
+					MpGracefulRestart: config.MpGracefulRestart{
+						Config: config.MpGracefulRestartConfig{
+							Enabled: true,
+						},
+					},
+				},
+			},
 		}
 		err := server.AddNeighbor(n)
 		if err != nil {
@@ -957,6 +979,31 @@ func (nrc *NetworkRoutingController) syncPeers() {
 			},
 		}
 
+		if nrc.bgpGracefulRestart {
+			n.GracefulRestart = config.GracefulRestart{
+				Config: config.GracefulRestartConfig{
+					Enabled: true,
+				},
+				State: config.GracefulRestartState{
+					LocalRestarting: true,
+				},
+			}
+
+			n.AfiSafis = []config.AfiSafi{
+				{
+					Config: config.AfiSafiConfig{
+						AfiSafiName: config.AFI_SAFI_TYPE_IPV4_UNICAST,
+						Enabled:     true,
+					},
+					MpGracefulRestart: config.MpGracefulRestart{
+						Config: config.MpGracefulRestartConfig{
+							Enabled: true,
+						},
+					},
+				},
+			}
+		}
+
 		// TODO: check if a node is alredy added as nieighbour in a better way than add and catch error
 		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
 			if !strings.Contains(err.Error(), "Can't overwrite the existing peer") {
@@ -1328,6 +1375,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 
 	nrc := NetworkRoutingController{}
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
+	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
