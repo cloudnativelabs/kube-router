@@ -223,9 +223,6 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			}
 		}
 
-		// add the current set of nodes (excluding self) as BGP peers. Nodes form full mesh
-		nrc.syncPeers()
-
 		// advertise cluster IP for the service to be reachable via host
 		if nrc.advertiseClusterIp {
 			glog.Infof("Advertising cluster ips of services to the external BGP peers")
@@ -269,6 +266,9 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		if err != nil {
 			glog.Errorf("Error adding BGP export policies: %s", err.Error())
 		}
+
+		// add the current set of nodes (excluding self) as BGP peers. Nodes form full mesh
+		nrc.syncPeers()
 
 		select {
 		case <-stopCh:
