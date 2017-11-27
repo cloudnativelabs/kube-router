@@ -53,6 +53,7 @@ type NetworkRoutingController struct {
 	globalPeerRouters    []*config.NeighborConfig
 	nodePeerRouters      []string
 	bgpFullMeshMode      bool
+	bgpEnableInternal    bool
 	bgpGracefulRestart   bool
 	ipSetHandler         *utils.IPSet
 	enableOverlays       bool
@@ -267,8 +268,9 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			glog.Errorf("Error adding BGP export policies: %s", err.Error())
 		}
 
-		// add the current set of nodes (excluding self) as BGP peers. Nodes form full mesh
-		nrc.syncPeers()
+		if nrc.bgpEnableInternal {
+			nrc.syncInternalPeers()
+		}
 
 		select {
 		case <-stopCh:
@@ -924,11 +926,11 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	return nil
 }
 
-// Refresh the peer relationship rest of the nodes in the cluster. Node add/remove
+// Refresh the peer relationship rest of the nodes in the cluster (iBGP peers). Node add/remove
 // events should ensure peer relationship with only currently active nodes. In case
 // we miss any events from API server this method which is called periodically
 // ensure peer relationship with removed nodes is deleted. Also update Pod subnet ipset.
-func (nrc *NetworkRoutingController) syncPeers() {
+func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 	glog.Infof("Syncing BGP peers for the node.")
 
@@ -1379,6 +1381,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 
 	nrc := NetworkRoutingController{}
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
+	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
@@ -1459,7 +1462,9 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 			"which its configured: " + err.Error())
 	}
 
-	watchers.NodeWatcher.RegisterHandler(&nrc)
+	if nrc.bgpEnableInternal {
+		watchers.NodeWatcher.RegisterHandler(&nrc)
+	}
 
 	return &nrc, nil
 }
