@@ -1500,6 +1500,7 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 
 	nsc := NetworkServicesController{}
 	nsc.syncPeriod = config.IpvsSyncPeriod
+	nsc.globalHairpin = config.GlobalHairpinMode
 
 	nsc.serviceMap = make(serviceInfoMap)
 	nsc.endpointsMap = make(endpointsInfoMap)
