@@ -27,6 +27,7 @@ type KubeRouterConfig struct {
 	AdvertiseExternalIp bool
 	PeerRouters         []net.IP
 	PeerASNs            []uint
+	PeerMultihopTtl     uint8
 	ClusterAsn          uint
 	FullMeshMode        bool
 	BGPGracefulRestart  bool
@@ -86,6 +87,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"ASN number under which cluster nodes will run iBGP.")
 	fs.UintSliceVar(&s.PeerASNs, "peer-router-asns", s.PeerASNs,
 		"ASN numbers of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr.")
+	fs.Uint8Var(&s.PeerMultihopTtl, "peer-router-multihop-ttl", s.PeerMultihopTtl,
+		"Enable eBGP multihop supports -- sets multihop-ttl. (Relevant only if ttl >= 2)")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,

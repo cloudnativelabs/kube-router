@@ -57,6 +57,7 @@ type NetworkRoutingController struct {
 	bgpGracefulRestart   bool
 	ipSetHandler         *utils.IPSet
 	enableOverlays       bool
+	peerMultihopTtl      uint8
 }
 
 var (
@@ -513,7 +514,7 @@ func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
 	return peers, nil
 }
 
-func connectToPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfig, bgpGracefulRestart bool) error {
+func connectToPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfig, bgpGracefulRestart bool, peerMultihopTtl uint8) error {
 	for _, peerConfig := range peerConfigs {
 		n := &config.Neighbor{
 			Config: *peerConfig,
@@ -540,6 +541,18 @@ func connectToPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfi
 							Enabled: true,
 						},
 					},
+				},
+			}
+		}
+		if peerMultihopTtl > 1 {
+			n.EbgpMultihop = config.EbgpMultihop{
+				Config: config.EbgpMultihopConfig{
+					Enabled:     true,
+					MultihopTtl: peerMultihopTtl,
+				},
+				State: config.EbgpMultihopState{
+					Enabled:     true,
+					MultihopTtl: peerMultihopTtl,
 				},
 			}
 		}
@@ -1319,7 +1332,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	if len(nrc.globalPeerRouters) != 0 {
-		err := connectToPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart)
+		err := connectToPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart, nrc.peerMultihopTtl)
 		if err != nil {
 			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
@@ -1383,6 +1396,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
 	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
+	nrc.peerMultihopTtl = kubeRouterConfig.PeerMultihopTtl
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
