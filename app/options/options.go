@@ -36,6 +36,7 @@ type KubeRouterConfig struct {
 	NodePortBindOnAllIp bool
 	EnableOverlay       bool
 	PeerPasswords       []string
+	EnablePprof         bool
 	// FullMeshPassword    string
 }
 
@@ -106,6 +107,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 			"When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets")
 	fs.StringSliceVar(&s.PeerPasswords, "peer-router-passwords", s.PeerPasswords,
 		"Password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
+	fs.BoolVar(&s.EnablePprof, "enable-pprof", false,
+		"Enables pprof for debugging performance and memory leak issues.")
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
 }
