@@ -1,10 +1,12 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"net/http"
 	"os"
 
-	"flag"
+	_ "net/http/pprof"
 
 	"github.com/cloudnativelabs/kube-router/app"
 	"github.com/cloudnativelabs/kube-router/app/options"
@@ -42,6 +44,12 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse kube-router config: %v\n", err)
 		os.Exit(1)
+	}
+
+	if config.EnablePprof {
+		 go func() {
+			 fmt.Fprintf(os.Stdout, http.ListenAndServe("0.0.0.0:6060", nil).Error())
+		 }()
 	}
 
 	err = kubeRouter.Run()
