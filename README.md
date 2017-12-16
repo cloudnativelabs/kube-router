@@ -18,13 +18,12 @@ single DaemonSet/Binary. It doesn't get any easier.
 
 ### IPVS/LVS based service proxy | `--run-service-proxy`
 
-kube-router uses the Linux kernel's IPVS features to implement its K8s Services
-Proxy. This feature has been requested for some time in kube-proxy, but you can
-have it right now with kube-router.
+kube-router uses the Linux kernel's LVS/IPVS features to implement its K8s Services
+Proxy. Kube-router fully leverages power off LVS/IPVS to provide unique features like DSR(Direct Server Return), L3 load balancing with ECMP for deployments where high throughput, minimal latency and high-availability are crucial.
 
 Read more about the advantages of IPVS for container load balancing:
 - [Kubernetes network services proxy with IPVS/LVS](https://cloudnativelabs.github.io/post/2017-05-10-kube-network-service-proxy/)
-- [Kernel Load-Balancing for Docker Containers Using IPVS](https://blog.codeship.com/kernel-load-balancing-for-docker-containers-using-ipvs/)
+- [Highly-available and scalable ingress for baremetal Kubernetes clusters](https://cloudnativelabs.github.io/post/2017-11-01-kube-high-available-ingress/)
 
 ### Pod Networking | `--run-router`
 
