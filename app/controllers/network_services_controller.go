@@ -238,6 +238,7 @@ type externalIPService struct {
 // as learned from services and endpoints information from the api server
 func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap) error {
 
+	var ipvsSvcs []*ipvs.Service
 	start := time.Now()
 	defer func() {
 		glog.Infof("sync ipvs servers took %v", time.Since(start))
@@ -266,6 +267,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	// map of active services and service endpoints
 	activeServiceEndpointMap := make(map[string][]string)
 
+	ipvsSvcs, err = h.GetServices()
+	if err != nil {
+		return errors.New("Failed get list of IPVS services due to: " + err.Error())
+	}
+
 	for k, svc := range serviceInfoMap {
 		var protocol uint16
 		if svc.protocol == "tcp" {
@@ -283,7 +289,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// create IPVS service for the service to be exposed through the cluster ip
-		ipvsClusterVipSvc, err := ipvsAddService(svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
+		ipvsClusterVipSvc, err := ipvsAddService(ipvsSvcs, svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
 		if err != nil {
 			glog.Errorf("Failed to create ipvs service for cluster ip: %s", err.Error())
 			continue
@@ -315,7 +321,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				nodeServiceIds = make([]string, len(addrs))
 
 				for i, addr := range addrs {
-					ipvsNodeportSvcs[i], err = ipvsAddService(addr.IP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
+					ipvsNodeportSvcs[i], err = ipvsAddService(ipvsSvcs, addr.IP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
 					if err != nil {
 						glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
 						continue
@@ -326,7 +332,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 			} else {
 				ipvsNodeportSvcs = make([]*ipvs.Service, 1)
-				ipvsNodeportSvcs[0], err = ipvsAddService(nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
+				ipvsNodeportSvcs[0], err = ipvsAddService(ipvsSvcs, nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
 				if err != nil {
 					glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
 					continue
@@ -388,7 +394,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 
 				// create IPVS service for the service to be exposed through the external ip
-				ipvsExternalIPSvc, err := ipvsAddService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
+				ipvsExternalIPSvc, err := ipvsAddService(ipvsSvcs, net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
 				if err != nil {
 					glog.Errorf("Failed to create ipvs service for external ip: %s due to %s", externalIP, err.Error())
 					continue
@@ -484,7 +490,8 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	// cleanup stale ipvs service and servers
 	glog.Infof("Cleaning up if any, old ipvs service and servers which are no longer needed")
-	ipvsSvcs, err := h.GetServices()
+	ipvsSvcs, err = h.GetServices()
+
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
@@ -1081,12 +1088,9 @@ func ipvsSetPersistence(svc *ipvs.Service, p bool) {
 	}
 }
 
-func ipvsAddService(vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
-	svcs, err := h.GetServices()
-	if err != nil {
-		return nil, err
-	}
+func ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
 
+	var err error
 	for _, svc := range svcs {
 		if vip.Equal(svc.Address) && protocol == svc.Protocol && port == svc.Port {
 			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) {
