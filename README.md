@@ -3,8 +3,9 @@
 [![Build Status](https://travis-ci.org/cloudnativelabs/kube-router.svg?branch=master)](https://travis-ci.org/cloudnativelabs/kube-router)
 [![Slack](https://img.shields.io/badge/slack-join%20chat%20%E2%86%92-e01563.svg)](https://kubernetes.slack.com/messages/C8DCQGTSB/)
 [![Docker Pulls kube-router](https://img.shields.io/docker/pulls/cloudnativelabs/kube-router.svg?label=docker+pulls)](https://hub.docker.com/r/cloudnativelabs/kube-router/)
+[![](https://images.microbadger.com/badges/image/cloudnativelabs/kube-router.svg)](https://microbadger.com/images/cloudnativelabs/kube-router "Get your own image badge on microbadger.com")
+[![](https://images.microbadger.com/badges/version/cloudnativelabs/kube-router.svg)](https://microbadger.com/images/cloudnativelabs/kube-router "Get your own version badge on microbadger.com")
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Go Report Card](https://goreportcard.com/badge/github.com/cloudnativelabs/kube-router)](https://goreportcard.com/report/github.com/cloudnativelabs/kube-router)
 
 Kube-router is a distributed load balancer, firewall and router designed for Kubernetes networking with aim to provide operational simplicity and high performance.
 
