@@ -44,27 +44,22 @@ const (
 )
 
 var (
-	h                        *ipvs.Handle
-	serviceBackendActiveConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	h                 *ipvs.Handle
+	serviceActiveConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
-		Name:      "service_backend_active_connections",
-		Help:      "Active conntection to backend of service",
+		Name:      "service_active_connections",
+		Help:      "Active conntection to service",
 	}, []string{"namespace", "service_name", "backend"})
-	serviceBackendInactiveConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	servicePpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
-		Name:      "service_backend_inactive_connections",
-		Help:      "Active conntection to backend of service",
-	}, []string{"namespace", "service_name", "backend"})
-	serviceBackendPpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_backend_pps_in",
+		Name:      "service_pps_in",
 		Help:      "Incoming packets per second",
-	}, []string{"namespace", "service_name", "backend"})
-	serviceBackendPpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"namespace", "service_name"})
+	servicePpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
-		Name:      "service_backend_pps_out",
+		Name:      "service_pps_out",
 		Help:      "Outoging packets per second",
-	}, []string{"namespace", "service_name", "backend"})
+	}, []string{"namespace", "service_name"})
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -133,10 +128,9 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	}
 
 	// register metrics
-	prometheus.MustRegister(serviceBackendActiveConn)
-	prometheus.MustRegister(serviceBackendInactiveConn)
-	prometheus.MustRegister(serviceBackendPpsIn)
-	prometheus.MustRegister(serviceBackendPpsOut)
+	prometheus.MustRegister(serviceActiveConn)
+	prometheus.MustRegister(servicePpsIn)
+	prometheus.MustRegister(servicePpsOut)
 	http.Handle("/metrics", promhttp.Handler())
 	go http.ListenAndServe(":8080", nil)
 
@@ -679,41 +673,27 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 }
 
 func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
-	// ipvsSvcs, err := h.GetServices()
-	// if err != nil {
-	// 	return errors.New("Failed to list IPVS services: " + err.Error())
-	// }
-	//
-	// for _, svc := range serviceInfoMap {
-	// 	for _, ipvsSvc := range ipvsSvcs {
-	// 		if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
-	// 			svc.protocol == strconv.Itoa(int(ipvsSvc.Protocol)) && uint16(svc.port) == ipvsSvc.Port {
-	// 			dsts, err := h.GetDestinations(ipvsSvc)
-	// 			if err != nil {
-	// 				glog.Errorf("Failed to get list of servers from ipvs service")
-	// 			}
-	// 			for _, dst := range dsts {
-	// 				serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats))
-	// 				serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
-	// 				serviceBackendPpsIn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSIn))
-	// 				serviceBackendPpsOut.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSOut))
-	// 			}
-	// 		}
-	// 		if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
-	// 			svc.protocol == strconv.Itoa(int(ipvsSvc.Protocol)) && uint16(svc.port) == ipvsSvc.Port {
-	// 			dsts, err := h.GetDestinations(ipvsSvc)
-	// 			if err != nil {
-	// 				glog.Errorf("Failed to get list of servers from ipvs service")
-	// 			}
-	// 			for _, dst := range dsts {
-	// 				serviceBackendActiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.ActiveConns))
-	// 				serviceBackendInactiveConn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.InactConns))
-	// 				serviceBackendPpsIn.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSIn))
-	// 				serviceBackendPpsOut.WithLabelValues(svc.namespace, svc.name, dst.Address.String()).Set(float64(dst.Stats.PPSOut))
-	// 			}
-	// 		}
-	// 	}
-	// }
+	ipvsSvcs, err := h.GetServices()
+	if err != nil {
+		return errors.New("Failed to list IPVS services: " + err.Error())
+	}
+
+	for _, svc := range serviceInfoMap {
+		for _, ipvsSvc := range ipvsSvcs {
+			if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
+				svc.protocol == strconv.Itoa(int(ipvsSvc.Protocol)) && uint16(svc.port) == ipvsSvc.Port {
+				serviceActiveConn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.Connections))
+				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+			}
+			if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
+				svc.protocol == strconv.Itoa(int(ipvsSvc.Protocol)) && uint16(svc.port) == ipvsSvc.Port {
+				serviceActiveConn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.Connections))
+				servicePpsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+			}
+		}
+	}
 	return nil
 }
 
