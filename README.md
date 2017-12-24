@@ -7,7 +7,7 @@
 [![](https://images.microbadger.com/badges/version/cloudnativelabs/kube-router.svg)](https://microbadger.com/images/cloudnativelabs/kube-router "Get your own version badge on microbadger.com")
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Kube-router is a distributed load balancer, firewall and router designed for Kubernetes networking with aim to provide operational simplicity and high performance.
+Kube-router is a turnkey solution for Kubernetes networking with aim to provide operational simplicity and high performance.
 
 ## Primary Features
 
