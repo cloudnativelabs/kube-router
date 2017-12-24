@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -562,11 +563,26 @@ func getPodObjectForEndpoint(endpointIP string) (*api.Pod, error) {
 // - disable rp_filter
 func prepareEndpointForDsr(containerId string, endpointIP string, vip string) error {
 
-	currentNamespaceHandle, err := netns.Get()
+	// FIXME: its possible switch namespaces may never work safely in GO without hacks.
+	//	 https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion
+	//	 https://www.weave.works/blog/linux-namespaces-and-go-don-t-mix
+	// Dont know if same issue, but seen namespace issue, so adding
+	// logs and boilerplate code and verbose logs for diagnosis
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	var activeNetworkNamespaceHandle netns.NsHandle
+
+	hostNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
 		return errors.New("Failed to get namespace due to " + err.Error())
 	}
-	defer currentNamespaceHandle.Close()
+	defer hostNetworkNamespaceHandle.Close()
+
+	activeNetworkNamespaceHandle, err = netns.Get()
+	glog.Infof("Current network namespace before netns.Set: " + activeNetworkNamespaceHandle.String())
+	activeNetworkNamespaceHandle.Close()
 
 	client, err := client.NewEnvClient()
 	if err != nil {
@@ -590,14 +606,21 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 		return errors.New("Failed to enter to endpoint namespace due to " + err.Error())
 	}
 
-	// TODO: fix boilerplate `netns.Set(currentNamespaceHandle)` code. Need a robust
+	activeNetworkNamespaceHandle, err = netns.Get()
+	glog.Infof("Current network namespace after netns.Set to container network namespace: " + activeNetworkNamespaceHandle.String())
+	activeNetworkNamespaceHandle.Close()
+
+	// TODO: fix boilerplate `netns.Set(hostNetworkNamespaceHandle)` code. Need a robust
 	// way to switch back to old namespace, pretty much all things will go wrong if we dont switch back
 
 	// create a ipip tunnel interface inside the endpoint container
 	tunIf, err := netlink.LinkByName(KUBE_TUNNEL_IF)
 	if err != nil {
 		if err.Error() != IFACE_NOT_FOUND {
-			netns.Set(currentNamespaceHandle)
+			netns.Set(hostNetworkNamespaceHandle)
+			activeNetworkNamespaceHandle, err = netns.Get()
+			glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+			activeNetworkNamespaceHandle.Close()
 			return errors.New("Failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
 		}
 
@@ -608,7 +631,10 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 		}
 		err = netlink.LinkAdd(&ipTunLink)
 		if err != nil {
-			netns.Set(currentNamespaceHandle)
+			netns.Set(hostNetworkNamespaceHandle)
+			activeNetworkNamespaceHandle, err = netns.Get()
+			glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+			activeNetworkNamespaceHandle.Close()
 			return errors.New("Failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
 		}
 
@@ -623,7 +649,10 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 		}
 
 		if err != nil {
-			netns.Set(currentNamespaceHandle)
+			netns.Set(hostNetworkNamespaceHandle)
+			activeNetworkNamespaceHandle, err = netns.Get()
+			glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+			activeNetworkNamespaceHandle.Close()
 			return errors.New("Failed to get " + KUBE_TUNNEL_IF + " tunnel interface handle due to " + err.Error())
 		}
 
@@ -633,7 +662,10 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 	// bring the tunnel interface up
 	err = netlink.LinkSetUp(tunIf)
 	if err != nil {
-		netns.Set(currentNamespaceHandle)
+		netns.Set(hostNetworkNamespaceHandle)
+		activeNetworkNamespaceHandle, err = netns.Get()
+		glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
 	}
 
@@ -642,7 +674,10 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 		Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 	err = netlink.AddrAdd(tunIf, netlinkVip)
 	if err != nil && err.Error() != IFACE_HAS_ADDR {
-		netns.Set(currentNamespaceHandle)
+		netns.Set(hostNetworkNamespaceHandle)
+		activeNetworkNamespaceHandle, err = netns.Get()
+		glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to assign vip " + vip + " to kube-tunnel-if interface ")
 	}
 	glog.Infof("Successfully assinged VIP: " + vip + " in endpoint " + endpointIP + ".")
@@ -650,25 +685,37 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 	// disable rp_filter on all interface
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		netns.Set(currentNamespaceHandle)
+		netns.Set(hostNetworkNamespaceHandle)
+		activeNetworkNamespaceHandle, err = netns.Get()
+		glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to disable rp_filter on kube-tunnel-if in the endpoint container")
 	}
 
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/eth0/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		netns.Set(currentNamespaceHandle)
+		netns.Set(hostNetworkNamespaceHandle)
+		activeNetworkNamespaceHandle, err = netns.Get()
+		glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to disable rp_filter on eth0 in the endpoint container")
 	}
 
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		netns.Set(currentNamespaceHandle)
+		netns.Set(hostNetworkNamespaceHandle)
+		activeNetworkNamespaceHandle, err = netns.Get()
+		glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to disable rp_filter on `all` in the endpoint container")
 	}
 
 	glog.Infof("Successfully disabled rp_filter in endpoint " + endpointIP + ".")
 
-	netns.Set(currentNamespaceHandle)
+	netns.Set(hostNetworkNamespaceHandle)
+	activeNetworkNamespaceHandle, err = netns.Get()
+	glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+	activeNetworkNamespaceHandle.Close()
 	return nil
 }
 
