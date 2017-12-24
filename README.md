@@ -20,7 +20,7 @@ single DaemonSet/Binary. It doesn't get any easier.
 ### IPVS/LVS based service proxy | `--run-service-proxy`
 
 kube-router uses the Linux kernel's LVS/IPVS features to implement its K8s Services
-Proxy. Kube-router fully leverages power off LVS/IPVS to provide unique features like DSR(Direct Server Return), L3 load balancing with ECMP for deployments where high throughput, minimal latency and high-availability are crucial.
+Proxy. Kube-router fully leverages power off LVS/IPVS to provide rich set of [scheduling options](/Documentation#load-balancing-scheduling-algorithms) and unique features like DSR (Direct Server Return), L3 load balancing with ECMP for deployments where high throughput, minimal latency and high-availability are crucial.
 
 Read more about the advantages of IPVS for container load balancing:
 - [Kubernetes network services proxy with IPVS/LVS](https://cloudnativelabs.github.io/post/2017-05-10-kube-network-service-proxy/)
