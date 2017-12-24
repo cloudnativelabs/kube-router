@@ -11,6 +11,7 @@ RUN apk add --no-cache \
       ipset \
       iproute2 \
       ipvsadm \
+      conntrack-tools \
       curl \
       bash && \
     mkdir -p /var/lib/gobgp && \
