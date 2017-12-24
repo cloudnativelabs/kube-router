@@ -49,17 +49,17 @@ var (
 		Namespace: namespace,
 		Name:      "service_active_connections",
 		Help:      "Active conntection to service",
-	}, []string{"namespace", "service_name", "backend"})
+	}, []string{"namespace", "service_name", "service_vip"})
 	servicePpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_pps_in",
 		Help:      "Incoming packets per second",
-	}, []string{"namespace", "service_name"})
+	}, []string{"namespace", "service_name", "service_vip"})
 	servicePpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_pps_out",
 		Help:      "Outoging packets per second",
-	}, []string{"namespace", "service_name"})
+	}, []string{"namespace", "service_name", "service_vip"})
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -679,15 +679,23 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	}
 
 	for _, svc := range serviceInfoMap {
+		var protocol uint16
+		if svc.protocol == "tcp" {
+			protocol = syscall.IPPROTO_TCP
+		} else {
+			protocol = syscall.IPPROTO_UDP
+		}
 		for _, ipvsSvc := range ipvsSvcs {
 			if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
-				svc.protocol == strconv.Itoa(int(ipvsSvc.Protocol)) && uint16(svc.port) == ipvsSvc.Port {
+				protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+				glog.Infof("Publishing prometheus metrics " + svc.clusterIP.String() + ":" + strconv.Itoa(svc.port))
 				serviceActiveConn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.Connections))
 				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
 				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
 			}
 			if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
-				svc.protocol == strconv.Itoa(int(ipvsSvc.Protocol)) && uint16(svc.port) == ipvsSvc.Port {
+				protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+				glog.Infof("Publishing prometheus metrics " + nsc.nodeIP.String() + ":" + strconv.Itoa(svc.port))
 				serviceActiveConn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.Connections))
 				servicePpsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
 				servicePpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
