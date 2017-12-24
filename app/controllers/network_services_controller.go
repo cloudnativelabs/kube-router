@@ -537,6 +537,15 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 						glog.Errorf("Failed to delete destination %s from ipvs service %s",
 							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
 					}
+
+					// flush conntrack when endpoint for a UDP service changes
+					if ipvsSvc.Protocol == syscall.IPPROTO_UDP {
+						_, err := exec.Command("conntrack", "-D", "--orig-dst", dst.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(dst.Port))).Output()
+						if err != nil {
+							glog.Error("Failed to delete conntrack entry for endpoint: " + dst.Address.String() + ":" + strconv.Itoa(int(dst.Port)) + " due to " + err.Error())
+						}
+						glog.Infof("Deleted conntrack entry for endpoint: " + dst.Address.String() + ":" + strconv.Itoa(int(dst.Port)))
+					}
 				}
 			}
 		}
