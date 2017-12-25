@@ -261,22 +261,16 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 		}
 
-		// flush all entries in the set
-		if targetSourcePodIpSet.Flush() != nil {
-			return nil, nil, fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
-		}
-		if targetDestPodIpSet.Flush() != nil {
-			return nil, nil, fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
-		}
-
 		activePolicyIpSets[targetDestPodIpSet.Name] = true
 		activePolicyIpSets[targetSourcePodIpSet.Name] = true
 
-		for k := range policy.targetPods {
-			// TODO restrict ipset to ip's of pods running on the node
-			targetDestPodIpSet.Add(k, utils.OptionTimeout, "0")
-			targetSourcePodIpSet.Add(k, utils.OptionTimeout, "0")
+		currnetPodIps := make([]string, 0, len(policy.targetPods))
+		for ip := range policy.targetPods {
+			currnetPodIps = append(currnetPodIps, ip)
 		}
+
+		targetSourcePodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
+		targetDestPodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
 
 		// TODO use iptables-restore to better implement the logic, than flush and add rules
 		err = iptablesCmdHandler.ClearChain("filter", policyChainName)
@@ -326,16 +320,14 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			if err != nil {
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
 			}
-			// flush all entries in the set
-			if srcPodIpSet.Flush() != nil {
-				return fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
-			}
 
 			activePolicyIpSets[srcPodIpSet.Name] = true
 
+			ingressRuleSrcPodIps := make([]string, 0, len(ingressRule.srcPods))
 			for _, pod := range ingressRule.srcPods {
-				srcPodIpSet.Add(pod.ip, utils.OptionTimeout, "0")
+				ingressRuleSrcPodIps = append(ingressRuleSrcPodIps, pod.ip)
 			}
+			srcPodIpSet.Refresh(ingressRuleSrcPodIps, utils.OptionTimeout, "0")
 
 			if len(ingressRule.ports) != 0 {
 				// case where 'ports' details and 'from' details specified in the ingress rule
@@ -463,16 +455,14 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			if err != nil {
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
 			}
-			// flush all entries in the set
-			if dstPodIpSet.Flush() != nil {
-				return fmt.Errorf("failed to flush ipset while syncing iptables: %s", err.Error())
-			}
 
 			activePolicyIpSets[dstPodIpSet.Name] = true
 
+			egressRuleDstPodIps := make([]string, 0, len(egressRule.dstPods))
 			for _, pod := range egressRule.dstPods {
-				dstPodIpSet.Add(pod.ip, utils.OptionTimeout, "0")
+				egressRuleDstPodIps = append(egressRuleDstPodIps, pod.ip)
 			}
+			dstPodIpSet.Refresh(egressRuleDstPodIps, utils.OptionTimeout, "0")
 
 			if len(egressRule.ports) != 0 {
 				// case where 'ports' details and 'from' details specified in the egress rule
