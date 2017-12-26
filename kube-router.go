@@ -47,9 +47,9 @@ func main() {
 	}
 
 	if config.EnablePprof {
-		 go func() {
-			 fmt.Fprintf(os.Stdout, http.ListenAndServe("0.0.0.0:6060", nil).Error())
-		 }()
+		go func() {
+			fmt.Fprintf(os.Stdout, http.ListenAndServe("0.0.0.0:6060", nil).Error())
+		}()
 	}
 
 	err = kubeRouter.Run()
