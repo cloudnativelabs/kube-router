@@ -22,6 +22,7 @@ kube-router:
 	@echo Finished kube-router binary build.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
+	go test github.com/cloudnativelabs/kube-router/utils/
 
 vagrant-up: export docker=$(DOCKER)
 vagrant-up: export DEV_IMG=$(REGISTRY_DEV):$(IMG_TAG)
@@ -75,7 +76,7 @@ docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSW
 
 push: container docker-login ## Pushes a Docker container image to a registry.
 	@echo Starting kube-router container image push.
-	$(DOCKER) push "$(REGISTRY_DEV)"
+	$(DOCKER) push "$(REGISTRY_DEV):$(IMG_TAG)"
 	@echo Finished kube-router container image push.
 
 push-release: push

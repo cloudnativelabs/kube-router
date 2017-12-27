@@ -2,9 +2,11 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"reflect"
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/plugins/ipam/host-local/backend/allocator"
@@ -23,7 +25,13 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 	if err != nil {
 		return net.IPNet{}, fmt.Errorf("Failed to get IPAM details from the CNI conf file: %s", err.Error())
 	}
-	return net.IPNet(ipamConfig.Subnet), nil
+
+	podCidr := net.IPNet(ipamConfig.Subnet)
+	if reflect.DeepEqual(podCidr, net.IPNet{}) {
+		return net.IPNet{}, errors.New("subnet missing from CNI IPAM")
+	}
+
+	return podCidr, nil
 }
 
 // InsertPodCidrInCniSpec inserts the pod CIDR allocated to the node by kubernetes controlller manager

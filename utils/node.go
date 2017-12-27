@@ -12,7 +12,7 @@ import (
 )
 
 // GetNodeObject returns the node API object for the node
-func GetNodeObject(clientset *kubernetes.Clientset, hostnameOverride string) (*apiv1.Node, error) {
+func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*apiv1.Node, error) {
 
 	// assuming kube-router is running as pod, first check env NODE_NAME
 	nodeName := os.Getenv("NODE_NAME")
