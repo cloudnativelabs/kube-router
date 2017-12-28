@@ -5,11 +5,13 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/utils"
+
 	api "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	cache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/cache"
 )
 
 type ServiceUpdate struct {
@@ -22,7 +24,7 @@ var (
 )
 
 type serviceWatcher struct {
-	clientset         *kubernetes.Clientset
+	clientset         kubernetes.Interface
 	serviceController cache.Controller
 	serviceLister     cache.Indexer
 	broadcaster       *utils.Broadcaster
@@ -80,7 +82,7 @@ func (svcw *serviceWatcher) HasSynced() bool {
 var servicesStopCh chan struct{}
 
 // StartServiceWatcher: start watching updates for services from Kuberentes API server
-func StartServiceWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Duration) (*serviceWatcher, error) {
+func StartServiceWatcher(clientset kubernetes.Interface, resyncPeriod time.Duration) (*serviceWatcher, error) {
 
 	svcw := serviceWatcher{}
 	ServiceWatcher = &svcw
@@ -93,7 +95,15 @@ func StartServiceWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Dura
 
 	svcw.clientset = clientset
 	svcw.broadcaster = utils.NewBroadcaster()
-	lw := cache.NewListWatchFromClient(clientset.Core().RESTClient(), "services", metav1.NamespaceAll, fields.Everything())
+	lw := &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return clientset.CoreV1().Services(metav1.NamespaceAll).List(options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return clientset.CoreV1().Services(metav1.NamespaceAll).Watch(options)
+		},
+	}
+
 	svcw.serviceLister, svcw.serviceController = cache.NewIndexerInformer(
 		lw,
 		&api.Service{}, resyncPeriod, eventHandler,
