@@ -57,10 +57,15 @@ func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 }
 
 // GetPodCidrFromNodeSpec reads the pod CIDR allocated to the node from API node object and returns it
-func GetPodCidrFromNodeSpec(clientset *kubernetes.Clientset, hostnameOverride string) (string, error) {
+func GetPodCidrFromNodeSpec(clientset kubernetes.Interface, hostnameOverride string) (string, error) {
 	node, err := GetNodeObject(clientset, hostnameOverride)
 	if err != nil {
 		return "", fmt.Errorf("Failed to get pod CIDR allocated for the node due to: " + err.Error())
 	}
+
+	if node.Spec.PodCIDR == "" {
+		return "", fmt.Errorf("node.Spec.PodCIDR not set for node: %v", node.Name)
+	}
+
 	return node.Spec.PodCIDR, nil
 }

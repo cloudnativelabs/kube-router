@@ -40,7 +40,7 @@ type NetworkRoutingController struct {
 	nodeSubnet           net.IPNet
 	nodeInterface        string
 	mu                   sync.Mutex
-	clientset            *kubernetes.Clientset
+	clientset            kubernetes.Interface
 	bgpServer            *gobgp.BgpServer
 	syncPeriod           time.Duration
 	clusterCIDR          string
@@ -227,35 +227,12 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 		// advertise cluster IP for the service to be reachable via host
 		if nrc.advertiseClusterIp {
-			glog.Infof("Advertising cluster ips of services to the external BGP peers")
-			for _, svc := range watchers.ServiceWatcher.List() {
-				if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
-
-					// skip headless services
-					if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
-						continue
-					}
-
-					glog.Infof("found a service of cluster ip type")
-					nrc.AdvertiseClusterIp(svc.Spec.ClusterIP)
-				}
-			}
+			nrc.advertiseClusterIPs()
 		}
 
 		// advertise cluster IP for the service to be reachable via host
 		if nrc.advertiseExternalIp {
-			glog.Infof("Advertising external ips of the services to the external BGP peers")
-			for _, svc := range watchers.ServiceWatcher.List() {
-				if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
-					// skip headless services
-					if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
-						continue
-					}
-					for _, externalIP := range svc.Spec.ExternalIPs {
-						nrc.AdvertiseClusterIp(externalIP)
-					}
-				}
-			}
+			nrc.advertiseExternalIPs()
 		}
 
 		glog.Infof("Performing periodic sync of the routes")
@@ -365,6 +342,43 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 						glog.Errorf("Failed to inject routes due to: " + err.Error())
 						continue
 					}
+				}
+			}
+		}
+	}
+}
+
+func (nrc *NetworkRoutingController) advertiseClusterIPs() {
+	glog.Infof("Advertising cluster ips of services to the external BGP peers")
+	for _, svc := range watchers.ServiceWatcher.List() {
+		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
+
+			// skip headless services
+			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
+				continue
+			}
+
+			glog.Infof("found a service of cluster ip type")
+			err := nrc.AdvertiseClusterIp(svc.Spec.ClusterIP)
+			if err != nil {
+				glog.Errorf("error advertising cluster IP: %q error: %v", svc.Spec.ClusterIP, err)
+			}
+		}
+	}
+}
+
+func (nrc *NetworkRoutingController) advertiseExternalIPs() {
+	glog.Infof("Advertising external ips of the services to the external BGP peers")
+	for _, svc := range watchers.ServiceWatcher.List() {
+		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
+			// skip headless services
+			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
+				continue
+			}
+			for _, externalIP := range svc.Spec.ExternalIPs {
+				err := nrc.AdvertiseClusterIp(externalIP)
+				if err != nil {
+					glog.Errorf("error advertising external IP: %q, error: %v", externalIP, err)
 				}
 			}
 		}
