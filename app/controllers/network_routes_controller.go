@@ -39,6 +39,7 @@ type NetworkRoutingController struct {
 	nodeHostName         string
 	nodeSubnet           net.IPNet
 	nodeInterface        string
+	activeNodes          map[string]bool
 	mu                   sync.Mutex
 	clientset            kubernetes.Interface
 	bgpServer            *gobgp.BgpServer
@@ -61,7 +62,6 @@ type NetworkRoutingController struct {
 }
 
 var (
-	activeNodes   = make(map[string]bool)
 	podEgressArgs = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
 		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
@@ -1004,7 +1004,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		}
 
 		currentNodes = append(currentNodes, nodeIP.String())
-		activeNodes[nodeIP.String()] = true
+		nrc.mu.Lock()
+		nrc.activeNodes[nodeIP.String()] = true
+		nrc.mu.Unlock()
 		n := &config.Neighbor{
 			Config: config.NeighborConfig{
 				NeighborAddress: nodeIP.String(),
@@ -1047,7 +1049,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 	// find the list of the node removed, from the last known list of active nodes
 	removedNodes := make([]string, 0)
-	for ip := range activeNodes {
+	nrc.mu.Lock()
+	defer nrc.mu.Unlock()
+	for ip := range nrc.activeNodes {
 		stillActive := false
 		for _, node := range currentNodes {
 			if ip == node {
@@ -1071,7 +1075,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		if err := nrc.bgpServer.DeleteNeighbor(n); err != nil {
 			glog.Errorf("Failed to remove node %s as peer due to %s", ip, err)
 		}
-		delete(activeNodes, ip)
+		delete(nrc.activeNodes, ip)
 	}
 }
 
@@ -1220,7 +1224,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
 			glog.Errorf("Failed to add node %s as peer due to %s", nodeIP, err)
 		}
-		activeNodes[nodeIP.String()] = true
+		nrc.activeNodes[nodeIP.String()] = true
 	} else if nodeUpdate.Op == watchers.REMOVE {
 		glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
 		n := &config.Neighbor{
@@ -1232,7 +1236,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 		if err := nrc.bgpServer.DeleteNeighbor(n); err != nil {
 			glog.Errorf("Failed to remove node %s as peer due to %s", nodeIP, err)
 		}
-		delete(activeNodes, nodeIP.String())
+		delete(nrc.activeNodes, nodeIP.String())
 	}
 	nrc.disableSourceDestinationCheck()
 }
@@ -1414,6 +1418,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
+	nrc.activeNodes = make(map[string]bool)
 
 	nrc.ipSetHandler, err = utils.NewIPSet()
 	if err != nil {
