@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"net"
 	"os"
 	"reflect"
 	"testing"
@@ -525,6 +526,198 @@ func Test_advertiseRoute(t *testing.T) {
 	}
 }
 
+func Test_syncInternalPeers(t *testing.T) {
+	testcases := []struct {
+		name          string
+		nrc           *NetworkRoutingController
+		existingNodes []*v1core.Node
+		neighbors     map[string]bool
+	}{
+		{
+			"sync 1 peer",
+			&NetworkRoutingController{
+				bgpFullMeshMode: true,
+				clientset:       fake.NewSimpleClientset(),
+				nodeIP:          net.ParseIP("10.0.0.0"),
+				bgpServer:       gobgp.NewBgpServer(),
+				activeNodes:     make(map[string]bool),
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.0.1": true,
+			},
+		},
+		{
+			"sync multiple peers",
+			&NetworkRoutingController{
+				bgpFullMeshMode: true,
+				clientset:       fake.NewSimpleClientset(),
+				nodeIP:          net.ParseIP("10.0.0.0"),
+				bgpServer:       gobgp.NewBgpServer(),
+				activeNodes:     make(map[string]bool),
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-2",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.2",
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.0.1": true,
+				"10.0.0.2": true,
+			},
+		},
+		{
+			"sync peer with removed nodes",
+			&NetworkRoutingController{
+				bgpFullMeshMode: true,
+				clientset:       fake.NewSimpleClientset(),
+				nodeIP:          net.ParseIP("10.0.0.0"),
+				bgpServer:       gobgp.NewBgpServer(),
+				activeNodes: map[string]bool{
+					"10.0.0.2": true,
+				},
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.0.1": true,
+			},
+		},
+		{
+			"sync multiple peers with full mesh disabled",
+			&NetworkRoutingController{
+				bgpFullMeshMode: false,
+				clientset:       fake.NewSimpleClientset(),
+				nodeIP:          net.ParseIP("10.0.0.0"),
+				bgpServer:       gobgp.NewBgpServer(),
+				activeNodes:     make(map[string]bool),
+				nodeAsnNumber:   100,
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+						Annotations: map[string]string{
+							"kube-router.io/node.asn": "100",
+						},
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-2",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.2",
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.0.1": true,
+			},
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			go testcase.nrc.bgpServer.Serve()
+			err := testcase.nrc.bgpServer.Start(&config.Global{
+				Config: config.GlobalConfig{
+					As:       1,
+					RouterId: "10.0.0.0",
+					Port:     10000,
+				},
+			})
+			if err != nil {
+				t.Fatalf("failed to start BGP server: %v", err)
+			}
+			defer testcase.nrc.bgpServer.Stop()
+
+			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
+				t.Errorf("failed to create existing nodes: %v", err)
+			}
+
+			testcase.nrc.syncInternalPeers()
+
+			neighbors := testcase.nrc.bgpServer.GetNeighbor("", false)
+			for _, neighbor := range neighbors {
+				_, exists := testcase.neighbors[neighbor.Config.NeighborAddress]
+				if !exists {
+					t.Errorf("expected neighbor: %v doesn't exist", neighbor.Config.NeighborAddress)
+				}
+			}
+
+			if !reflect.DeepEqual(testcase.nrc.activeNodes, testcase.neighbors) {
+				t.Logf("actual active nodes: %v", testcase.nrc.activeNodes)
+				t.Logf("expected active nodes: %v", testcase.neighbors)
+				t.Errorf("did not get expected activeNodes")
+			}
+		})
+	}
+}
+
 func Test_OnNodeUpdate(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -657,7 +850,6 @@ func Test_OnNodeUpdate(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			t.Log(testcase.name)
 			go testcase.nrc.bgpServer.Serve()
 			err := testcase.nrc.bgpServer.Start(&config.Global{
 				Config: config.GlobalConfig{
@@ -695,6 +887,17 @@ func Test_OnNodeUpdate(t *testing.T) {
 func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) error {
 	for _, svc := range svcs {
 		_, err := clientset.CoreV1().Services("default").Create(svc)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func createNodes(clientset kubernetes.Interface, nodes []*v1core.Node) error {
+	for _, node := range nodes {
+		_, err := clientset.CoreV1().Nodes().Create(node)
 		if err != nil {
 			return err
 		}
