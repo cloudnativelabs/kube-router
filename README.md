@@ -102,9 +102,7 @@ that has been thouroughly tested and optimized.
 
 ## Project status
 
-Project is in alpha stage. We are working towards beta release
-[milestone](https://github.com/cloudnativelabs/kube-router/milestone/2) and are
-activley incorporating users feedback.
+After the significant incubation period to stabilize the code and incorporate user feedback, project is in Beta stage. The core functionality is stable. We are working toward final Beta release.
 
 ## Contributing
 
