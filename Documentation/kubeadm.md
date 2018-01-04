@@ -1,8 +1,8 @@
 # Deploying kube-router with kubeadm
 
-Please follow the [steps](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/) to install Kubernetes cluster with Kubeadm.
+Please follow the [steps](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/) to install Kubernetes cluster with Kubeadm, however must specify `--pod-network-cidr` when you run `kubeadm init`.
 
-Kube-router relies on kube-controll-manager to allocate pod CIDR for the nodes. So you must use `kubeadm init` with `--pod-network-cidr` flag. On the controller node after `kubeadm init` is complete:
+Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes.
 
 Kube-router provides pod networking, network policy and high perfoming IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options.
 
