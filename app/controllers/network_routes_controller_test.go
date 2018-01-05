@@ -884,6 +884,36 @@ func Test_OnNodeUpdate(t *testing.T) {
 	}
 }
 
+func Test_generateTunnelName(t *testing.T) {
+	testcases := []struct {
+		name       string
+		nodeIP     string
+		tunnelName string
+	}{
+		{
+			"IP less than 12 characters after removing '.'",
+			"10.0.0.1",
+			"tun-10001",
+		},
+		{
+			"IP has 12 characters after removing '.'",
+			"100.200.300.400",
+			"tun100200300400",
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			tunnelName := generateTunnelName(testcase.nodeIP)
+			if tunnelName != testcase.tunnelName {
+				t.Logf("actual tunnel interface name: %s", tunnelName)
+				t.Logf("expected tunnel interface name: %s", testcase.tunnelName)
+				t.Error("did not get expected tunnel interface name")
+			}
+		})
+	}
+}
+
 func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) error {
 	for _, svc := range svcs {
 		_, err := clientset.CoreV1().Services("default").Create(svc)
