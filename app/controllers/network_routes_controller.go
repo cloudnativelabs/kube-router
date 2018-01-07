@@ -760,7 +760,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 
 	// check if the neighbour is in same subnet
 	if !nrc.nodeSubnet.Contains(nexthop) {
-		tunnelName := "tun-" + strings.Replace(nexthop.String(), ".", "", -1)
+		tunnelName := generateTunnelName(nexthop.String())
 		glog.Infof("Found node: " + nexthop.String() + " to be in different subnet.")
 
 		// if overlay is not enabled then skip creating tunnels and adding route
@@ -785,17 +785,18 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 		link, err = netlink.LinkByName(tunnelName)
 		if err != nil {
 			glog.Infof("Found node: " + nexthop.String() + " to be in different subnet. Creating tunnel: " + tunnelName)
-			cmd := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
-				"remote", nexthop.String(), "dev", nrc.nodeInterface)
-			err = cmd.Run()
+			out, err := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
+				"remote", nexthop.String(), "dev", nrc.nodeInterface).CombinedOutput()
 			if err != nil {
-				return errors.New("Route not injected for the route advertised by the node " + nexthop.String() +
-					". Failed to create tunnel interface " + tunnelName)
+				return fmt.Errorf("Route not injected for the route advertised by the node %s "+
+					"Failed to create tunnel interface %s. error: %s, output: %s",
+					nexthop.String(), tunnelName, err, string(out))
 			}
+
 			link, err = netlink.LinkByName(tunnelName)
 			if err != nil {
-				return errors.New("Route not injected for the route advertised by the node " + nexthop.String() +
-					". Failed to create tunnel interface " + tunnelName)
+				return fmt.Errorf("Route not injected for the route advertised by the node %s "+
+					"Failed to get tunnel interface by name error: %s", tunnelName, err)
 			}
 			if err := netlink.LinkSetUp(link); err != nil {
 				return errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
@@ -808,15 +809,15 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop.String() + " already exists.")
 		}
 
-		out, err := exec.Command("ip", "route", "list", "table", customRouteTableID).Output()
+		out, err := exec.Command("ip", "route", "list", "table", customRouteTableID).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("Failed to verify if route already exists in %s table: %s",
 				customRouteTableName, err.Error())
 		}
 		if !strings.Contains(string(out), tunnelName) {
-			if err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table",
-				customRouteTableID).Run(); err != nil {
-				return errors.New("Failed to add route in custom route table due to: " + err.Error())
+			if out, err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table",
+				customRouteTableID).CombinedOutput(); err != nil {
+				return fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
 			}
 		}
 
@@ -1400,6 +1401,21 @@ func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
 		}
 	}
 	return net.IPNet{}, "", errors.New("Failed to find interface with specified node ip")
+}
+
+// generateTunnelName will generate a name for a tunnel interface given a node IP
+// for example, if the node IP is 10.0.0.1 the tunnel interface will be named tun-10001
+// Since linux restricts interface names to 15 characters, if length of a node IP
+// is greater than 12 (after removing "."), then the interface name is tunXYZ
+// as opposed to tun-XYZ
+func generateTunnelName(nodeIP string) string {
+	hash := strings.Replace(nodeIP, ".", "", -1)
+
+	if len(hash) < 12 {
+		return "tun-" + hash
+	}
+
+	return "tun" + hash
 }
 
 // func (nrc *NetworkRoutingController) getExternalNodeIPs(
