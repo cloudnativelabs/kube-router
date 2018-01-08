@@ -3,7 +3,7 @@
 
 ## Summary
 
-This document covers how to contribute to the kube-router project. Kube-router uses github PRs to manage contributions (could be anything from documentation, bug fixes, manfiests etc.).
+This document covers how to contribute to the kube-router project. Kube-router uses github PRs to manage contributions (could be anything from documentation, bug fixes, manifests etc.).
 
 Please read [users guide](./Documentation/README.md#user-guide) and [developers guide](/Documentation/developing.md) for the functionality and internals of kube-router.
 
