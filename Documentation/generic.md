@@ -1,4 +1,4 @@
-# Deploying kube-router on generic cluster
+# Kube-router on generic cluster
 
 Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes.
 
@@ -6,7 +6,11 @@ Kube-router provides pod networking, network policy and high perfoming IPVS/LVS 
 
 ## Prerequisites
 
-### Kubelet
+kube-router can work as your whole network stack in Kubernetes on-prem & bare metall and works without any cloudproviders.
+
+below is the needed configuration to run kube-router in such environments
+
+### Kubelet on each node
 
 kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & network plugin `cni`.
 
@@ -22,7 +26,7 @@ The following options needs to be set on the controller-manager:
 --service-cluster-ip-range=${SERVICE_IP_RANGE} # for example 10.50.0.0/22
 ```
 
-## kube-router providing pod networking and network policy
+## Kube-router providing pod networking and network policy
 
 ```sh
 CLUSTERCIDR=10.32.0.0/12 \
@@ -32,7 +36,7 @@ sed -e "s;%APISERVER%;$APISERVER;g" -e "s;%CLUSTERCIDR%;$CLUSTERCIDR;g"' | \
 kubectl apply -f -
 ```
 
-## kube-router providing service proxy, firewall and pod networking
+## Kube-router providing service proxy, firewall and pod networking
 
 ```sh
 CLUSTERCIDR=10.32.0.0/12 \
