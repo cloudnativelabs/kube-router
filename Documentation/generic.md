@@ -2,14 +2,13 @@
 
 Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes.
 
-Kube-router provides pod networking, network policy and high perfoming IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options.
+Kube-router provides pod networking, network policy and high perfoming IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options listed below the prerequisites.
 
 ## Prerequisites
 
 ### Kubelet
 
-kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & network plugin `cni`
-Startup options:
+kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & network plugin `cni`.
 
 - --cni-conf-dir=/etc/cni/net.d
 - --network-plugin=cni
