@@ -56,7 +56,6 @@ spec:
         scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
       serviceAccountName: kube-router
-      serviceAccount: kube-router
       containers:
       - name: kube-router
         image: cloudnativelabs/kube-router
@@ -135,11 +134,14 @@ spec:
       - name: kubeconfig
         hostPath:
           path: /var/lib/kube-router
+
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: kube-router
   namespace: kube-system
+
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1beta1
@@ -175,6 +177,7 @@ rules:
       - get
       - list
       - watch
+
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
