@@ -99,6 +99,7 @@ type serviceInfo struct {
 	directServerReturnMethod string
 	hairpin                  bool
 	externalIPs              []string
+	local                    bool
 }
 
 // map of all services, with unique service id(namespace name, service name, port) as key
@@ -422,7 +423,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				Weight:        1,
 			}
 
-			err := ipvsAddServer(ipvsClusterVipSvc, &dst)
+			err := ipvsAddServer(ipvsClusterVipSvc, &dst, false, nsc.podCidr)
 			if err != nil {
 				glog.Errorf(err.Error())
 			}
@@ -432,7 +433,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 			if svc.nodePort != 0 {
 				for i := 0; i < len(ipvsNodeportSvcs); i++ {
-					err := ipvsAddServer(ipvsNodeportSvcs[i], &dst)
+					err := ipvsAddServer(ipvsNodeportSvcs[i], &dst, svc.local, nsc.podCidr)
 					if err != nil {
 						glog.Errorf(err.Error())
 					}
@@ -449,7 +450,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 
 				// add server to IPVS service
-				err := ipvsAddServer(externalIpService.ipvsSvc, &dst)
+				err := ipvsAddServer(externalIpService.ipvsSvc, &dst, svc.local, nsc.podCidr)
 				if err != nil {
 					glog.Errorf(err.Error())
 				}
@@ -784,6 +785,7 @@ func buildServicesInfo() serviceInfoMap {
 				name:        svc.ObjectMeta.Name,
 				namespace:   svc.ObjectMeta.Namespace,
 				externalIPs: make([]string, len(svc.Spec.ExternalIPs)),
+				local:       false,
 			}
 			dsrMethod, ok := svc.ObjectMeta.Annotations["kube-router.io/service.dsr"]
 			if ok {
@@ -806,6 +808,7 @@ func buildServicesInfo() serviceInfoMap {
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
 			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations["kube-router.io/service.hairpin"]
+			_, svcInfo.local = svc.ObjectMeta.Annotations["kube-router.io/service.local"]
 
 			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
 			serviceMap[svcId] = &svcInfo
@@ -856,8 +859,9 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 		}
 	}
 	if len(podCidr) > 0 {
+		//TODO: ipset should be used for destination podCidr(s) match after multiple podCidr(s) per node get supported
 		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
-			"!", "-s", podCidr, "-j", "MASQUERADE"}
+			"!", "-s", podCidr, "!", "-d", podCidr, "-j", "MASQUERADE"}
 		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to run iptables command" + err.Error())
@@ -1257,7 +1261,19 @@ func ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, sc
 	return &svc, nil
 }
 
-func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination) error {
+func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination, local bool, podCidr string) error {
+	//for service.local enabled svc, only forward traffic to the pod on local node
+	if local {
+		_, ipnet, err := net.ParseCIDR(podCidr)
+		if err != nil {
+			glog.Infof("Failed to ParseCIDR %s for adding destination %s to the service %s",
+				podCidr, ipvsDestinationString(dest), ipvsServiceString(service))
+			return nil
+		}
+		if !ipnet.Contains(dest.Address) {
+			return nil
+		}
+	}
 
 	err := h.NewDestination(service, dest)
 	if err == nil {
