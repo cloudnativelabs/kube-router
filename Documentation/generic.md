@@ -1,5 +1,7 @@
 # Kube-router on generic cluster
 
+This guide assumes you already have bootstrapped a Kubernets cluster from scratch yourself or used some other deployment tool.
+
 Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes.
 
 Kube-router provides pod networking, network policy and high perfoming IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options listed below the prerequisites.
@@ -17,9 +19,9 @@ kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & net
 - --cni-conf-dir=/etc/cni/net.d
 - --network-plugin=cni
 
-If you have been using other CNI providers such as weave-net, calico or flannel you will have to remove old configurations from this directory on each node.
+If you have been using a other CNI providerssuch as weave-net, calico or flannel you will have to remove old configurations from /etc/cni/net.d on each node.
 
-## __Switching CNI provider on a running cluster requires you to delete all the running pods and let them recreate and get new adresses assigned from the kubenet IPAM__
+## __Switching CNI provider on a running cluster will require you to delete all the running pods and let them recreate and get new adresses assigned from the Kubenet IPAM__
 
 ### Kube controller-manager
 
@@ -32,6 +34,8 @@ The following options needs to be set on the controller-manager:
 
 ## Kube-router providing pod networking and network policy
 
+Don't forgett to adjust values for Cluster CIDR (pod range) & apiserver adress (must be reachable directly from host networking).
+
 ```sh
 CLUSTERCIDR=10.32.0.0/12 \
 APISERVER=https://cluster01.int.domain.com:6443 \
@@ -42,6 +46,8 @@ kubectl apply -f -
 
 ## Kube-router providing service proxy, firewall and pod networking
 
+Don't forgett to adjust values for Cluster CIDR (pod range) & apiserver adress (must be reachable directly from host networking).
+
 ```sh
 CLUSTERCIDR=10.32.0.0/12 \
 APISERVER=https://cluster01.int.domain.com:6443 \
@@ -51,7 +57,8 @@ kubectl apply -f -
 ```
 
 Now since kube-router provides service proxy as well. Run below commands to remove kube-proxy and cleanup any iptables configuration it may have done.
-Depending on if or how you installed kube-proxy these instructions will differ and have to be ran on every node where kube-proxy has run.
+
+Depending on if or how you installed kube-proxy previously these instructions will differ and have to be ran on every node where kube-proxy has run.
 
 ```sh
 kubectl -n kube-system delete ds kube-proxy

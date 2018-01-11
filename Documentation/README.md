@@ -87,7 +87,7 @@ Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/maste
 #### kubeadm
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/kubeadm.md) to deploy Kubernetes cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/)
 
-#### Generic platforms
+#### generic
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/generic.md) to deploy kube-router on generic clusters like on-prem & bare metall
 
 ### deployment
