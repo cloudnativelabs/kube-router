@@ -130,8 +130,7 @@ spec:
           name: kube-router-cfg
       - name: kubeconfig
         hostPath:
-          path: /var/lib/kube-router/kubeconfig
----
+          path: /var/lib/kube-router
 apiVersion: v1
 kind: ServiceAccount
 metadata:
