@@ -17,6 +17,10 @@ kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & net
 - --cni-conf-dir=/etc/cni/net.d
 - --network-plugin=cni
 
+If you have been using other CNI providers such as weave-net, calico or flannel you will have to remove old configurations from this directory on each node.
+
+## __Switching CNI provider on a running cluster requires you to delete all the running pods and let them recreate and get new adresses assigned from the kubenet IPAM__
+
 ### Kube controller-manager
 
 The following options needs to be set on the controller-manager:
