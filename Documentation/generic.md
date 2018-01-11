@@ -1,31 +1,31 @@
 # Kube-router on generic cluster
 
-This guide assumes you already have bootstrapped a Kubernets cluster from scratch yourself or used some other deployment tool.
+This guide assumes you already have bootstrapped a Kubernets cluster from scratch yourself or used some other deployment tool
 
-Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes.
+Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes
 
-Kube-router provides pod networking, network policy and high perfoming IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options listed below the prerequisites.
+Kube-router provides pod networking, network policy and high perfoming IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options listed below the prerequisites
 
 ## Prerequisites
 
-kube-router can work as your whole network stack in Kubernetes on-prem & bare metall and works without any cloudproviders.
+kube-router can work as your whole network stack in Kubernetes on-prem & bare metall and works without any cloudproviders
 
 below is the needed configuration to run kube-router in such environments
 
 ### Kubelet on each node
 
-kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & network plugin `cni`.
+kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & network plugin `cni`
 
 - --cni-conf-dir=/etc/cni/net.d
 - --network-plugin=cni
 
-If you have been using a other CNI providerssuch as weave-net, calico or flannel you will have to remove old configurations from /etc/cni/net.d on each node.
+If you have been using a other CNI providerssuch as weave-net, calico or flannel you will have to remove old configurations from /etc/cni/net.d on each node
 
 ## __Switching CNI provider on a running cluster will require you to delete all the running pods and let them recreate and get new adresses assigned from the Kubenet IPAM__
 
 ### Kube controller-manager
 
-The following options needs to be set on the controller-manager:
+The following options needs to be set on the controller-manager
 
 ```text
 --cluster-cidr=${POD_NETWORK} # for example 10.32.0.0/12
@@ -34,7 +34,7 @@ The following options needs to be set on the controller-manager:
 
 ## Kube-router providing pod networking and network policy
 
-Don't forgett to adjust values for Cluster CIDR (pod range) & apiserver adress (must be reachable directly from host networking).
+Don't forgett to adjust values for Cluster CIDR (pod range) & apiserver adress (must be reachable directly from host networking)
 
 ```sh
 CLUSTERCIDR=10.32.0.0/12 \
@@ -46,7 +46,7 @@ kubectl apply -f -
 
 ## Kube-router providing service proxy, firewall and pod networking
 
-Don't forgett to adjust values for Cluster CIDR (pod range) & apiserver adress (must be reachable directly from host networking).
+Don't forgett to adjust values for Cluster CIDR (pod range) & apiserver adress (must be reachable directly from host networking)
 
 ```sh
 CLUSTERCIDR=10.32.0.0/12 \
@@ -56,9 +56,9 @@ sed -e "s;%APISERVER%;$APISERVER;g" -e "s;%CLUSTERCIDR%;$CLUSTERCIDR;g"' | \
 kubectl apply -f -
 ```
 
-Now since kube-router provides service proxy as well. Run below commands to remove kube-proxy and cleanup any iptables configuration it may have done.
+Now since kube-router provides service proxy as well. Run below commands to remove kube-proxy and cleanup any iptables configuration it may have done
 
-Depending on if or how you installed kube-proxy previously these instructions will differ and have to be ran on every node where kube-proxy has run.
+Depending on if or how you installed kube-proxy previously these instructions will differ and have to be ran on every node where kube-proxy has run
 
 ```sh
 kubectl -n kube-system delete ds kube-proxy
