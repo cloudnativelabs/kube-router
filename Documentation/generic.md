@@ -1,6 +1,6 @@
 # Kube-router on generic cluster
 
-This guide assumes you already have bootstrapped a Kubernets cluster from scratch yourself or used some other deployment tool
+This guide assumes you already have bootstrapped the initial pieces for a Kubernets cluster and is about to switch or setup service & container networking provider
 
 Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes
 
