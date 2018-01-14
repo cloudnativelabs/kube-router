@@ -50,7 +50,7 @@ Any iptables rules kube-proxy left around will also need to be cleaned up. This 
 
 ## Running kube-router without the service proxy
 
-This runs kube-router with pod/service networking and the network policy firewall. The service proxy is disabled. Don't forget to update the cluster CIDR and apiserver addresses to match your cluster.
+This runs kube-router with pod/service networking and the network policy firewall. The service proxy is disabled and relies on for example [kube-proxy](https://kubernetes.io/docs/reference/generated/kube-proxy/) to provide service networking.
 
     kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml
 
