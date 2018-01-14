@@ -62,9 +62,6 @@ spec:
           readOnly: true
         - name: cni-conf-dir
           mountPath: /etc/cni/net.d
-        - name: kubeconfig
-          mountPath: /var/lib/kube-router
-          readOnly: true
       initContainers:
       - name: install-cni
         image: busybox
@@ -82,9 +79,7 @@ spec:
         - mountPath: /etc/cni/net.d
           name: cni-conf-dir
         - mountPath: /etc/kube-router
-          name: kube-router-cfg
-        - name: kubeconfig
-          mountPath: /var/lib/kube-router          
+          name: kube-router-cfg       
       hostNetwork: true
       tolerations:
       - key: CriticalAddonsOnly
@@ -102,9 +97,6 @@ spec:
       - name: kube-router-cfg
         configMap:
           name: kube-router-cfg
-      - name: kubeconfig
-        hostPath:
-          path: /var/lib/kube-router
 
 ---
 apiVersion: v1
