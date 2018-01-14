@@ -1,66 +1,59 @@
 # Kube-router on generic clusters
 
-This guide assumes you already have bootstrapped the initial pieces for a Kubernetes cluster and is about to switch or setup service & container networking provider
+This guide is for running kube-router as the [CNI](https://github.com/containernetworking) network provider for on premise and/or bare metal clusters outside of a cloud provider's environment. It assumes the initial cluster is bootstrapped and a networking provider needs configuration.
 
-Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes
+All pod networking CIDRs are allocated by kube-controller-manager. Kube-router provides service/pod networking, a network policy firewall, and a high performance IPVS/LVS based service proxy. The network policy firewall and service proxy are both optional but recommended.
 
-Kube-router provides pod networking, network policy and a high performance IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options listed below the prerequisites
 
-## Prerequisites
+### Configuring the Kubelet
 
-kube-router can work as your whole network stack in Kubernetes on-prem & bare metal and works without any cloud providers.
+Ensure each kubelet is configured with the following options:
 
-below is the needed configuration to run kube-router in such environments
+    --network-plugin=cni
+    --cni-conf-dir=/etc/cni/net.d
 
-### Kubelet on each node
+If a previous CNI provider (e.g. weave-net, calico, or flannel) was used, remove old configurations from `/etc/cni/net.d` on each kubelet.
 
-kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & network plugin `cni`
+**Note: Switching CNI providers on a running cluster requires re-creating all pods to pick up new pod IPs**
 
-- --cni-conf-dir=/etc/cni/net.d
-- --network-plugin=cni
 
-If you have been using another CNI provider such as weave-net, calico or flannel you will have to remove old configurations from /etc/cni/net.d on each node
+### Configuring kube-controller-manager
 
-## __Switching CNI provider on a running cluster will require you to delete all the running pods and let them recreate and get new addresses assigned from the Kubenet IPAM__
+The following options are mandatory for kube-controller-manager:
 
-### Kube controller-manager
+    --cluster-cidr=${POD_NETWORK} # for example 10.32.0.0/12
+    --service-cluster-ip-range=${SERVICE_IP_RANGE} # for example 10.50.0.0/22
 
-The following options needs to be set on the controller-manager
 
-```text
---cluster-cidr=${POD_NETWORK} # for example 10.32.0.0/12
---service-cluster-ip-range=${SERVICE_IP_RANGE} # for example 10.50.0.0/22
-```
+## Running kube-router with everything
 
-## Kube-router providing pod networking and network policy
+This runs kube-router with pod/service networking, the network policy firewall, and service proxy to replace kube-proxy. The example command uses `10.32.0.0/12` as the pod CIDR address range and `https://cluster01.int.domain.com:6443` as the apiserver address. Please change these to suit your cluster.
 
-Don't forget to adjust values for Cluster CIDR (pod range) & apiserver address (must be reachable directly from host networking)
+    CLUSTERCIDR=10.32.0.0/12 \
+    APISERVER=https://cluster01.int.domain.com:6443 \
+    sh -c 'curl https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter-all-features.yaml -o - | \
+    sed -e "s;%APISERVER%;$APISERVER;g" -e "s;%CLUSTERCIDR%;$CLUSTERCIDR;g"' | \
+    kubectl apply -f -
 
-```sh
-CLUSTERCIDR=10.32.0.0/12 \
-APISERVER=https://cluster01.int.domain.com:6443 \
-sh -c 'curl https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml -o - | \
-sed -e "s;%APISERVER%;$APISERVER;g" -e "s;%CLUSTERCIDR%;$CLUSTERCIDR;g"' | \
-kubectl apply -f -
-```
+### Removing a previous kube-proxy
 
-## Kube-router providing service proxy, firewall and pod networking
+If kube-proxy was never deployed to the cluster, this can likely be skipped.
 
-Don't forget to adjust values for Cluster CIDR (pod range) & apiserver address (must be reachable directly from host networking)
+Remove any previously running kube-proxy and all iptables rules it created. Start by deleting the kube-proxy daemonset:
 
-```sh
-CLUSTERCIDR=10.32.0.0/12 \
-APISERVER=https://cluster01.int.domain.com:6443 \
-sh -c 'curl https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter-all-features.yaml -o - | \
-sed -e "s;%APISERVER%;$APISERVER;g" -e "s;%CLUSTERCIDR%;$CLUSTERCIDR;g"' | \
-kubectl apply -f -
-```
+    kubectl -n kube-system delete ds kube-proxy
 
-Now since kube-router provides service proxy as well. Run below commands to remove kube-proxy and cleanup any iptables configuration it may have done
+Any iptables rules kube-proxy left around will also need to be cleaned up. This command might differ based on how kube-proxy was setup or configured:
 
-Depending on if or how you installed kube-proxy previously these instructions will differ and have to be ran on every node where kube-proxy has run
+    docker run --privileged --net=host gcr.io/google_containers/kube-proxy-amd64:v1.7.3 kube-proxy --cleanup-iptables
 
-```sh
-kubectl -n kube-system delete ds kube-proxy
-docker run --privileged --net=host gcr.io/google_containers/kube-proxy-amd64:v1.7.3 kube-proxy --cleanup-iptables
-```
+
+## Running kube-router without the service proxy
+
+This runs kube-router with pod/service networking and the network policy firewall. The service proxy is disabled. Don't forget to update the cluster CIDR and apiserver addresses to match your cluster.
+
+    CLUSTERCIDR=10.32.0.0/12 \
+    APISERVER=https://cluster01.int.domain.com:6443 \
+    sh -c 'curl https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml -o - | \
+    sed -e "s;%APISERVER%;$APISERVER;g" -e "s;%CLUSTERCIDR%;$CLUSTERCIDR;g"' | \
+    kubectl apply -f -
