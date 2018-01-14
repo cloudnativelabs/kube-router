@@ -50,12 +50,8 @@ Any iptables rules kube-proxy left around will also need to be cleaned up. This 
 
 ## Running kube-router without the service proxy
 
-Without service proxy, kube-router will use in-cluster configuration to access APIserver through the cluster ip
-
 This runs kube-router with pod/service networking and the network policy firewall. The service proxy is disabled. Don't forget to update the cluster CIDR and apiserver addresses to match your cluster.
 
-    CLUSTERCIDR=10.32.0.0/12 \
-    APISERVER=https://cluster01.int.domain.com:6443 \
-    sh -c 'curl https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml -o - | \
-    sed -e "s;%APISERVER%;$APISERVER;g" -e "s;%CLUSTERCIDR%;$CLUSTERCIDR;g"' | \
-    kubectl apply -f -
+Without service proxy, kube-router will use in-cluster configuration to access APIserver through the cluster ip
+
+    kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml
