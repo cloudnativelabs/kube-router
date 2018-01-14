@@ -54,4 +54,4 @@ This runs kube-router with pod/service networking and the network policy firewal
 
     kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml
 
-When service proxy is disabled kube-router will use in-cluster configuration to access APIserver through the cluster-ip.
+When service proxy is disabled kube-router will use in-cluster configuration to access APIserver through the cluster-ip. Service networking must therefore be setup before deploying kube-router in this operation mode.
