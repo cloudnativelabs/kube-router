@@ -2,7 +2,7 @@
 
 This guide is for running kube-router as the [CNI](https://github.com/containernetworking) network provider for on premise and/or bare metal clusters outside of a cloud provider's environment. It assumes the initial cluster is bootstrapped and a networking provider needs configuration.
 
-All pod networking [CIDRs](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) are allocated by kube-controller-manager. Kube-router provides service/pod networking, a network policy firewall, and a high performance [IPVS/LVS]((http://www.linuxvirtualserver.org/software/ipvs.html) based service proxy. The network policy firewall and service proxy are both optional but recommended.
+All pod networking [CIDRs](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) are allocated by kube-controller-manager. Kube-router provides service/pod networking, a network policy firewall, and a high performance [IPVS/LVS](http://www.linuxvirtualserver.org/software/ipvs.html) based service proxy. The network policy firewall and service proxy are both optional but recommended.
 
 ### Configuring the Kubelet
 
