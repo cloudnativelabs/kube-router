@@ -752,86 +752,78 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	return nil
 }
 
+// injectRoute adds routes on a node as advertised by BGP peers
+// routes on nodes are only added if --enable-overlay=true, otherwise
+// routes advertised by BGP peers are ignored
 func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	nexthop := path.GetNexthop()
 	nlri := path.GetNlri()
 	dst, _ := netlink.ParseIPNet(nlri.String())
 	var route *netlink.Route
 
-	// check if the neighbour is in same subnet
-	if !nrc.nodeSubnet.Contains(nexthop) {
-		tunnelName := generateTunnelName(nexthop.String())
-		glog.Infof("Found node: " + nexthop.String() + " to be in different subnet.")
-
-		// if overlay is not enabled then skip creating tunnels and adding route
-		if !nrc.enableOverlays {
-			glog.Infof("Found node: " + nexthop.String() + " to be in different subnet but overlays are " +
-				"disabled so not creating any tunnel and injecting route for the node's pod CIDR.")
-			glog.Infof("Cleaning up if there is any existing tunnel interface for the node")
-			link, err := netlink.LinkByName(tunnelName)
-			if err != nil {
-				return nil
-			}
-			err = netlink.LinkDel(link)
-			if err != nil {
-				glog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
-			}
+	if !nrc.enableOverlays {
+		glog.Infof("Found node: " + nexthop.String() + " but overlays are " +
+			"disabled so not creating any tunnel and injecting route for the node's pod CIDR.")
+		glog.Infof("Cleaning up if there is any existing tunnel interface for the node")
+		link, err := netlink.LinkByName(tunnelName)
+		if err != nil {
 			return nil
 		}
+		err = netlink.LinkDel(link)
+		if err != nil {
+			glog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
+		}
+		return nil
+	}
 
-		// create ip-in-ip tunnel and inject route as overlay is enabled
-		var link netlink.Link
-		var err error
+	glog.Infof("Adding IPIP tunnel overlay for node: " + nexthop.String())
+	tunnelName := generateTunnelName(nexthop.String())
+
+	var link netlink.Link
+	var err error
+	link, err = netlink.LinkByName(tunnelName)
+	if err != nil {
+		glog.Infof("Found node: " + nexthop.String() + ". Creating tunnel: " + tunnelName)
+		out, err := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
+			"remote", nexthop.String(), "dev", nrc.nodeInterface).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("Route not injected for the route advertised by the node %s "+
+				"Failed to create tunnel interface %s. error: %s, output: %s",
+				nexthop.String(), tunnelName, err, string(out))
+		}
+
 		link, err = netlink.LinkByName(tunnelName)
 		if err != nil {
-			glog.Infof("Found node: " + nexthop.String() + " to be in different subnet. Creating tunnel: " + tunnelName)
-			out, err := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
-				"remote", nexthop.String(), "dev", nrc.nodeInterface).CombinedOutput()
-			if err != nil {
-				return fmt.Errorf("Route not injected for the route advertised by the node %s "+
-					"Failed to create tunnel interface %s. error: %s, output: %s",
-					nexthop.String(), tunnelName, err, string(out))
-			}
-
-			link, err = netlink.LinkByName(tunnelName)
-			if err != nil {
-				return fmt.Errorf("Route not injected for the route advertised by the node %s "+
-					"Failed to get tunnel interface by name error: %s", tunnelName, err)
-			}
-			if err := netlink.LinkSetUp(link); err != nil {
-				return errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
-			}
-			// reduce the MTU by 20 bytes to accommodate ipip tunnel overhead
-			if err := netlink.LinkSetMTU(link, link.Attrs().MTU-20); err != nil {
-				return errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
-			}
-		} else {
-			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop.String() + " already exists.")
+			return fmt.Errorf("Route not injected for the route advertised by the node %s "+
+				"Failed to get tunnel interface by name error: %s", tunnelName, err)
 		}
-
-		out, err := exec.Command("ip", "route", "list", "table", customRouteTableID).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("Failed to verify if route already exists in %s table: %s",
-				customRouteTableName, err.Error())
+		if err := netlink.LinkSetUp(link); err != nil {
+			return errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
 		}
-		if !strings.Contains(string(out), tunnelName) {
-			if out, err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table",
-				customRouteTableID).CombinedOutput(); err != nil {
-				return fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
-			}
-		}
-
-		route = &netlink.Route{
-			LinkIndex: link.Attrs().Index,
-			Dst:       dst,
-			Protocol:  0x11,
+		// reduce the MTU by 20 bytes to accommodate ipip tunnel overhead
+		if err := netlink.LinkSetMTU(link, link.Attrs().MTU-20); err != nil {
+			return errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
 		}
 	} else {
-		route = &netlink.Route{
-			Dst:      dst,
-			Gw:       nexthop,
-			Protocol: 0x11,
+		glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop.String() + " already exists.")
+	}
+
+	out, err := exec.Command("ip", "route", "list", "table", customRouteTableID).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Failed to verify if route already exists in %s table: %s",
+			customRouteTableName, err.Error())
+	}
+	if !strings.Contains(string(out), tunnelName) {
+		if out, err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table",
+			customRouteTableID).CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
 		}
+	}
+
+	route = &netlink.Route{
+		LinkIndex: link.Attrs().Index,
+		Dst:       dst,
+		Protocol:  0x11,
 	}
 
 	if path.IsWithdraw {
