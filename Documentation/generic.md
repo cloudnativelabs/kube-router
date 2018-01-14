@@ -56,4 +56,4 @@ This runs kube-router with pod/service networking and the network policy firewal
 
 In this mode kube-router relies on for example [kube-proxy](https://kubernetes.io/docs/reference/generated/kube-proxy/) to provide service networking.
 
-When service proxy is disabled kube-router will use [in-cluster configuration](https://github.com/kubernetes/client-go/tree/master/examples/in-cluster-client-configuration) to access APIserver through the cluster-ip. Service networking must therefore be setup before deploying kube-router.
+When service proxy is disabled kube-router will use [in-cluster configuration](https://github.com/kubernetes/client-go/tree/master/examples/in-cluster-client-configuration) to access APIserver through cluster-ip. Service networking must therefore be setup before deploying kube-router.
