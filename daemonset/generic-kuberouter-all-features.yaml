@@ -25,7 +25,7 @@ data:
     - name: cluster
       cluster:
         certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        server: https://%APISERVER%
+        server: %APISERVER%
     users:
     - name: kube-router
       user:
