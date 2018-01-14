@@ -1,14 +1,14 @@
-# Kube-router on generic cluster
+# Kube-router on generic clusters
 
-This guide assumes you already have bootstrapped the initial pieces for a Kubernets cluster and is about to switch or setup service & container networking provider
+This guide assumes you already have bootstrapped the initial pieces for a Kubernetes cluster and is about to switch or setup service & container networking provider
 
 Kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes
 
-Kube-router provides pod networking, network policy and high perfoming IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options listed below the prerequisites
+Kube-router provides pod networking, network policy and a high performance IPVS/LVS based service proxy. Depending on you choose to use kube-router for service proxy you have two options listed below the prerequisites
 
 ## Prerequisites
 
-kube-router can work as your whole network stack in Kubernetes on-prem & bare metall and works without any cloudproviders
+kube-router can work as your whole network stack in Kubernetes on-prem & bare metal and works without any cloud providers.
 
 below is the needed configuration to run kube-router in such environments
 
@@ -19,9 +19,9 @@ kube-router assumes each Kubelet is using `/etc/cni/net.d` as cni conf dir & net
 - --cni-conf-dir=/etc/cni/net.d
 - --network-plugin=cni
 
-If you have been using a other CNI providerssuch as weave-net, calico or flannel you will have to remove old configurations from /etc/cni/net.d on each node
+If you have been using another CNI provider such as weave-net, calico or flannel you will have to remove old configurations from /etc/cni/net.d on each node
 
-## __Switching CNI provider on a running cluster will require you to delete all the running pods and let them recreate and get new adresses assigned from the Kubenet IPAM__
+## __Switching CNI provider on a running cluster will require you to delete all the running pods and let them recreate and get new addresses assigned from the Kubenet IPAM__
 
 ### Kube controller-manager
 
@@ -34,7 +34,7 @@ The following options needs to be set on the controller-manager
 
 ## Kube-router providing pod networking and network policy
 
-Don't forgett to adjust values for Cluster CIDR (pod range) & apiserver adress (must be reachable directly from host networking)
+Don't forget to adjust values for Cluster CIDR (pod range) & apiserver address (must be reachable directly from host networking)
 
 ```sh
 CLUSTERCIDR=10.32.0.0/12 \
@@ -46,7 +46,7 @@ kubectl apply -f -
 
 ## Kube-router providing service proxy, firewall and pod networking
 
-Don't forgett to adjust values for Cluster CIDR (pod range) & apiserver adress (must be reachable directly from host networking)
+Don't forget to adjust values for Cluster CIDR (pod range) & apiserver address (must be reachable directly from host networking)
 
 ```sh
 CLUSTERCIDR=10.32.0.0/12 \
