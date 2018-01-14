@@ -4,22 +4,22 @@ This guide is for running kube-router as the [CNI](https://github.com/containern
 
 All pod networking [CIDRs](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) are allocated by kube-controller-manager. Kube-router provides service/pod networking, a network policy firewall, and a high performance [IPVS/LVS]((http://www.linuxvirtualserver.org/software/ipvs.html) based service proxy. The network policy firewall and service proxy are both optional but recommended.
 
+### Configuring the Kubelet
 
-### Configuring the [Kubelet](https://kubernetes.io/docs/reference/generated/kubelet/)
-
-Ensure each kubelet is configured with the following options:
+Ensure each [Kubelet](https://kubernetes.io/docs/reference/generated/kubelet/) is configured with the following options:
 
     --network-plugin=cni
     --cni-conf-dir=/etc/cni/net.d
 
+If running Kubelet containerised, make sure `/etc/cni/net.d` is mapped to the host's `/etc/cni/net.d`
+
 If a previous CNI provider (e.g. weave-net, calico, or flannel) was used, remove old configurations from `/etc/cni/net.d` on each kubelet.
 
-**Note: Switching CNI providers on a running cluster requires re-creating all pods to pick up new pod IPs**
+_**Note: Switching CNI providers on a running cluster requires re-creating all pods to pick up new pod IPs**_
 
+### Configuring kube-controller-manager
 
-### Configuring [kube-controller-manager](https://kubernetes.io/docs/reference/generated/kube-controller-manager/)
-
-The following options are mandatory for kube-controller-manager:
+The following options are mandatory for [kube-controller-manager](https://kubernetes.io/docs/reference/generated/kube-controller-manager/):
 
     --cluster-cidr=${POD_NETWORK} # for example 10.32.0.0/12
     --service-cluster-ip-range=${SERVICE_IP_RANGE} # for example 10.50.0.0/22
@@ -35,9 +35,9 @@ This runs kube-router with pod/service networking, the network policy firewall, 
     sed -e "s;%APISERVER%;$APISERVER;g" -e "s;%CLUSTERCIDR%;$CLUSTERCIDR;g"' | \
     kubectl apply -f -
 
-### Removing a previous [kube-proxy](https://kubernetes.io/docs/reference/generated/kube-proxy/)
+### Removing a previous kube-proxy
 
-If kube-proxy was never deployed to the cluster, this can likely be skipped.
+If [kube-proxy](https://kubernetes.io/docs/reference/generated/kube-proxy/) was never deployed to the cluster, this can likely be skipped.
 
 Remove any previously running kube-proxy and all iptables rules it created. Start by deleting the kube-proxy daemonset:
 
