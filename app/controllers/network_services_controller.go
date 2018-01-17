@@ -134,7 +134,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	prometheus.MustRegister(servicePpsIn)
 	prometheus.MustRegister(servicePpsOut)
 	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(":8080", nil)
+	go http.ListenAndServe(":"+strconv.Itoa(MetricsPort), nil)
 
 	// enable ipvs connection tracking
 	err = ensureIpvsConntrack()
