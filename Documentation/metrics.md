@@ -9,7 +9,8 @@ By default kube-router will export Prometheus metrics on port `8080` under the p
 
 If running kube-router as daemonset this port might collide with other services running on the host network and must be changed.
 
-kube-router supports the following runtime configuration for controlling where to expose the metrics
+kube-router 0.1.0-rc2 and upwards supports the following runtime configuration for controlling where to expose the metrics.
+If you are using a older version, metrics path & port is locked to `/metrics` & `8080`.
 
       --metrics-port int                    Prometheus metrics port to use ( default 8080 )
       --metrics-path string                 Path to serve Prometheus metrics on ( default /metrics )
