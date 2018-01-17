@@ -2,12 +2,11 @@
 
 ## Scraping kube-router metrics with Prometheus
 
-The scope of this document is to describe how to setup the annotations needed for [Prometheus](https://prometheus.io/) to use Kubernetes SD to discover & scape kube-router pods.
+The scope of this document is to describe how to setup the [annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/) needed for [Prometheus](https://prometheus.io/) to use [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) to discover & scape kube-router [pods](https://kubernetes.io/docs/concepts/workloads/pods/pod/).
 For help with installing Prometheus please see their [docs](https://prometheus.io/docs/introduction/overview/)
 
 By default kube-router will export Prometheus metrics on port `8080` under the path `/metrics`.
-
-If running kube-router as daemonset this port might collide with other services running on the host network and must be changed.
+If running kube-router as [daemonset](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/) this port might collide with other applications running on the host network and must be changed.
 
 kube-router 0.1.0-rc2 and upwards supports the following runtime configuration for controlling where to expose the metrics.
 If you are using a older version, metrics path & port is locked to `/metrics` & `8080`.
@@ -15,7 +14,7 @@ If you are using a older version, metrics path & port is locked to `/metrics` & 
       --metrics-port int                    Prometheus metrics port to use ( default 8080 )
       --metrics-path string                 Path to serve Prometheus metrics on ( default /metrics )
 
-By enabling [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) in Prometheus configuration it will automaticly discover & scrape pods with the correct annotations.
+By enabling Kubernetes SD in Prometheus configuration & adding required annotations it can automaticly discover & scrape kube-router metrics.
 
 ## Supported annotations
 
