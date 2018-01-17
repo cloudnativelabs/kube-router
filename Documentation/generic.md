@@ -23,10 +23,11 @@ _**Note: Switching CNI providers on a running cluster requires re-creating all p
 
 If you choose to use kube-router for pod-to-pod network connectivity then [kube-controller-manager](https://kubernetes.io/docs/reference/generated/kube-controller-manager/) need to be configured to allocate pod CIDRs by passing `--allocate-node-cidrs=true` flag and providing a `cluster-cidr` (i.e. by passing --cluster-cidr=10.32.0.0/12 for e.g.)
 
+E.g
+
     --allocate-node-cidrs=true
     --cluster-cidr=10.32.0.0/12
     --service-cluster-ip-range=10.50.0.0/22
-
 
 ## Running kube-router with everything
 
