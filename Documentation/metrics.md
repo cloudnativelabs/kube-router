@@ -14,7 +14,7 @@ If you are using a older version, metrics path & port is locked to `/metrics` & 
       --metrics-port int                    Prometheus metrics port to use ( default 8080 )
       --metrics-path string                 Path to serve Prometheus metrics on ( default /metrics )
 
-By enabling Kubernetes SD in Prometheus configuration & adding required annotations it can automaticly discover & scrape kube-router metrics.
+By enabling [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) in Prometheus configuration & adding required annotations it can automaticly discover & scrape kube-router metrics.
 
 ## Supported annotations
 
