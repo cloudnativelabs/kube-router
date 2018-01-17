@@ -26,7 +26,7 @@ The following annotations can be set on pods/services to enable automatic SD & s
 
 They are to be set under `spec.template.metadata`
 
-E.g
+For example:
 
     spec:
       template:
@@ -35,4 +35,4 @@ E.g
             k8s-app: kube-router
           annotations:
             prometheus.io/scrape: "true"
-            prometheus.io/port: "9153"
+            prometheus.io/port: "8080"
