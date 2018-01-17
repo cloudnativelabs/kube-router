@@ -116,6 +116,8 @@ Usage of ./kube-router:
       --kubeconfig string                   Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --masquerade-all                      SNAT all traffic to cluster IP/node port.
       --master string                       The address of the Kubernetes API server (overrides any value in kubeconfig).
+      --metrics-port int                    Prometheus metrics port to use, default 8080
+      --metrics-path                        Path to serve Prometheus metrics on, Default /metrics
       --nodeport-bindon-all-ip              For service of NodePort type create IPVS service that listens on all IP's of the node.
       --nodes-full-mesh                     Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
       --peer-router-asns uintSlice          ASN numbers of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr. (default [])
