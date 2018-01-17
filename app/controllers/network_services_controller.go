@@ -84,6 +84,7 @@ type NetworkServicesController struct {
 	client              *kubernetes.Clientset
 	nodeportBindOnAllIp bool
 	MetricsPort         int
+	MetricsPath         string
 }
 
 // internal representation of kubernetes service
@@ -134,7 +135,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	prometheus.MustRegister(serviceActiveConn)
 	prometheus.MustRegister(servicePpsIn)
 	prometheus.MustRegister(servicePpsOut)
-	http.Handle("/metrics", promhttp.Handler())
+	http.Handle(nsc.MetricsPath, promhttp.Handler())
 	go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
 
 	// enable ipvs connection tracking
@@ -1567,6 +1568,7 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 	nsc.syncPeriod = config.IpvsSyncPeriod
 	nsc.globalHairpin = config.GlobalHairpinMode
 	nsc.MetricsPort = config.MetricsPort
+	nsc.MetricsPath = config.MetricsPath
 
 	nsc.serviceMap = make(serviceInfoMap)
 	nsc.endpointsMap = make(endpointsInfoMap)

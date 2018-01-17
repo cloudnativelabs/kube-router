@@ -38,6 +38,7 @@ type KubeRouterConfig struct {
 	PeerPasswords       []string
 	EnablePprof         bool
 	MetricsPort         int
+	MetricsPath         string
 	// FullMeshPassword    string
 }
 
@@ -111,6 +112,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.EnablePprof, "enable-pprof", false,
 		"Enables pprof for debugging performance and memory leak issues.")
 	fs.IntVar(&s.MetricsPort, "metrics-port", "8080", "Prometheus metrics port")
+	fs.StringVar(&s.MetricsPath, "metrics-path", "/metrics", "Prometheus metrics path")
 
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
