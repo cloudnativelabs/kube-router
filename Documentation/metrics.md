@@ -36,3 +36,31 @@ For example:
           annotations:
             prometheus.io/scrape: "true"
             prometheus.io/port: "8080"
+
+## Avail metrics
+
+The following metrics is exposed by kube-router prefixed by `kube_router_`
+
+* service_total_connections
+  Total connections made to the service since creation
+* service_packets_in
+  Total n/o packets received by service
+* service_packets_out
+  Total n/o packets sent by service
+* service_bytes_in
+  Total bytes received by the service
+* service_bytes_out
+  Total bytes sent by the service
+* service_pps_in
+  Incoming packets per second
+* service_pps_out
+  Outgoing packets per second
+* service_cps
+  Connections per second
+* service_bps_in
+  Incoming bytes per second
+* service_bps_out
+  Outgoing bytes per second
+
+To get a grouped list of CPS for each service a Prometheus query could look like this e.g: 
+`sum(kube_router_service_cps) by (namespace, service_name)`
