@@ -6,6 +6,8 @@ All pod networking [CIDRs](https://en.wikipedia.org/wiki/Classless_Inter-Domain_
 
 ### Configuring the Kubelet
 
+If you choose to run kube-router as daemonset, then both kube-apiserver and kubelet must be run with `--allow-privileged=true` option
+
 Ensure each [Kubelet](https://kubernetes.io/docs/reference/generated/kubelet/) is configured with the following options:
 
     --network-plugin=cni
@@ -19,11 +21,13 @@ _**Note: Switching CNI providers on a running cluster requires re-creating all p
 
 ### Configuring kube-controller-manager
 
-The following options are mandatory for [kube-controller-manager](https://kubernetes.io/docs/reference/generated/kube-controller-manager/):
+If you choose to use kube-router for pod-to-pod network connectivity then [kube-controller-manager](https://kubernetes.io/docs/reference/generated/kube-controller-manager/) need to be configured to allocate pod CIDRs by passing `--allocate-node-cidrs=true` flag and providing a `cluster-cidr` (i.e. by passing --cluster-cidr=10.32.0.0/12 for e.g.)
 
-    --cluster-cidr=${POD_NETWORK} # for example 10.32.0.0/12
-    --service-cluster-ip-range=${SERVICE_IP_RANGE} # for example 10.50.0.0/22
+For example:
 
+    --allocate-node-cidrs=true
+    --cluster-cidr=10.32.0.0/12
+    --service-cluster-ip-range=10.50.0.0/22
 
 ## Running kube-router with everything
 
