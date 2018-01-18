@@ -167,9 +167,17 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	}
 
 	// register metrics
-	prometheus.MustRegister(serviceTotalConn)
+	prometheus.MustRegister(serviceBpsIn)
+	prometheus.MustRegister(serviceBpsOut
+	prometheus.MustRegister(serviceBytesIn)
+	prometheus.MustRegister(serviceBytesOut)
+	prometheus.MustRegister(serviceCPS)
 	prometheus.MustRegister(servicePacketsIn)
 	prometheus.MustRegister(servicePacketsOut)
+	prometheus.MustRegister(servicePpsIn)
+	prometheus.MustRegister(servicePpsOut)
+	prometheus.MustRegister(serviceTotalConn)
+
 	http.Handle(nsc.MetricsPath, promhttp.Handler())
 	go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
 
