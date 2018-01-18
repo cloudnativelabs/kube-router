@@ -168,7 +168,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 
 	// register metrics
 	prometheus.MustRegister(serviceBpsIn)
-	prometheus.MustRegister(serviceBpsOut
+	prometheus.MustRegister(serviceBpsOut)
 	prometheus.MustRegister(serviceBytesIn)
 	prometheus.MustRegister(serviceBytesOut)
 	prometheus.MustRegister(serviceCPS)
