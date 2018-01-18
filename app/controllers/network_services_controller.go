@@ -750,14 +750,14 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 				glog.Infof("Publishing prometheus metrics " + svc.clusterIP.String() + ":" + strconv.Itoa(svc.port))
 				serviceActiveConn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.Connections))
 				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsOut))
 			}
 			if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
 				protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
 				glog.Infof("Publishing prometheus metrics " + nsc.nodeIP.String() + ":" + strconv.Itoa(svc.port))
 				serviceActiveConn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.Connections))
 				servicePpsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsOut))
 			}
 		}
 	}
