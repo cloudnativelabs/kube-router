@@ -45,11 +45,31 @@ const (
 )
 
 var (
-	h                 *ipvs.Handle
-	serviceActiveConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	h                *ipvs.Handle
+	serviceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
-		Name:      "service_active_connections",
-		Help:      "Active conntection to service",
+		Name:      "service_total_connections",
+		Help:      "Total conntection to service",
+	}, []string{"namespace", "service_name", "service_vip"})
+	servicePacketsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_packets_in",
+		Help:      "Total incoming packets",
+	}, []string{"namespace", "service_name", "service_vip"})
+	servicePacketsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_packets_out",
+		Help:      "Total outoging packets",
+	}, []string{"namespace", "service_name", "service_vip"})
+	serviceBytesIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_bytes_in",
+		Help:      "Total incoming bytes",
+	}, []string{"namespace", "service_name", "service_vip"})
+	serviceBytesOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_bytes_out",
+		Help:      "Total outoging bytes",
 	}, []string{"namespace", "service_name", "service_vip"})
 	servicePpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -60,6 +80,21 @@ var (
 		Namespace: namespace,
 		Name:      "service_pps_out",
 		Help:      "Outoging packets per second",
+	}, []string{"namespace", "service_name", "service_vip"})
+	serviceCPS = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_cps",
+		Help:      "Service connections per second",
+	}, []string{"namespace", "service_name", "service_vip"})
+	serviceBpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_bps_in",
+		Help:      "Incoming bytes per second",
+	}, []string{"namespace", "service_name", "service_vip"})
+	serviceBpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "service_bps_out",
+		Help:      "Outoging bytes per second",
 	}, []string{"namespace", "service_name", "service_vip"})
 )
 
@@ -132,9 +167,17 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	}
 
 	// register metrics
-	prometheus.MustRegister(serviceActiveConn)
+	prometheus.MustRegister(serviceBpsIn)
+	prometheus.MustRegister(serviceBpsOut)
+	prometheus.MustRegister(serviceBytesIn)
+	prometheus.MustRegister(serviceBytesOut)
+	prometheus.MustRegister(serviceCPS)
+	prometheus.MustRegister(servicePacketsIn)
+	prometheus.MustRegister(servicePacketsOut)
 	prometheus.MustRegister(servicePpsIn)
 	prometheus.MustRegister(servicePpsOut)
+	prometheus.MustRegister(serviceTotalConn)
+
 	http.Handle(nsc.MetricsPath, promhttp.Handler())
 	go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
 
@@ -748,16 +791,31 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 			if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
 				protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
 				glog.Infof("Publishing prometheus metrics " + svc.clusterIP.String() + ":" + strconv.Itoa(svc.port))
-				serviceActiveConn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.Connections))
-				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BPSIn))
+				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BPSOut))
+				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BytesIn))
+				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BytesOut))
+				serviceCPS.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.CPS))
+				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsOut))
+				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PPSIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PPSOut))
+				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.Connections))
+
 			}
 			if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
 				protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
 				glog.Infof("Publishing prometheus metrics " + nsc.nodeIP.String() + ":" + strconv.Itoa(svc.port))
-				serviceActiveConn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.Connections))
-				servicePpsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.BPSIn))
+				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.BPSOut))
+				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.BytesIn))
+				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.BytesOut))
+				serviceCPS.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.CPS))
+				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
+				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsOut))
+				servicePpsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PPSIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PPSOut))
+				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.Connections))
 			}
 		}
 	}
