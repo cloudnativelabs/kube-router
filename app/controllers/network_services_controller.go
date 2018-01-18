@@ -791,15 +791,15 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 			if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
 				protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
 				glog.Infof("Publishing prometheus metrics " + svc.clusterIP.String() + ":" + strconv.Itoa(svc.port))
-				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, nsc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BPSIn))
-				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, nsc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BPSOut))
-				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, nsc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BytesIn))
-				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, nsc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BytesOut))
-				serviceCPS.WithLabelValues(svc.namespace, svc.name, nsc.clusterIP.String()).Set(float64(ipvsSvc.Stats.CPS))
+				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BPSIn))
+				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BPSOut))
+				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BytesIn))
+				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BytesOut))
+				serviceCPS.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.CPS))
 				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
 				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsOut))
-				servicePpsIn.WithLabelValues(svc.namespace, svc.name, nsc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PPSIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, nsc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PPSOut))
+				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PPSIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PPSOut))
 				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.Connections))
 
 			}
