@@ -96,6 +96,11 @@ var (
 		Name:      "service_bps_out",
 		Help:      "Outoging bytes per second",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
+	controllerIpvsServices = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_ipvs_services",
+		Help:      "Number of ipvs services in the instance",
+	}, []string{})
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -177,6 +182,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	prometheus.MustRegister(servicePpsIn)
 	prometheus.MustRegister(servicePpsOut)
 	prometheus.MustRegister(serviceTotalConn)
+	prometheus.MustRegister(controllerIpvsServicesg81)
 
 	http.Handle(nsc.MetricsPath, promhttp.Handler())
 	go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
@@ -828,6 +834,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSIn))
 				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSOut))
 				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.Connections))
+				controllerIpvsServices.WithLabelValues().Set(float64(count(ipvsSvcs)))
 			}
 		}
 	}
