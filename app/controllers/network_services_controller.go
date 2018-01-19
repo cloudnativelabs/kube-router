@@ -101,6 +101,11 @@ var (
 		Name:      "controller_ipvs_services",
 		Help:      "Number of ipvs services in the instance",
 	}, []string{})
+	controllerPublishMetricsTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_publishmetrics_time",
+		Help:      "Time it took to publish metrics",
+	}, []string{})
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -183,6 +188,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	prometheus.MustRegister(servicePpsOut)
 	prometheus.MustRegister(serviceTotalConn)
 	prometheus.MustRegister(controllerIpvsServices)
+	prometheus.MustRegister(controllerPublishMetricsTime)
 
 	http.Handle(nsc.MetricsPath, promhttp.Handler())
 	go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
@@ -781,6 +787,12 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 }
 
 func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
+	start := time.Now()
+	defer func() {
+		endTime := time.Since(start)
+		controllerPublishMetricsTime.WithLabelValues().Set(float64(endTime))
+		glog.Infof("Publishing Prometheus metrics took %v", endTime)
+	}()
 	ipvsSvcs, err := h.GetServices()
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
@@ -799,7 +811,6 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		default:
 			protocol = syscall.IPPROTO_NONE
 		}
-		glog.Info("Publishing Prometheus metrics")
 		for _, ipvsSvc := range ipvsSvcs {
 
 			switch svcAddress := ipvsSvc.Address.String(); svcAddress {

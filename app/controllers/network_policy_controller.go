@@ -17,10 +17,15 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus"
 	api "k8s.io/api/core/v1"
 	apiextensions "k8s.io/api/extensions/v1beta1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/client-go/kubernetes"
+)
+
+const (
+	namespace = "kube_router"
 )
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
@@ -33,6 +38,14 @@ import (
 // originating/destined from/to pod goes throuh fitler table's, FORWARD chain, followed by pod specific chain,
 // followed by one or more network policy chains, till there is a match which will accept the packet, or gets
 // dropped by the rule in the pod chain, if there is no match.
+
+var (
+	controllerIptablesSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_iptables_sync_time",
+		Help:      "Time it took for controller to sync iptables",
+	}, []string{})
+)
 
 // NetworkPolicyController strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
@@ -104,6 +117,8 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 	defer wg.Done()
 
 	glog.Infof("Starting network policy controller")
+
+	prometheus.MustRegister(controllerIptablesSyncTime)
 
 	// loop forever till notified to stop on stopCh
 	for {
@@ -186,7 +201,9 @@ func (npc *NetworkPolicyController) Sync() error {
 
 	start := time.Now()
 	defer func() {
-		glog.Infof("sync iptables took %v", time.Since(start))
+		endTime := time.Since(start)
+		controllerIptablesSyncTime.WithLabelValues().Set(float64(endTime))
+		glog.Infof("sync iptables took %v", endTime)
 	}()
 
 	if npc.v1NetworkPolicy {
