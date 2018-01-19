@@ -1,34 +1,4 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "prometheus",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    }
-  ],
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "4.6.2"
-    },
-    {
-      "type": "panel",
-      "id": "graph",
-      "name": "Graph",
-      "version": ""
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
-      "version": "1.0.0"
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -44,22 +14,22 @@
   },
   "editable": true,
   "gnetId": null,
-  "graphTooltip": 1,
+  "graphTooltip": 2,
   "hideControls": false,
-  "id": null,
+  "id": 4,
   "links": [],
   "refresh": "30s",
   "rows": [
     {
       "collapse": false,
-      "height": 168,
+      "height": 300,
       "panels": [
         {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "prometheus",
           "description": "",
           "fill": 1,
           "id": 4,
@@ -96,7 +66,7 @@
               "expr": "sum(kube_router_service_cps) by (namespace, service_name, protocol, port)",
               "format": "time_series",
               "instant": false,
-              "intervalFactor": 5,
+              "intervalFactor": 2,
               "legendFormat": "{{namespace}}/{{service_name}} {{port}}/{{protocol}}",
               "refId": "A"
             }
@@ -139,29 +109,24 @@
         },
         {
           "aliasColors": {},
-          "bars": true,
+          "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
-          "description": "Total connections made to the service",
+          "datasource": "prometheus",
           "fill": 1,
-          "id": 12,
+          "id": 13,
           "legend": {
             "alignAsTable": true,
             "avg": false,
-            "current": true,
-            "hideEmpty": true,
-            "hideZero": true,
+            "current": false,
             "max": false,
             "min": false,
             "rightSide": true,
             "show": false,
-            "sort": "current",
-            "sortDesc": true,
             "total": false,
-            "values": true
+            "values": false
           },
-          "lines": false,
+          "lines": true,
           "linewidth": 1,
           "links": [],
           "nullPointMode": "null",
@@ -176,38 +141,43 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sort_desc(sum(kube_router_service_total_connections > 0) by (namespace, service_name, protocol, port))",
+              "expr": "sum(kube_router_service_bps_in) by (instance)",
               "format": "time_series",
-              "instant": true,
-              "intervalFactor": 3,
-              "legendFormat": "{{namespace}}<br/>{{service_name}}<br/>{{port}}/{{protocol}}",
+              "instant": false,
+              "intervalFactor": 2,
+              "legendFormat": "in: {{instance}}",
               "refId": "A"
+            },
+            {
+              "expr": "- sum(kube_router_service_bps_out) by (instance)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "out: {{instance}}",
+              "refId": "B"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Total Connections",
+          "title": "Traffic by node",
           "tooltip": {
-            "shared": false,
+            "shared": true,
             "sort": 0,
             "value_type": "individual"
           },
           "type": "graph",
           "xaxis": {
             "buckets": null,
-            "mode": "series",
+            "mode": "time",
             "name": null,
             "show": true,
-            "values": [
-              "total"
-            ]
+            "values": []
           },
           "yaxes": [
             {
-              "format": "short",
+              "format": "Bps",
               "label": null,
-              "logBase": 10,
+              "logBase": 1,
               "max": null,
               "min": null,
               "show": true
@@ -218,7 +188,7 @@
               "logBase": 1,
               "max": null,
               "min": null,
-              "show": false
+              "show": true
             }
           ]
         }
@@ -232,14 +202,14 @@
     },
     {
       "collapse": false,
-      "height": 231,
+      "height": 337,
       "panels": [
         {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "prometheus",
           "fill": 1,
           "id": 2,
           "legend": {
@@ -274,14 +244,14 @@
             {
               "expr": "sum(kube_router_service_pps_in) by (namespace, service_name, protocol, port)",
               "format": "time_series",
-              "intervalFactor": 5,
+              "intervalFactor": 2,
               "legendFormat": "in {{namespace}}/{{service_name}} {{port}}/{{protocol}}",
               "refId": "A"
             },
             {
               "expr": "- sum(kube_router_service_pps_out) by (namespace, service_name, protocol, port)",
               "format": "time_series",
-              "intervalFactor": 5,
+              "intervalFactor": 2,
               "legendFormat": "out {{namespace}}/{{service_name}} {{port}}/{{protocol}}",
               "refId": "B"
             }
@@ -318,7 +288,7 @@
               "logBase": 1,
               "max": null,
               "min": null,
-              "show": true
+              "show": false
             }
           ]
         },
@@ -327,7 +297,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "prometheus",
           "fill": 1,
           "id": 7,
           "legend": {
@@ -361,7 +331,7 @@
               "expr": "sum(kube_router_service_bps_in) by (namespace, service_name, protocol, port)",
               "format": "time_series",
               "instant": false,
-              "intervalFactor": 5,
+              "intervalFactor": 2,
               "legendFormat": "in {{namespace}}/{{service_name}} {{port}}/{{protocol}}",
               "refId": "A"
             },
@@ -369,7 +339,7 @@
               "expr": "- sum(kube_router_service_bps_out) by (namespace, service_name, protocol, port)",
               "format": "time_series",
               "instant": false,
-              "intervalFactor": 5,
+              "intervalFactor": 2,
               "legendFormat": "out {{namespace}}/{{service_name}} {{port}}/{{protocol}}",
               "refId": "B"
             }
@@ -427,7 +397,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "prometheus",
           "fill": 1,
           "id": 6,
           "legend": {
@@ -511,7 +481,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "prometheus",
           "fill": 1,
           "id": 9,
           "legend": {
@@ -607,7 +577,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "prometheus",
           "fill": 1,
           "id": 10,
           "legend": {
@@ -691,7 +661,7 @@
           "bars": true,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": "prometheus",
           "fill": 1,
           "id": 11,
           "legend": {
@@ -777,6 +747,103 @@
       "showTitle": false,
       "title": "Dashboard Row",
       "titleSize": "h6"
+    },
+    {
+      "collapse": false,
+      "height": 250,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "prometheus",
+          "description": "Total connections made to the service",
+          "fill": 1,
+          "id": 12,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "hideEmpty": true,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "rightSide": true,
+            "show": false,
+            "sort": "current",
+            "sortDesc": true,
+            "total": false,
+            "values": true
+          },
+          "lines": false,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 12,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sort_desc(sum(kube_router_service_total_connections > 0) by (namespace, service_name, protocol, port))",
+              "format": "time_series",
+              "instant": true,
+              "intervalFactor": 3,
+              "legendFormat": "{{namespace}}<br/>{{service_name}}<br/>{{port}}/{{protocol}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Total Connections",
+          "tooltip": {
+            "shared": false,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "series",
+            "name": null,
+            "show": true,
+            "values": [
+              "total"
+            ]
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 10,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ]
+        }
+      ],
+      "repeat": null,
+      "repeatIteration": null,
+      "repeatRowId": null,
+      "showTitle": false,
+      "title": "Dashboard Row",
+      "titleSize": "h6"
     }
   ],
   "schemaVersion": 14,
@@ -819,5 +886,5 @@
   },
   "timezone": "browser",
   "title": "kube-router",
-  "version": 24
+  "version": 27
 }
