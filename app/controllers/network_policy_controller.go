@@ -24,10 +24,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const (
-	namespace = "kube_router"
-)
-
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
 // policies. Two different types of iptables chains are used. Each pod running on the node which either
 // requires ingress or egress filtering gets a pod specific chian. Each network policy has a iptable chain, which
