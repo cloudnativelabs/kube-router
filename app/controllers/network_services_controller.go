@@ -182,7 +182,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	prometheus.MustRegister(servicePpsIn)
 	prometheus.MustRegister(servicePpsOut)
 	prometheus.MustRegister(serviceTotalConn)
-	prometheus.MustRegister(controllerIpvsServicesg81)
+	prometheus.MustRegister(controllerIpvsServices)
 
 	http.Handle(nsc.MetricsPath, promhttp.Handler())
 	go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
@@ -288,7 +288,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	var ipvsSvcs []*ipvs.Service
 	start := time.Now()
 	defer func() {
-		glog.Infof("sync ipvs servers took %v", time.Since(start))
+		glog.Infof("sync ipvs servicess took %v", time.Since(start))
 	}()
 
 	dummyVipInterface, err := getKubeDummyInterface()
@@ -834,7 +834,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSIn))
 				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSOut))
 				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.Connections))
-				controllerIpvsServices.WithLabelValues().Set(float64(count(ipvsSvcs)))
+				controllerIpvsServices.WithLabelValues().Set(float64(len(ipvsSvcs)))
 			}
 		}
 	}
