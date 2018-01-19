@@ -269,4 +269,5 @@ kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
 [Configuring BGP Peers](bgp.md)
 
 ## Metrics
+
 [Configure metrics gathering](metrics.md)

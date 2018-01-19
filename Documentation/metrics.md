@@ -64,3 +64,8 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
 
 To get a grouped list of CPS for each service a Prometheus query could look like this e.g: 
 `sum(kube_router_service_cps) by (namespace, service_name)`
+
+## Grafana Dashboard
+
+This repo contains a example [Grafana dashboard](https://grafana.com/) utilizing all the above exposed metrics from kube-router.
+[kube-router.json](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/kube-router.json)
