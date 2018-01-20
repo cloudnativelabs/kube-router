@@ -49,53 +49,53 @@ var (
 	serviceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_total_connections",
-		Help:      "Total conntection to service",
-	}, []string{"namespace", "service_name", "service_vip"})
+		Help:      "Total incoming conntections made",
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	servicePacketsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_packets_in",
 		Help:      "Total incoming packets",
-	}, []string{"namespace", "service_name", "service_vip"})
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	servicePacketsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_packets_out",
 		Help:      "Total outoging packets",
-	}, []string{"namespace", "service_name", "service_vip"})
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	serviceBytesIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bytes_in",
 		Help:      "Total incoming bytes",
-	}, []string{"namespace", "service_name", "service_vip"})
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	serviceBytesOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bytes_out",
-		Help:      "Total outoging bytes",
-	}, []string{"namespace", "service_name", "service_vip"})
+		Help:      "Total outgoing bytes",
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	servicePpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_pps_in",
 		Help:      "Incoming packets per second",
-	}, []string{"namespace", "service_name", "service_vip"})
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	servicePpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_pps_out",
 		Help:      "Outoging packets per second",
-	}, []string{"namespace", "service_name", "service_vip"})
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	serviceCPS = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_cps",
 		Help:      "Service connections per second",
-	}, []string{"namespace", "service_name", "service_vip"})
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	serviceBpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bps_in",
 		Help:      "Incoming bytes per second",
-	}, []string{"namespace", "service_name", "service_vip"})
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	serviceBpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bps_out",
 		Help:      "Outoging bytes per second",
-	}, []string{"namespace", "service_name", "service_vip"})
+	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -782,40 +782,52 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 
 	for _, svc := range serviceInfoMap {
 		var protocol uint16
-		if svc.protocol == "tcp" {
-			protocol = syscall.IPPROTO_TCP
-		} else {
-			protocol = syscall.IPPROTO_UDP
-		}
-		for _, ipvsSvc := range ipvsSvcs {
-			if strings.Compare(svc.clusterIP.String(), ipvsSvc.Address.String()) == 0 &&
-				protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-				glog.Infof("Publishing prometheus metrics " + svc.clusterIP.String() + ":" + strconv.Itoa(svc.port))
-				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BPSIn))
-				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BPSOut))
-				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BytesIn))
-				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.BytesOut))
-				serviceCPS.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.CPS))
-				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PacketsOut))
-				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PPSIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.PPSOut))
-				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svc.clusterIP.String()).Set(float64(ipvsSvc.Stats.Connections))
+		var pushMetric bool
+		var svcVip string
 
+		switch aProtocol := svc.protocol; aProtocol {
+		case "tcp":
+			protocol = syscall.IPPROTO_TCP
+		case "udp":
+			protocol = syscall.IPPROTO_UDP
+		default:
+			protocol = syscall.IPPROTO_NONE
+		}
+		glog.Info("Publishing Prometheus metrics")
+		for _, ipvsSvc := range ipvsSvcs {
+
+			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
+			case svc.clusterIP.String():
+				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+					pushMetric = true
+					svcVip = svc.clusterIP.String()
+				} else {
+					pushMetric = false
+				}
+			case nsc.nodeIP.String():
+				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+					pushMetric = true
+					svcVip = nsc.nodeIP.String()
+				} else {
+					pushMetric = false
+				}
+			default:
+				svcVip = ""
+				pushMetric = false
 			}
-			if strings.Compare(nsc.nodeIP.String(), ipvsSvc.Address.String()) == 0 &&
-				protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-				glog.Infof("Publishing prometheus metrics " + nsc.nodeIP.String() + ":" + strconv.Itoa(svc.port))
-				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.BPSIn))
-				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.BPSOut))
-				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.BytesIn))
-				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.BytesOut))
-				serviceCPS.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.CPS))
-				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PacketsOut))
-				servicePpsIn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PPSIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.PPSOut))
-				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, nsc.nodeIP.String()).Set(float64(ipvsSvc.Stats.Connections))
+
+			if pushMetric {
+				glog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)", svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
+				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSIn))
+				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSOut))
+				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesIn))
+				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesOut))
+				serviceCPS.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.CPS))
+				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsIn))
+				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsOut))
+				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSOut))
+				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.Connections))
 			}
 		}
 	}
