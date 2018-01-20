@@ -819,6 +819,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		default:
 			protocol = syscall.IPPROTO_NONE
 		}
+		glog.Info("Publishing Prometheus metrics")
 		for _, ipvsSvc := range ipvsSvcs {
 
 			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
