@@ -40,7 +40,6 @@ type NetworkRoutingController struct {
 	nodeSubnet           net.IPNet
 	nodeInterface        string
 	activeNodes          map[string]bool
-	mu                   sync.Mutex
 	clientset            kubernetes.Interface
 	bgpServer            *gobgp.BgpServer
 	syncPeriod           time.Duration
@@ -1005,9 +1004,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		}
 
 		currentNodes = append(currentNodes, nodeIP.String())
-		nrc.mu.Lock()
 		nrc.activeNodes[nodeIP.String()] = true
-		nrc.mu.Unlock()
 		n := &config.Neighbor{
 			Config: config.NeighborConfig{
 				NeighborAddress: nodeIP.String(),
@@ -1050,8 +1047,6 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 	// find the list of the node removed, from the last known list of active nodes
 	removedNodes := make([]string, 0)
-	nrc.mu.Lock()
-	defer nrc.mu.Unlock()
 	for ip := range nrc.activeNodes {
 		stillActive := false
 		for _, node := range currentNodes {
@@ -1209,36 +1204,20 @@ func rtTablesAdd(tableNumber, tableName string) error {
 // new node is added or old node is deleted. So peer up with new node and drop peering
 // from old node
 func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdate) {
-	nrc.mu.Lock()
-	defer nrc.mu.Unlock()
 
 	node := nodeUpdate.Node
 	nodeIP, _ := utils.GetNodeIP(node)
 	if nodeUpdate.Op == watchers.ADD {
 		glog.Infof("Received node %s added update from watch API so peer with new node", nodeIP)
-		n := &config.Neighbor{
-			Config: config.NeighborConfig{
-				NeighborAddress: nodeIP.String(),
-				PeerAs:          nrc.defaultNodeAsnNumber,
-			},
-		}
-		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
-			glog.Errorf("Failed to add node %s as peer due to %s", nodeIP, err)
-		}
-		nrc.activeNodes[nodeIP.String()] = true
 	} else if nodeUpdate.Op == watchers.REMOVE {
 		glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
-		n := &config.Neighbor{
-			Config: config.NeighborConfig{
-				NeighborAddress: nodeIP.String(),
-				PeerAs:          nrc.defaultNodeAsnNumber,
-			},
-		}
-		if err := nrc.bgpServer.DeleteNeighbor(n); err != nil {
-			glog.Errorf("Failed to remove node %s as peer due to %s", nodeIP, err)
-		}
-		delete(nrc.activeNodes, nodeIP.String())
 	}
+
+	// TODO: do delta sync. i.e) deal just with node that got added by making it neighbour or removing it as neighbour
+	if nrc.bgpEnableInternal && !nodeIP.Equal(nrc.nodeIP) {
+		nrc.syncInternalPeers()
+	}
+
 	nrc.disableSourceDestinationCheck()
 }
 
