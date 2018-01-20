@@ -200,6 +200,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 	// setup metrics
 	prometheus.MustRegister(controllerBPGpeers)
+	prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
 
 	// Wait till we are ready to launch BGP server
 	for {
@@ -986,7 +987,8 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
 		return
 	}
-
+	// publish metric
+	controllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Item())))
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, node := range nodes.Items {
@@ -1021,9 +1023,6 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				continue
 			}
 		}
-
-		// publish metric
-		controllerBPGpeers.WithLabelValues().Set(float64(len(currentNodes)))
 
 		currentNodes = append(currentNodes, nodeIP.String())
 		nrc.mu.Lock()
