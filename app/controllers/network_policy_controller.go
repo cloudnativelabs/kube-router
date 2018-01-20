@@ -114,6 +114,7 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 
 	glog.Infof("Starting network policy controller")
 
+	// setup metrics
 	prometheus.MustRegister(controllerIptablesSyncTime)
 
 	// loop forever till notified to stop on stopCh

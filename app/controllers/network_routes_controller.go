@@ -28,6 +28,7 @@ import (
 	"github.com/osrg/gobgp/packet/bgp"
 	gobgp "github.com/osrg/gobgp/server"
 	"github.com/osrg/gobgp/table"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -69,6 +70,16 @@ var (
 	podEgressArgsBad = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
 		"-j", "MASQUERADE"}}
+	controllerBPGpeers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_bgp_peers",
+		Help:      "BGP peers in the runtime configuration",
+	}, []string{})
+	controllerBGPInternalPeersSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_bgp_internal_peers_sync_time",
+		Help:      "Time it took to sync internal bgp peers",
+	}, []string{})
 )
 
 const (
@@ -186,6 +197,9 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	defer wg.Done()
 
 	glog.Infof("Starting network route controller")
+
+	// setup metrics
+	prometheus.MustRegister(controllerBPGpeers)
 
 	// Wait till we are ready to launch BGP server
 	for {
@@ -333,7 +347,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 		case ev := <-watcher.Event():
 			switch msg := ev.(type) {
 			case *gobgp.WatchEventBestPath:
-				glog.Infof("Processing bgp route advertisement from peer")
+				glog.V(3).Infof("Processing bgp route advertisement from peer %s", ev)
 				for _, path := range msg.PathList {
 					if path.IsLocal() {
 						continue
@@ -959,8 +973,12 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 // we miss any events from API server this method which is called periodically
 // ensure peer relationship with removed nodes is deleted. Also update Pod subnet ipset.
 func (nrc *NetworkRoutingController) syncInternalPeers() {
-
-	glog.Infof("Syncing BGP peers for the node.")
+	start := time.Now()
+	defer func() {
+		endTime := time.Since(start)
+		controllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime))
+		glog.Infof("Syncing BGP peers for the node took %v", endtime)
+	}()
 
 	// get the current list of the nodes from API server
 	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
@@ -1003,6 +1021,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				continue
 			}
 		}
+
+		// publish metric
+		controllerBPGpeers.WithLabelValues().Set(float64(len(currentNodes)))
 
 		currentNodes = append(currentNodes, nodeIP.String())
 		nrc.mu.Lock()
