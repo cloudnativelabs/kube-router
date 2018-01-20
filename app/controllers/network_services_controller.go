@@ -170,10 +170,10 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 
 	glog.Infof("Starting network services controller")
 
-	// enable masquerade rule
+	// enable masquerad rule
 	err := ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
 	if err != nil {
-		return errors.New("Failed to do add masqurade rule in POSTROUTING chain of nat table due to: %s" + err.Error())
+		return errors.New("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
 
 	// register metrics
@@ -209,7 +209,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 		}
 
 		if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
-			glog.Infof("Performing periodic syn of the ipvs services and server to reflect desired state of kubernetes services and endpoints")
+			glog.Infof("Performing periodic sync of ipvs services")
 			nsc.sync()
 		} else {
 			continue
@@ -256,7 +256,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(endpointsUpdate *watcher
 		nsc.endpointsMap = newEndpointsMap
 		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 	} else {
-		glog.Infof("Skipping ipvs server sync on endpoints update because nothing changed")
+		glog.Infof("Skipping ipvs server sync on endpoints because nothing changed")
 	}
 }
 
@@ -932,7 +932,7 @@ func buildEndpointsInfo() endpointsInfoMap {
 	return endpointsMap
 }
 
-// Add an iptable rule to masqurade outbound IPVS traffic. IPVS nat requires that reverse path traffic
+// Add an iptable rule to masquerad outbound IPVS traffic. IPVS nat requires that reverse path traffic
 // to go through the director for its functioning. So the masquerade rule ensures source IP is modifed
 // to node ip, so return traffic from real server (endpoint pods) hits the node/lvs director
 func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
@@ -957,7 +957,7 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 			return errors.New("Failed to run iptables command" + err.Error())
 		}
 	}
-	glog.Infof("Successfully added iptables masqurade rule")
+	glog.Infof("Successfully added iptables masquerad rule")
 	return nil
 }
 
@@ -1612,7 +1612,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 
 	handle.Close()
 
-	// cleanup iptable masqurade rule
+	// cleanup iptable masquerad rule
 	err = deleteMasqueradeIptablesRule()
 	if err != nil {
 		glog.Errorf("Failed to cleanup iptable masquerade rule due to: %s", err.Error())
