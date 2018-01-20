@@ -103,7 +103,7 @@ var (
 	}, []string{})
 	controllerPublishMetricsTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
-		Name:      "controller_publishmetrics_time",
+		Name:      "controller_publish_metrics_time",
 		Help:      "Time it took to publish metrics",
 	}, []string{})
 )
