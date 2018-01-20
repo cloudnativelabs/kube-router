@@ -302,7 +302,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	defer func() {
 		endTime := time.Since(start)
 		controllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime))
-		glog.Infof("sync ipvs services took %v", time.Since(endTime))
+		glog.Infof("sync ipvs services took %v", endTime)
 	}()
 
 	dummyVipInterface, err := getKubeDummyInterface()
