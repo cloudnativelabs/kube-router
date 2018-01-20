@@ -106,6 +106,11 @@ var (
 		Name:      "controller_publish_metrics_time",
 		Help:      "Time it took to publish metrics",
 	}, []string{})
+	controllerIpvsServicesSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_ipvs_services_sync_time",
+		Help:      "Time it took for controller to sync ipvs services",
+	}, []string{})
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -189,6 +194,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	prometheus.MustRegister(serviceTotalConn)
 	prometheus.MustRegister(controllerIpvsServices)
 	prometheus.MustRegister(controllerPublishMetricsTime)
+	prometheus.MustRegister(controllerIpvsServicesSyncTime)
 
 	http.Handle(nsc.MetricsPath, promhttp.Handler())
 	go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
@@ -294,7 +300,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	var ipvsSvcs []*ipvs.Service
 	start := time.Now()
 	defer func() {
-		glog.Infof("sync ipvs servicess took %v", time.Since(start))
+		endTime := time.Since(start)
+		controllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime))
+		glog.Infof("sync ipvs services took %v", time.Since(endTime))
 	}()
 
 	dummyVipInterface, err := getKubeDummyInterface()
