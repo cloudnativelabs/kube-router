@@ -977,7 +977,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	defer func() {
 		endTime := time.Since(start)
 		controllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime))
-		glog.Infof("Syncing BGP peers for the node took %v", endtime)
+		glog.Infof("Syncing BGP peers for the node took %v", endTime)
 	}()
 
 	// get the current list of the nodes from API server
