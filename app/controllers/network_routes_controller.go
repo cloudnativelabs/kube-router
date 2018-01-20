@@ -80,6 +80,11 @@ var (
 		Name:      "controller_bgp_internal_peers_sync_time",
 		Help:      "Time it took to sync internal bgp peers",
 	}, []string{})
+	controllerBGPadvertisementsReceived = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_bgp_advertisements_received",
+		Help:      "Time it took to sync internal bgp peers",
+	}, []string{})
 )
 
 const (
@@ -201,6 +206,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	// setup metrics
 	prometheus.MustRegister(controllerBPGpeers)
 	prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
+	prometheus.MustRegister(controllerBGPadvertisementsReceived)
 
 	// Wait till we are ready to launch BGP server
 	for {
@@ -348,7 +354,8 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 		case ev := <-watcher.Event():
 			switch msg := ev.(type) {
 			case *gobgp.WatchEventBestPath:
-				glog.V(3).Infof("Processing bgp route advertisement from peer %s", ev)
+				glog.V(3).Info("Processing bgp route advertisement from peer")
+				controllerBGPadvertisementsReceived.WithLabelValues().Add(float64(1))
 				for _, path := range msg.PathList {
 					if path.IsLocal() {
 						continue
