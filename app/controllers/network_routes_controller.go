@@ -988,7 +988,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		return
 	}
 	// publish metric
-	controllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items))
+	controllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, node := range nodes.Items {
