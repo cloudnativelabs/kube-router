@@ -67,6 +67,5 @@ To get a grouped list of CPS for each service a Prometheus query could look like
 
 ## Grafana Dashboard
 
-This repo contains a example [Grafana dashboard](https://grafana.com/) utilizing all the above exposed metrics from kube-router.
-[kube-router.json](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/kube-router.json)
-[dashboard.png](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/dashboard.png)
+This repo contains a example [Grafana dashboard](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/kube-router.json) utilizing all the above exposed metrics from kube-router.
+![dashboard](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/dashboard.png)
