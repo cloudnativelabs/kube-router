@@ -3,6 +3,7 @@ package controllers
 import (
 	"errors"
 	"math/rand"
+	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/app/options"
+	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -102,13 +104,21 @@ var (
 		Name:      "controller_bgp_advertisements_received",
 		Help:      "Time it took to sync internal bgp peers",
 	}, []string{})
+	controllerMetricsExportTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_metrics_export_time",
+		Help:      "Time it took to export metrics",
+	}, []string{})
 )
 
 // Holds settings for the metrics controller
 type MetricsController struct {
-	MetricsPort int
-	MetricsPath string
-	syncPeriod  time.Duration
+	endpointsMap endpointsInfoMap
+	MetricsPath  string
+	MetricsPort  int
+	nodeIP       net.IP
+	serviceMap   serviceInfoMap
+	syncPeriod   time.Duration
 }
 
 // Run prometheus metrics controller
@@ -124,6 +134,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 	prometheus.MustRegister(controllerIptablesSyncTime)
 	prometheus.MustRegister(controllerIpvsServices)
 	prometheus.MustRegister(controllerIpvsServicesSyncTime)
+	prometheus.MustRegister(controllerMetricsExportTime)
 	prometheus.MustRegister(serviceBpsIn)
 	prometheus.MustRegister(serviceBpsOut)
 	prometheus.MustRegister(serviceBytesIn)
@@ -177,7 +188,8 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		glog.V(2).Infof("Publishing Prometheus metrics took %v", endTime)
+		glog.V(2).Infof("Export Prometheus metrics took %v", endTime)
+		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
 	}()
 	ipvsSvcs, err := h.GetServices()
 	if err != nil {
@@ -250,6 +262,11 @@ func NewMetricsController(config *options.KubeRouterConfig) (*MetricsController,
 	mc.MetricsPort = config.MetricsPort
 	mc.MetricsPath = config.MetricsPath
 	mc.syncPeriod = config.MetricsSyncPeriod
+	nodeIP, err := utils.GetNodeIP(node)
+	if err != nil {
+		return nil, err
+	}
+	mc.nodeIP = nodeIP
 	rand.Seed(time.Now().UnixNano())
 	return &mc, nil
 }
