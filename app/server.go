@@ -126,7 +126,7 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if kr.Config.Metrics {
-		mc, err := controllers.NewMetricsController(kr.Config)
+		mc, err := controllers.NewMetricsController(kr.Client, kr.Config)
 		if err != nil {
 			return errors.New("Failed to create metrics controller: " + err.Error())
 		}
