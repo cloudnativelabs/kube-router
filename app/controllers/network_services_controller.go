@@ -579,7 +579,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 		endpoints, ok := activeServiceEndpointMap[key]
 		if !ok {
-			ipvsSyncStats.serviceRemoved++
 			glog.V(1).Infof("Found a IPVS service %s which is no longer needed so cleaning up",
 				ipvsServiceString(ipvsSvc))
 			err := h.DelService(ipvsSvc)
@@ -602,7 +601,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 					}
 				}
 				if !validEp {
-					ipvsSyncStats.ipvsDestinationsRemoved++
 					glog.V(1).Infof("Found a destination %s in service %s which is no longer needed so cleaning up",
 						ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
 					err := h.DelDestination(ipvsSvc, dst)
