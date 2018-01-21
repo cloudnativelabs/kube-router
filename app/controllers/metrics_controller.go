@@ -124,6 +124,7 @@ type MetricsController struct {
 
 // Run prometheus metrics controller
 func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+	var err error
 	t := time.NewTicker(mc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
