@@ -40,6 +40,7 @@ type KubeRouterConfig struct {
 	Metrics             bool
 	MetricsPort         int
 	MetricsPath         string
+	MetricsSyncPeriod   time.Duration
 	// FullMeshPassword    string
 }
 
@@ -48,6 +49,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IpvsSyncPeriod:     1 * time.Minute,
 		IPTablesSyncPeriod: 1 * time.Minute,
 		RoutesSyncPeriod:   1 * time.Minute,
+		MetricsSyncPeriod:  30 * time.Second,
 		EnableOverlay:      true,
 	}
 }
@@ -115,6 +117,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&s.MetricsPort, "metrics-port", 8080, "Prometheus metrics port")
 	fs.StringVar(&s.MetricsPath, "metrics-path", "/metrics", "Prometheus metrics path")
 	fs.BoolVar(&s.Metrics, "metrics", true, "Expose Prometheus metrics on metrics-port & metric-path")
+	fs.DurationVar(&s.MetricsSyncPeriod, "metrics-sync-period", s.MetricsSyncPeriod, "The delay between exporting metrics (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")

@@ -153,7 +153,7 @@ func (nsc *NetworkServicesController) sync() {
 		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
 	}
 	nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
-	nsc.publishMetrics(nsc.serviceMap)
+	//nsc.publishMetrics(nsc.serviceMap)
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
@@ -711,6 +711,7 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 	return nil
 }
 
+/*
 func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
 	start := time.Now()
 	defer func() {
@@ -776,7 +777,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	}
 	return nil
 }
-
+*/
 func buildServicesInfo() serviceInfoMap {
 	serviceMap := make(serviceInfoMap)
 	for _, svc := range watchers.ServiceWatcher.List() {

@@ -973,7 +973,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
 		return
 	}
-	// publish metric
+
 	controllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
