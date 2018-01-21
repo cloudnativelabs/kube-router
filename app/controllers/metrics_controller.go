@@ -15,12 +15,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// Holds settings for the metrics controller
 type MetricsController struct {
 	MetricsPort int
 	MetricsPath string
 }
 
-// Start prometheus metrics exporter
+// Run prometheus metrics controller
 func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	glog.Info("Starting metrics controller")
@@ -54,7 +55,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			glog.Errorf("could not shutdown: %v", err)
 		}
 	}()
-	http.HandleFunc(mc.MetricsPath, promhttp.Handler())
+	http.Handler(mc.MetricsPath, promhttp.Handler())
 	err := srv.ListenAndServe()
 	if err != http.ErrServerClosed { // HL
 		glog.Fatalf("Metrics controller listen: %s\n", err)
