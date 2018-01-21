@@ -61,12 +61,23 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
   Incoming bytes per second
 * service_bps_out
   Outgoing bytes per second
+* controller_iptables_sync_time
+  Time it took for the iptables sync loop to complete
+* controller_ipvs_services_sync_time
+  Time it took for the ipvs sync loop to complete
+* controller_bgp_internal_peers_sync_time
+  Time it took for the BGP peer sync loop to complete
+* controller_ipvs_services
+  The number of ipvs services in the instance
+* controller_bgp_peers
+  Number of BGP peers of the instance
+* controller_bgp_advertisements_received
+  Number of total BGP advertisements received since software start
 
 To get a grouped list of CPS for each service a Prometheus query could look like this e.g: 
 `sum(kube_router_service_cps) by (namespace, service_name)`
 
 ## Grafana Dashboard
 
-This repo contains a example [Grafana dashboard](https://grafana.com/) utilizing all the above exposed metrics from kube-router.
-[kube-router.json](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/kube-router.json)
-[dashboard.png](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/dashboard.png)
+This repo contains a example [Grafana dashboard](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/kube-router.json) utilizing all the above exposed metrics from kube-router.
+![dashboard](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/dashboard.png)
