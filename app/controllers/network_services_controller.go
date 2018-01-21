@@ -176,25 +176,6 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	if err != nil {
 		return errors.New("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
-	/*
-		// register metrics
-		prometheus.MustRegister(serviceBpsIn)
-		prometheus.MustRegister(serviceBpsOut)
-		prometheus.MustRegister(serviceBytesIn)
-		prometheus.MustRegister(serviceBytesOut)
-		prometheus.MustRegister(serviceCPS)
-		prometheus.MustRegister(servicePacketsIn)
-		prometheus.MustRegister(servicePacketsOut)
-		prometheus.MustRegister(servicePpsIn)
-		prometheus.MustRegister(servicePpsOut)
-		prometheus.MustRegister(serviceTotalConn)
-		prometheus.MustRegister(controllerIpvsServices)
-		prometheus.MustRegister(controllerPublishMetricsTime)
-		prometheus.MustRegister(controllerIpvsServicesSyncTime)
-
-		http.Handle(nsc.MetricsPath, promhttp.Handler())
-		go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
-	*/
 
 	// enable ipvs connection tracking
 	err = ensureIpvsConntrack()

@@ -19,6 +19,7 @@ type MetricsController struct {
 	MetricsPath string
 }
 
+// Start prometheus metrics exporter
 func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 
 	glog.Info("Starting metrics controller")
@@ -60,7 +61,6 @@ func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeR
 	mc := MetricsController{}
 	mc.MetricsPort = config.MetricsPort
 	mc.MetricsPath = config.MetricsPath
-	mc.client = clientset
 	rand.Seed(time.Now().UnixNano())
 	return &mc, nil
 }
