@@ -137,35 +137,35 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(mc.MetricsPort), Handler: http.DefaultServeMux}
 
+	// add prometheus handler on metrics path
+	http.Handle(mc.MetricsPath, promhttp.Handler())
+
 	go func() {
-		<-stopCh
-		glog.Info("Shutting down metrics controller")
-		if err := srv.Shutdown(context.Background()); err != nil {
-			glog.Errorf("could not shutdown: %v", err)
+		if err := srv.ListenAndServe(); err != nil {
+			// cannot panic, because this probably is an intentional close
+			glog.Error("Metrics controller: ListenAndServe() error: %s", err)
 		}
 	}()
 
-	// add prometheus handler on metrics path
-	http.Handle(mc.MetricsPath, promhttp.Handler())
-	
-	err := go srv.ListenAndServe()
-	if err != http.ErrServerClosed {
-		glog.Fatalf("Coult not start metrics controller: %s\n", err)
-	}
-	
 	for {
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down metrics controller")
+			if err := srv.Shutdown(context.Background()); err != nil {
+				glog.Errorf("could not shutdown: %v", err)
+			}
 			return
 		default:
 		}
-		
+
 		mc.sync()
-		
+
 		select {
 		case <-stopCh:
 			glog.Info("Shutting down metrics controller")
+			if err := srv.Shutdown(context.Background()); err != nil {
+				glog.Errorf("could not shutdown: %v", err)
+			}
 			return
 		case <-t.C:
 		}
