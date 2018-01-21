@@ -55,7 +55,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			glog.Errorf("could not shutdown: %v", err)
 		}
 	}()
-	http.Handler(mc.MetricsPath, promhttp.Handler())
+	http.Handle(mc.MetricsPath, promhttp.Handler())
 	err := srv.ListenAndServe()
 	if err != http.ErrServerClosed { // HL
 		glog.Fatalf("Metrics controller listen: %s\n", err)
