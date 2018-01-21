@@ -420,7 +420,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		// to avoid martian packets
 		for _, externalIP := range svc.externalIPs {
 			var externalIpServiceId string
-			if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {++
+			if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
 				ipvsExternalIPSvc, err := ipvsAddFWMarkService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
 				if err != nil {
 					glog.Errorf("Failed to create ipvs service for External IP: %s due to: %s", externalIP, err.Error())
@@ -812,7 +812,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
-	
+
 	glog.V(1).Info("Publishing Prometheus metrics")
 	for _, svc := range serviceInfoMap {
 		var protocol uint16
