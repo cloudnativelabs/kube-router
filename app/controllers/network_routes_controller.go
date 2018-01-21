@@ -115,7 +115,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 	}
 
-	glog.Info("Populating ipsets.")
+	glog.V(1).Info("Populating ipsets.")
 	err = nrc.syncNodeIPSets()
 	if err != nil {
 		glog.Errorf("Failed initial ipset setup: %s", err)
@@ -132,22 +132,22 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 	// Handle ipip tunnel overlay
 	if nrc.enableOverlays {
-		glog.Info("IPIP Tunnel Overlay enabled in configuration.")
-		glog.Info("Setting up overlay networking.")
+		glog.V(1).Info("IPIP Tunnel Overlay enabled in configuration.")
+		glog.V(1).Info("Setting up overlay networking.")
 		err = nrc.enablePolicyBasedRouting()
 		if err != nil {
 			glog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 		}
 	} else {
-		glog.Info("IPIP Tunnel Overlay disabled in configuration.")
-		glog.Info("Cleaning up old overlay networking if needed.")
+		glog.V(1).Info("IPIP Tunnel Overlay disabled in configuration.")
+		glog.V(1).Info("Cleaning up old overlay networking if needed.")
 		err = nrc.disablePolicyBasedRouting()
 		if err != nil {
 			glog.Errorf("Failed to disable policy based routing: %s", err.Error())
 		}
 	}
 
-	glog.Info("Performing cleanup of depreciated rules/ipsets (if needed).")
+	glog.V(1).Info("Performing cleanup of depreciated rules/ipsets (if needed).")
 	err = deleteBadPodEgressRules()
 	if err != nil {
 		glog.Errorf("Error cleaning up old/bad Pod egress rules: %s", err.Error())
@@ -155,14 +155,14 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 	// Handle Pod egress masquerading configuration
 	if nrc.enablePodEgress {
-		glog.Infoln("Enabling Pod egress.")
+		glog.V(1).Infoln("Enabling Pod egress.")
 
 		err = createPodEgressRule()
 		if err != nil {
 			glog.Errorf("Error enabling Pod egress: %s", err.Error())
 		}
 	} else {
-		glog.Infoln("Disabling Pod egress.")
+		glog.V(1).Infoln("Disabling Pod egress.")
 
 		err = deletePodEgressRule()
 		if err != nil {
@@ -202,11 +202,6 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	defer wg.Done()
 
 	glog.Infof("Starting network route controller")
-
-	// setup metrics
-	prometheus.MustRegister(controllerBPGpeers)
-	prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
-	prometheus.MustRegister(controllerBGPadvertisementsReceived)
 
 	// Wait till we are ready to launch BGP server
 	for {

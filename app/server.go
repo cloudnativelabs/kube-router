@@ -121,9 +121,17 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
-		glog.Infof("None of router, firewall, service proxy functionality was specified to be run. So exiting")
+		glog.Infof("Router, Firewall or Service proxy functionality must be specified. Exiting!")
 		os.Exit(0)
 	}
+
+	// Start metrics controller
+	mc, err := controllers.NewMetricsController(kr.Client, kr.Config)
+	if err != nil {
+		return errors.New("Failed to create network services controller: " + err.Error())
+	}
+	wg.Add(1)
+	go mc.Run(stopCh, &wg)
 
 	if kr.Config.RunFirewall {
 		npc, err := controllers.NewNetworkPolicyController(kr.Client, kr.Config)

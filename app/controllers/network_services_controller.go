@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"reflect"
@@ -26,7 +25,6 @@ import (
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/net/context"
@@ -133,8 +131,6 @@ type NetworkServicesController struct {
 	globalHairpin       bool
 	client              *kubernetes.Clientset
 	nodeportBindOnAllIp bool
-	MetricsPort         int
-	MetricsPath         string
 }
 
 // internal representation of kubernetes service
@@ -180,24 +176,25 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	if err != nil {
 		return errors.New("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
+	/*
+		// register metrics
+		prometheus.MustRegister(serviceBpsIn)
+		prometheus.MustRegister(serviceBpsOut)
+		prometheus.MustRegister(serviceBytesIn)
+		prometheus.MustRegister(serviceBytesOut)
+		prometheus.MustRegister(serviceCPS)
+		prometheus.MustRegister(servicePacketsIn)
+		prometheus.MustRegister(servicePacketsOut)
+		prometheus.MustRegister(servicePpsIn)
+		prometheus.MustRegister(servicePpsOut)
+		prometheus.MustRegister(serviceTotalConn)
+		prometheus.MustRegister(controllerIpvsServices)
+		prometheus.MustRegister(controllerPublishMetricsTime)
+		prometheus.MustRegister(controllerIpvsServicesSyncTime)
 
-	// register metrics
-	prometheus.MustRegister(serviceBpsIn)
-	prometheus.MustRegister(serviceBpsOut)
-	prometheus.MustRegister(serviceBytesIn)
-	prometheus.MustRegister(serviceBytesOut)
-	prometheus.MustRegister(serviceCPS)
-	prometheus.MustRegister(servicePacketsIn)
-	prometheus.MustRegister(servicePacketsOut)
-	prometheus.MustRegister(servicePpsIn)
-	prometheus.MustRegister(servicePpsOut)
-	prometheus.MustRegister(serviceTotalConn)
-	prometheus.MustRegister(controllerIpvsServices)
-	prometheus.MustRegister(controllerPublishMetricsTime)
-	prometheus.MustRegister(controllerIpvsServicesSyncTime)
-
-	http.Handle(nsc.MetricsPath, promhttp.Handler())
-	go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
+		http.Handle(nsc.MetricsPath, promhttp.Handler())
+		go http.ListenAndServe(":"+strconv.Itoa(nsc.MetricsPort), nil)
+	*/
 
 	// enable ipvs connection tracking
 	err = ensureIpvsConntrack()
@@ -209,13 +206,13 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 	for {
 		select {
 		case <-stopCh:
-			glog.Infof("Shutting down network services controller")
+			glog.Info("Shutting down network services controller")
 			return nil
 		default:
 		}
 
 		if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
-			glog.V(1).Infof("Performing periodic sync of ipvs services")
+			glog.V(1).Info("Performing periodic sync of ipvs services")
 			nsc.sync()
 		} else {
 			continue
@@ -223,7 +220,7 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 
 		select {
 		case <-stopCh:
-			glog.Infof("Shutting down network services controller")
+			glog.Info("Shutting down network services controller")
 			return nil
 		case <-t.C:
 		}
@@ -447,7 +444,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				// do policy routing to deliver the packet locally so that IPVS can pick the packet
 				err = routeVIPTrafficToDirector("0x" + fmt.Sprintf("%x", fwMark))
 				if err != nil {
-					glog.Errorf("Failed to setup ip rule to lookup traffic to external IP: %s through custom "+
+					glog.Error("Failed to setup ip rule to lookup traffic to external IP: %s through custom "+
 						"route table due to ", externalIP, err.Error())
 					continue
 				}
@@ -1669,8 +1666,6 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 	nsc := NetworkServicesController{}
 	nsc.syncPeriod = config.IpvsSyncPeriod
 	nsc.globalHairpin = config.GlobalHairpinMode
-	nsc.MetricsPort = config.MetricsPort
-	nsc.MetricsPath = config.MetricsPath
 
 	nsc.serviceMap = make(serviceInfoMap)
 	nsc.endpointsMap = make(endpointsInfoMap)
