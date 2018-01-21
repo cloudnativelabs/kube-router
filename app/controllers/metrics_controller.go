@@ -148,7 +148,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 	// add prometheus handler on metrics path
 	http.Handle(mc.MetricsPath, promhttp.Handler())
 	
-	go err := srv.ListenAndServe()
+	err := go srv.ListenAndServe()
 	if err != http.ErrServerClosed {
 		glog.Fatalf("Coult not start metrics controller: %s\n", err)
 	}
