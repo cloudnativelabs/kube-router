@@ -52,19 +52,12 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			return nil
 		default:
 		}
-
-		select {
-		case <-stopCh:
-			glog.Info("Shutting down metrics controller")
-			return nil
-		case <-t.C:
-		}
 	}
 }
 
 func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*MetricsController, error) {
 	var err error
-	mc := NetworkServicesController{}
+	mc := MetricsController{}
 	mc.MetricsPort = config.MetricsPort
 	mc.MetricsPath = config.MetricsPath
 	mc.client = clientset

@@ -128,7 +128,7 @@ func (kr *KubeRouter) Run() error {
 	// Start metrics controller
 	mc, err := controllers.NewMetricsController(kr.Client, kr.Config)
 	if err != nil {
-		return errors.New("Failed to create network services controller: " + err.Error())
+		return errors.New("Failed to create metrics controller: " + err.Error())
 	}
 	wg.Add(1)
 	go mc.Run(stopCh, &wg)
