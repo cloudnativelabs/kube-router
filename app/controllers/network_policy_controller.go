@@ -17,7 +17,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
-	"github.com/prometheus/client_golang/prometheus"
 	api "k8s.io/api/core/v1"
 	apiextensions "k8s.io/api/extensions/v1beta1"
 	networking "k8s.io/api/networking/v1"
@@ -34,14 +33,6 @@ import (
 // originating/destined from/to pod goes throuh fitler table's, FORWARD chain, followed by pod specific chain,
 // followed by one or more network policy chains, till there is a match which will accept the packet, or gets
 // dropped by the rule in the pod chain, if there is no match.
-
-var (
-	controllerIptablesSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "controller_iptables_sync_time",
-		Help:      "Time it took for controller to sync iptables",
-	}, []string{})
-)
 
 // NetworkPolicyController strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {

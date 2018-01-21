@@ -28,7 +28,6 @@ import (
 	"github.com/osrg/gobgp/packet/bgp"
 	gobgp "github.com/osrg/gobgp/server"
 	"github.com/osrg/gobgp/table"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -70,21 +69,6 @@ var (
 	podEgressArgsBad = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
 		"-j", "MASQUERADE"}}
-	controllerBPGpeers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "controller_bgp_peers",
-		Help:      "BGP peers in the runtime configuration",
-	}, []string{})
-	controllerBGPInternalPeersSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "controller_bgp_internal_peers_sync_time",
-		Help:      "Time it took to sync internal bgp peers",
-	}, []string{})
-	controllerBGPadvertisementsReceived = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "controller_bgp_advertisements_received",
-		Help:      "Time it took to sync internal bgp peers",
-	}, []string{})
 )
 
 const (

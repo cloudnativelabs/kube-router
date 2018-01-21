@@ -24,7 +24,6 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/net/context"
@@ -43,72 +42,7 @@ const (
 )
 
 var (
-	h                *ipvs.Handle
-	serviceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_total_connections",
-		Help:      "Total incoming conntections made",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	servicePacketsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_packets_in",
-		Help:      "Total incoming packets",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	servicePacketsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_packets_out",
-		Help:      "Total outoging packets",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceBytesIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_bytes_in",
-		Help:      "Total incoming bytes",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceBytesOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_bytes_out",
-		Help:      "Total outgoing bytes",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	servicePpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_pps_in",
-		Help:      "Incoming packets per second",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	servicePpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_pps_out",
-		Help:      "Outoging packets per second",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceCPS = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_cps",
-		Help:      "Service connections per second",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceBpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_bps_in",
-		Help:      "Incoming bytes per second",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceBpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_bps_out",
-		Help:      "Outoging bytes per second",
-	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	controllerIpvsServices = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "controller_ipvs_services",
-		Help:      "Number of ipvs services in the instance",
-	}, []string{})
-	controllerPublishMetricsTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "controller_publish_metrics_time",
-		Help:      "Time it took to publish metrics",
-	}, []string{})
-	controllerIpvsServicesSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "controller_ipvs_services_sync_time",
-		Help:      "Time it took for controller to sync ipvs services",
-	}, []string{})
+	h *ipvs.Handle
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -781,7 +715,6 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		controllerPublishMetricsTime.WithLabelValues().Set(float64(endTime))
 		glog.V(2).Infof("Publishing Prometheus metrics took %v", endTime)
 	}()
 	ipvsSvcs, err := h.GetServices()
