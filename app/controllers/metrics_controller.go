@@ -11,6 +11,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/net/context"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -21,7 +22,7 @@ type MetricsController struct {
 
 // Start prometheus metrics exporter
 func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-
+	defer wg.Done()
 	glog.Info("Starting metrics controller")
 	// register metrics
 	prometheus.MustRegister(controllerBGPadvertisementsReceived)
@@ -42,18 +43,36 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 	prometheus.MustRegister(servicePpsOut)
 	prometheus.MustRegister(serviceTotalConn)
 
-	http.Handle(mc.MetricsPath, promhttp.Handler())
-	go http.ListenAndServe(":"+strconv.Itoa(mc.MetricsPort), nil)
+	// http.Handle(mc.MetricsPath, promhttp.Handler())
 
-	// loop forever unitl notified to stop on stopCh
-	for {
-		select {
-		case <-stopCh:
-			glog.Info("Shutting down metrics controller")
-			return nil
-		default:
+	srv := &http.Server{Addr: ":" + strconv.Itoa(mc.MetricsPort), Handler: http.DefaultServeMux}
+
+	go func() {
+		<-stopCh
+		glog.Info("Shutting down metrics controller")
+		if err := srv.Shutdown(context.Background()); err != nil {
+			glog.Errorf("could not shutdown: %v", err)
 		}
+	}()
+	http.HandleFunc(mc.MetricsPath, promhttp.Handler())
+	err := srv.ListenAndServe()
+	if err != http.ErrServerClosed { // HL
+		glog.Fatalf("Metrics controller listen: %s\n", err)
 	}
+
+	glog.Info("Metrics controller stopped")
+	// http.ListenAndServe(":"+strconv.Itoa(mc.MetricsPort), nil)
+	/*
+		// loop forever unitl notified to stop on stopCh
+		for {
+			select {
+			case <-stopCh:
+				glog.Info("Shutting down metrics controller")
+				return nil
+			default:
+			}
+		}
+	*/
 }
 
 func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*MetricsController, error) {

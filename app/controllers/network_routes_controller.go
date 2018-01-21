@@ -251,7 +251,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			nrc.advertiseExternalIPs()
 		}
 
-		glog.Infof("Performing periodic sync of the routes")
+		glog.V(1).Info("Performing periodic sync of the routes")
 		err = nrc.advertiseRoute()
 		if err != nil {
 			glog.Errorf("Error advertising route: %s", err.Error())
@@ -416,7 +416,7 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
 
-	glog.Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
+	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
 
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrLen),
 		subnet), false, attrs, time.Now(), false)}); err != nil {
@@ -852,10 +852,10 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	}
 
 	if path.IsWithdraw {
-		glog.Infof("Removing route: '%s via %s' from peer in the routing table", dst, nexthop)
+		glog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nexthop)
 		return netlink.RouteDel(route)
 	}
-	glog.Infof("Inject route: '%s via %s' from peer to routing table", dst, nexthop)
+	glog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nexthop)
 	return netlink.RouteReplace(route)
 }
 
