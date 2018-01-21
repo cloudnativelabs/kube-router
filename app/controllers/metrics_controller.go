@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/context"
+	"k8s.io/client-go/kubernetes"
 )
 
 var (
@@ -257,11 +258,15 @@ func (mc *MetricsController) sync() {
 	mc.publishMetrics(mc.serviceMap)
 }
 
-func NewMetricsController(config *options.KubeRouterConfig) (*MetricsController, error) {
+func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*MetricsController, error) {
 	mc := MetricsController{}
 	mc.MetricsPort = config.MetricsPort
 	mc.MetricsPath = config.MetricsPath
 	mc.syncPeriod = config.MetricsSyncPeriod
+	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
+	if err != nil {
+		return nil, err
+	}
 	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {
 		return nil, err
