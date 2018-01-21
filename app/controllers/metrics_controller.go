@@ -62,6 +62,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 	}
 
 	glog.Info("Metrics controller stopped")
+	return nil
 	// http.ListenAndServe(":"+strconv.Itoa(mc.MetricsPort), nil)
 	/*
 		// loop forever unitl notified to stop on stopCh
