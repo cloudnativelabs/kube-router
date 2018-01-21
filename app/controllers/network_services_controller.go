@@ -153,7 +153,6 @@ func (nsc *NetworkServicesController) sync() {
 		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
 	}
 	nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
-	//nsc.publishMetrics(nsc.serviceMap)
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
@@ -711,73 +710,6 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 	return nil
 }
 
-/*
-func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
-	start := time.Now()
-	defer func() {
-		endTime := time.Since(start)
-		glog.V(2).Infof("Publishing Prometheus metrics took %v", endTime)
-	}()
-	ipvsSvcs, err := h.GetServices()
-	if err != nil {
-		return errors.New("Failed to list IPVS services: " + err.Error())
-	}
-
-	glog.V(1).Info("Publishing Prometheus metrics")
-	for _, svc := range serviceInfoMap {
-		var protocol uint16
-		var pushMetric bool
-		var svcVip string
-
-		switch aProtocol := svc.protocol; aProtocol {
-		case "tcp":
-			protocol = syscall.IPPROTO_TCP
-		case "udp":
-			protocol = syscall.IPPROTO_UDP
-		default:
-			protocol = syscall.IPPROTO_NONE
-		}
-		for _, ipvsSvc := range ipvsSvcs {
-
-			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
-			case svc.clusterIP.String():
-				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-					pushMetric = true
-					svcVip = svc.clusterIP.String()
-				} else {
-					pushMetric = false
-				}
-			case nsc.nodeIP.String():
-				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-					pushMetric = true
-					svcVip = nsc.nodeIP.String()
-				} else {
-					pushMetric = false
-				}
-			default:
-				svcVip = ""
-				pushMetric = false
-			}
-
-			if pushMetric {
-				glog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)", svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
-				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSIn))
-				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSOut))
-				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesIn))
-				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesOut))
-				serviceCPS.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.CPS))
-				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsOut))
-				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSOut))
-				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.Connections))
-				controllerIpvsServices.WithLabelValues().Set(float64(len(ipvsSvcs)))
-			}
-		}
-	}
-	return nil
-}
-*/
 func buildServicesInfo() serviceInfoMap {
 	serviceMap := make(serviceInfoMap)
 	for _, svc := range watchers.ServiceWatcher.List() {

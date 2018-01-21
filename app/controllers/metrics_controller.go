@@ -165,7 +165,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			if err := srv.Shutdown(context.Background()); err != nil {
 				glog.Errorf("could not shutdown: %v", err)
 			}
-			return
+			return err
 		default:
 		}
 
@@ -177,7 +177,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			if err := srv.Shutdown(context.Background()); err != nil {
 				glog.Errorf("could not shutdown: %v", err)
 			}
-			return
+			return err
 		case <-t.C:
 		}
 	}
@@ -220,10 +220,10 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 				} else {
 					pushMetric = false
 				}
-			case nsc.nodeIP.String():
+			case mc.nodeIP.String():
 				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
 					pushMetric = true
-					svcVip = nsc.nodeIP.String()
+					svcVip = mc.nodeIP.String()
 				} else {
 					pushMetric = false
 				}
