@@ -533,7 +533,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	}
 
 	// cleanup stale ipvs service and servers
-	glog.Infof("Cleaning up if any, old ipvs service and servers which are no longer needed")
+	glog.V(1).Info("Cleaning up if any, old ipvs service and servers which are no longer needed")
 	ipvsSvcs, err = h.GetServices()
 
 	if err != nil {
@@ -949,7 +949,7 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 			return errors.New("Failed to run iptables command" + err.Error())
 		}
 	}
-	glog.Infof("Successfully added iptables masquerad rule")
+	glog.V(1).Info("Successfully added iptables masquerad rule")
 	return nil
 }
 

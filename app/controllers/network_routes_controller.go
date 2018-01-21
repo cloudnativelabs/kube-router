@@ -234,7 +234,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 		// Update ipset entries
 		if nrc.enablePodEgress || nrc.enableOverlays {
-			glog.Info("Syncing ipsets.")
+			glog.V(1).Info("Syncing ipsets")
 			err := nrc.syncNodeIPSets()
 			if err != nil {
 				glog.Errorf("Error synchronizing ipsets: %s", err.Error())
@@ -288,7 +288,7 @@ func createPodEgressRule() error {
 
 	}
 
-	glog.Infof("Added iptables rule to masqurade outbound traffic from pods.")
+	glog.V(1).Infof("Added iptables rule to masqurade outbound traffic from pods.")
 	return nil
 }
 
@@ -366,7 +366,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 }
 
 func (nrc *NetworkRoutingController) advertiseClusterIPs() {
-	glog.Infof("Advertising cluster ips of services to the external BGP peers")
+	glog.V(1).Info("Advertising cluster ips of services to the external BGP peers")
 	for _, svc := range watchers.ServiceWatcher.List() {
 		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
 
@@ -375,7 +375,7 @@ func (nrc *NetworkRoutingController) advertiseClusterIPs() {
 				continue
 			}
 
-			glog.Infof("found a service of cluster ip type")
+			glog.V(2).Info("found a service of cluster ip type")
 			err := nrc.AdvertiseClusterIp(svc.Spec.ClusterIP)
 			if err != nil {
 				glog.Errorf("error advertising cluster IP: %q error: %v", svc.Spec.ClusterIP, err)
@@ -385,7 +385,7 @@ func (nrc *NetworkRoutingController) advertiseClusterIPs() {
 }
 
 func (nrc *NetworkRoutingController) advertiseExternalIPs() {
-	glog.Infof("Advertising external ips of the services to the external BGP peers")
+	glog.V(2).Info("Advertising external ips of the services to the external BGP peers")
 	for _, svc := range watchers.ServiceWatcher.List() {
 		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
 			// skip headless services
@@ -592,7 +592,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerConfigs []*config.Ne
 			return fmt.Errorf("Error peering with peer router "+
 				"\"%s\" due to: %s", peerConfig.NeighborAddress, err)
 		}
-		glog.Infof("Successfully configured %s in ASN %v as BGP peer to the node",
+		glog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
 			peerConfig.NeighborAddress, peerConfig.PeerAs)
 	}
 	return nil
@@ -605,7 +605,7 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
-	glog.Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
+	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
 		clusterIp), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
@@ -980,7 +980,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	defer func() {
 		endTime := time.Since(start)
 		controllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime))
-		glog.Infof("Syncing BGP peers for the node took %v", endTime)
+		glog.V(2).Infof("Syncing BGP peers for the node took %v", endTime)
 	}()
 
 	// get the current list of the nodes from API server
