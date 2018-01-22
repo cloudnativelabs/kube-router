@@ -11,8 +11,9 @@ If running kube-router as [daemonset](https://kubernetes.io/docs/concepts/worklo
 kube-router 0.1.0-rc2 and upwards supports the following runtime configuration for controlling where to expose the metrics.
 If you are using a older version, metrics path & port is locked to `/metrics` & `8080`.
 
-      --metrics-port int                    Prometheus metrics port to use ( default 8080 )
-      --metrics-path string                 Path to serve Prometheus metrics on ( default /metrics )
+      --metrics      bool                   Enable metrics export on metrics-port & metrics-path ( default: true )
+      --metrics-port int                    Prometheus metrics port to use ( default: 8080 )
+      --metrics-path string                 Path to serve Prometheus metrics on ( default: /metrics )
 
 By enabling [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) in Prometheus configuration & adding required annotations it can automaticly discover & scrape kube-router metrics.
 
@@ -41,6 +42,18 @@ For example:
 
 The following metrics is exposed by kube-router prefixed by `kube_router_`
 
+* controller_bgp_peers
+  Number of BGP peers of the instance
+* controller_bgp_advertisements_received
+  Number of total BGP advertisements received since software start
+* controller_bgp_internal_peers_sync_time
+  Time it took for the BGP peer sync loop to complete
+* controller_iptables_sync_time
+  Time it took for the iptables sync loop to complete
+* controller_ipvs_services_sync_time
+  Time it took for the ipvs sync loop to complete
+* controller_ipvs_services
+  The number of ipvs services in the instance
 * service_total_connections
   Total connections made to the service since creation
 * service_packets_in
@@ -61,18 +74,6 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
   Incoming bytes per second
 * service_bps_out
   Outgoing bytes per second
-* controller_iptables_sync_time
-  Time it took for the iptables sync loop to complete
-* controller_ipvs_services_sync_time
-  Time it took for the ipvs sync loop to complete
-* controller_bgp_internal_peers_sync_time
-  Time it took for the BGP peer sync loop to complete
-* controller_ipvs_services
-  The number of ipvs services in the instance
-* controller_bgp_peers
-  Number of BGP peers of the instance
-* controller_bgp_advertisements_received
-  Number of total BGP advertisements received since software start
 
 To get a grouped list of CPS for each service a Prometheus query could look like this e.g: 
 `sum(kube_router_service_cps) by (namespace, service_name)`

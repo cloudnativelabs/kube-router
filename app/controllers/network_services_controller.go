@@ -1033,7 +1033,7 @@ func deleteMasqueradeIptablesRule() error {
 			if err != nil {
 				return errors.New("Failed to run iptables command" + err.Error())
 			}
-			glog.V(3).Infof("Deleted iptables masquerade rule: %s", rule)
+			glog.V(2).Infof("Deleted iptables masquerade rule: %s", rule)
 			break
 		}
 	}
