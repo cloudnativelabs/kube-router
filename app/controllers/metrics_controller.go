@@ -21,7 +21,6 @@ import (
 )
 
 var (
-	hs               *ipvs.Handle
 	serviceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_total_connections",
@@ -114,7 +113,7 @@ var (
 	}, []string{})
 )
 
-// Holds settings for the metrics controller
+// MetricsController Holds settings for the metrics controller
 type MetricsController struct {
 	endpointsMap endpointsInfoMap
 	MetricsPath  string
@@ -123,6 +122,7 @@ type MetricsController struct {
 	nodeIP       net.IP
 	serviceMap   serviceInfoMap
 	syncPeriod   time.Duration
+	ipvsHandle   *ipvs.Handle
 }
 
 // Run prometheus metrics controller
@@ -159,7 +159,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			// cannot panic, because this probably is an intentional close
-			glog.Error("Metrics controller: ListenAndServe() error: %s", err)
+			glog.Errorf("Metrics controller error: %s", err)
 		}
 	}()
 
@@ -170,7 +170,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			if err := srv.Shutdown(context.Background()); err != nil {
 				glog.Errorf("could not shutdown: %v", err)
 			}
-			return err
+			return nil
 		default:
 		}
 
@@ -182,11 +182,10 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			if err := srv.Shutdown(context.Background()); err != nil {
 				glog.Errorf("could not shutdown: %v", err)
 			}
-			return err
+			return nil
 		case <-t.C:
 		}
 	}
-	return nil
 }
 
 func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error {
@@ -197,7 +196,7 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
 	}()
 
-	ipvsSvcs, err := hs.GetServices()
+	ipvsSvcs, err := mc.ipvsHandle.GetServices()
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
@@ -205,7 +204,6 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 	glog.V(1).Info("Publishing Prometheus metrics")
 	for _, svc := range serviceInfoMap {
 		var protocol uint16
-		var pushMetric bool
 		var svcVip string
 
 		switch aProtocol := svc.protocol; aProtocol {
@@ -216,29 +214,19 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 		default:
 			protocol = syscall.IPPROTO_NONE
 		}
-		for _, ipvsSvc := range ipvsSvcs {
 
-			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
-			case svc.clusterIP.String():
-				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-					pushMetric = true
+		for _, ipvsSvc := range ipvsSvcs {
+			if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+				switch svcAddress := ipvsSvc.Address.String(); svcAddress {
+				case svc.clusterIP.String():
 					svcVip = svc.clusterIP.String()
-				} else {
-					pushMetric = false
-				}
-			case mc.nodeIP.String():
-				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-					pushMetric = true
+				case mc.nodeIP.String():
 					svcVip = mc.nodeIP.String()
-				} else {
-					pushMetric = false
+				default:
 				}
-			default:
-				svcVip = ""
-				pushMetric = false
 			}
 
-			if pushMetric {
+			if svcVip != "" {
 				glog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)", svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
 				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSIn))
 				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSOut))
@@ -265,9 +253,12 @@ func (mc *MetricsController) sync() {
 	mc.publishMetrics(mc.serviceMap)
 }
 
+// NewMetricsController returns new MetricController object
 func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*MetricsController, error) {
 	var err error
-	hs, err = ipvs.New("")
+
+	mc.ipvsHandle, err = ipvs.New("")
+
 	if err != nil {
 		return nil, err
 	}

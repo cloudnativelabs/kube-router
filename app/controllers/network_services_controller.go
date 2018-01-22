@@ -358,8 +358,8 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				// do policy routing to deliver the packet locally so that IPVS can pick the packet
 				err = routeVIPTrafficToDirector("0x" + fmt.Sprintf("%x", fwMark))
 				if err != nil {
-					glog.Error("Failed to setup ip rule to lookup traffic to external IP: %s through custom "+
-						"route table due to ", externalIP, err.Error())
+					glog.Errorf("Failed to setup ip rule to lookup traffic to external IP: %s through custom "+
+						"route table due to %s", externalIP, err.Error())
 					continue
 				}
 			} else {
@@ -494,7 +494,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				ipvsServiceString(ipvsSvc))
 			err := h.DelService(ipvsSvc)
 			if err != nil {
-				glog.Errorf("Failed to delete stale IPVS service %s due to:",
+				glog.Errorf("Failed to delete stale IPVS service %s due to: %s",
 					ipvsServiceString(ipvsSvc), err.Error())
 				continue
 			}
@@ -1233,14 +1233,14 @@ func ipvsAddServer(service *ipvs.Service, dest *ipvs.Destination, local bool, po
 	if strings.Contains(err.Error(), IPVS_SERVER_EXISTS) {
 		err = h.UpdateDestination(service, dest)
 		if err != nil {
-			return fmt.Errorf("Failed to update ipvs destination %s to the ipvs service %s due to : %s", dest.Address,
+			return fmt.Errorf("Failed to update ipvs destination %s to the ipvs service %s due to : %s",
 				ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 		}
 		// TODO: Make this debug output when we get log levels
 		// glog.Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
 		// 	ipvsDestinationString(dest), ipvsServiceString(service))
 	} else {
-		return fmt.Errorf("Failed to add ipvs destination %s to the ipvs service %s due to : %s", dest.Address,
+		return fmt.Errorf("Failed to add ipvs destination %s to the ipvs service %s due to : %s",
 			ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 	}
 	return nil

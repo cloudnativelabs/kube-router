@@ -1247,7 +1247,7 @@ func getNameSpaceDefaultPolicy(namespace string) (string, error) {
 					return annot["ingress"]["isolation"], nil
 				}
 				glog.Errorf("Skipping invalid network-policy for namespace \"%s\": %s", namespace, err)
-				return "DefaultAllow", errors.New("Invalid NetworkPolicy.")
+				return "DefaultAllow", errors.New("Invalid NetworkPolicy")
 			}
 			return "DefaultAllow", nil
 		}

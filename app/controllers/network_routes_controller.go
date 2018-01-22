@@ -457,7 +457,7 @@ func stringSliceToIPs(s []string) ([]net.IP, error) {
 	for _, ipString := range s {
 		ip := net.ParseIP(ipString)
 		if ip == nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as an IP.", ipString)
+			return nil, fmt.Errorf("Could not parse \"%s\" as an IP", ipString)
 		}
 		ips = append(ips, ip)
 	}
@@ -469,7 +469,7 @@ func stringSliceToUInt32(s []string) ([]uint32, error) {
 	for _, intString := range s {
 		newInt, err := strconv.ParseUint(intString, 0, 32)
 		if err != nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as an integer.", intString)
+			return nil, fmt.Errorf("Could not parse \"%s\" as an integer", intString)
 		}
 		ints = append(ints, uint32(newInt))
 	}
@@ -481,7 +481,7 @@ func stringSliceB64Decode(s []string) ([]string, error) {
 	for _, b64String := range s {
 		decoded, err := base64.StdEncoding.DecodeString(b64String)
 		if err != nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as a base64 encoded string.",
+			return nil, fmt.Errorf("Could not parse \"%s\" as a base64 encoded string",
 				b64String)
 		}
 		ss = append(ss, string(decoded))
@@ -510,7 +510,7 @@ func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
 	for i := 0; i < len(ips); i++ {
 		if !((asns[i] >= 64512 && asns[i] <= 65535) ||
 			(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
-			return nil, fmt.Errorf("Invalid ASN number \"%d\" for global BGP peer.",
+			return nil, fmt.Errorf("Invalid ASN number \"%d\" for global BGP peer",
 				asns[i])
 		}
 
@@ -928,7 +928,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		glog.Infof("Creating missing ipset \"%s\"", podSubnetsIPSetName)
 		_, err = nrc.ipSetHandler.Create(podSubnetsIPSetName, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("ipset \"%s\" not found in controller instance.",
+			return fmt.Errorf("ipset \"%s\" not found in controller instance",
 				podSubnetsIPSetName)
 		}
 	}
@@ -943,7 +943,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		glog.Infof("Creating missing ipset \"%s\"", nodeAddrsIPSetName)
 		_, err = nrc.ipSetHandler.Create(nodeAddrsIPSetName, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("ipset \"%s\" not found in controller instance.",
+			return fmt.Errorf("ipset \"%s\" not found in controller instance",
 				nodeAddrsIPSetName)
 		}
 	}
