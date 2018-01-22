@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/app/options"
 	"github.com/cloudnativelabs/kube-router/utils"
+	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -20,6 +21,7 @@ import (
 )
 
 var (
+	h                *ipvs.Handle
 	serviceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_total_connections",
@@ -117,6 +119,7 @@ type MetricsController struct {
 	endpointsMap endpointsInfoMap
 	MetricsPath  string
 	MetricsPort  int
+	mu           sync.Mutex
 	nodeIP       net.IP
 	serviceMap   serviceInfoMap
 	syncPeriod   time.Duration
@@ -193,6 +196,7 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 		glog.V(2).Infof("Export Prometheus metrics took %v", endTime)
 		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
 	}()
+
 	ipvsSvcs, err := h.GetServices()
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
@@ -254,6 +258,8 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 }
 
 func (mc *MetricsController) sync() {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
 	mc.serviceMap = buildServicesInfo()
 	mc.endpointsMap = buildEndpointsInfo()
 	mc.publishMetrics(mc.serviceMap)

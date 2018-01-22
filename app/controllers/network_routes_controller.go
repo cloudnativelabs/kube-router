@@ -1221,7 +1221,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 	node := nodeUpdate.Node
 	nodeIP, _ := utils.GetNodeIP(node)
 	if nodeUpdate.Op == watchers.ADD {
-		glog.Infof("Received node %s added update from watch API so peer with new node", nodeIP)
+		glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
 		n := &config.Neighbor{
 			Config: config.NeighborConfig{
 				NeighborAddress: nodeIP.String(),
