@@ -113,7 +113,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
 	fs.BoolVar(&s.EnablePprof, "enable-pprof", false,
 		"Enables pprof for debugging performance and memory leak issues.")
-	fs.Uint16Var(&s.MetricsPort, "metrics-port", 8080, "Prometheus metrics port, 0 = Disabled")
+	fs.Uint16Var(&s.MetricsPort, "metrics-port", 0, "Prometheus metrics port, 0 = Disabled")
 	fs.StringVar(&s.MetricsPath, "metrics-path", "/metrics", "Prometheus metrics path")
 	fs.DurationVar(&s.MetricsSyncPeriod, "metrics-sync-period", s.MetricsSyncPeriod, "The delay between exporting metrics (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
