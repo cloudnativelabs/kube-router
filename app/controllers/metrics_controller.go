@@ -257,24 +257,28 @@ func (mc *MetricsController) sync() {
 func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*MetricsController, error) {
 	var err error
 
+	mc := MetricsController{}
 	mc.ipvsHandle, err = ipvs.New("")
-
 	if err != nil {
 		return nil, err
 	}
-	mc := MetricsController{}
-	mc.MetricsPort = config.MetricsPort
 	mc.MetricsPath = config.MetricsPath
+	mc.MetricsPort = config.MetricsPort
 	mc.syncPeriod = config.MetricsSyncPeriod
+
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {
 		return nil, err
 	}
+
 	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {
 		return nil, err
 	}
+
 	mc.nodeIP = nodeIP
+
 	rand.Seed(time.Now().UnixNano())
+
 	return &mc, nil
 }
