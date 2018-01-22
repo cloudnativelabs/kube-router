@@ -1,7 +1,6 @@
 package options
 
 import (
-	"flag"
 	"net"
 	"time"
 
@@ -41,6 +40,7 @@ type KubeRouterConfig struct {
 	MetricsPort         uint16
 	MetricsPath         string
 	MetricsSyncPeriod   time.Duration
+	VLevel              int
 	// FullMeshPassword    string
 }
 
@@ -119,5 +119,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&s.MetricsSyncPeriod, "metrics-sync-period", s.MetricsSyncPeriod, "The delay between exporting metrics (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
-	flag.Parse()
+	fs.IntVarP(&s.VLevel, "v", "v", 0, "log level for V logs")
+
 }
