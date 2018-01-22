@@ -117,7 +117,7 @@ var (
 type MetricsController struct {
 	endpointsMap endpointsInfoMap
 	MetricsPath  string
-	MetricsPort  int
+	MetricsPort  uint16
 	mu           sync.Mutex
 	nodeIP       net.IP
 	serviceMap   serviceInfoMap
