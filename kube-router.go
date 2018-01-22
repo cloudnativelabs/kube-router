@@ -10,7 +10,6 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/app"
 	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/golang/glog"
 	"github.com/spf13/pflag"
 )
 
@@ -25,6 +24,7 @@ func main() {
 	flag.CommandLine.Parse([]string{})
 
 	flag.Set("logtostderr", "true")
+	flag.Set("v", config.VLevel)
 
 	if config.HelpRequested {
 		pflag.Usage()
@@ -52,8 +52,6 @@ func main() {
 			fmt.Fprintf(os.Stdout, http.ListenAndServe("0.0.0.0:6060", nil).Error())
 		}()
 	}
-
-	glog.Level.Set("3")
 
 	err = kubeRouter.Run()
 	if err != nil {
