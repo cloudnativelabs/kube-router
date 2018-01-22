@@ -11,8 +11,9 @@ If running kube-router as [daemonset](https://kubernetes.io/docs/concepts/worklo
 kube-router 0.1.0-rc2 and upwards supports the following runtime configuration for controlling where to expose the metrics.
 If you are using a older version, metrics path & port is locked to `/metrics` & `8080`.
 
-      --metrics-port uint16 <0-65535>                Prometheus metrics port to use ( default: 0, disabled )
-      --metrics-path string                 Path to serve Prometheus metrics on ( default: /metrics )
+      --metrics-path        string               Path to serve Prometheus metrics on ( default: /metrics )
+      --metrics-port        uint16 <0-65535>     Prometheus metrics port to use ( default: 0, disabled )
+      --metrics-sync-period duration            The delay between exporting metrics (e.g. '5s', '1m', '2h22m'). Must be greater than 0.
 
 To enable kube-router metrics, start kube-router with `--metrics-port` and provide a port over 0
 
