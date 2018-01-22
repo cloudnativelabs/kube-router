@@ -121,7 +121,7 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
-		glog.Infof("Router, Firewall or Service proxy functionality must be specified. Exiting!")
+		glog.Info("Router, Firewall or Service proxy functionality must be specified. Exiting!")
 		os.Exit(0)
 	}
 
