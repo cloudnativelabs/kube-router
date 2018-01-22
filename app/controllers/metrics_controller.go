@@ -197,7 +197,7 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
 	}()
 
-	ipvsSvcs, err := h.GetServices()
+	ipvsSvcs, err := hs.GetServices()
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
