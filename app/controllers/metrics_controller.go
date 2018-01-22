@@ -150,7 +150,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 	prometheus.MustRegister(servicePpsOut)
 	prometheus.MustRegister(serviceTotalConn)
 
-	srv := &http.Server{Addr: ":" + strconv.Itoa(mc.MetricsPort), Handler: http.DefaultServeMux}
+	srv := &http.Server{Addr: ":" + strconv.Itoa(int(mc.MetricsPort)), Handler: http.DefaultServeMux}
 
 	// add prometheus handler on metrics path
 	http.Handle(mc.MetricsPath, promhttp.Handler())
