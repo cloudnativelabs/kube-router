@@ -201,8 +201,9 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 	}
 
 	glog.V(1).Info("Publishing Prometheus metrics")
-	for _, svc := range serviceInfoMap {
+	for _, ipvsSvc := range ipvsSvcs {
 		var protocol uint16
+		var pushMetric bool
 		var svcVip string
 
 		switch aProtocol := svc.protocol; aProtocol {
@@ -213,19 +214,27 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 		default:
 			protocol = syscall.IPPROTO_NONE
 		}
-
-		for _, ipvsSvc := range ipvsSvcs {
+		switch svcAddress := ipvsSvc.Address.String(); svcAddress {
+		case svc.clusterIP.String():
 			if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-				switch svcAddress := ipvsSvc.Address.String(); svcAddress {
-				case svc.clusterIP.String():
-					svcVip = svc.clusterIP.String()
-				case mc.nodeIP.String():
-					svcVip = mc.nodeIP.String()
-				default:
-				}
+				pushMetric = true
+				svcVip = svc.clusterIP.String()
+			} else {
+				pushMetric = false
 			}
+		case nsc.nodeIP.String():
+			if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+				pushMetric = true
+				svcVip = mc.nodeIP.String()
+			} else {
+				pushMetric = false
+			}
+		default:
+			svcVip = ""
+			pushMetric = false
+		}
 
-			if svcVip != "" {
+		if pushMetric {
 				glog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)", svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
 				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSIn))
 				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSOut))
