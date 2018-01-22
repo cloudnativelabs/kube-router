@@ -266,6 +266,7 @@ func (mc *MetricsController) sync() {
 }
 
 func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*MetricsController, error) {
+	var err error
 	hs, err = ipvs.New("")
 	if err != nil {
 		return nil, err
