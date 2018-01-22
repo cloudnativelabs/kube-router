@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	h                *ipvs.Handle
+	hI               *ipvs.Handle
 	serviceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_total_connections",
@@ -197,7 +197,7 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
 	}()
 
-	ipvsSvcs, err := h.GetServices()
+	ipvsSvcs, err := hI.GetServices()
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
