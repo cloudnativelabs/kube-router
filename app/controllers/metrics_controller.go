@@ -224,10 +224,10 @@ func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error
 				} else {
 					pushMetric = false
 				}
-			case nsc.nodeIP.String():
+			case mc.nodeIP.String():
 				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
 					pushMetric = true
-					svcVip = nsc.nodeIP.String()
+					svcVip = mc.nodeIP.String()
 				} else {
 					pushMetric = false
 				}
