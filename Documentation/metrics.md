@@ -11,9 +11,10 @@ If running kube-router as [daemonset](https://kubernetes.io/docs/concepts/worklo
 kube-router 0.1.0-rc2 and upwards supports the following runtime configuration for controlling where to expose the metrics.
 If you are using a older version, metrics path & port is locked to `/metrics` & `8080`.
 
-      --metrics      bool                   Enable metrics export on metrics-port & metrics-path ( default: true )
-      --metrics-port int                    Prometheus metrics port to use ( default: 8080 )
+      --metrics-port int<0 - 65535>                Prometheus metrics port to use ( default: 0, disabled )
       --metrics-path string                 Path to serve Prometheus metrics on ( default: /metrics )
+
+To enable kube-router metrics, start kube-router with `--metrics-port` and provide a port over 0
 
 By enabling [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) in Prometheus configuration & adding required annotations it can automaticly discover & scrape kube-router metrics.
 
