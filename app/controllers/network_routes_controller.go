@@ -99,7 +99,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		}
 	}
 
-	glog.Info("Populating ipsets.")
+	glog.V(1).Info("Populating ipsets.")
 	err = nrc.syncNodeIPSets()
 	if err != nil {
 		glog.Errorf("Failed initial ipset setup: %s", err)
@@ -116,22 +116,22 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 	// Handle ipip tunnel overlay
 	if nrc.enableOverlays {
-		glog.Info("IPIP Tunnel Overlay enabled in configuration.")
-		glog.Info("Setting up overlay networking.")
+		glog.V(1).Info("IPIP Tunnel Overlay enabled in configuration.")
+		glog.V(1).Info("Setting up overlay networking.")
 		err = nrc.enablePolicyBasedRouting()
 		if err != nil {
 			glog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 		}
 	} else {
-		glog.Info("IPIP Tunnel Overlay disabled in configuration.")
-		glog.Info("Cleaning up old overlay networking if needed.")
+		glog.V(1).Info("IPIP Tunnel Overlay disabled in configuration.")
+		glog.V(1).Info("Cleaning up old overlay networking if needed.")
 		err = nrc.disablePolicyBasedRouting()
 		if err != nil {
 			glog.Errorf("Failed to disable policy based routing: %s", err.Error())
 		}
 	}
 
-	glog.Info("Performing cleanup of depreciated rules/ipsets (if needed).")
+	glog.V(1).Info("Performing cleanup of depreciated rules/ipsets (if needed).")
 	err = deleteBadPodEgressRules()
 	if err != nil {
 		glog.Errorf("Error cleaning up old/bad Pod egress rules: %s", err.Error())
@@ -139,14 +139,14 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 	// Handle Pod egress masquerading configuration
 	if nrc.enablePodEgress {
-		glog.Infoln("Enabling Pod egress.")
+		glog.V(1).Infoln("Enabling Pod egress.")
 
 		err = createPodEgressRule()
 		if err != nil {
 			glog.Errorf("Error enabling Pod egress: %s", err.Error())
 		}
 	} else {
-		glog.Infoln("Disabling Pod egress.")
+		glog.V(1).Infoln("Disabling Pod egress.")
 
 		err = deletePodEgressRule()
 		if err != nil {
@@ -218,7 +218,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 
 		// Update ipset entries
 		if nrc.enablePodEgress || nrc.enableOverlays {
-			glog.Info("Syncing ipsets.")
+			glog.V(1).Info("Syncing ipsets")
 			err := nrc.syncNodeIPSets()
 			if err != nil {
 				glog.Errorf("Error synchronizing ipsets: %s", err.Error())
@@ -235,7 +235,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 			nrc.advertiseExternalIPs()
 		}
 
-		glog.Infof("Performing periodic sync of the routes")
+		glog.V(1).Info("Performing periodic sync of the routes")
 		err = nrc.advertiseRoute()
 		if err != nil {
 			glog.Errorf("Error advertising route: %s", err.Error())
@@ -272,7 +272,7 @@ func createPodEgressRule() error {
 
 	}
 
-	glog.Infof("Added iptables rule to masqurade outbound traffic from pods.")
+	glog.V(1).Infof("Added iptables rule to masqurade outbound traffic from pods.")
 	return nil
 }
 
@@ -333,7 +333,8 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 		case ev := <-watcher.Event():
 			switch msg := ev.(type) {
 			case *gobgp.WatchEventBestPath:
-				glog.Infof("Processing bgp route advertisement from peer")
+				glog.V(3).Info("Processing bgp route advertisement from peer")
+				controllerBGPadvertisementsReceived.WithLabelValues().Add(float64(1))
 				for _, path := range msg.PathList {
 					if path.IsLocal() {
 						continue
@@ -349,7 +350,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 }
 
 func (nrc *NetworkRoutingController) advertiseClusterIPs() {
-	glog.Infof("Advertising cluster ips of services to the external BGP peers")
+	glog.V(1).Info("Advertising cluster ips of services to the external BGP peers")
 	for _, svc := range watchers.ServiceWatcher.List() {
 		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
 
@@ -358,7 +359,7 @@ func (nrc *NetworkRoutingController) advertiseClusterIPs() {
 				continue
 			}
 
-			glog.Infof("found a service of cluster ip type")
+			glog.V(2).Info("found a service of cluster ip type")
 			err := nrc.AdvertiseClusterIp(svc.Spec.ClusterIP)
 			if err != nil {
 				glog.Errorf("error advertising cluster IP: %q error: %v", svc.Spec.ClusterIP, err)
@@ -368,7 +369,7 @@ func (nrc *NetworkRoutingController) advertiseClusterIPs() {
 }
 
 func (nrc *NetworkRoutingController) advertiseExternalIPs() {
-	glog.Infof("Advertising external ips of the services to the external BGP peers")
+	glog.V(2).Info("Advertising external ips of the services to the external BGP peers")
 	for _, svc := range watchers.ServiceWatcher.List() {
 		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
 			// skip headless services
@@ -399,7 +400,7 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
 
-	glog.Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
+	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
 
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrLen),
 		subnet), false, attrs, time.Now(), false)}); err != nil {
@@ -456,7 +457,7 @@ func stringSliceToIPs(s []string) ([]net.IP, error) {
 	for _, ipString := range s {
 		ip := net.ParseIP(ipString)
 		if ip == nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as an IP.", ipString)
+			return nil, fmt.Errorf("Could not parse \"%s\" as an IP", ipString)
 		}
 		ips = append(ips, ip)
 	}
@@ -468,7 +469,7 @@ func stringSliceToUInt32(s []string) ([]uint32, error) {
 	for _, intString := range s {
 		newInt, err := strconv.ParseUint(intString, 0, 32)
 		if err != nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as an integer.", intString)
+			return nil, fmt.Errorf("Could not parse \"%s\" as an integer", intString)
 		}
 		ints = append(ints, uint32(newInt))
 	}
@@ -480,7 +481,7 @@ func stringSliceB64Decode(s []string) ([]string, error) {
 	for _, b64String := range s {
 		decoded, err := base64.StdEncoding.DecodeString(b64String)
 		if err != nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as a base64 encoded string.",
+			return nil, fmt.Errorf("Could not parse \"%s\" as a base64 encoded string",
 				b64String)
 		}
 		ss = append(ss, string(decoded))
@@ -509,7 +510,7 @@ func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
 	for i := 0; i < len(ips); i++ {
 		if !((asns[i] >= 64512 && asns[i] <= 65535) ||
 			(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
-			return nil, fmt.Errorf("Invalid ASN number \"%d\" for global BGP peer.",
+			return nil, fmt.Errorf("Invalid ASN number \"%d\" for global BGP peer",
 				asns[i])
 		}
 
@@ -575,7 +576,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerConfigs []*config.Ne
 			return fmt.Errorf("Error peering with peer router "+
 				"\"%s\" due to: %s", peerConfig.NeighborAddress, err)
 		}
-		glog.Infof("Successfully configured %s in ASN %v as BGP peer to the node",
+		glog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
 			peerConfig.NeighborAddress, peerConfig.PeerAs)
 	}
 	return nil
@@ -588,7 +589,7 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
-	glog.Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
+	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
 		clusterIp), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
@@ -835,10 +836,10 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	}
 
 	if path.IsWithdraw {
-		glog.Infof("Removing route: '%s via %s' from peer in the routing table", dst, nexthop)
+		glog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nexthop)
 		return netlink.RouteDel(route)
 	}
-	glog.Infof("Inject route: '%s via %s' from peer to routing table", dst, nexthop)
+	glog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nexthop)
 	return netlink.RouteReplace(route)
 }
 
@@ -927,7 +928,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		glog.Infof("Creating missing ipset \"%s\"", podSubnetsIPSetName)
 		_, err = nrc.ipSetHandler.Create(podSubnetsIPSetName, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("ipset \"%s\" not found in controller instance.",
+			return fmt.Errorf("ipset \"%s\" not found in controller instance",
 				podSubnetsIPSetName)
 		}
 	}
@@ -942,7 +943,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		glog.Infof("Creating missing ipset \"%s\"", nodeAddrsIPSetName)
 		_, err = nrc.ipSetHandler.Create(nodeAddrsIPSetName, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("ipset \"%s\" not found in controller instance.",
+			return fmt.Errorf("ipset \"%s\" not found in controller instance",
 				nodeAddrsIPSetName)
 		}
 	}
@@ -959,8 +960,12 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 // we miss any events from API server this method which is called periodically
 // ensure peer relationship with removed nodes is deleted. Also update Pod subnet ipset.
 func (nrc *NetworkRoutingController) syncInternalPeers() {
-
-	glog.Infof("Syncing BGP peers for the node.")
+	start := time.Now()
+	defer func() {
+		endTime := time.Since(start)
+		controllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime))
+		glog.V(2).Infof("Syncing BGP peers for the node took %v", endTime)
+	}()
 
 	// get the current list of the nodes from API server
 	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
@@ -969,6 +974,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		return
 	}
 
+	controllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, node := range nodes.Items {
@@ -1215,7 +1221,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 	node := nodeUpdate.Node
 	nodeIP, _ := utils.GetNodeIP(node)
 	if nodeUpdate.Op == watchers.ADD {
-		glog.Infof("Received node %s added update from watch API so peer with new node", nodeIP)
+		glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
 		n := &config.Neighbor{
 			Config: config.NeighborConfig{
 				NeighborAddress: nodeIP.String(),
