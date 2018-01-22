@@ -125,7 +125,7 @@ func (kr *KubeRouter) Run() error {
 		os.Exit(0)
 	}
 
-	if kr.Config.Metrics {
+	if (kr.Config.MetricsPort > 0) && (kr.Config.MetricsPort <= 65535) {
 		mc, err := controllers.NewMetricsController(kr.Client, kr.Config)
 		if err != nil {
 			return errors.New("Failed to create metrics controller: " + err.Error())
