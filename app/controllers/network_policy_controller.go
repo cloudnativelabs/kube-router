@@ -136,7 +136,7 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 
 // OnPodUpdate handles updates to pods from the Kubernetes api server
 func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
-	glog.V(2).Infof("Received pod update namspace:%s pod name:%s", podUpdate.Pod.Namespace, podUpdate.Pod.Name)
+	glog.V(2).Infof("Received pod update namespace:%s pod name:%s", podUpdate.Pod.Namespace, podUpdate.Pod.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
 		if err != nil {
@@ -167,14 +167,14 @@ func (npc *NetworkPolicyController) OnNamespaceUpdate(namespaceUpdate *watchers.
 		return
 	}
 
-	glog.V(2).Infof("Received namesapce update namspace:%s", namespaceUpdate.Namespace.Name)
+	glog.V(2).Infof("Received namespace update namespace:%s", namespaceUpdate.Namespace.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
 		if err != nil {
 			glog.Errorf("Error syncing on namespace update: %s", err)
 		}
 	} else {
-		glog.V(2).Info("Received namspace update, but controller not in sync")
+		glog.V(2).Info("Received namespace update, but controller not in sync")
 	}
 }
 
