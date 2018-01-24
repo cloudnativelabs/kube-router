@@ -164,7 +164,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		glog.V(2).Infof("Export Prometheus metrics took %v", endTime)
+		glog.V(2).Infof("Publishing IPVS metrics took %v", endTime)
 		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
 	}()
 
@@ -173,7 +173,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
 
-	glog.V(1).Info("Publishing Prometheus service controller metrics")
+	glog.V(1).Info("Publishing IPVS metrics")
 	for _, svc := range serviceInfoMap {
 		var protocol uint16
 		var pushMetric bool

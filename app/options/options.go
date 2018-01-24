@@ -40,7 +40,6 @@ type KubeRouterConfig struct {
 	MetricsEnabled      bool
 	MetricsPort         uint16
 	MetricsPath         string
-	MetricsSyncPeriod   time.Duration
 	VLevel              string
 	// FullMeshPassword    string
 }
@@ -117,7 +116,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enables pprof for debugging performance and memory leak issues.")
 	fs.Uint16Var(&s.MetricsPort, "metrics-port", 0, "Prometheus metrics port, 0 = Disabled")
 	fs.StringVar(&s.MetricsPath, "metrics-path", "/metrics", "Prometheus metrics path")
-	fs.DurationVar(&s.MetricsSyncPeriod, "metrics-sync-period", s.MetricsSyncPeriod, "The delay between exporting metrics (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
