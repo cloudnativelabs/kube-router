@@ -66,6 +66,7 @@ type NetworkServicesController struct {
 	globalHairpin       bool
 	client              *kubernetes.Clientset
 	nodeportBindOnAllIp bool
+	MetricsEnabled      bool
 }
 
 // internal representation of kubernetes service
@@ -154,7 +155,7 @@ func (nsc *NetworkServicesController) sync() {
 		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
 	}
 	nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
-	if kubeRouterConfig.MetricsEnabled {
+	if nsc.MetricsEnabled {
 		nsc.publishMetrics(nsc.serviceMap)
 	}
 }

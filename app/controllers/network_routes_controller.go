@@ -60,6 +60,7 @@ type NetworkRoutingController struct {
 	ipSetHandler         *utils.IPSet
 	enableOverlays       bool
 	peerMultihopTtl      uint8
+	MetricsEnabled       bool
 }
 
 var (
@@ -335,7 +336,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 			switch msg := ev.(type) {
 			case *gobgp.WatchEventBestPath:
 				glog.V(3).Info("Processing bgp route advertisement from peer")
-				if kubeRouterConfig.MetricsEnabled {
+				if nrc.MetricsEnabled {
 					controllerBGPadvertisementsReceived.WithLabelValues().Add(float64(1))
 				}
 				for _, path := range msg.PathList {
@@ -1435,14 +1436,15 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 
 	var err error
 
+	nrc := NetworkRoutingController{}
 	if kubeRouterConfig.MetricsEnabled {
 		//Register the metrics for this controller
 		prometheus.MustRegister(controllerBGPadvertisementsReceived)
 		prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
 		prometheus.MustRegister(controllerBPGpeers)
+		nrc.MetricsEnabled = true
 	}
 
-	nrc := NetworkRoutingController{}
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
 	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
