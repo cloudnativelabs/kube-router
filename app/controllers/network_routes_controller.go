@@ -58,6 +58,7 @@ type NetworkRoutingController struct {
 	ipSetHandler         *utils.IPSet
 	enableOverlays       bool
 	peerMultihopTtl      uint8
+	overrideNextHop      bool
 }
 
 var (
@@ -590,6 +591,7 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 // defult export policy to reject everything and an explicit policy is added so that each node only
 // advertised the pod CIDR assigned to it. Additionally export policy is added so that each node
 // advertises cluster IP's ONLY to the external BGP peers (and not to iBGP peers).
+// An option allows to override the next-hop-address with the outgoing ip for external bgp peers.
 func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
@@ -632,6 +634,14 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	statements := make([]config.Statement, 0)
 
+	actions := config.Actions{
+		RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+	}
+
+	if nrc.overrideNextHop {
+		actions.BgpActions.SetNextHop = "self"
+	}
+
 	// statement to represent the export policy to permit advertising node's pod CIDR
 	statements = append(statements,
 		config.Statement{
@@ -640,9 +650,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 					PrefixSet: "podcidrprefixset",
 				},
 			},
-			Actions: config.Actions{
-				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
-			},
+			Actions: actions,
 		})
 
 	externalBgpPeers := make([]string, 0)
@@ -665,6 +673,15 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		if err != nil {
 			nrc.bgpServer.AddDefinedSet(ns)
 		}
+
+		actions := config.Actions{
+			RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+		}
+
+		if nrc.overrideNextHop {
+			actions.BgpActions.SetNextHop = "self"
+		}
+
 		// statement to represent the export policy to permit advertising cluster IP's
 		// only to the global BGP peer or node specific BGP peer
 		statements = append(statements, config.Statement{
@@ -676,9 +693,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 					NeighborSet: "externalpeerset",
 				},
 			},
-			Actions: config.Actions{
-				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
-			},
+			Actions: actions,
 		})
 	}
 
@@ -745,7 +760,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	var route *netlink.Route
 
 	// check if the neighbour is in same subnet
-	if !nrc.nodeSubnet.Contains(nexthop) {
+	if nrc.overrideNextHop == false && !nrc.nodeSubnet.Contains(nexthop) {
 		tunnelName := "tun-" + strings.Replace(nexthop.String(), ".", "", -1)
 		glog.Infof("Found node: " + nexthop.String() + " to be in different subnet.")
 
@@ -1399,6 +1414,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.peerMultihopTtl = kubeRouterConfig.PeerMultihopTtl
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
+	nrc.overrideNextHop = kubeRouterConfig.OverrideNextHop
 	nrc.clientset = clientset
 
 	nrc.ipSetHandler, err = utils.NewIPSet()
