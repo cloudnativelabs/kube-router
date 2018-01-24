@@ -49,7 +49,6 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IpvsSyncPeriod:     1 * time.Minute,
 		IPTablesSyncPeriod: 1 * time.Minute,
 		RoutesSyncPeriod:   1 * time.Minute,
-		MetricsSyncPeriod:  30 * time.Second,
 		EnableOverlay:      true,
 	}
 }
