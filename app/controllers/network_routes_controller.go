@@ -335,7 +335,9 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 			switch msg := ev.(type) {
 			case *gobgp.WatchEventBestPath:
 				glog.V(3).Info("Processing bgp route advertisement from peer")
-				controllerBGPadvertisementsReceived.WithLabelValues().Add(float64(1))
+				if kubeRouterConfig.MetricsEnabled {
+					controllerBGPadvertisementsReceived.WithLabelValues().Add(float64(1))
+				}
 				for _, path := range msg.PathList {
 					if path.IsLocal() {
 						continue
@@ -1433,10 +1435,12 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 
 	var err error
 
-	//Register the metrics for this controller
-	prometheus.MustRegister(controllerBGPadvertisementsReceived)
-	prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
-	prometheus.MustRegister(controllerBPGpeers)
+	if kubeRouterConfig.MetricsEnabled {
+		//Register the metrics for this controller
+		prometheus.MustRegister(controllerBGPadvertisementsReceived)
+		prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
+		prometheus.MustRegister(controllerBPGpeers)
+	}
 
 	nrc := NetworkRoutingController{}
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode

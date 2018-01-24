@@ -37,6 +37,7 @@ type KubeRouterConfig struct {
 	EnableOverlay       bool
 	PeerPasswords       []string
 	EnablePprof         bool
+	MetricsEnabled      bool
 	MetricsPort         uint16
 	MetricsPath         string
 	MetricsSyncPeriod   time.Duration

@@ -154,6 +154,77 @@ func (nsc *NetworkServicesController) sync() {
 		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
 	}
 	nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+	if kubeRouterConfig.MetricsEnabled {
+		nsc.publishMetrics(nsc.serviceMap)
+	}
+}
+
+func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
+	start := time.Now()
+	defer func() {
+		endTime := time.Since(start)
+		glog.V(2).Infof("Export Prometheus metrics took %v", endTime)
+		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
+	}()
+
+	ipvsSvcs, err := h.GetServices()
+	if err != nil {
+		return errors.New("Failed to list IPVS services: " + err.Error())
+	}
+
+	glog.V(1).Info("Publishing Prometheus service controller metrics")
+	for _, svc := range serviceInfoMap {
+		var protocol uint16
+		var pushMetric bool
+		var svcVip string
+
+		switch aProtocol := svc.protocol; aProtocol {
+		case "tcp":
+			protocol = syscall.IPPROTO_TCP
+		case "udp":
+			protocol = syscall.IPPROTO_UDP
+		default:
+			protocol = syscall.IPPROTO_NONE
+		}
+		for _, ipvsSvc := range ipvsSvcs {
+
+			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
+			case svc.clusterIP.String():
+				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+					pushMetric = true
+					svcVip = svc.clusterIP.String()
+				} else {
+					pushMetric = false
+				}
+			case nsc.nodeIP.String():
+				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+					pushMetric = true
+					svcVip = nsc.nodeIP.String()
+				} else {
+					pushMetric = false
+				}
+			default:
+				svcVip = ""
+				pushMetric = false
+			}
+
+			if pushMetric {
+				glog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)", svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
+				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSIn))
+				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSOut))
+				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesIn))
+				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesOut))
+				serviceCPS.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.CPS))
+				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsIn))
+				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsOut))
+				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSIn))
+				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSOut))
+				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.Connections))
+				controllerIpvsServices.WithLabelValues().Set(float64(len(ipvsSvcs)))
+			}
+		}
+	}
+	return nil
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
@@ -214,7 +285,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	defer func() {
 		endTime := time.Since(start)
-		controllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime))
+		if kubeRouterConfig.MetricsEnabled {
+			controllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime))
+		}
 		glog.V(1).Infof("sync ipvs services took %v", endTime)
 	}()
 
@@ -1505,20 +1578,21 @@ func (nsc *NetworkServicesController) Cleanup() {
 func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
 
 	var err error
-
-	//Register the metrics for this controller
-	prometheus.MustRegister(controllerIpvsServices)
-	prometheus.MustRegister(controllerIpvsServicesSyncTime)
-	prometheus.MustRegister(serviceBpsIn)
-	prometheus.MustRegister(serviceBpsOut)
-	prometheus.MustRegister(serviceBytesIn)
-	prometheus.MustRegister(serviceBytesOut)
-	prometheus.MustRegister(serviceCPS)
-	prometheus.MustRegister(servicePacketsIn)
-	prometheus.MustRegister(servicePacketsOut)
-	prometheus.MustRegister(servicePpsIn)
-	prometheus.MustRegister(servicePpsOut)
-	prometheus.MustRegister(serviceTotalConn)
+	if kubeRouterConfig.MetricsEnabled {
+		//Register the metrics for this controller
+		prometheus.MustRegister(controllerIpvsServices)
+		prometheus.MustRegister(controllerIpvsServicesSyncTime)
+		prometheus.MustRegister(serviceBpsIn)
+		prometheus.MustRegister(serviceBpsOut)
+		prometheus.MustRegister(serviceBytesIn)
+		prometheus.MustRegister(serviceBytesOut)
+		prometheus.MustRegister(serviceCPS)
+		prometheus.MustRegister(servicePacketsIn)
+		prometheus.MustRegister(servicePacketsOut)
+		prometheus.MustRegister(servicePpsIn)
+		prometheus.MustRegister(servicePpsOut)
+		prometheus.MustRegister(serviceTotalConn)
+	}
 
 	h, err = ipvs.New("")
 	if err != nil {

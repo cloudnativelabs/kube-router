@@ -188,7 +188,9 @@ func (npc *NetworkPolicyController) Sync() error {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		controllerIptablesSyncTime.WithLabelValues().Set(float64(endTime))
+		if kubeRouterConfig.MetricsEnabled {
+			controllerIptablesSyncTime.WithLabelValues().Set(float64(endTime))
+		}
 		glog.V(2).Infof("sync iptables took %v", endTime)
 	}()
 
@@ -1378,9 +1380,10 @@ func (npc *NetworkPolicyController) Cleanup() {
 
 // NewNetworkPolicyController returns new NetworkPolicyController object
 func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkPolicyController, error) {
-	//Register the metrics for this controller
-	prometheus.MustRegister(controllerIptablesSyncTime)
-
+	if kubeRouterConfig.MetricsEnabled {
+		//Register the metrics for this controller
+		prometheus.MustRegister(controllerIptablesSyncTime)
+	}
 	npc := NetworkPolicyController{}
 
 	npc.syncPeriod = config.IPTablesSyncPeriod

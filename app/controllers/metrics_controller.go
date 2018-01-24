@@ -1,17 +1,13 @@
 package controllers
 
 import (
-	"errors"
-	"math/rand"
 	"net"
 	"net/http"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -127,8 +123,6 @@ type MetricsController struct {
 
 // Run prometheus metrics controller
 func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-	t := time.NewTicker(mc.syncPeriod)
-	defer t.Stop()
 	defer wg.Done()
 	glog.Info("Starting metrics controller")
 
@@ -157,123 +151,13 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			return nil
 		default:
 		}
-
-		mc.sync()
-
-		select {
-		case <-stopCh:
-			glog.Info("Shutting down metrics controller")
-			if err := srv.Shutdown(context.Background()); err != nil {
-				glog.Errorf("could not shutdown: %v", err)
-			}
-			return nil
-		case <-t.C:
-		}
 	}
-}
-
-func (mc *MetricsController) publishMetrics(serviceInfoMap serviceInfoMap) error {
-	start := time.Now()
-	defer func() {
-		endTime := time.Since(start)
-		glog.V(2).Infof("Export Prometheus metrics took %v", endTime)
-		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
-	}()
-
-	ipvsSvcs, err := mc.ipvsHandle.GetServices()
-	if err != nil {
-		return errors.New("Failed to list IPVS services: " + err.Error())
-	}
-
-	glog.V(1).Info("Publishing Prometheus metrics")
-	for _, svc := range serviceInfoMap {
-		var protocol uint16
-		var pushMetric bool
-		var svcVip string
-
-		switch aProtocol := svc.protocol; aProtocol {
-		case "tcp":
-			protocol = syscall.IPPROTO_TCP
-		case "udp":
-			protocol = syscall.IPPROTO_UDP
-		default:
-			protocol = syscall.IPPROTO_NONE
-		}
-		for _, ipvsSvc := range ipvsSvcs {
-
-			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
-			case svc.clusterIP.String():
-				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-					pushMetric = true
-					svcVip = svc.clusterIP.String()
-				} else {
-					pushMetric = false
-				}
-			case mc.nodeIP.String():
-				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
-					pushMetric = true
-					svcVip = mc.nodeIP.String()
-				} else {
-					pushMetric = false
-				}
-			default:
-				svcVip = ""
-				pushMetric = false
-			}
-
-			if pushMetric {
-				glog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)", svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
-				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSIn))
-				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSOut))
-				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesIn))
-				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesOut))
-				serviceCPS.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.CPS))
-				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsOut))
-				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSOut))
-				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.Connections))
-				controllerIpvsServices.WithLabelValues().Set(float64(len(ipvsSvcs)))
-			}
-		}
-	}
-	return nil
-}
-
-func (mc *MetricsController) sync() {
-	mc.mu.Lock()
-	defer mc.mu.Unlock()
-	mc.serviceMap = buildServicesInfo()
-	mc.endpointsMap = buildEndpointsInfo()
-	mc.publishMetrics(mc.serviceMap)
 }
 
 // NewMetricsController returns new MetricController object
 func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*MetricsController, error) {
-	var err error
-
-	mc := MetricsController{}
-	mc.ipvsHandle, err = ipvs.New("")
-	if err != nil {
-		return nil, err
-	}
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort
 	mc.syncPeriod = config.MetricsSyncPeriod
-
-	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
-	if err != nil {
-		return nil, err
-	}
-
-	nodeIP, err := utils.GetNodeIP(node)
-	if err != nil {
-		return nil, err
-	}
-
-	mc.nodeIP = nodeIP
-
-	rand.Seed(time.Now().UnixNano())
-
 	return &mc, nil
 }
