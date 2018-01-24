@@ -1579,6 +1579,14 @@ func (nsc *NetworkServicesController) Cleanup() {
 func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
 
 	var err error
+	h, err = ipvs.New("")
+	if err != nil {
+		return nil, err
+	}
+	// &h = handle
+
+	nsc := NetworkServicesController{}
+
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
 		prometheus.MustRegister(controllerIpvsServices)
@@ -1596,13 +1604,6 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 		nsc.MetricsEnabled = true
 	}
 
-	h, err = ipvs.New("")
-	if err != nil {
-		return nil, err
-	}
-	// &h = handle
-
-	nsc := NetworkServicesController{}
 	nsc.syncPeriod = config.IpvsSyncPeriod
 	nsc.globalHairpin = config.GlobalHairpinMode
 
