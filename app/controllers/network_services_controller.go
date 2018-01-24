@@ -286,7 +286,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	defer func() {
 		endTime := time.Since(start)
-		if kubeRouterConfig.MetricsEnabled {
+		if nsc.MetricsEnabled {
 			controllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime))
 		}
 		glog.V(1).Infof("sync ipvs services took %v", endTime)
@@ -1579,7 +1579,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
 
 	var err error
-	if kubeRouterConfig.MetricsEnabled {
+	if config.MetricsEnabled {
 		//Register the metrics for this controller
 		prometheus.MustRegister(controllerIpvsServices)
 		prometheus.MustRegister(controllerIpvsServicesSyncTime)
@@ -1593,6 +1593,7 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 		prometheus.MustRegister(servicePpsIn)
 		prometheus.MustRegister(servicePpsOut)
 		prometheus.MustRegister(serviceTotalConn)
+		nsc.MetricsEnabled = true
 	}
 
 	h, err = ipvs.New("")
