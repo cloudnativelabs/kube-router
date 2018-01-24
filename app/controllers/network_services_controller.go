@@ -165,7 +165,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	defer func() {
 		endTime := time.Since(start)
 		glog.V(2).Infof("Publishing IPVS metrics took %v", endTime)
-		controllerMetricsExportTime.WithLabelValues().Set(float64(endTime))
+		controllerIpvsMetricsExportTime.WithLabelValues().Set(float64(endTime))
 	}()
 
 	ipvsSvcs, err := h.GetServices()

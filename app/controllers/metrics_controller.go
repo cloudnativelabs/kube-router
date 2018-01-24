@@ -100,9 +100,9 @@ var (
 		Name:      "controller_bgp_advertisements_received",
 		Help:      "Time it took to sync internal bgp peers",
 	}, []string{})
-	controllerMetricsExportTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	controllerIpvsMetricsExportTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
-		Name:      "controller_metrics_export_time",
+		Name:      "controller_ipvs_metrics_export_time",
 		Help:      "Time it took to export metrics",
 	}, []string{})
 )
@@ -123,7 +123,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 	glog.Info("Starting metrics controller")
 
 	// register metrics for this controller
-	prometheus.MustRegister(controllerMetricsExportTime)
+	prometheus.MustRegister(controllerIpvsMetricsExportTime)
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(mc.MetricsPort)), Handler: http.DefaultServeMux}
 
