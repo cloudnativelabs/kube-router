@@ -71,6 +71,8 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
   Time it took for the ipvs sync loop to complete
 * controller_ipvs_services
   The number of ipvs services in the instance
+* controller_ipvs_metrics_export_time
+  The time it took to run the metrics export for IPVS services
 * service_total_connections
   Total connections made to the service since creation
 * service_packets_in
