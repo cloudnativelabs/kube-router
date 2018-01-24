@@ -24,6 +24,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/net/context"
@@ -1504,6 +1505,21 @@ func (nsc *NetworkServicesController) Cleanup() {
 func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
 
 	var err error
+
+	//Register the metrics for this controller
+	prometheus.MustRegister(controllerIpvsServices)
+	prometheus.MustRegister(controllerIpvsServicesSyncTime)
+	prometheus.MustRegister(serviceBpsIn)
+	prometheus.MustRegister(serviceBpsOut)
+	prometheus.MustRegister(serviceBytesIn)
+	prometheus.MustRegister(serviceBytesOut)
+	prometheus.MustRegister(serviceCPS)
+	prometheus.MustRegister(servicePacketsIn)
+	prometheus.MustRegister(servicePacketsOut)
+	prometheus.MustRegister(servicePpsIn)
+	prometheus.MustRegister(servicePpsOut)
+	prometheus.MustRegister(serviceTotalConn)
+
 	h, err = ipvs.New("")
 	if err != nil {
 		return nil, err

@@ -131,24 +131,9 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 	defer t.Stop()
 	defer wg.Done()
 	glog.Info("Starting metrics controller")
-	// register metrics
-	prometheus.MustRegister(controllerBGPadvertisementsReceived)
-	prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
-	prometheus.MustRegister(controllerBPGpeers)
-	prometheus.MustRegister(controllerIptablesSyncTime)
-	prometheus.MustRegister(controllerIpvsServices)
-	prometheus.MustRegister(controllerIpvsServicesSyncTime)
+
+	// register metrics for this controller
 	prometheus.MustRegister(controllerMetricsExportTime)
-	prometheus.MustRegister(serviceBpsIn)
-	prometheus.MustRegister(serviceBpsOut)
-	prometheus.MustRegister(serviceBytesIn)
-	prometheus.MustRegister(serviceBytesOut)
-	prometheus.MustRegister(serviceCPS)
-	prometheus.MustRegister(servicePacketsIn)
-	prometheus.MustRegister(servicePacketsOut)
-	prometheus.MustRegister(servicePpsIn)
-	prometheus.MustRegister(servicePpsOut)
-	prometheus.MustRegister(serviceTotalConn)
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(mc.MetricsPort)), Handler: http.DefaultServeMux}
 

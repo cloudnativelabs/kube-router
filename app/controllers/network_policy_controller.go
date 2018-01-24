@@ -17,6 +17,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus"
 	api "k8s.io/api/core/v1"
 	apiextensions "k8s.io/api/extensions/v1beta1"
 	networking "k8s.io/api/networking/v1"
@@ -1377,6 +1378,8 @@ func (npc *NetworkPolicyController) Cleanup() {
 
 // NewNetworkPolicyController returns new NetworkPolicyController object
 func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkPolicyController, error) {
+	//Register the metrics for this controller
+	prometheus.MustRegister(controllerIptablesSyncTime)
 
 	npc := NetworkPolicyController{}
 

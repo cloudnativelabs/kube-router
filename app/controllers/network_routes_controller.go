@@ -28,6 +28,7 @@ import (
 	"github.com/osrg/gobgp/packet/bgp"
 	gobgp "github.com/osrg/gobgp/server"
 	"github.com/osrg/gobgp/table"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -1431,6 +1432,11 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
 
 	var err error
+
+	//Register the metrics for this controller
+	prometheus.MustRegister(controllerBGPadvertisementsReceived)
+	prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
+	prometheus.MustRegister(controllerBPGpeers)
 
 	nrc := NetworkRoutingController{}
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
