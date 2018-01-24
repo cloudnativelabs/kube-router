@@ -5,10 +5,8 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -117,8 +115,6 @@ type MetricsController struct {
 	mu           sync.Mutex
 	nodeIP       net.IP
 	serviceMap   serviceInfoMap
-	syncPeriod   time.Duration
-	ipvsHandle   *ipvs.Handle
 }
 
 // Run prometheus metrics controller
@@ -159,6 +155,5 @@ func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeR
 	mc := MetricsController{}
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort
-	mc.syncPeriod = config.MetricsSyncPeriod
 	return &mc, nil
 }
