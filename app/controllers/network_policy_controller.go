@@ -17,6 +17,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus"
 	api "k8s.io/api/core/v1"
 	apiextensions "k8s.io/api/extensions/v1beta1"
 	networking "k8s.io/api/networking/v1"
@@ -40,6 +41,7 @@ type NetworkPolicyController struct {
 	nodeHostName    string
 	mu              sync.Mutex
 	syncPeriod      time.Duration
+	MetricsEnabled  bool
 	v1NetworkPolicy bool
 
 	// list of all active network policies expressed as networkPolicyInfo
@@ -103,19 +105,19 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 	defer t.Stop()
 	defer wg.Done()
 
-	glog.Infof("Starting network policy controller")
+	glog.Info("Starting network policy controller")
 
 	// loop forever till notified to stop on stopCh
 	for {
 		select {
 		case <-stopCh:
-			glog.Infof("Shutting down network policies controller")
+			glog.Info("Shutting down network policies controller")
 			return
 		default:
 		}
 
 		if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
-			glog.Infof("Performing periodic syn of the iptables to reflect network policies")
+			glog.V(1).Info("Performing periodic sync of iptables to reflect network policies")
 			err := npc.Sync()
 			if err != nil {
 				glog.Errorf("Error during periodic sync: " + err.Error())
@@ -135,14 +137,14 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 
 // OnPodUpdate handles updates to pods from the Kubernetes api server
 func (npc *NetworkPolicyController) OnPodUpdate(podUpdate *watchers.PodUpdate) {
-	glog.Infof("Received pod update namspace:%s pod name:%s", podUpdate.Pod.Namespace, podUpdate.Pod.Name)
+	glog.V(2).Infof("Received pod update namespace:%s pod name:%s", podUpdate.Pod.Namespace, podUpdate.Pod.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
 		if err != nil {
 			glog.Errorf("Error syncing on pod update: %s", err)
 		}
 	} else {
-		glog.Infof("Received pod update, but controller not in sync")
+		glog.V(2).Infof("Received pod update, but controller not in sync")
 	}
 }
 
@@ -154,7 +156,7 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(networkPolicyUpdate *w
 			glog.Errorf("Error syncing on network policy update: %s", err)
 		}
 	} else {
-		glog.Infof("Received network policy update, but controller not in sync")
+		glog.V(2).Info("Received network policy update, but controller not in sync")
 	}
 }
 
@@ -166,14 +168,14 @@ func (npc *NetworkPolicyController) OnNamespaceUpdate(namespaceUpdate *watchers.
 		return
 	}
 
-	glog.Infof("Received namesapce update namspace:%s", namespaceUpdate.Namespace.Name)
+	glog.V(2).Infof("Received namespace update namespace:%s", namespaceUpdate.Namespace.Name)
 	if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 		err := npc.Sync()
 		if err != nil {
 			glog.Errorf("Error syncing on namespace update: %s", err)
 		}
 	} else {
-		glog.Infof("Received namspace update, but controller not in sync")
+		glog.V(2).Info("Received namespace update, but controller not in sync")
 	}
 }
 
@@ -186,8 +188,14 @@ func (npc *NetworkPolicyController) Sync() error {
 
 	start := time.Now()
 	defer func() {
-		glog.Infof("sync iptables took %v", time.Since(start))
+		endTime := time.Since(start)
+		if npc.MetricsEnabled {
+			controllerIptablesSyncTime.WithLabelValues().Set(float64(endTime))
+		}
+		glog.V(2).Infof("sync iptables took %v", endTime)
 	}()
+
+	glog.V(1).Info("Starting periodic sync of iptables")
 
 	if npc.v1NetworkPolicy {
 		npc.networkPoliciesInfo, err = buildNetworkPoliciesInfo()
@@ -289,7 +297,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 		}
 	}
 
-	glog.Infof("Iptables chains in the filter table are synchronized with the network policies.")
+	glog.V(2).Infof("Iptables chains in the filter table are synchronized with the network policies.")
 
 	return activePolicyChains, activePolicyIpSets, nil
 }
@@ -886,7 +894,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		if err != nil {
 			return fmt.Errorf("Failed to delete the chain %s due to %s", chain, err.Error())
 		}
-		glog.Infof("Deleted pod specific firewall chain: %s from the filter table", chain)
+		glog.V(2).Infof("Deleted pod specific firewall chain: %s from the filter table", chain)
 	}
 
 	// cleanup network policy chains
@@ -918,7 +926,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		if err != nil {
 			return fmt.Errorf("Failed to flush the rules in chain %s due to %s", policyChain, err)
 		}
-		glog.Infof("Deleted network policy chain: %s from the filter table", policyChain)
+		glog.V(2).Infof("Deleted network policy chain: %s from the filter table", policyChain)
 	}
 
 	// cleanup network policy ipsets
@@ -944,7 +952,7 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(nodeIp st
 			}
 			_, ok := policy.targetPods[pod.Status.PodIP]
 			if ok && (policy.policyType == "both" || policy.policyType == "ingress") {
-				glog.Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
+				glog.V(2).Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
 				nodePods[pod.Status.PodIP] = podInfo{ip: pod.Status.PodIP,
 					name:      pod.ObjectMeta.Name,
 					namespace: pod.ObjectMeta.Namespace,
@@ -971,7 +979,7 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(nodeIp str
 			}
 			_, ok := policy.targetPods[pod.Status.PodIP]
 			if ok && (policy.policyType == "both" || policy.policyType == "egress") {
-				glog.Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
+				glog.V(2).Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
 				nodePods[pod.Status.PodIP] = podInfo{ip: pod.Status.PodIP,
 					name:      pod.ObjectMeta.Name,
 					namespace: pod.ObjectMeta.Namespace,
@@ -1243,7 +1251,7 @@ func getNameSpaceDefaultPolicy(namespace string) (string, error) {
 					return annot["ingress"]["isolation"], nil
 				}
 				glog.Errorf("Skipping invalid network-policy for namespace \"%s\": %s", namespace, err)
-				return "DefaultAllow", errors.New("Invalid NetworkPolicy.")
+				return "DefaultAllow", errors.New("Invalid NetworkPolicy")
 			}
 			return "DefaultAllow", nil
 		}
@@ -1290,7 +1298,7 @@ func policyIndexedDestinationPodIpSetName(namespace, policyName string, egressRu
 // Cleanup cleanup configurations done
 func (npc *NetworkPolicyController) Cleanup() {
 
-	glog.Infof("Cleaning up iptables configuration permanently done by kube-router")
+	glog.Info("Cleaning up iptables configuration permanently done by kube-router")
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
@@ -1373,8 +1381,13 @@ func (npc *NetworkPolicyController) Cleanup() {
 
 // NewNetworkPolicyController returns new NetworkPolicyController object
 func NewNetworkPolicyController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkPolicyController, error) {
-
 	npc := NetworkPolicyController{}
+
+	if config.MetricsEnabled {
+		//Register the metrics for this controller
+		prometheus.MustRegister(controllerIptablesSyncTime)
+		npc.MetricsEnabled = true
+	}
 
 	npc.syncPeriod = config.IPTablesSyncPeriod
 

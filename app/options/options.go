@@ -37,8 +37,10 @@ type KubeRouterConfig struct {
 	EnableOverlay       bool
 	PeerPasswords       []string
 	EnablePprof         bool
-	MetricsPort         int
+	MetricsEnabled      bool
+	MetricsPort         uint16
 	MetricsPath         string
+	VLevel              string
 	// FullMeshPassword    string
 }
 
@@ -111,9 +113,10 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
 	fs.BoolVar(&s.EnablePprof, "enable-pprof", false,
 		"Enables pprof for debugging performance and memory leak issues.")
-	fs.IntVar(&s.MetricsPort, "metrics-port", 8080, "Prometheus metrics port")
+	fs.Uint16Var(&s.MetricsPort, "metrics-port", 0, "Prometheus metrics port, 0 = Disabled")
 	fs.StringVar(&s.MetricsPath, "metrics-path", "/metrics", "Prometheus metrics path")
-
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
+	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
+
 }

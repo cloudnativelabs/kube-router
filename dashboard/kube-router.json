@@ -44,7 +44,7 @@
   },
   "editable": true,
   "gnetId": null,
-  "graphTooltip": 2,
+  "graphTooltip": 1,
   "hideControls": false,
   "id": null,
   "links": [],
@@ -52,7 +52,7 @@
   "rows": [
     {
       "collapse": false,
-      "height": 300,
+      "height": 139,
       "panels": [
         {
           "aliasColors": {},
@@ -93,7 +93,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(kube_router_service_cps) by (namespace, service_name, protocol, port)",
+              "expr": "sum(kube_router_service_cps{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"}) by (namespace, service_name, protocol, port)",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -104,7 +104,7 @@
           "thresholds": [],
           "timeFrom": null,
           "timeShift": null,
-          "title": "CPS",
+          "title": "Connections",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -121,7 +121,7 @@
           "yaxes": [
             {
               "format": "short",
-              "label": null,
+              "label": "Per second",
               "logBase": 1,
               "max": null,
               "min": null,
@@ -133,7 +133,7 @@
               "logBase": 1,
               "max": null,
               "min": null,
-              "show": true
+              "show": false
             }
           ]
         },
@@ -171,7 +171,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(kube_router_service_bps_in) by (instance)",
+              "expr": "sum(kube_router_service_bps_in{instance=~\"[[selnode]]\"}) by (instance)",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -179,7 +179,7 @@
               "refId": "A"
             },
             {
-              "expr": "- sum(kube_router_service_bps_out) by (instance)",
+              "expr": "- sum(kube_router_service_bps_out{instance=~\"[[selnode]]\"}) by (instance)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "out: {{instance}}",
@@ -206,7 +206,7 @@
           "yaxes": [
             {
               "format": "Bps",
-              "label": null,
+              "label": "Rate",
               "logBase": 1,
               "max": null,
               "min": null,
@@ -218,7 +218,7 @@
               "logBase": 1,
               "max": null,
               "min": null,
-              "show": true
+              "show": false
             }
           ]
         }
@@ -232,7 +232,7 @@
     },
     {
       "collapse": false,
-      "height": 337,
+      "height": 158,
       "panels": [
         {
           "aliasColors": {},
@@ -272,14 +272,14 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(kube_router_service_pps_in) by (namespace, service_name, protocol, port)",
+              "expr": "sum(kube_router_service_pps_in{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"}) by (namespace, service_name, protocol, port)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "in {{namespace}}/{{service_name}} {{port}}/{{protocol}}",
               "refId": "A"
             },
             {
-              "expr": "- sum(kube_router_service_pps_out) by (namespace, service_name, protocol, port)",
+              "expr": "- sum(kube_router_service_pps_out{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"}) by (namespace, service_name, protocol, port)",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "out {{namespace}}/{{service_name}} {{port}}/{{protocol}}",
@@ -289,7 +289,7 @@
           "thresholds": [],
           "timeFrom": null,
           "timeShift": null,
-          "title": "PPS",
+          "title": "Packets",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -306,7 +306,7 @@
           "yaxes": [
             {
               "format": "pps",
-              "label": null,
+              "label": "Per second",
               "logBase": 1,
               "max": null,
               "min": null,
@@ -358,7 +358,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(kube_router_service_bps_in) by (namespace, service_name, protocol, port)",
+              "expr": "sum(kube_router_service_bps_in{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"}) by (namespace, service_name, protocol, port)",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -366,7 +366,7 @@
               "refId": "A"
             },
             {
-              "expr": "- sum(kube_router_service_bps_out) by (namespace, service_name, protocol, port)",
+              "expr": "- sum(kube_router_service_bps_out{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"}) by (namespace, service_name, protocol, port)",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -377,7 +377,7 @@
           "thresholds": [],
           "timeFrom": null,
           "timeShift": null,
-          "title": "BPS",
+          "title": "Traffic",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -394,7 +394,319 @@
           "yaxes": [
             {
               "format": "Bps",
+              "label": "Rate",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ]
+        }
+      ],
+      "repeat": null,
+      "repeatIteration": null,
+      "repeatRowId": null,
+      "showTitle": false,
+      "title": "Dashboard Row",
+      "titleSize": "h6"
+    },
+    {
+      "collapse": false,
+      "height": 164,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_PROMETHEUS}",
+          "fill": 0,
+          "id": 16,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": false,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 3,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(kube_router_controller_iptables_sync_time{instance=~\"[[selnode]]\"}) by (instance)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Iptables sync",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "ns",
+              "label": "Time",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
               "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_PROMETHEUS}",
+          "fill": 0,
+          "id": 18,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": false,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 3,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(kube_router_controller_ipvs_services_sync_time{instance=~\"[[selnode]]\"}) by (instance)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Ipvs service sync",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "ns",
+              "label": "Time",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_PROMETHEUS}",
+          "fill": 0,
+          "id": 21,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": false,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 3,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(kube_router_controller_bgp_internal_peers_sync_time{instance=~\"[[selnode]]\"}) by (instance)",
+              "format": "time_series",
+              "intervalFactor": 5,
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "BGP peer sync",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "ns",
+              "label": "Time",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_PROMETHEUS}",
+          "fill": 0,
+          "id": 23,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": false,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 3,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(kube_router_controller_ipvs_metrics_export_time{instance=~\"[[selnode]]\"}) by (instance)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Metrics export time",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "ns",
+              "label": "Time",
               "logBase": 1,
               "max": null,
               "min": null,
@@ -420,7 +732,248 @@
     },
     {
       "collapse": false,
-      "height": 281,
+      "height": 247,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_PROMETHEUS}",
+          "fill": 0,
+          "id": 15,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": false,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 4,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(kube_router_controller_ipvs_services{instance=~\"[[selnode]]\"}) by (instance)",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Ipvs services",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": "Per node",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
+            }
+          ]
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_PROMETHEUS}",
+          "fill": 0,
+          "id": 20,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": false,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 4,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "\nsort_desc(sum(kube_router_controller_bgp_peers{instance=~\"[[selnode]]\"}) by (instance))",
+              "format": "time_series",
+              "instant": false,
+              "intervalFactor": 5,
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "BGP peers 5m avg",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": "Peers",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_PROMETHEUS}",
+          "fill": 0,
+          "id": 22,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "rightSide": true,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "span": 4,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(rate(kube_router_controller_bgp_advertisements_received{instance=~\"[[selnode]]\"}[1m])) by (instance)",
+              "format": "time_series",
+              "interval": "",
+              "intervalFactor": 2,
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "BGP announcements received 5m avg",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": "Rate",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ]
+        }
+      ],
+      "repeat": null,
+      "repeatIteration": null,
+      "repeatRowId": null,
+      "showTitle": false,
+      "title": "Dashboard Row",
+      "titleSize": "h6"
+    },
+    {
+      "collapse": false,
+      "height": 177,
       "panels": [
         {
           "aliasColors": {},
@@ -460,7 +1013,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sort_desc(sum(kube_router_service_bytes_in > 0) by (namespace, service_name, protocol, port))",
+              "expr": "sort_desc(sum(kube_router_service_bytes_in{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"} > 0) by (namespace, service_name, protocol, port))",
               "format": "time_series",
               "instant": true,
               "intervalFactor": 2,
@@ -471,7 +1024,7 @@
           "thresholds": [],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Total Bytes In",
+          "title": "Bytes In",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -489,8 +1042,9 @@
           },
           "yaxes": [
             {
+              "decimals": null,
               "format": "decbytes",
-              "label": null,
+              "label": "Total",
               "logBase": 10,
               "max": null,
               "min": null,
@@ -544,7 +1098,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sort_desc(sum(kube_router_service_bytes_out > 0) by (namespace, service_name, protocol, port))",
+              "expr": "sort_desc(sum(kube_router_service_bytes_out{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"} > 0) by (namespace, service_name, protocol, port))",
               "format": "time_series",
               "instant": true,
               "intervalFactor": 2,
@@ -553,9 +1107,9 @@
             }
           ],
           "thresholds": [],
-          "timeFrom": "1m",
+          "timeFrom": null,
           "timeShift": null,
-          "title": "Total Bytes Out",
+          "title": "Bytes Out",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -574,7 +1128,7 @@
           "yaxes": [
             {
               "format": "bytes",
-              "label": null,
+              "label": "Total",
               "logBase": 10,
               "max": null,
               "min": null,
@@ -600,7 +1154,7 @@
     },
     {
       "collapse": false,
-      "height": 257,
+      "height": 154,
       "panels": [
         {
           "aliasColors": {},
@@ -640,7 +1194,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sort_desc(sum(kube_router_service_packets_in > 0) by (namespace, service_name, protocol, port))",
+              "expr": "sort_desc(sum(kube_router_service_packets_in{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"} > 0) by (namespace, service_name, protocol, port))",
               "format": "time_series",
               "instant": true,
               "intervalFactor": 2,
@@ -651,7 +1205,7 @@
           "thresholds": [],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Total Packets In",
+          "title": "Packets In",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -670,7 +1224,7 @@
           "yaxes": [
             {
               "format": "short",
-              "label": null,
+              "label": "Total",
               "logBase": 10,
               "max": null,
               "min": null,
@@ -724,7 +1278,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sort_desc(sum(kube_router_service_packets_out > 0) by (namespace, service_name, protocol, port))",
+              "expr": "sort_desc(sum(kube_router_service_packets_out{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"} > 0) by (namespace, service_name, protocol, port))",
               "format": "time_series",
               "instant": true,
               "intervalFactor": 2,
@@ -735,7 +1289,7 @@
           "thresholds": [],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Total Packets Out",
+          "title": "Packets Out",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -754,7 +1308,7 @@
           "yaxes": [
             {
               "format": "short",
-              "label": null,
+              "label": "Total",
               "logBase": 10,
               "max": null,
               "min": null,
@@ -821,7 +1375,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sort_desc(sum(kube_router_service_total_connections > 0) by (namespace, service_name, protocol, port))",
+              "expr": "sort_desc(sum(kube_router_service_total_connections{namespace=~\"[[selnamespace]]\",instance=~\"[[selnode]]\"} > 0) by (namespace, service_name, protocol, port))",
               "format": "time_series",
               "instant": true,
               "intervalFactor": 3,
@@ -832,7 +1386,7 @@
           "thresholds": [],
           "timeFrom": null,
           "timeShift": null,
-          "title": "Total Connections",
+          "title": "Connections",
           "tooltip": {
             "shared": false,
             "sort": 0,
@@ -851,7 +1405,7 @@
           "yaxes": [
             {
               "format": "short",
-              "label": null,
+              "label": "Total",
               "logBase": 10,
               "max": null,
               "min": null,
@@ -883,10 +1437,51 @@
     "network"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "${DS_PROMETHEUS}",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Namespace",
+        "multi": true,
+        "name": "selnamespace",
+        "options": [],
+        "query": "label_values(kube_router_service_total_connections, namespace)",
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "${DS_PROMETHEUS}",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Instance",
+        "multi": true,
+        "name": "selnode",
+        "options": [],
+        "query": "label_values(kube_router_service_total_connections, instance)",
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {
@@ -916,5 +1511,5 @@
   },
   "timezone": "browser",
   "title": "kube-router",
-  "version": 27
+  "version": 48
 }

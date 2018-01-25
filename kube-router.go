@@ -24,6 +24,7 @@ func main() {
 	flag.CommandLine.Parse([]string{})
 
 	flag.Set("logtostderr", "true")
+	flag.Set("v", config.VLevel)
 
 	if config.HelpRequested {
 		pflag.Usage()
