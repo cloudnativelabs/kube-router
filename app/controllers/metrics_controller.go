@@ -137,17 +137,12 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 		}
 	}()
 
-	for {
-		select {
-		case <-stopCh:
-			glog.Infof("Shutting down metrics controller")
-			if err := srv.Shutdown(context.Background()); err != nil {
-				glog.Errorf("could not shutdown: %v", err)
-			}
-			return nil
-		default:
-		}
+	<-stopCh
+	glog.Infof("Shutting down metrics controller")
+	if err := srv.Shutdown(context.Background()); err != nil {
+		glog.Errorf("could not shutdown: %v", err)
 	}
+	return nil
 }
 
 // NewMetricsController returns new MetricController object
