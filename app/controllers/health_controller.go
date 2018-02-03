@@ -22,6 +22,7 @@ type HealthController struct {
 }
 
 func sendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
+	glog.Infof("Send Heartbeat from %s", controller)
 	heartbeat := ControllerHeartbeat{
 		Component:     controller,
 		Lastheartbeat: time.Now(),
@@ -31,7 +32,7 @@ func sendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 
 func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("These aren't the droids you're looking for"))
+	w.Write([]byte("These aren't the droids you're looking for\n"))
 }
 
 func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
@@ -60,8 +61,9 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 			}
 			return nil
 		case heartbeat := <-healthChan:
-			glog.V(3).Infof("Received heartbeat from %s", heartbeat.Component)
+			glog.Infof("Received heartbeat from %s", heartbeat.Component)
 		case <-t.C:
+			glog.Infof("Health controller tick")
 		}
 	}
 
