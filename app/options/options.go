@@ -119,6 +119,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	// fs.StringVar(&s.FullMeshPassword, "nodes-full-mesh-password", s.FullMeshPassword,
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
-	fs.Uint16Var(&s.MetricsPort, "health-port", 0, "Health check port, 0 = Disabled")
+	fs.Uint16Var(&s.HealthPort, "health-port", 0, "Health check port, 0 = Disabled")
 
 }
