@@ -99,7 +99,7 @@ type endpointsInfo struct {
 type endpointsInfoMap map[string][]endpointsInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
-func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (nsc *NetworkServicesController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
@@ -134,6 +134,8 @@ func (nsc *NetworkServicesController) Run(stopCh <-chan struct{}, wg *sync.WaitG
 		} else {
 			continue
 		}
+
+		sendHeartBeat(healthChan, "NSC")
 
 		select {
 		case <-stopCh:
