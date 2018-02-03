@@ -125,14 +125,14 @@ func (kr *KubeRouter) Run() error {
 		os.Exit(0)
 	}
 
-	//if (kr.Config.HealthPort > 0) && (kr.Config.HealthPort <= 65535) {
-	hc, err := controllers.NewHealthController(kr.Config)
-	if err != nil {
-		return errors.New("Failed to create health controller: " + err.Error())
+	if (kr.Config.HealthPort > 0) && (kr.Config.HealthPort <= 65535) {
+		hc, err := controllers.NewHealthController(kr.Config)
+		if err != nil {
+			return errors.New("Failed to create health controller: " + err.Error())
+		}
+		wg.Add(1)
+		go hc.Run(healthChan, stopCh, &wg)
 	}
-	wg.Add(1)
-	go hc.Run(healthChan, stopCh, &wg)
-	//}
 
 	if (kr.Config.MetricsPort > 0) && (kr.Config.MetricsPort <= 65535) {
 		kr.Config.MetricsEnabled = true
@@ -157,7 +157,7 @@ func (kr *KubeRouter) Run() error {
 		}
 
 		wg.Add(1)
-		go npc.Run(stopCh, &wg)
+		go npc.Run(healthChan, stopCh, &wg)
 	}
 
 	if kr.Config.RunRouter {
@@ -167,7 +167,7 @@ func (kr *KubeRouter) Run() error {
 		}
 
 		wg.Add(1)
-		go nrc.Run(stopCh, &wg)
+		go nrc.Run(healthChan, stopCh, &wg)
 	}
 
 	if kr.Config.RunServiceProxy {

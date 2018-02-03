@@ -100,7 +100,7 @@ type protocolAndPort struct {
 }
 
 // Run runs forver till we receive notification on stopCh
-func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (npc *NetworkPolicyController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
@@ -125,6 +125,8 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 		} else {
 			continue
 		}
+
+		sendHeartBeat(healthChan, "NPC")
 
 		select {
 		case <-stopCh:

@@ -118,7 +118,7 @@ type MetricsController struct {
 }
 
 // Run prometheus metrics controller
-func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (mc *MetricsController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 	defer wg.Done()
 	glog.Info("Starting metrics controller")
 
@@ -136,6 +136,8 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			glog.Errorf("Metrics controller error: %s", err)
 		}
 	}()
+
+	sendHeartBeat(healthChan, "MC")
 
 	<-stopCh
 	glog.Infof("Shutting down metrics controller")
