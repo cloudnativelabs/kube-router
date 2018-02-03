@@ -149,10 +149,8 @@ func (mc *MetricsController) Run(healthChan chan<- *ControllerHeartbeat, stopCh 
 			return nil
 		case <-t.C:
 			glog.V(4).Info("Metrics controller tick")
+		}
 	}
-	
-
-
 }
 
 // NewMetricsController returns new MetricController object

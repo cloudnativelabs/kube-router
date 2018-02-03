@@ -84,7 +84,7 @@ func (hc *HealthController) CheckHealth() bool {
 }
 
 func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-	t := time.NewTicker(1.5 * time.Second)
+	t := time.NewTicker(1 * time.Second)
 	defer wg.Done()
 	glog.Info("Starting health controller")
 
