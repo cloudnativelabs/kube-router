@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/cloudnativelabs/kube-router/app/options"
 	"github.com/golang/glog"
@@ -119,6 +120,7 @@ type MetricsController struct {
 
 // Run prometheus metrics controller
 func (mc *MetricsController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+	t := time.NewTicker(3 * time.Second)
 	defer wg.Done()
 	glog.Info("Starting metrics controller")
 
@@ -136,15 +138,21 @@ func (mc *MetricsController) Run(healthChan chan<- *ControllerHeartbeat, stopCh 
 			glog.Errorf("Metrics controller error: %s", err)
 		}
 	}()
-
-	sendHeartBeat(healthChan, "MC")
-
-	<-stopCh
-	glog.Infof("Shutting down metrics controller")
-	if err := srv.Shutdown(context.Background()); err != nil {
-		glog.Errorf("could not shutdown: %v", err)
+	for {
+		sendHeartBeat(healthChan, "MC")
+		select {
+		case <-stopCh:
+			glog.Infof("Shutting down metrics controller")
+			if err := srv.Shutdown(context.Background()); err != nil {
+				glog.Errorf("could not shutdown: %v", err)
+			}
+			return nil
+		case <-t.C:
+			glog.V(4).Info("Metrics controller tick")
 	}
-	return nil
+	
+
+
 }
 
 // NewMetricsController returns new MetricController object
