@@ -121,12 +121,12 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *ControllerHeartbeat, 
 			err := npc.Sync()
 			if err != nil {
 				glog.Errorf("Error during periodic sync: " + err.Error())
+			} else {
+				sendHeartBeat(healthChan, "NPC")
 			}
 		} else {
 			continue
 		}
-
-		sendHeartBeat(healthChan, "NPC")
 
 		select {
 		case <-stopCh:

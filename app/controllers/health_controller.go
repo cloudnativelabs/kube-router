@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -42,15 +43,23 @@ func sendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 	if hc.Status.Healthy {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("These aren't the droids you're looking for\n"))
+		w.Write([]byte("OK\n"))
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("These are the droids you're looking for\n"))
+		statusText := fmt.Sprintf("Service controller last alive %s\n ago"+
+			"Routing controller last alive: %s\n ago"+
+			"Policy controller last alive: %s\n ago"+
+			"Metrics controller last alive: %s\n ago",
+			time.Since(hc.Status.NetworkServicesControllerAlive),
+			time.Since(hc.Status.NetworkRoutingControllerAlive),
+			time.Since(hc.Status.NetworkPolicyControllerAlive),
+			time.Since(hc.Status.MetricsControllerAlive))
+		w.Write([]byte(statusText))
 	}
 }
 
 func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
-	glog.Infof("Received heartbeat from %s", beat.Component)
+	glog.V(3).Infof("Received heartbeat from %s", beat.Component)
 	switch component := beat.Component; component {
 	case "NSC":
 		hc.Status.NetworkServicesControllerAlive = time.Now()
@@ -64,22 +73,35 @@ func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 }
 
 func (hc *HealthController) CheckHealth() bool {
-	glog.V(4).Info("Checking components")
 	health := true
-	if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+3*time.Second {
-		glog.Error("Network Policy Controller heartbeat timeout")
-		health = false
+	if hc.Config.RunFirewall {
+		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+3*time.Second {
+			glog.Error("Network Policy Controller heartbeat missed")
+			health = false
+		}
 	}
 
-	if time.Since(hc.Status.NetworkRoutingControllerAlive) > hc.Config.RoutesSyncPeriod+3*time.Second {
-		glog.Error("Network Routing Controller heartbeat timeout")
-		health = false
+	if hc.Config.RunRouter {
+		if time.Since(hc.Status.NetworkRoutingControllerAlive) > hc.Config.RoutesSyncPeriod+3*time.Second {
+			glog.Error("Network Routing Controller heartbeat missed")
+			health = false
+		}
 	}
 
-	if time.Since(hc.Status.NetworkServicesControllerAlive) > hc.Config.IpvsSyncPeriod+3*time.Second {
-		glog.Error("NetworkService Controller heartbeat timeout")
-		health = false
+	if hc.Config.RunServiceProxy {
+		if time.Since(hc.Status.NetworkServicesControllerAlive) > hc.Config.IpvsSyncPeriod+3*time.Second {
+			glog.Error("NetworkService Controller heartbeat missed")
+			health = false
+		}
 	}
+
+	if hc.Config.MetricsEnabled {
+		if time.Since(hc.Status.MetricsControllerAlive) > 3*time.Second {
+			glog.Error("Metrics Controller heartbeat missed")
+			health = false
+		}
+	}
+
 	return health
 }
 
@@ -90,7 +112,6 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(hc.HealthPort)), Handler: http.DefaultServeMux}
 
-	// add prometheus handler on metrics path
 	http.HandleFunc("/healthz", hc.Handler)
 
 	go func() {

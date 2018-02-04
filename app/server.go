@@ -111,7 +111,9 @@ func (kr *KubeRouter) stopApiWatchers() {
 func (kr *KubeRouter) Run() error {
 	var err error
 	var wg sync.WaitGroup
+
 	healthChan := make(chan *controllers.ControllerHeartbeat, 10)
+	defer close(healthChan)
 
 	stopCh := make(chan struct{})
 

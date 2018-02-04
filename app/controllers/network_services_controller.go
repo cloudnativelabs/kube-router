@@ -130,12 +130,15 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *ControllerHeartbeat
 
 		if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
 			glog.V(1).Info("Performing periodic sync of ipvs services")
-			nsc.sync()
+			err := nsc.sync()
+			if err != nil {
+				glog.Errorf("Error during periodic ipvs sync: " + err.Error())
+			} else {
+				sendHeartBeat(healthChan, "NSC")
+			}
 		} else {
 			continue
 		}
-
-		sendHeartBeat(healthChan, "NSC")
 
 		select {
 		case <-stopCh:
@@ -146,20 +149,28 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *ControllerHeartbeat
 	}
 }
 
-func (nsc *NetworkServicesController) sync() {
+func (nsc *NetworkServicesController) sync() error {
+	var err error
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
 	nsc.serviceMap = buildServicesInfo()
 	nsc.endpointsMap = buildEndpointsInfo()
-	err := nsc.syncHairpinIptablesRules()
+	err = nsc.syncHairpinIptablesRules()
 	if err != nil {
 		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
 	}
-	nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+
+	err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+	if err != nil {
+		glog.Errorf("Error syncing IPVS services: %s", err.Error())
+		return err
+	}
+
 	if nsc.MetricsEnabled {
 		nsc.publishMetrics(nsc.serviceMap)
 	}
+	return nil
 }
 
 func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
