@@ -45,6 +45,12 @@ spec:
         - --run-router=true
         - --run-firewall=true
         - --run-service-proxy=false
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 20244
+          initialDelaySeconds: 10
+          periodSeconds: 3
         env:
         - name: NODE_NAME
           valueFrom:
