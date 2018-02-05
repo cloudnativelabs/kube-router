@@ -21,4 +21,4 @@ kube-router is started with
     --run-firewall=true
     --run-service-proxy=true
 
-If the route controller or service controller exits it's main loop and does not publish a heartbeat the /healthz endpoint will return a error 500 signaling that kube-router is not healthy
+If the route controller, policy controller or service controller exits it's main loop and does not publish a heartbeat the /healthz endpoint will return a error 500 signaling that kube-router is not healthy.
