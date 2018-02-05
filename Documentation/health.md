@@ -1,9 +1,10 @@
 # Health checking kube-router
 
-kube-router currently has basic health checking in form of heartbeats sent from each controller to the health manager each time the main loop completes successfully.
+kube-router currently has basic health checking in form of heartbeats sent from each controller to the healthcontroller each time the main loop completes successfully.
 
-The healthz port is by default 20244 but can be changed with the startup option
-    
+The health port is by default 20244 but can be changed with the startup option.
+The health path is `/healthz`
+
     --health-port=<port number>
 
 If port is set to 0 (zero) no HTTP endpoint will be made availible but the health controller will still run and print out any missed heartbeats to STDERR of kube-router
