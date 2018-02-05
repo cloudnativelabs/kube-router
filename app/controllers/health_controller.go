@@ -117,6 +117,7 @@ func (hc *HealthController) CheckHealth() bool {
 
 //Run starts the HealthController
 func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+	Started := time.Now()
 	t := time.NewTicker(500 * time.Millisecond)
 	defer wg.Done()
 	glog.Info("Starting health controller")
@@ -138,9 +139,10 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 		hc.HTTPenabled = true
 	}
 	for {
-
-		hc.Status.Healthy = hc.CheckHealth()
-
+		//Give the controllers a few seconds to start before checking health
+		if time.Since(Started) > 5*time.Second {
+			hc.Status.Healthy = hc.CheckHealth()
+		}
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down health controller")
@@ -164,6 +166,9 @@ func NewHealthController(config *options.KubeRouterConfig) (*HealthController, e
 	hc := HealthController{
 		Config:     config,
 		HealthPort: config.HealthPort,
+		Status: HealthStats{
+			Healthy: false,
+		},
 	}
 	return &hc, nil
 }
