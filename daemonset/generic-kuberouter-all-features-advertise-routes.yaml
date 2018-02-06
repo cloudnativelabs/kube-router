@@ -69,6 +69,12 @@ spec:
         - "--peer-router-asns=64512"
         - "--cluster-asn=64512"
         - "--advertise-cluster-ip=true"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 20244
+          initialDelaySeconds: 10
+          periodSeconds: 3
         env:
         - name: NODE_NAME
           valueFrom:

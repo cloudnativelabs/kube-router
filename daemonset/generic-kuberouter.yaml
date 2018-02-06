@@ -45,17 +45,17 @@ spec:
         - "--run-router=true"
         - "--run-firewall=true"
         - "--run-service-proxy=false"
-        env:
-        - name: NODE_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: spec.nodeName
         livenessProbe:
           httpGet:
             path: /healthz
             port: 20244
           initialDelaySeconds: 10
           periodSeconds: 3
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         resources:
           requests:
             cpu: 250m
