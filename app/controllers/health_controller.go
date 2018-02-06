@@ -27,6 +27,7 @@ type HealthController struct {
 
 //HealthStats is holds the latest heartbeats
 type HealthStats struct {
+	sync.Mutex
 	Healthy                        bool
 	MetricsControllerAlive         time.Time
 	NetworkPolicyControllerAlive   time.Time
@@ -68,6 +69,9 @@ func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 //HandleHeartbeat handles recevied heartbeats onthe health channel
 func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 	glog.V(3).Infof("Received heartbeat from %s", beat.Component)
+
+	hc.Status.Lock()
+	defer hc.Status.Unlock()
 
 	switch component := beat.Component; component {
 	case "NSC":

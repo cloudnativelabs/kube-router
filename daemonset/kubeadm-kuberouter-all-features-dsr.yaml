@@ -27,6 +27,10 @@ metadata:
   name: kube-router
   namespace: kube-system
 spec:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 2
   template:
     metadata:
       labels:
