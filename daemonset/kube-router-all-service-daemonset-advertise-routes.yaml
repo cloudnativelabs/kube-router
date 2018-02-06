@@ -45,12 +45,6 @@ spec:
           - "--cluster-asn=64512"
           - "--peer-router-ips=192.168.1.99"
           - "--peer-router-asns=64513"
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 20244
-          initialDelaySeconds: 10
-          periodSeconds: 3
         securityContext:
           privileged: true
         imagePullPolicy: Always
@@ -59,6 +53,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 20244
+          initialDelaySeconds: 10
+          periodSeconds: 3
         volumeMounts:
         - name: lib-modules
           mountPath: /lib/modules

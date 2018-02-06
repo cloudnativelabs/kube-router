@@ -37,12 +37,6 @@ spec:
       - name: kube-router
         image: cloudnativelabs/kube-router
         args: ["--run-router=false", "--run-firewall=false", "--run-service-proxy=true", "--kubeconfig=/var/lib/kube-router/kubeconfig"]
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 20244
-          initialDelaySeconds: 10
-          periodSeconds: 3
         securityContext:
           privileged: true
         imagePullPolicy: Always
@@ -51,6 +45,12 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 20244
+          initialDelaySeconds: 10
+          periodSeconds: 3
         volumeMounts:
         - name: lib-modules
           mountPath: /lib/modules
