@@ -129,8 +129,9 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(hc.HealthPort)), Handler: http.DefaultServeMux}
 
 	http.HandleFunc("/healthz", hc.Handler)
+
 	if (hc.Config.HealthPort > 0) && (hc.Config.HealthPort <= 65535) {
-		hc.HTTPenabled = false
+		hc.HTTPenabled = true
 		go func() {
 			if err := srv.ListenAndServe(); err != nil {
 				// cannot panic, because this probably is an intentional close
@@ -140,8 +141,9 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 	} else if hc.Config.MetricsPort > 65535 {
 		glog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", hc.Config.MetricsPort)
 	} else {
-		hc.HTTPenabled = true
+		hc.HTTPenabled = false
 	}
+
 	for {
 		//Give the controllers a few seconds to start before checking health
 		if time.Since(Started) > 5*time.Second {
