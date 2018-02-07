@@ -68,7 +68,7 @@ kubectl -n kube-system delete pods -l k8s-app=kube-router
 ```
 
 ### With Rolling Updates
-After you update a DaemonSet template, old DaemonSet pods will be killed, and new DaemonSet pods will be created automatically, in a controlled fashion
+After updating a DaemonSet template, old DaemonSet pods will be killed, and new DaemonSet pods will be created automatically, in a controlled fashion
 
 If your global BGP peers supports gracefull restarts, [rolling updates](https://kubernetes.io/docs/tasks/manage-daemon/update-daemon-set/) can be used to upgrade your kube-router daemonset without network downtime
 To enable gracefull BGP restart kube-router must be started with `--bgp-graceful-restart`
