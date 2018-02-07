@@ -109,9 +109,11 @@ func (kr *KubeRouter) stopApiWatchers() {
 
 // Run starts the controllers and waits forever till we get SIGINT or SIGTERM
 func (kr *KubeRouter) Run() error {
-
 	var err error
 	var wg sync.WaitGroup
+
+	healthChan := make(chan *controllers.ControllerHeartbeat, 10)
+	defer close(healthChan)
 
 	stopCh := make(chan struct{})
 
@@ -125,6 +127,13 @@ func (kr *KubeRouter) Run() error {
 		os.Exit(0)
 	}
 
+	hc, err := controllers.NewHealthController(kr.Config)
+	if err != nil {
+		return errors.New("Failed to create health controller: " + err.Error())
+	}
+	wg.Add(1)
+	go hc.Run(healthChan, stopCh, &wg)
+
 	if (kr.Config.MetricsPort > 0) && (kr.Config.MetricsPort <= 65535) {
 		kr.Config.MetricsEnabled = true
 		mc, err := controllers.NewMetricsController(kr.Client, kr.Config)
@@ -132,7 +141,8 @@ func (kr *KubeRouter) Run() error {
 			return errors.New("Failed to create metrics controller: " + err.Error())
 		}
 		wg.Add(1)
-		go mc.Run(stopCh, &wg)
+		go mc.Run(healthChan, stopCh, &wg)
+
 	} else if kr.Config.MetricsPort > 65535 {
 		glog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", kr.Config.MetricsPort)
 		kr.Config.MetricsEnabled = false
@@ -147,7 +157,7 @@ func (kr *KubeRouter) Run() error {
 		}
 
 		wg.Add(1)
-		go npc.Run(stopCh, &wg)
+		go npc.Run(healthChan, stopCh, &wg)
 	}
 
 	if kr.Config.RunRouter {
@@ -157,7 +167,7 @@ func (kr *KubeRouter) Run() error {
 		}
 
 		wg.Add(1)
-		go nrc.Run(stopCh, &wg)
+		go nrc.Run(healthChan, stopCh, &wg)
 	}
 
 	if kr.Config.RunServiceProxy {
@@ -167,7 +177,7 @@ func (kr *KubeRouter) Run() error {
 		}
 
 		wg.Add(1)
-		go nsc.Run(stopCh, &wg)
+		go nsc.Run(healthChan, stopCh, &wg)
 	}
 
 	// Handle SIGINT and SIGTERM

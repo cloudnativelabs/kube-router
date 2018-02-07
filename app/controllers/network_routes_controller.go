@@ -82,7 +82,7 @@ const (
 )
 
 // Run runs forever until we are notified on stop channel
-func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	cidr, err := utils.GetPodCidrFromCniSpec("/etc/cni/net.d/10-kuberouter.conf")
 	if err != nil {
 		glog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err.Error())
@@ -253,6 +253,8 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 		if nrc.bgpEnableInternal {
 			nrc.syncInternalPeers()
 		}
+
+		sendHeartBeat(healthChan, "NRC")
 
 		select {
 		case <-stopCh:
