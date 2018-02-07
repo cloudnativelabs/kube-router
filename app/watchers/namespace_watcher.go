@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	listers "k8s.io/client-go/listers/core/v1"
-	cache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/cache"
 )
 
 type NamespaceUpdate struct {
@@ -97,7 +97,7 @@ func StartNamespaceWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Du
 
 	nsw.clientset = clientset
 	nsw.broadcaster = utils.NewBroadcaster()
-	lw := cache.NewListWatchFromClient(clientset.Core().RESTClient(), "namespaces", metav1.NamespaceAll, fields.Everything())
+	lw := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "namespaces", metav1.NamespaceAll, fields.Everything())
 	nsw.namespaceLister, nsw.namespaceController = cache.NewIndexerInformer(
 		lw,
 		&api.Namespace{}, resyncPeriod, eventHandler,

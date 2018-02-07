@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
-	cache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/cache"
 )
 
 type Operation int
@@ -103,7 +103,7 @@ func StartEndpointsWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Du
 
 	ew.clientset = clientset
 	ew.broadcaster = utils.NewBroadcaster()
-	lw := cache.NewListWatchFromClient(clientset.Core().RESTClient(), "endpoints", metav1.NamespaceAll, fields.Everything())
+	lw := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "endpoints", metav1.NamespaceAll, fields.Everything())
 	ew.endpointsLister, ew.endpointsController = cache.NewIndexerInformer(
 		lw,
 		&api.Endpoints{}, resyncPeriod, eventHandler,

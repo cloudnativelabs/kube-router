@@ -19,7 +19,7 @@ var (
 	serviceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_total_connections",
-		Help:      "Total incoming conntections made",
+		Help:      "Total incoming connections made",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	servicePacketsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -29,7 +29,7 @@ var (
 	servicePacketsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_packets_out",
-		Help:      "Total outoging packets",
+		Help:      "Total outgoing packets",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	serviceBytesIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -49,7 +49,7 @@ var (
 	servicePpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_pps_out",
-		Help:      "Outoging packets per second",
+		Help:      "Outgoing packets per second",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	serviceCPS = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -64,7 +64,7 @@ var (
 	serviceBpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bps_out",
-		Help:      "Outoging bytes per second",
+		Help:      "Outgoing bytes per second",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
 	controllerIpvsServices = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
