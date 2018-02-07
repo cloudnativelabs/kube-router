@@ -336,7 +336,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	for k, svc := range serviceInfoMap {
 		var protocol uint16
 
-		switch aProtocol := svc.protocol; aProtocol {
+		switch svc.protocol {
 		case "tcp":
 			protocol = syscall.IPPROTO_TCP
 		case "udp":
@@ -663,12 +663,12 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 	glog.V(1).Infof("Current network namespace before netns.Set: " + activeNetworkNamespaceHandle.String())
 	activeNetworkNamespaceHandle.Close()
 
-	client, err := client.NewEnvClient()
+	dockerClient, err := client.NewEnvClient()
 	if err != nil {
 		return errors.New("Failed to get docker client due to " + err.Error())
 	}
 
-	containerSpec, err := client.ContainerInspect(context.Background(), containerId)
+	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerId)
 	if err != nil {
 		return errors.New("Failed to get docker container spec due to " + err.Error())
 	}
@@ -842,7 +842,7 @@ func buildServicesInfo() serviceInfoMap {
 				}
 			}
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
-			svcInfo.sessionAffinity = (svc.Spec.SessionAffinity == "ClientIP")
+			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == "ClientIP"
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations["kube-router.io/service.hairpin"]
 			_, svcInfo.local = svc.ObjectMeta.Annotations["kube-router.io/service.local"]
 
@@ -1487,12 +1487,12 @@ func setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap) error {
 	return nil
 }
 
-// unique identfier for a load-balanced service (namespace + name + portname)
+// unique identifier for a load-balanced service (namespace + name + portname)
 func generateServiceId(namespace, svcName, port string) string {
 	return namespace + "-" + svcName + "-" + port
 }
 
-// unique identfier for a load-balanced service (namespace + name + portname)
+// unique identifier for a load-balanced service (namespace + name + portname)
 func generateIpPortId(ip, protocol, port string) string {
 	return ip + "-" + protocol + "-" + port
 }
@@ -1532,7 +1532,7 @@ func getKubeDummyInterface() (netlink.Link, error) {
 	dummyVipInterface, err := netlink.LinkByName(KUBE_DUMMY_IF)
 	if err != nil && err.Error() == IFACE_NOT_FOUND {
 		glog.V(1).Infof("Could not find dummy interface: " + KUBE_DUMMY_IF + " to assign cluster ip's, creating one")
-		err = netlink.LinkAdd(&netlink.Dummy{netlink.LinkAttrs{Name: KUBE_DUMMY_IF}})
+		err = netlink.LinkAdd(&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: KUBE_DUMMY_IF}})
 		if err != nil {
 			return nil, errors.New("Failed to add dummy interface:  " + err.Error())
 		}

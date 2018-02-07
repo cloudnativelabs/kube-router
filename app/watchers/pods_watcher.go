@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	listers "k8s.io/client-go/listers/core/v1"
-	cache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/cache"
 )
 
 type PodUpdate struct {
@@ -102,7 +102,7 @@ func StartPodWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Duration
 
 	pw.clientset = clientset
 	pw.broadcaster = utils.NewBroadcaster()
-	lw := cache.NewListWatchFromClient(clientset.Core().RESTClient(), "pods", metav1.NamespaceAll, fields.Everything())
+	lw := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "pods", metav1.NamespaceAll, fields.Everything())
 	pw.podLister, pw.podController = cache.NewIndexerInformer(
 		lw,
 		&api.Pod{}, resyncPeriod, eventHandler,

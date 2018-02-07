@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
-	cache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/cache"
 )
 
 type NodeUpdate struct {
@@ -85,7 +85,7 @@ func StartNodeWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Duratio
 
 	nw.clientset = clientset
 	nw.broadcaster = utils.NewBroadcaster()
-	lw := cache.NewListWatchFromClient(clientset.Core().RESTClient(), "nodes", metav1.NamespaceAll, fields.Everything())
+	lw := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "nodes", metav1.NamespaceAll, fields.Everything())
 	nw.nodeLister, nw.nodeController = cache.NewIndexerInformer(
 		lw,
 		&api.Node{}, resyncPeriod, eventHandler,

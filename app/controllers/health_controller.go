@@ -11,16 +11,16 @@ import (
 	"golang.org/x/net/context"
 )
 
-//ControllerHeartbeat is the structure to hold the heartbeats sent by controlers
+//ControllerHeartbeat is the structure to hold the heartbeats sent by controllers
 type ControllerHeartbeat struct {
 	Component     string
-	Lastheartbeat time.Time
+	LastHeartBeat time.Time
 }
 
 //HealthController reports the health of the controller loops as a http endpoint
 type HealthController struct {
 	HealthPort  uint16
-	HTTPenabled bool
+	HTTPEnabled bool
 	Status      HealthStats
 	Config      *options.KubeRouterConfig
 }
@@ -39,7 +39,7 @@ type HealthStats struct {
 func sendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 	heartbeat := ControllerHeartbeat{
 		Component:     controller,
-		Lastheartbeat: time.Now(),
+		LastHeartBeat: time.Now(),
 	}
 	channel <- &heartbeat
 }
@@ -66,7 +66,7 @@ func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-//HandleHeartbeat handles recevied heartbeats onthe health channel
+//HandleHeartbeat handles received heartbeats on the health channel
 func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 	glog.V(3).Infof("Received heartbeat from %s", beat.Component)
 
@@ -131,7 +131,7 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 	http.HandleFunc("/healthz", hc.Handler)
 
 	if (hc.Config.HealthPort > 0) && (hc.Config.HealthPort <= 65535) {
-		hc.HTTPenabled = true
+		hc.HTTPEnabled = true
 		go func() {
 			if err := srv.ListenAndServe(); err != nil {
 				// cannot panic, because this probably is an intentional close
@@ -141,7 +141,7 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 	} else if hc.Config.MetricsPort > 65535 {
 		glog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", hc.Config.MetricsPort)
 	} else {
-		hc.HTTPenabled = false
+		hc.HTTPEnabled = false
 	}
 
 	for {
@@ -152,7 +152,7 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down health controller")
-			if hc.HTTPenabled {
+			if hc.HTTPEnabled {
 				if err := srv.Shutdown(context.Background()); err != nil {
 					glog.Errorf("could not shutdown: %v", err)
 				}
@@ -167,7 +167,7 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 
 }
 
-//NewHealthController creates a new healh controller and returns a reference to it
+//NewHealthController creates a new health controller and returns a reference to it
 func NewHealthController(config *options.KubeRouterConfig) (*HealthController, error) {
 	hc := HealthController{
 		Config:     config,

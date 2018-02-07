@@ -871,7 +871,7 @@ func (nrc *NetworkRoutingController) Cleanup() {
 }
 
 func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
-	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
+	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
 		return
@@ -882,8 +882,8 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 			return
 		}
 		providerID := strings.Replace(node.Spec.ProviderID, "///", "//", 1)
-		url, err := url.Parse(providerID)
-		instanceID := url.Path
+		URL, err := url.Parse(providerID)
+		instanceID := URL.Path
 		instanceID = strings.Trim(instanceID, "/")
 
 		sess, _ := session.NewSession(aws.NewConfig().WithMaxRetries(5))
@@ -913,7 +913,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 
 func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	// Get the current list of the nodes from API server
-	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
+	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		return errors.New("Failed to list nodes from API server: " + err.Error())
 	}
@@ -979,7 +979,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	}()
 
 	// get the current list of the nodes from API server
-	nodes, err := nrc.clientset.Core().Nodes().List(metav1.ListOptions{})
+	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
 		return
@@ -1323,7 +1323,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 
 		// Get Global Peer Router Password configs
-		peerPasswords := []string{}
+		var peerPasswords []string
 		nodeBGPPasswordsAnnotation, ok := node.ObjectMeta.Annotations["kube-router.io/peer.passwords"]
 		if !ok {
 			glog.Infof("Could not find BGP peer password info in the node's annotations. Assuming no passwords.")

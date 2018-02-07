@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
-	cache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/cache"
 )
 
 type NetworkPolicyUpdate struct {
@@ -92,13 +92,13 @@ func StartNetworkPolicyWatcher(clientset *kubernetes.Clientset, resyncPeriod tim
 	npw.broadcaster = utils.NewBroadcaster()
 	var lw *cache.ListWatch
 	if v1NetworkPolicy {
-		lw = cache.NewListWatchFromClient(clientset.Networking().RESTClient(), "networkpolicies", metav1.NamespaceAll, fields.Everything())
+		lw = cache.NewListWatchFromClient(clientset.NetworkingV1().RESTClient(), "networkpolicies", metav1.NamespaceAll, fields.Everything())
 		npw.networkPolicyLister, npw.networkPolicyController = cache.NewIndexerInformer(
 			lw, &networking.NetworkPolicy{}, resyncPeriod, eventHandler,
 			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 		)
 	} else {
-		lw = cache.NewListWatchFromClient(clientset.Extensions().RESTClient(), "networkpolicies", metav1.NamespaceAll, fields.Everything())
+		lw = cache.NewListWatchFromClient(clientset.ExtensionsV1beta1().RESTClient(), "networkpolicies", metav1.NamespaceAll, fields.Everything())
 		npw.networkPolicyLister, npw.networkPolicyController = cache.NewIndexerInformer(
 			lw, &apiextensions.NetworkPolicy{}, resyncPeriod, eventHandler,
 			cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
