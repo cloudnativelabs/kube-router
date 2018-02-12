@@ -478,8 +478,10 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 			activeServiceEndpointMap[externalIpServiceId] = make([]string, 0)
 			for _, endpoint := range endpoints {
-				activeServiceEndpointMap[externalIpServiceId] =
-					append(activeServiceEndpointMap[externalIpServiceId], endpoint.ip)
+				isLocal, _ := isLocalEndpoint(endpoint.ip, nsc.podCidr)
+				if !svc.local || (svc.local && isLocal) {
+					activeServiceEndpointMap[externalIpServiceId] = append(activeServiceEndpointMap[externalIpServiceId], endpoint.ip)
+				}
 			}
 		}
 
@@ -492,13 +494,15 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				Weight:        1,
 			}
 
-			err := ipvsAddServer(ipvsClusterVipSvc, &dst, false, nsc.podCidr)
+			err := ipvsAddServer(ipvsClusterVipSvc, &dst, svc.local, nsc.podCidr)
 			if err != nil {
 				glog.Errorf(err.Error())
 			}
 
-			activeServiceEndpointMap[clusterServiceId] =
-				append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+			isLocal, err := isLocalEndpoint(endpoint.ip, nsc.podCidr)
+			if !svc.local || (svc.local && isLocal) {
+				activeServiceEndpointMap[clusterServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+			}
 
 			if svc.nodePort != 0 {
 				for i := 0; i < len(ipvsNodeportSvcs); i++ {
@@ -507,8 +511,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 						glog.Errorf(err.Error())
 					}
 
-					activeServiceEndpointMap[nodeServiceIds[i]] =
-						append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+					if !svc.local || (svc.local && isLocal) {
+						activeServiceEndpointMap[nodeServiceIds[i]] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+					}
 				}
 			}
 
@@ -622,6 +627,17 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	}
 	glog.V(1).Info("IPVS servers and services are synced to desired state")
 	return nil
+}
+
+func isLocalEndpoint(ip, podCidr string) (bool, error) {
+	_, ipnet, err := net.ParseCIDR(podCidr)
+	if err != nil {
+		return false, err
+	}
+	if ipnet.Contains(net.ParseIP(ip)) {
+		return true, nil
+	}
+	return false, nil
 }
 
 func getPodObjectForEndpoint(endpointIP string) (*api.Pod, error) {
@@ -845,6 +861,9 @@ func buildServicesInfo() serviceInfoMap {
 			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == "ClientIP"
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations["kube-router.io/service.hairpin"]
 			_, svcInfo.local = svc.ObjectMeta.Annotations["kube-router.io/service.local"]
+			if svc.Spec.ExternalTrafficPolicy == api.ServiceExternalTrafficPolicyTypeLocal {
+				svcInfo.local = true
+			}
 
 			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
 			serviceMap[svcId] = &svcInfo
