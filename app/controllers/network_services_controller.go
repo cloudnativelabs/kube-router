@@ -298,7 +298,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	var ipvsSvcs []*ipvs.Service
 
 	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to check output and don't Error when matching
-	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.$)")
+	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
 
 	start := time.Now()
 
