@@ -1,4 +1,4 @@
-FROM alpine:3.6
+FROM alpine:3.7
 
 COPY kube-router gobgp /usr/local/bin/
 COPY build/image-assets/bashrc /root/.bashrc
