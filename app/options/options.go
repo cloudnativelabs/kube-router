@@ -41,6 +41,7 @@ type KubeRouterConfig struct {
 	RunFirewall         bool
 	RunRouter           bool
 	RunServiceProxy     bool
+	Version             bool
 	VLevel              string
 	// FullMeshPassword    string
 }
@@ -57,6 +58,8 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVarP(&s.HelpRequested, "help", "h", false,
 		"Print usage information.")
+	fs.BoolVarP(&s.Version, "version", "V", false,
+		"Print version information.")
 	fs.BoolVar(&s.RunServiceProxy, "run-service-proxy", true,
 		"Enables Service Proxy -- sets up IPVS for Kubernetes Services.")
 	fs.BoolVar(&s.RunFirewall, "run-firewall", true,
@@ -120,5 +123,4 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
 	fs.Uint16Var(&s.HealthPort, "health-port", 20244, "Health check port, 0 = Disabled")
-
 }

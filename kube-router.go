@@ -31,6 +31,11 @@ func main() {
 		os.Exit(0)
 	}
 
+	if config.Version {
+		app.PrintVersion(false)
+		os.Exit(0)
+	}
+
 	if os.Geteuid() != 0 {
 		fmt.Fprintf(os.Stderr, "kube-router needs to be run with privileges to execute iptables, ipset and configure ipvs\n")
 		os.Exit(1)
