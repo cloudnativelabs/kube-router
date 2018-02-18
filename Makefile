@@ -1,5 +1,6 @@
 NAME?=kube-router
 DEV_SUFFIX?=-git
+BUILD_DATE?=$(shell date --iso-8601)
 LOCAL_PACKAGES?=app app/controllers app/options app/watchers utils
 IMG_NAMESPACE?=cloudnativelabs
 GIT_COMMIT=$(shell git describe --tags --dirty)
@@ -18,7 +19,7 @@ all: test kube-router container ## Default target. Runs tests, builds binaries a
 
 kube-router:
 	@echo Starting kube-router binary build.
-	CGO_ENABLED=0 go build -o kube-router kube-router.go
+	CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/app.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/app.buildDate=$(BUILD_DATE)' -o kube-router kube-router.go
 	@echo Finished kube-router binary build.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)

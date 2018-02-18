@@ -8,40 +8,41 @@ import (
 )
 
 type KubeRouterConfig struct {
-	HelpRequested       bool
-	Kubeconfig          string
-	Master              string
-	ConfigSyncPeriod    time.Duration
-	CleanupConfig       bool
-	IPTablesSyncPeriod  time.Duration
-	IpvsSyncPeriod      time.Duration
-	RoutesSyncPeriod    time.Duration
-	RunServiceProxy     bool
-	RunFirewall         bool
-	RunRouter           bool
-	MasqueradeAll       bool
-	ClusterCIDR         string
-	EnablePodEgress     bool
-	HostnameOverride    string
 	AdvertiseClusterIp  bool
 	AdvertiseExternalIp bool
-	PeerRouters         []net.IP
+	BGPGracefulRestart  bool
+	CleanupConfig       bool
+	ClusterAsn          uint
+	ClusterCIDR         string
+	ConfigSyncPeriod    time.Duration
+	EnableiBGP          bool
+	EnableOverlay       bool
+	EnablePodEgress     bool
+	EnablePprof         bool
+	FullMeshMode        bool
+	GlobalHairpinMode   bool
+	HealthPort          uint16
+	HelpRequested       bool
+	HostnameOverride    string
+	IPTablesSyncPeriod  time.Duration
+	IpvsSyncPeriod      time.Duration
+	Kubeconfig          string
+	MasqueradeAll       bool
+	Master              string
+	MetricsEnabled      bool
+	MetricsPath         string
+	MetricsPort         uint16
+	NodePortBindOnAllIp bool
 	PeerASNs            []uint
 	PeerMultihopTtl     uint8
-	ClusterAsn          uint
-	FullMeshMode        bool
-	BGPGracefulRestart  bool
-	EnableiBGP          bool
-	GlobalHairpinMode   bool
-	NodePortBindOnAllIp bool
-	EnableOverlay       bool
 	PeerPasswords       []string
-	EnablePprof         bool
-	MetricsEnabled      bool
-	MetricsPort         uint16
-	MetricsPath         string
+	PeerRouters         []net.IP
+	RoutesSyncPeriod    time.Duration
+	RunFirewall         bool
+	RunRouter           bool
+	RunServiceProxy     bool
+	Version             bool
 	VLevel              string
-	HealthPort          uint16
 	// FullMeshPassword    string
 }
 
@@ -57,6 +58,8 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVarP(&s.HelpRequested, "help", "h", false,
 		"Print usage information.")
+	fs.BoolVarP(&s.Version, "version", "V", false,
+		"Print version information.")
 	fs.BoolVar(&s.RunServiceProxy, "run-service-proxy", true,
 		"Enables Service Proxy -- sets up IPVS for Kubernetes Services.")
 	fs.BoolVar(&s.RunFirewall, "run-firewall", true,
@@ -120,5 +123,4 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
 	fs.Uint16Var(&s.HealthPort, "health-port", 20244, "Health check port, 0 = Disabled")
-
 }
