@@ -26,7 +26,7 @@ import (
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
 // policies. Two different types of iptables chains are used. Each pod running on the node which either
-// requires ingress or egress filtering gets a pod specific chian. Each network policy has a iptable chain, which
+// requires ingress or egress filtering gets a pod specific chains. Each network policy has a iptable chain, which
 // has rules expreessed through ipsets matching source and destination pod ip's. In the FORWARD chain of the
 // filter table a rule is added to jump the traffic originating (in case of egress network policy) from the pod
 // or destined (in case of ingress network policy) to the pod to the pod specific iptable chain. Each
