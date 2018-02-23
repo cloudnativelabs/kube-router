@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -904,10 +905,18 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 			},
 		)
 		if err != nil {
-			glog.Errorf("Failed to disable source destination check due to: " + err.Error())
+			awserr := err.(awserr.Error)
+			if awserr.Code() == "UnauthorizedOperation" {
+				glog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
+				return
+			}
+			glog.Errorf("Failed to disable source destination check due to: %v", err.Error())
 		} else {
 			glog.Infof("Disabled source destination check for the instance: " + instanceID)
 		}
+
+		// to prevent EC2 rejecting API call due to API throttling give a delay between the calls
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
