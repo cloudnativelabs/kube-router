@@ -9,7 +9,7 @@ performed.
 
 Here's a quick way to get going on a random node in your cluster:
 ```
-KR_POD="basename $(kubectl -n kube-system get pods -l k8s-app=kube-router --output name|head -n1)"
+KR_POD=$(basename $(kubectl -n kube-system get pods -l k8s-app=kube-router --output name|head -n1))
 kubectl -n kube-system exec -it ${KR_POD} bash
 ```
 
