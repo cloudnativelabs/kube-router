@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -63,6 +62,9 @@ type NetworkRoutingController struct {
 	peerMultihopTtl      uint8
 	MetricsEnabled       bool
 	bgpServerStarted     bool
+	bgpRRClient          bool
+	bgpRRServer          bool
+	bgpClusterId         uint32
 }
 
 var (
@@ -905,18 +907,10 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 			},
 		)
 		if err != nil {
-			awserr := err.(awserr.Error)
-			if awserr.Code() == "UnauthorizedOperation" {
-				glog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
-				return
-			}
-			glog.Errorf("Failed to disable source destination check due to: %v", err.Error())
+			glog.Errorf("Failed to disable source destination check due to: " + err.Error())
 		} else {
 			glog.Infof("Disabled source destination check for the instance: " + instanceID)
 		}
-
-		// to prevent EC2 rejecting API call due to API throttling give a delay between the calls
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -994,6 +988,27 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		return
 	}
 
+	// find annotations
+	for _, node := range nodes.Items {
+		nodeIP, _ := utils.GetNodeIP(&node)
+		if nodeIP.String() == nrc.nodeIP.String() {
+			if clusterId, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; ok {
+				if cid, err := strconv.Atoi(clusterId); err == nil {
+					glog.Infof("Found rr.server annotation, acting as a route reflector server")
+					nrc.bgpRRServer = true
+					nrc.bgpClusterId = uint32(cid)
+				}
+			}
+			if clusterId, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
+				if cid, err := strconv.Atoi(clusterId); err == nil {
+					glog.Infof("Found rr.client annotation, acting as a route reflector client")
+					nrc.bgpRRClient = true
+					nrc.bgpClusterId = uint32(cid)
+				}
+			}
+		}
+	}
+
 	controllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
@@ -1003,6 +1018,15 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		// skip self
 		if nodeIP.String() == nrc.nodeIP.String() {
 			continue
+		}
+
+		// we are rr-client peer only with rr-server
+		if nrc.bgpRRClient {
+			if _, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; !ok {
+				glog.Infof("Not peering with the Node %s because we are rr-client and node is not rr-server.",
+					nodeIP.String())
+				continue
+			}
 		}
 
 		// if node full mesh is not requested then just peer with nodes with same ASN
@@ -1061,6 +1085,25 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 						},
 					},
 				},
+			}
+		}
+
+		// we are rr-server peer with other rr-client with reflection enabled
+		if nrc.bgpRRServer {
+			if _, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
+				glog.Infof("Peer enabling reflection with the Node %s because we are rr-server and node is rr-client.",
+					nodeIP.String())
+				//add rr options with clusterId
+				n.RouteReflector = config.RouteReflector{
+					Config: config.RouteReflectorConfig{
+						RouteReflectorClient:    true,
+						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterId),
+					},
+					State: config.RouteReflectorState{
+						RouteReflectorClient:    true,
+						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterId),
+					},
+				}
 			}
 		}
 
@@ -1448,6 +1491,8 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
 	nrc.activeNodes = make(map[string]bool)
+	nrc.bgpRRClient = false
+	nrc.bgpRRServer = false
 	nrc.bgpServerStarted = false
 
 	nrc.ipSetHandler, err = utils.NewIPSet()
