@@ -618,6 +618,11 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 // advertises cluster IP's ONLY to the external BGP peers (and not to iBGP peers).
 func (nrc *NetworkRoutingController) addExportPolicies() error {
 
+	// we are rr server do not add export policies
+	if nrc.bgpRRServer {
+		return nil
+	}
+
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
 		return err
@@ -753,14 +758,9 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		}
 	}
 
-	// configure default BGP export policy to reject unless where are RR server
 	pd := make([]*config.PolicyDefinition, 0)
 	pd = append(pd, &definition)
-	if !nrc.bgpRRServer {
-		err = nrc.bgpServer.ReplacePolicyAssignment("", table.POLICY_DIRECTION_EXPORT, pd, table.ROUTE_TYPE_REJECT)
-	} else {
-		err = nrc.bgpServer.ReplacePolicyAssignment("", table.POLICY_DIRECTION_EXPORT, pd, table.ROUTE_TYPE_ACCEPT)
-	}
+	err = nrc.bgpServer.ReplacePolicyAssignment("", table.POLICY_DIRECTION_EXPORT, pd, table.ROUTE_TYPE_REJECT)
 	if err != nil {
 		return errors.New("Failed to replace policy assignment: " + err.Error())
 	}
@@ -990,27 +990,6 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	if err != nil {
 		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
 		return
-	}
-
-	// find annotations
-	for _, node := range nodes.Items {
-		nodeIP, _ := utils.GetNodeIP(&node)
-		if nodeIP.String() == nrc.nodeIP.String() {
-			if clusterId, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; ok {
-				if cid, err := strconv.Atoi(clusterId); err == nil {
-					glog.Infof("Found rr.server annotation, acting as a route reflector server")
-					nrc.bgpRRServer = true
-					nrc.bgpClusterId = uint32(cid)
-				}
-			}
-			if clusterId, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
-				if cid, err := strconv.Atoi(clusterId); err == nil {
-					glog.Infof("Found rr.client annotation, acting as a route reflector client")
-					nrc.bgpRRClient = true
-					nrc.bgpClusterId = uint32(cid)
-				}
-			}
-		}
 	}
 
 	controllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
@@ -1316,6 +1295,24 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 		nodeAsnNumber = uint32(asnNo)
 		nrc.nodeAsnNumber = nodeAsnNumber
+	}
+
+	if clusterid, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; ok {
+		glog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
+		clusterId, err := strconv.ParseUint(clusterid, 0, 32)
+		if err != nil {
+			return errors.New("Failed to parse rr.server clusterId number specified for the the node")
+		}
+		nrc.bgpClusterId = uint32(clusterId)
+		nrc.bgpRRServer = true
+	} else if clusterid, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
+		glog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
+		clusterId, err := strconv.ParseUint(clusterid, 0, 32)
+		if err != nil {
+			return errors.New("Failed to parse rr.client clusterId number specified for the the node")
+		}
+		nrc.bgpClusterId = uint32(clusterId)
+		nrc.bgpRRClient = true
 	}
 
 	nrc.bgpServer = gobgp.NewBgpServer()
