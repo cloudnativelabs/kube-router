@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -63,6 +62,9 @@ type NetworkRoutingController struct {
 	peerMultihopTtl      uint8
 	MetricsEnabled       bool
 	bgpServerStarted     bool
+	bgpRRClient          bool
+	bgpRRServer          bool
+	bgpClusterId         uint32
 }
 
 var (
@@ -616,6 +618,11 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 // advertises cluster IP's ONLY to the external BGP peers (and not to iBGP peers).
 func (nrc *NetworkRoutingController) addExportPolicies() error {
 
+	// we are rr server do not add export policies
+	if nrc.bgpRRServer {
+		return nil
+	}
+
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
 		return err
@@ -751,7 +758,6 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		}
 	}
 
-	// configure default BGP export policy to reject
 	pd := make([]*config.PolicyDefinition, 0)
 	pd = append(pd, &definition)
 	err = nrc.bgpServer.ReplacePolicyAssignment("", table.POLICY_DIRECTION_EXPORT, pd, table.ROUTE_TYPE_REJECT)
@@ -905,18 +911,10 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 			},
 		)
 		if err != nil {
-			awserr := err.(awserr.Error)
-			if awserr.Code() == "UnauthorizedOperation" {
-				glog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
-				return
-			}
-			glog.Errorf("Failed to disable source destination check due to: %v", err.Error())
+			glog.Errorf("Failed to disable source destination check due to: " + err.Error())
 		} else {
 			glog.Infof("Disabled source destination check for the instance: " + instanceID)
 		}
-
-		// to prevent EC2 rejecting API call due to API throttling give a delay between the calls
-		time.Sleep(100 * time.Millisecond)
 	}
 }
 
@@ -1005,6 +1003,13 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			continue
 		}
 
+		// we are rr client peer only with rr server
+		if nrc.bgpRRClient {
+			if _, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; !ok {
+				continue
+			}
+		}
+
 		// if node full mesh is not requested then just peer with nodes with same ASN
 		// (run iBGP among same ASN peers)
 		if !nrc.bgpFullMeshMode {
@@ -1061,6 +1066,23 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 						},
 					},
 				},
+			}
+		}
+
+		// we are rr server peer with other rr client with reflection enabled
+		if nrc.bgpRRServer {
+			if _, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
+				//add rr options with clusterId
+				n.RouteReflector = config.RouteReflector{
+					Config: config.RouteReflectorConfig{
+						RouteReflectorClient:    true,
+						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterId),
+					},
+					State: config.RouteReflectorState{
+						RouteReflectorClient:    true,
+						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterId),
+					},
+				}
 			}
 		}
 
@@ -1271,6 +1293,24 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		nrc.nodeAsnNumber = nodeAsnNumber
 	}
 
+	if clusterid, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; ok {
+		glog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
+		clusterId, err := strconv.ParseUint(clusterid, 0, 32)
+		if err != nil {
+			return errors.New("Failed to parse rr.server clusterId number specified for the the node")
+		}
+		nrc.bgpClusterId = uint32(clusterId)
+		nrc.bgpRRServer = true
+	} else if clusterid, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
+		glog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
+		clusterId, err := strconv.ParseUint(clusterid, 0, 32)
+		if err != nil {
+			return errors.New("Failed to parse rr.client clusterId number specified for the the node")
+		}
+		nrc.bgpClusterId = uint32(clusterId)
+		nrc.bgpRRClient = true
+	}
+
 	nrc.bgpServer = gobgp.NewBgpServer()
 	go nrc.bgpServer.Serve()
 
@@ -1448,6 +1488,8 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
 	nrc.activeNodes = make(map[string]bool)
+	nrc.bgpRRClient = false
+	nrc.bgpRRServer = false
 	nrc.bgpServerStarted = false
 
 	nrc.ipSetHandler, err = utils.NewIPSet()
