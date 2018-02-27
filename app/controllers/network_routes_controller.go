@@ -1003,11 +1003,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			continue
 		}
 
-		// we are rr-client peer only with rr-server
+		// we are rr client peer only with rr server
 		if nrc.bgpRRClient {
 			if _, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; !ok {
-				glog.Infof("Not peering with the Node %s because we are rr-client and node is not rr-server.",
-					nodeIP.String())
 				continue
 			}
 		}
@@ -1071,11 +1069,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			}
 		}
 
-		// we are rr-server peer with other rr-client with reflection enabled
+		// we are rr server peer with other rr client with reflection enabled
 		if nrc.bgpRRServer {
 			if _, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
-				glog.Infof("Peer enabling reflection with the Node %s because we are rr-server and node is rr-client.",
-					nodeIP.String())
 				//add rr options with clusterId
 				n.RouteReflector = config.RouteReflector{
 					Config: config.RouteReflectorConfig{
