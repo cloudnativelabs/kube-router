@@ -22,7 +22,7 @@ This model support more than a single AS per cluster to allow AS per rack or AS
 per node models. Nodes in the cluster does not form full node-to-node mesh.
 Users has to explicitly select this mode by specifying `--nodes-full-mesh=false`
 when launching kube-router. In this mode kube-router expects each node is
-configured with an ASN number from the node's API object annoations. Kube-router
+configured with an ASN number from the node's API object annonations. Kube-router
 will use the node's `kube-router.io/node.asn` annotation value as the ASN
 number for the node.
 
@@ -34,6 +34,33 @@ kubectl annotate node <kube-node> "kube-router.io/node.asn=64512"
 
 Only nodes with in same ASN form full mesh. Two nodes with different ASNs never
 get peered.
+
+### Route-Reflector setup  Without Full Mesh
+
+This model support the common scheme of using Route Reflector Server node to concentrate 
+peering from Client Peer. This has the big advantage of not needing full mesh, and
+scale better. In this mode kube-router expects each node is configured either in 
+Route Reflector server mode or in Route Reflector client mode. This is done 
+with node `kube-router.io/rr.server=ClusterID`, `kube-router.io/rr.client=ClusterId`
+respectively. In this mode each Route Reflector Client will only peer with Route
+Reflector Servers. Each Route Route Reflector Server will peer other Route Reflector
+Server and with Route Reflector Clients enabling reflection.
+
+Users can annotate node objects with the following command:
+
+```
+kubectl annotate node <kube-node> "kube-router.io/rr.server=42"
+```
+
+for Route Reflector server mode, and 
+
+```
+kubectl annotate node <kube-node> "kube-router.io/rr.client=42"
+```
+
+for Route Reflector client mode.
+
+Only nodes with the same ClusterID in client and server mode will peer together.
 
 ## Peering Outside The Cluster
 ### Global External BGP Peers
