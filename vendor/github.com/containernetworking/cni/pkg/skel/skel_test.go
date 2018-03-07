@@ -22,7 +22,6 @@ import (
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/version"
 
-	"github.com/containernetworking/cni/pkg/testutils"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -65,7 +64,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 			"CNI_PATH":        "/some/cni/path",
 		}
 
-		stdinData = `{ "some": "config", "cniVersion": "9.8.7" }`
+		stdinData = `{ "name":"skel-test", "some": "config", "cniVersion": "9.8.7" }`
 		stdout = &bytes.Buffer{}
 		stderr = &bytes.Buffer{}
 		versionInfo = version.PluginSupports("9.8.7")
@@ -121,7 +120,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 
 		DescribeTable("required / optional env vars", envVarChecker,
 			Entry("command", "CNI_COMMAND", true),
-			Entry("container id", "CNI_CONTAINERID", false),
+			Entry("container id", "CNI_CONTAINERID", true),
 			Entry("net ns", "CNI_NETNS", true),
 			Entry("if name", "CNI_IFNAME", true),
 			Entry("args", "CNI_ARGS", false),
@@ -147,13 +146,13 @@ var _ = Describe("dispatching to the correct callback", func() {
 
 		Context("when the stdin data is missing the required cniVersion config", func() {
 			BeforeEach(func() {
-				dispatch.Stdin = strings.NewReader(`{ "some": "config" }`)
+				dispatch.Stdin = strings.NewReader(`{ "name": "skel-test", "some": "config" }`)
 			})
 
 			Context("when the plugin supports version 0.1.0", func() {
 				BeforeEach(func() {
 					versionInfo = version.PluginSupports("0.1.0")
-					expectedCmdArgs.StdinData = []byte(`{ "some": "config" }`)
+					expectedCmdArgs.StdinData = []byte(`{ "name": "skel-test", "some": "config" }`)
 				})
 
 				It("infers the config is 0.1.0 and calls the cmdAdd callback", func() {
@@ -208,7 +207,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 
 		DescribeTable("required / optional env vars", envVarChecker,
 			Entry("command", "CNI_COMMAND", true),
-			Entry("container id", "CNI_CONTAINERID", false),
+			Entry("container id", "CNI_CONTAINERID", true),
 			Entry("net ns", "CNI_NETNS", false),
 			Entry("if name", "CNI_IFNAME", true),
 			Entry("args", "CNI_ARGS", false),
@@ -248,20 +247,18 @@ var _ = Describe("dispatching to the correct callback", func() {
 			Entry("path", "CNI_PATH", false),
 		)
 
-		Context("when the stdin is empty", func() {
-			BeforeEach(func() {
-				dispatch.Stdin = strings.NewReader("")
-			})
+		It("does not read from Stdin", func() {
+			r := &BadReader{}
+			dispatch.Stdin = r
 
-			It("succeeds without error", func() {
-				err := dispatch.pluginMain(cmdAdd.Func, cmdDel.Func, versionInfo)
+			err := dispatch.pluginMain(cmdAdd.Func, cmdDel.Func, versionInfo)
 
-				Expect(err).NotTo(HaveOccurred())
-				Expect(stdout).To(MatchJSON(`{
-					"cniVersion": "0.3.1",
-					"supportedVersions": ["9.8.7"]
+			Expect(err).NotTo(HaveOccurred())
+			Expect(r.ReadCount).To(Equal(0))
+			Expect(stdout).To(MatchJSON(`{
+				"cniVersion": "0.3.1",
+				"supportedVersions": ["9.8.7"]
 			}`))
-			})
 		})
 	})
 
@@ -289,7 +286,7 @@ var _ = Describe("dispatching to the correct callback", func() {
 
 	Context("when stdin cannot be read", func() {
 		BeforeEach(func() {
-			dispatch.Stdin = &testutils.BadReader{}
+			dispatch.Stdin = &BadReader{}
 		})
 
 		It("does not call any cmd callback", func() {
@@ -344,3 +341,21 @@ var _ = Describe("dispatching to the correct callback", func() {
 		})
 	})
 })
+
+// BadReader is an io.Reader which always errors
+type BadReader struct {
+	Error     error
+	ReadCount int
+}
+
+func (r *BadReader) Read(buffer []byte) (int, error) {
+	r.ReadCount++
+	if r.Error != nil {
+		return 0, r.Error
+	}
+	return 0, errors.New("banana")
+}
+
+func (r *BadReader) Close() error {
+	return nil
+}

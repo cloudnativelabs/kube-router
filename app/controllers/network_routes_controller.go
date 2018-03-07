@@ -94,10 +94,7 @@ func (nrc *NetworkRoutingController) Run(stopCh <-chan struct{}, wg *sync.WaitGr
 	}
 
 	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
-		err = utils.InsertPodCidrInCniSpec("/etc/cni/net.d/10-kuberouter.conf", currentCidr)
-		if err != nil {
-			glog.Errorf("Failed to insert pod CIDR into CNI conf file: %s", err.Error())
-		}
+		glog.Errorf("Please insert pod CIDR into CNI conf file: %s", currentCidr)
 	}
 
 	glog.Info("Populating ipsets.")

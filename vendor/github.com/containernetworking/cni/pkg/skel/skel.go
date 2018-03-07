@@ -17,6 +17,8 @@
 package skel
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -70,8 +72,8 @@ func (t *dispatcher) getCmdArgsFromEnv() (string, *CmdArgs, error) {
 			"CNI_CONTAINERID",
 			&contID,
 			reqForCmdEntry{
-				"ADD": false,
-				"DEL": false,
+				"ADD": true,
+				"DEL": true,
 			},
 		},
 		{
@@ -123,6 +125,10 @@ func (t *dispatcher) getCmdArgsFromEnv() (string, *CmdArgs, error) {
 		return "", nil, fmt.Errorf("required env variables missing")
 	}
 
+	if cmd == "VERSION" {
+		t.Stdin = bytes.NewReader(nil)
+	}
+
 	stdinData, err := ioutil.ReadAll(t.Stdin)
 	if err != nil {
 		return "", nil, fmt.Errorf("error reading from stdin: %v", err)
@@ -162,10 +168,30 @@ func (t *dispatcher) checkVersionAndCall(cmdArgs *CmdArgs, pluginVersionInfo ver
 	return toCall(cmdArgs)
 }
 
+func validateConfig(jsonBytes []byte) error {
+	var conf struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(jsonBytes, &conf); err != nil {
+		return fmt.Errorf("error reading network config: %s", err)
+	}
+	if conf.Name == "" {
+		return fmt.Errorf("missing network name")
+	}
+	return nil
+}
+
 func (t *dispatcher) pluginMain(cmdAdd, cmdDel func(_ *CmdArgs) error, versionInfo version.PluginInfo) *types.Error {
 	cmd, cmdArgs, err := t.getCmdArgsFromEnv()
 	if err != nil {
 		return createTypedError(err.Error())
+	}
+
+	if cmd != "VERSION" {
+		err = validateConfig(cmdArgs.StdinData)
+		if err != nil {
+			return createTypedError(err.Error())
+		}
 	}
 
 	switch cmd {

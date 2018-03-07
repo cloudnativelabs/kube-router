@@ -64,14 +64,15 @@ var _ = Describe("No-op plugin", func() {
 			// Keep this last
 			"CNI_ARGS=" + args,
 		}
-		cmd.Stdin = strings.NewReader(`{"some":"stdin-json", "cniVersion": "0.3.1"}`)
+		stdinData := `{"name": "noop-test", "some":"stdin-json", "cniVersion": "0.3.1"}`
+		cmd.Stdin = strings.NewReader(stdinData)
 		expectedCmdArgs = skel.CmdArgs{
 			ContainerID: "some-container-id",
 			Netns:       "/some/netns/path",
 			IfName:      "some-eth0",
 			Args:        args,
 			Path:        "/some/bin/path",
-			StdinData:   []byte(`{"some":"stdin-json", "cniVersion": "0.3.1"}`),
+			StdinData:   []byte(stdinData),
 		}
 	})
 
@@ -101,6 +102,7 @@ var _ = Describe("No-op plugin", func() {
 		Expect(debug.WriteDebug(debugFileName)).To(Succeed())
 
 		cmd.Stdin = strings.NewReader(`{
+	"name":"noop-test",
 	"some":"stdin-json",
 	"cniVersion": "0.3.1",
 	"prevResult": {
@@ -118,6 +120,7 @@ var _ = Describe("No-op plugin", func() {
 		Expect(debug.WriteDebug(debugFileName)).To(Succeed())
 
 		cmd.Stdin = strings.NewReader(`{
+	"name":"noop-test",
 	"some":"stdin-json",
 	"cniVersion": "0.3.1",
 	"prevResult": {
@@ -130,6 +133,7 @@ var _ = Describe("No-op plugin", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(session).Should(gexec.Exit(0))
 		Expect(session.Out.Contents()).To(MatchJSON(`{
+  "cniVersion": "0.3.1",
 	"ips": [{"version": "4", "address": "10.1.2.3/24"}],
 	"dns": {"nameservers": ["1.2.3.4"]}
 }`))
@@ -139,7 +143,7 @@ var _ = Describe("No-op plugin", func() {
 		// Remove the DEBUG option from CNI_ARGS and regular args
 		newArgs := "FOO=BAR"
 		cmd.Env[len(cmd.Env)-1] = "CNI_ARGS=" + newArgs
-		newStdin := fmt.Sprintf(`{"some":"stdin-json", "cniVersion": "0.3.1", "debugFile": "%s"}`, debugFileName)
+		newStdin := fmt.Sprintf(`{"name":"noop-test", "some": "stdin-json", "cniVersion": "0.3.1", "debugFile": %q}`, debugFileName)
 		cmd.Stdin = strings.NewReader(newStdin)
 		expectedCmdArgs.Args = newArgs
 		expectedCmdArgs.StdinData = []byte(newStdin)

@@ -72,7 +72,7 @@ func newPluginInfo(configValue, prevResult string, injectDebugFilePath bool, res
 		config += fmt.Sprintf(`, "prevResult": %s`, prevResult)
 	}
 	if injectDebugFilePath {
-		config += fmt.Sprintf(`, "debugFile": "%s"`, debugFilePath)
+		config += fmt.Sprintf(`, "debugFile": %q`, debugFilePath)
 	}
 	if len(capabilities) > 0 {
 		config += `, "capabilities": {`
@@ -136,7 +136,16 @@ var _ = Describe("Invoking plugins", func() {
 			debug = &noop_debug.Debug{}
 			Expect(debug.WriteDebug(debugFilePath)).To(Succeed())
 
-			pluginConfig = []byte(`{ "type": "noop", "cniVersion": "0.3.1", "capabilities": { "portMappings": true, "somethingElse": true, "noCapability": false } }`)
+			pluginConfig = []byte(`{
+				"type": "noop",
+				"name": "apitest",
+				"cniVersion": "0.3.1",
+				"capabilities": {
+					"portMappings": true,
+					"somethingElse": true,
+					"noCapability": false
+				}
+			}`)
 			netConfig, err = libcni.ConfFromBytes(pluginConfig)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -243,17 +252,16 @@ var _ = Describe("Invoking plugins", func() {
 			}
 
 			cniBinPath = filepath.Dir(pluginPaths["noop"])
-			pluginConfig = `{ "type": "noop", "some-key": "some-value", "cniVersion": "0.3.1", "capabilities": { "portMappings": true } }`
+			pluginConfig = `{
+				"type": "noop",
+				"name": "apitest",
+				"some-key": "some-value",
+				"cniVersion": "0.3.1",
+				"capabilities": { "portMappings": true }
+			}`
 			cniConfig = libcni.CNIConfig{Path: []string{cniBinPath}}
-			netConfig = &libcni.NetworkConfig{
-				Network: &types.NetConf{
-					Type: "noop",
-					Capabilities: map[string]bool{
-						"portMappings": true,
-					},
-				},
-				Bytes: []byte(pluginConfig),
-			}
+			netConfig, err = libcni.ConfFromBytes([]byte(pluginConfig))
+			Expect(err).NotTo(HaveOccurred())
 			runtimeConfig = &libcni.RuntimeConf{
 				ContainerID: "some-container-id",
 				NetNS:       "/some/netns/path",
@@ -297,6 +305,7 @@ var _ = Describe("Invoking plugins", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(result).To(Equal(&current.Result{
+					CNIVersion: current.ImplementedSpecVersion,
 					IPs: []*current.IPConfig{
 						{
 							Version: "4",
@@ -479,6 +488,7 @@ var _ = Describe("Invoking plugins", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(result).To(Equal(&current.Result{
+					CNIVersion: current.ImplementedSpecVersion,
 					// IP4 added by first plugin
 					IPs: []*current.IPConfig{
 						{
