@@ -31,14 +31,16 @@ import (
 	"github.com/osrg/gobgp/table"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
+	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 )
 
 // NetworkRoutingController is struct to hold necessary information required by controller
 type NetworkRoutingController struct {
 	nodeIP               net.IP
-	nodeHostName         string
+	nodeName             string
 	nodeSubnet           net.IPNet
 	nodeInterface        string
 	activeNodes          map[string]bool
@@ -370,8 +372,20 @@ func (nrc *NetworkRoutingController) advertiseClusterIPs() {
 			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
 				continue
 			}
-
 			glog.V(2).Info("found a service of cluster ip type")
+
+			if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
+				nodeHasEndpoints, err := nrc.nodeHasEndpointsForService(svc)
+				if err != nil {
+					glog.Errorf("error determining if node has endpoints for svc: %q error: %v", svc.Name, err)
+					continue
+				}
+
+				if !nodeHasEndpoints {
+					continue
+				}
+			}
+
 			err := nrc.AdvertiseClusterIp(svc.Spec.ClusterIP)
 			if err != nil {
 				glog.Errorf("error advertising cluster IP: %q error: %v", svc.Spec.ClusterIP, err)
@@ -388,6 +402,19 @@ func (nrc *NetworkRoutingController) advertiseExternalIPs() {
 			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
 				continue
 			}
+
+			if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
+				nodeHasEndpoints, err := nrc.nodeHasEndpointsForService(svc)
+				if err != nil {
+					glog.Errorf("error determining if node has endpoints for svc: %q error: %v", svc.Name, err)
+					continue
+				}
+
+				if !nodeHasEndpoints {
+					continue
+				}
+			}
+
 			for _, externalIP := range svc.Spec.ExternalIPs {
 				err := nrc.AdvertiseClusterIp(externalIP)
 				if err != nil {
@@ -450,6 +477,40 @@ func (nrc *NetworkRoutingController) getExternalIps() ([]string, error) {
 		}
 	}
 	return externalIpList, nil
+}
+
+// nodeHasEndpointsForService will get the corresponding Endpoints resource for a given Service
+// return true if any endpoint addresses has NodeName matching the node name of the route controller
+func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Service) (bool, error) {
+	// listers for endpoints and services should use the same keys since
+	// endpoint and service resources share the same object name and namespace
+	key, err := cache.MetaNamespaceKeyFunc(svc)
+	if err != nil {
+		return false, err
+	}
+	item, exists, err := watchers.EndpointsWatcher.GetByKey(key)
+	if err != nil {
+		return false, err
+	}
+
+	if !exists {
+		return false, fmt.Errorf("endpoint resource doesn't exist for service: %q", svc.Name)
+	}
+
+	ep, ok := item.(*v1core.Endpoints)
+	if !ok {
+		return false, errors.New("failed to convert cache item to Endpoints type")
+	}
+
+	for _, subset := range ep.Subsets {
+		for _, address := range subset.Addresses {
+			if *address.NodeName == nrc.nodeName {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 // Used for processing Annotations that may contain multiple items
@@ -1563,7 +1624,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 		return nil, errors.New("Failed getting node object from API server: " + err.Error())
 	}
 
-	nrc.nodeHostName = node.Name
+	nrc.nodeName = node.Name
 
 	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {

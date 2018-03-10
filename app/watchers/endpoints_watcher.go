@@ -7,7 +7,8 @@ import (
 	"github.com/cloudnativelabs/kube-router/utils"
 	api "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
@@ -31,7 +32,7 @@ var (
 )
 
 type endpointsWatcher struct {
-	clientset           *kubernetes.Clientset
+	clientset           kubernetes.Interface
 	endpointsController cache.Controller
 	endpointsLister     cache.Indexer
 	broadcaster         *utils.Broadcaster
@@ -84,13 +85,17 @@ func (ew *endpointsWatcher) List() []*api.Endpoints {
 	return epInstances
 }
 
+func (ew *endpointsWatcher) GetByKey(key string) (item interface{}, exists bool, err error) {
+	return ew.endpointsLister.GetByKey(key)
+}
+
 func (ew *endpointsWatcher) HasSynced() bool {
 	return ew.endpointsController.HasSynced()
 }
 
 var endpointsStopCh chan struct{}
 
-func StartEndpointsWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Duration) (*endpointsWatcher, error) {
+func StartEndpointsWatcher(clientset kubernetes.Interface, resyncPeriod time.Duration) (*endpointsWatcher, error) {
 
 	ew := endpointsWatcher{}
 	EndpointsWatcher = &ew
@@ -103,7 +108,14 @@ func StartEndpointsWatcher(clientset *kubernetes.Clientset, resyncPeriod time.Du
 
 	ew.clientset = clientset
 	ew.broadcaster = utils.NewBroadcaster()
-	lw := cache.NewListWatchFromClient(clientset.CoreV1().RESTClient(), "endpoints", metav1.NamespaceAll, fields.Everything())
+	lw := &cache.ListWatch{
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			return clientset.CoreV1().Endpoints(metav1.NamespaceAll).List(options)
+		},
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			return clientset.CoreV1().Endpoints(metav1.NamespaceAll).Watch(options)
+		},
+	}
 	ew.endpointsLister, ew.endpointsController = cache.NewIndexerInformer(
 		lw,
 		&api.Endpoints{}, resyncPeriod, eventHandler,
