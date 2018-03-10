@@ -753,18 +753,19 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		err = nrc.bgpServer.AddPolicyAssignment("",
 			table.POLICY_DIRECTION_EXPORT,
 			[]*config.PolicyDefinition{&definition},
-			table.ROUTE_TYPE_ACCEPT)
+			table.ROUTE_TYPE_REJECT)
 		if err != nil {
 			return errors.New("Failed to add policy assignment: " + err.Error())
 		}
-	}
-
-	// configure default BGP export policy to reject
-	pd := make([]*config.PolicyDefinition, 0)
-	pd = append(pd, &definition)
-	err = nrc.bgpServer.ReplacePolicyAssignment("", table.POLICY_DIRECTION_EXPORT, pd, table.ROUTE_TYPE_REJECT)
-	if err != nil {
-		return errors.New("Failed to replace policy assignment: " + err.Error())
+	} else {
+		// configure default BGP export policy to reject
+		err = nrc.bgpServer.ReplacePolicyAssignment("",
+			table.POLICY_DIRECTION_EXPORT,
+			[]*config.PolicyDefinition{&definition},
+			table.ROUTE_TYPE_REJECT)
+		if err != nil {
+			return errors.New("Failed to replace policy assignment: " + err.Error())
+		}
 	}
 
 	return nil
