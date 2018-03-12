@@ -24,7 +24,7 @@ DOCKERFILE_SED_EXPR?=s,FROM alpine:,FROM multiarch/alpine:armhf-v,
 else ifeq ($(GOARCH), arm64)
 QEMU_ARCH=aarch64
 ARCH_TAG_PREFIX=$(GOARCH)
-FILE_ARCH=ARM64
+FILE_ARCH=ARM aarch64
 DOCKERFILE_SED_EXPR?=s,FROM alpine:,FROM multiarch/alpine:aarch64-v,
 else
 DOCKERFILE_SED_EXPR?=
@@ -180,7 +180,7 @@ multiarch-check:
 
 multiarch-binverify:
 	@echo 'Verifying kube-router gobgp for ARCH=$(FILE_ARCH) ...'
-	@[ `file kube-router gobgp| cut -d, -f2 |grep -cw $(FILE_ARCH)` -eq 2 ]
+	@[ `file kube-router gobgp| cut -d, -f2 |grep -cw "$(FILE_ARCH)"` -eq 2 ]
 
 multiarch-setup:
 	$(DOCKER) run --rm --privileged multiarch/qemu-user-static:register
@@ -209,6 +209,6 @@ endif
 .PHONY: update-glide test docker-login push-release github-release help
 .PHONY: gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
-.PHONY: multiarch-setup multiarch-check
+.PHONY: multiarch-setup multiarch-check multiarch-binverify
 
 .DEFAULT: all
