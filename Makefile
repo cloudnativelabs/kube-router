@@ -174,6 +174,7 @@ gobgp: vendor/github.com/osrg/gobgp/gobgp
 multiarch-check:
 	@[ -z "$(QEMU_ARCH)" ] && exit 0; \
 	  QEMU_RUNTIME=$$(sed -n '/interpreter/s/.* //p' /proc/sys/fs/binfmt_misc/qemu-$(QEMU_ARCH)); \
+	  trap 'rc=$$?; [ $$rc -ne 0 ] && echo "To fix below, try running: make multiarch-setup\n"; exit $$rc' 0 ;\
 	  echo "Checking for QEMU_RUNTIME=$${QEMU_RUNTIME} ..." ;\
 	  test -x "$${QEMU_RUNTIME}"
 
