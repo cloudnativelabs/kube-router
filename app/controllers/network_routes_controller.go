@@ -66,6 +66,7 @@ type NetworkRoutingController struct {
 	bgpRRClient          bool
 	bgpRRServer          bool
 	bgpClusterId         uint32
+	cniConfFile          string
 }
 
 var (
@@ -87,7 +88,7 @@ const (
 
 // Run runs forever until we are notified on stop channel
 func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
-	cidr, err := utils.GetPodCidrFromCniSpec("/etc/cni/net.d/10-kuberouter.conf")
+	cidr, err := utils.GetPodCidrFromCniSpec(nrc.cniConfFile)
 	if err != nil {
 		glog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err.Error())
 	}
@@ -100,7 +101,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat,
 	}
 
 	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
-		err = utils.InsertPodCidrInCniSpec("/etc/cni/net.d/10-kuberouter.conf", currentCidr)
+		err = utils.InsertPodCidrInCniSpec(nrc.cniConfFile, currentCidr)
 		if err != nil {
 			glog.Errorf("Failed to insert pod CIDR into CNI conf file: %s", err.Error())
 		}
@@ -1501,6 +1502,14 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.bgpRRClient = false
 	nrc.bgpRRServer = false
 	nrc.bgpServerStarted = false
+
+	nrc.cniConfFile = os.Getenv("KUBE_ROUTER_CNI_CONF_FILE")
+	if nrc.cniConfFile == "" {
+		nrc.cniConfFile = "/etc/cni/net.d/10-kuberouter.conf"
+	}
+	if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
+		return nil, errors.New("CNI conf file " + nrc.cniConfFile + " does not exist.")
+	}
 
 	nrc.ipSetHandler, err = utils.NewIPSet()
 	if err != nil {
