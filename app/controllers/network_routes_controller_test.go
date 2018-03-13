@@ -394,6 +394,137 @@ func Test_advertiseExternalIPs(t *testing.T) {
 	}
 }
 
+func Test_nodeHasEndpointsForService(t *testing.T) {
+	testcases := []struct {
+		name             string
+		nrc              *NetworkRoutingController
+		existingService  *v1core.Service
+		existingEndpoint *v1core.Endpoints
+		nodeHasEndpoints bool
+		err              error
+	}{
+		{
+			"node has endpoints for service",
+			&NetworkRoutingController{
+				nodeName: "node-1",
+			},
+			&v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc-1",
+					Namespace: "default",
+				},
+				Spec: v1core.ServiceSpec{
+					Type:        "ClusterIP",
+					ClusterIP:   "10.0.0.1",
+					ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
+				},
+			},
+			&v1core.Endpoints{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc-1",
+					Namespace: "default",
+				},
+				Subsets: []v1core.EndpointSubset{
+					{
+						Addresses: []v1core.EndpointAddress{
+							{
+								IP:       "172.20.1.1",
+								NodeName: ptrToString("node-1"),
+							},
+							{
+								IP:       "172.20.1.2",
+								NodeName: ptrToString("node-2"),
+							},
+						},
+					},
+				},
+			},
+			true,
+			nil,
+		},
+		{
+			"node has no endpoints for service",
+			&NetworkRoutingController{
+				nodeName: "node-1",
+			},
+			&v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc-1",
+					Namespace: "default",
+				},
+				Spec: v1core.ServiceSpec{
+					Type:        "ClusterIP",
+					ClusterIP:   "10.0.0.1",
+					ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
+				},
+			},
+			&v1core.Endpoints{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc-1",
+					Namespace: "default",
+				},
+				Subsets: []v1core.EndpointSubset{
+					{
+						Addresses: []v1core.EndpointAddress{
+							{
+								IP:       "172.20.1.1",
+								NodeName: ptrToString("node-2"),
+							},
+							{
+								IP:       "172.20.1.2",
+								NodeName: ptrToString("node-3"),
+							},
+						},
+					},
+				},
+			},
+			false,
+			nil,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			clientset := fake.NewSimpleClientset()
+
+			_, err := watchers.StartServiceWatcher(clientset, 0)
+			if err != nil {
+				t.Fatalf("failed to initialize service watcher: %v", err)
+			}
+
+			_, err = watchers.StartEndpointsWatcher(clientset, 0)
+			if err != nil {
+				t.Fatalf("failed to initialize endpoints watcher: %v", err)
+			}
+
+			_, err = clientset.CoreV1().Endpoints("default").Create(testcase.existingEndpoint)
+			if err != nil {
+				t.Fatalf("failed to create existing endpoints: %v", err)
+			}
+
+			_, err = clientset.CoreV1().Services("default").Create(testcase.existingService)
+			if err != nil {
+				t.Fatalf("failed to create existing services: %v", err)
+			}
+
+			waitForListerWithTimeout(time.Second*10, t)
+
+			nodeHasEndpoints, err := testcase.nrc.nodeHasEndpointsForService(testcase.existingService)
+			if !reflect.DeepEqual(err, testcase.err) {
+				t.Logf("actual err: %v", err)
+				t.Logf("expected err: %v", testcase.err)
+				t.Error("unexpected error")
+			}
+			if nodeHasEndpoints != testcase.nodeHasEndpoints {
+				t.Logf("expected nodeHasEndpoints: %v", testcase.nodeHasEndpoints)
+				t.Logf("actual nodeHasEndpoints: %v", nodeHasEndpoints)
+				t.Error("unexpected nodeHasEndpoints")
+			}
+
+		})
+	}
+}
+
 func Test_advertiseRoute(t *testing.T) {
 	testcases := []struct {
 		name        string
@@ -968,4 +1099,8 @@ func waitForBGPWatchEventWithTimeout(timeout time.Duration, expectedNumEvents in
 			}
 		}
 	}
+}
+
+func ptrToString(str string) *string {
+	return &str
 }
