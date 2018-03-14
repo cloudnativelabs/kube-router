@@ -1,11 +1,12 @@
 NAME?=kube-router
+GOARCH?=amd64
 DEV_SUFFIX?=-git
 BUILD_DATE?=$(shell date --iso-8601)
 LOCAL_PACKAGES?=app app/controllers app/options app/watchers utils
 IMG_NAMESPACE?=cloudnativelabs
 GIT_COMMIT=$(shell git describe --tags --dirty)
 GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
-IMG_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(GIT_BRANCH)
+IMG_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(if $(ARCH_TAG_PREFIX),$(ARCH_TAG_PREFIX)-)$(GIT_BRANCH)
 RELEASE_TAG?=$(shell build/get-git-tag.sh)
 REGISTRY?=$(if $(IMG_FQDN),$(IMG_FQDN)/$(IMG_NAMESPACE)/$(NAME),$(IMG_NAMESPACE)/$(NAME))
 REGISTRY_DEV?=$(REGISTRY)$(DEV_SUFFIX)
@@ -15,11 +16,26 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 
+ifeq ($(GOARCH), arm)
+QEMU_ARCH=arm
+ARCH_TAG_PREFIX=$(GOARCH)
+FILE_ARCH=ARM
+DOCKERFILE_SED_EXPR?=s,FROM alpine:,FROM multiarch/alpine:armhf-v,
+else ifeq ($(GOARCH), arm64)
+QEMU_ARCH=aarch64
+ARCH_TAG_PREFIX=$(GOARCH)
+FILE_ARCH=ARM aarch64
+DOCKERFILE_SED_EXPR?=s,FROM alpine:,FROM multiarch/alpine:aarch64-v,
+else
+DOCKERFILE_SED_EXPR?=
+FILE_ARCH=x86-64
+endif
+$(info Building for GOARCH=$(GOARCH))
 all: test kube-router container ## Default target. Runs tests, builds binaries and images.
 
 kube-router:
 	@echo Starting kube-router binary build.
-	CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/app.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/app.buildDate=$(BUILD_DATE)' -o kube-router kube-router.go
+	GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/app.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/app.buildDate=$(BUILD_DATE)' -o kube-router kube-router.go
 	@echo Finished kube-router binary build.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
@@ -52,13 +68,16 @@ vagrant-image-update: all ## Rebuild kube-router, update image in local VMs, and
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
-container: kube-router gobgp ## Builds a Docker container image.
+container: multiarch-check Dockerfile.$(GOARCH).run kube-router gobgp multiarch-binverify ## Builds a Docker container image.
 	@echo Starting kube-router container image build.
-	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" .
+	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" -f Dockerfile.$(GOARCH).run .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
 	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
 	fi
 	@echo Finished kube-router container image build.
+
+Dockerfile.$(GOARCH).run: Dockerfile Makefile
+	@sed -e "$(DOCKERFILE_SED_EXPR)" Dockerfile > $(@)
 
 docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSWORD} variables.
 	@echo Starting docker login target.
@@ -149,9 +168,22 @@ gobgp: vendor/github.com/osrg/gobgp/gobgp
 	    sh -c ' \
 	    apk add -U git && \
 	    ln -s /pwd/vendor /go/src && \
-	    CGO_ENABLED=0 go get github.com/osrg/gobgp/gobgp && \
-	    gobgp --version && \
-	    cp /go/bin/gobgp /pwd'
+	    CGO_ENABLED=0 GOARCH=$(GOARCH) go get github.com/osrg/gobgp/gobgp && \
+	    cp `find /go/bin -type f -name gobgp` /pwd'
+
+multiarch-check:
+	@[ -z "$(QEMU_ARCH)" ] && exit 0; \
+	  QEMU_RUNTIME=$$(sed -n '/interpreter/s/.* //p' /proc/sys/fs/binfmt_misc/qemu-$(QEMU_ARCH)); \
+	  trap 'rc=$$?; [ $$rc -ne 0 ] && echo "To fix below, try running: make multiarch-setup\n"; exit $$rc' 0 ;\
+	  echo "Checking for QEMU_RUNTIME=$${QEMU_RUNTIME} ..." ;\
+	  test -x "$${QEMU_RUNTIME}"
+
+multiarch-binverify:
+	@echo 'Verifying kube-router gobgp for ARCH=$(FILE_ARCH) ...'
+	@[ `file kube-router gobgp| cut -d, -f2 |grep -cw "$(FILE_ARCH)"` -eq 2 ]
+
+multiarch-setup:
+	$(DOCKER) run --rm --privileged multiarch/qemu-user-static:register
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
@@ -177,5 +209,6 @@ endif
 .PHONY: update-glide test docker-login push-release github-release help
 .PHONY: gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
+.PHONY: multiarch-setup multiarch-check multiarch-binverify
 
 .DEFAULT: all
