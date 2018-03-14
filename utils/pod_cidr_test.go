@@ -16,6 +16,7 @@ func Test_GetPodCidrFromCniSpec(t *testing.T) {
 		cniConfFile string
 		podCidr     net.IPNet
 		err         error
+		filename    string
 	}{
 		{
 			"CNI config file has subnet",
@@ -25,18 +26,20 @@ func Test_GetPodCidrFromCniSpec(t *testing.T) {
 				Mask: net.IPv4Mask(255, 255, 255, 0),
 			},
 			nil,
+			"10-kuberouter.conf",
 		},
 		{
 			"CNI config file missing subnet",
 			`{"bridge":"kube-bridge","ipam":{"type":"host-local"},"isDefaultGateway":true,"name":"kubernetes","type":"bridge"}`,
 			net.IPNet{},
 			errors.New("subnet missing from CNI IPAM"),
+			"10-kuberouter.conf",
 		},
 	}
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			file, err := createFile(testcase.cniConfFile)
+			file, err := createFile(testcase.cniConfFile, testcase.filename)
 			if err != nil {
 				t.Fatalf("Failed to create temporary CNI config file: %v", err)
 			}
@@ -65,6 +68,7 @@ func Test_InsertPodCidrInCniSpec(t *testing.T) {
 		existingCni string
 		newCni      string
 		err         error
+		filename    string
 	}{
 		{
 			"insert cidr to cni config",
@@ -72,12 +76,22 @@ func Test_InsertPodCidrInCniSpec(t *testing.T) {
 			`{"bridge":"kube-bridge","ipam":{"type":"host-local"},"isDefaultGateway":true,"name":"kubernetes","type":"bridge"}`,
 			`{"bridge":"kube-bridge","ipam":{"subnet":"172.17.0.0/24","type":"host-local"},"isDefaultGateway":true,"name":"kubernetes","type":"bridge"}`,
 			nil,
+			"/tmp/10-kuberouter.conf",
+		},
+		{
+			"insert cidr to cni config",
+			"172.17.0.0/24",
+			`{"cniVersion":"0.3.0","name":"mynet","plugins":[{"bridge":"kube-bridge","ipam":{"type":"host-local"},"isDefaultGateway":true,"name":"kubernetes","type":"bridge"},{"type":"portmap"}]}`,
+			`{"cniVersion":"0.3.0","name":"mynet","plugins":[{"bridge":"kube-bridge","ipam":{"subnet":"172.17.0.0/24","type":"host-local"},"isDefaultGateway":true,"name":"kubernetes","type":"bridge"},{"type":"portmap"}]}`,
+			nil,
+			"/tmp/10-kuberouter.conflist",
 		},
 	}
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			cniConfigFile, err := createFile(testcase.existingCni)
+			cniConfigFile, err := createFile(testcase.existingCni, testcase.filename)
+
 			if err != nil {
 				t.Fatalf("failed to create temporary CNI config: %v", err)
 			}
@@ -104,8 +118,8 @@ func Test_InsertPodCidrInCniSpec(t *testing.T) {
 	}
 }
 
-func createFile(content string) (*os.File, error) {
-	file, err := ioutil.TempFile("", "")
+func createFile(content, filename string) (*os.File, error) {
+	file, err := os.Create(filename)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create file: %v", err)
 	}
@@ -114,6 +128,7 @@ func createFile(content string) (*os.File, error) {
 		return nil, fmt.Errorf("cannot write to file: %v", err)
 	}
 
+	fmt.Println("File is ", file.Name())
 	return file, nil
 }
 
