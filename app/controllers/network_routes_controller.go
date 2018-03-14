@@ -443,6 +443,16 @@ func (nrc *NetworkRoutingController) advertiseExternalIPs() {
 					glog.Errorf("error advertising external IP: %q, error: %v", externalIP, err)
 				}
 			}
+		} else if svc.Spec.Type == "LoadBalancer" {
+			_, uselbips := svc.ObjectMeta.Annotations["kube-router.io/service.uselbips"]
+			if uselbips {
+				for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
+					err := nrc.AdvertiseClusterIp(lbIngress.IP)
+					if err != nil {
+						glog.Errorf("error advertising loadbalancer IP: %q, error: %v", lbIngress.IP, err)
+					}
+				}
+			}
 		}
 	}
 }

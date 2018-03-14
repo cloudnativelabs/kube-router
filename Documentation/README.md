@@ -264,6 +264,42 @@ For destination hashing scheduling use:
 kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
 ```
 
+### LoadBalancer IPs
+
+By default Kube-router will only consider externalIPs from the Service
+Spec, if you want to **also** use the IP(s) allocated by the LoadBalancer
+implementation for loadbalancer service types, you can annotate the
+service as per below example (`status.loadBalancer.ingress` IPs):
+
+```
+$ kubectl annotate service my-external-service "kube-router.io/service.uselbips=true"
+$ kubectl get svc my-external-service -oyaml
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kube-router.io/service.uselbips: "true"
+  name: my-external-service
+  namespace: default
+  externalIPs: []
+[...]
+spec:
+  type: LoadBalancer
+[...]
+status:
+  loadBalancer:
+    ingress:
+    - ip: 192.0.2.1
+```
+
+The `kube-router.io/service.uselbips` per service annotation will make
+the ingress IP(s) set by the LoadBalancer, in addition to externalIPs, to:
+* be locally added to nodes (to `kube-dummy-if` network interface, to LVS)
+* be advertised to BGP peers
+
+Above has been successfully tested together with
+[MetalLB](https://github.com/google/metallb) in ARP mode.
+
 ### HostPort support
 
 If you would like to use `HostPort` functionality below changes are required in the manifest.
