@@ -411,50 +411,12 @@ func (nrc *NetworkRoutingController) advertiseClusterIPs() {
 
 func (nrc *NetworkRoutingController) advertiseExternalIPs() {
 	glog.V(2).Info("Advertising external ips of the services to the external BGP peers")
-	for _, svc := range watchers.ServiceWatcher.List() {
-		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
-			// skip headless services
-			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
-				continue
-			}
-
-			if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
-				nodeHasEndpoints, err := nrc.nodeHasEndpointsForService(svc)
-				if err != nil {
-					glog.Errorf("error determining if node has endpoints for svc: %q error: %v", svc.Name, err)
-					continue
-				}
-
-				if !nodeHasEndpoints {
-					for _, externalIP := range svc.Spec.ExternalIPs {
-						err := nrc.UnadvertiseClusterIp(externalIP)
-						if err != nil {
-							glog.Errorf("error unadvertising external IP: %q, error: %v", externalIP, err)
-						}
-					}
-
-					continue
-				}
-			}
-
-			for _, externalIP := range svc.Spec.ExternalIPs {
-				glog.V(2).Infof("Advertising externalIP: %s", externalIP)
-				err := nrc.AdvertiseClusterIp(externalIP)
-				if err != nil {
-					glog.Errorf("error advertising external IP: %q, error: %v", externalIP, err)
-				}
-			}
-		} else if svc.Spec.Type == "LoadBalancer" {
-			_, uselbips := svc.ObjectMeta.Annotations["kube-router.io/service.uselbips"]
-			if uselbips {
-				for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
-					glog.V(2).Infof("Advertising loadbalancer IP: %s", lbIngress.IP)
-					err := nrc.AdvertiseClusterIp(lbIngress.IP)
-					if err != nil {
-						glog.Errorf("error advertising loadbalancer IP: %q, error: %v", lbIngress.IP, err)
-					}
-				}
-			}
+	externalIpList, _ := nrc.getExternalIps(true)
+	for _, externalIP := range externalIpList {
+		glog.V(2).Infof("Advertising externalIP: %s", externalIP)
+		err := nrc.AdvertiseClusterIp(externalIP)
+		if err != nil {
+			glog.Errorf("error advertising external IP: %q, error: %v", externalIP, err)
 		}
 	}
 }
@@ -498,9 +460,29 @@ func (nrc *NetworkRoutingController) getClusterIps() ([]string, error) {
 	return clusterIpList, nil
 }
 
-func (nrc *NetworkRoutingController) getExternalIps() ([]string, error) {
+func (nrc *NetworkRoutingController) getExternalIps(verify_endpoints bool) ([]string, error) {
 	externalIpList := make([]string, 0)
 	for _, svc := range watchers.ServiceWatcher.List() {
+		if verify_endpoints {
+			if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
+				nodeHasEndpoints, err := nrc.nodeHasEndpointsForService(svc)
+				if err != nil {
+					glog.Errorf("error determining if node has endpoints for svc: %q error: %v", svc.Name, err)
+					continue
+				}
+
+				if !nodeHasEndpoints {
+					for _, externalIP := range svc.Spec.ExternalIPs {
+						err := nrc.UnadvertiseClusterIp(externalIP)
+						if err != nil {
+							glog.Errorf("error unadvertising external IP: %q, error: %v", externalIP, err)
+						}
+					}
+
+					continue
+				}
+			}
+		}
 		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
 
 			// skip headless services
@@ -508,6 +490,13 @@ func (nrc *NetworkRoutingController) getExternalIps() ([]string, error) {
 				continue
 			}
 			externalIpList = append(externalIpList, svc.Spec.ExternalIPs...)
+		} else if svc.Spec.Type == "LoadBalancer" {
+			_, uselbips := svc.ObjectMeta.Annotations["kube-router.io/service.uselbips"]
+			if uselbips {
+				for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
+					externalIpList = append(externalIpList, lbIngress.IP)
+				}
+			}
 		}
 	}
 	return externalIpList, nil
@@ -757,7 +746,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	for _, ip := range clusterIps {
 		clusterIpPrefixList = append(clusterIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
 	}
-	externalIps, _ := nrc.getExternalIps()
+	externalIps, _ := nrc.getExternalIps(false)
 	for _, ip := range externalIps {
 		clusterIpPrefixList = append(clusterIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
 	}
