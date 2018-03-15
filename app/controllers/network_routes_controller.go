@@ -438,6 +438,7 @@ func (nrc *NetworkRoutingController) advertiseExternalIPs() {
 			}
 
 			for _, externalIP := range svc.Spec.ExternalIPs {
+				glog.V(2).Infof("Advertising externalIP: %s", externalIP)
 				err := nrc.AdvertiseClusterIp(externalIP)
 				if err != nil {
 					glog.Errorf("error advertising external IP: %q, error: %v", externalIP, err)
@@ -447,6 +448,7 @@ func (nrc *NetworkRoutingController) advertiseExternalIPs() {
 			_, uselbips := svc.ObjectMeta.Annotations["kube-router.io/service.uselbips"]
 			if uselbips {
 				for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
+					glog.V(2).Infof("Advertising loadbalancer IP: %s", lbIngress.IP)
 					err := nrc.AdvertiseClusterIp(lbIngress.IP)
 					if err != nil {
 						glog.Errorf("error advertising loadbalancer IP: %q, error: %v", lbIngress.IP, err)
