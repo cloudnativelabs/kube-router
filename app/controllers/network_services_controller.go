@@ -690,6 +690,7 @@ func prepareEndpointForDsr(containerId string, endpointIP string, vip string) er
 	if err != nil {
 		return errors.New("Failed to get docker client due to " + err.Error())
 	}
+	defer dockerClient.Close()
 
 	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerId)
 	if err != nil {
