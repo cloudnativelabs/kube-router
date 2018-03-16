@@ -347,6 +347,98 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				"1.1.1.1/32": true,
 			},
 		},
+		{
+			"add bgp path to loadbalancerIP for service with LoadBalancer IP and proper annotation",
+			&NetworkRoutingController{
+				bgpServer: gobgp.NewBgpServer(),
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+						Annotations: map[string]string{
+							"kube-router.io/service.uselbips": "true",
+						},
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "LoadBalancer",
+						ClusterIP: "10.0.0.1",
+					},
+					Status: v1core.ServiceStatus{
+						LoadBalancer: v1core.LoadBalancerStatus{
+							Ingress: []v1core.LoadBalancerIngress{
+								{
+									IP: "10.0.255.1",
+								},
+								{
+									IP: "10.0.255.2",
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.255.1/32": true,
+				"10.0.255.2/32": true,
+			},
+		},
+		{
+			"no bgp path to nil loadbalancerIPs for service with LoadBalancer and proper annotation",
+			&NetworkRoutingController{
+				bgpServer: gobgp.NewBgpServer(),
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+						Annotations: map[string]string{
+							"kube-router.io/service.uselbips": "true",
+						},
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "LoadBalancer",
+						ClusterIP: "10.0.0.1",
+					},
+					Status: v1core.ServiceStatus{
+						LoadBalancer: v1core.LoadBalancerStatus{
+							Ingress: []v1core.LoadBalancerIngress{},
+						},
+					},
+				},
+			},
+			map[string]bool{},
+		},
+		{
+			"no bgp path to loadbalancerIPs for service with LoadBalancer and no annotation",
+			&NetworkRoutingController{
+				bgpServer: gobgp.NewBgpServer(),
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "LoadBalancer",
+						ClusterIP: "10.0.0.1",
+					},
+					Status: v1core.ServiceStatus{
+						LoadBalancer: v1core.LoadBalancerStatus{
+							Ingress: []v1core.LoadBalancerIngress{
+								{
+									IP: "10.0.255.1",
+								},
+								{
+									IP: "10.0.255.2",
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{},
+		},
 	}
 
 	for _, testcase := range testcases {
