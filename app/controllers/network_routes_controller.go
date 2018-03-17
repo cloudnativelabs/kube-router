@@ -69,6 +69,7 @@ type NetworkRoutingController struct {
 	bgpRRServer          bool
 	bgpClusterId         uint32
 	cniConfFile          string
+	initSrcDstCheckDone  bool
 }
 
 var (
@@ -117,6 +118,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat,
 
 	// In case of cluster provisioned on AWS disable source-destination check
 	nrc.disableSourceDestinationCheck()
+	nrc.initSrcDstCheckDone = true
 
 	// enable IP forwarding for the packets coming in/out from the pods
 	err = nrc.enableForwarding()
@@ -1338,7 +1340,12 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 	if nrc.bgpEnableInternal {
 		nrc.syncInternalPeers()
 	}
-	nrc.disableSourceDestinationCheck()
+
+	// skip if first round of disableSourceDestinationCheck() is not done yet, this is to prevent
+	// all the nodes for all the node add update trying to perfrom disableSourceDestinationCheck
+	if nrc.initSrcDstCheckDone {
+		nrc.disableSourceDestinationCheck()
+	}
 }
 
 func (nrc *NetworkRoutingController) startBgpServer() error {
@@ -1563,6 +1570,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.bgpRRClient = false
 	nrc.bgpRRServer = false
 	nrc.bgpServerStarted = false
+	nrc.initSrcDstCheckDone = false
 
 	nrc.cniConfFile = os.Getenv("KUBE_ROUTER_CNI_CONF_FILE")
 	if nrc.cniConfFile == "" {
