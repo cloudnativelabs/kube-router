@@ -25,6 +25,7 @@ type KubeRouterConfig struct {
 	HelpRequested       bool
 	HostnameOverride    string
 	IPTablesSyncPeriod  time.Duration
+	IpvsIgnoreKey       []string
 	IpvsSyncPeriod      time.Duration
 	Kubeconfig          string
 	MasqueradeAll       bool
@@ -82,6 +83,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The delay between apiserver configuration synchronizations (e.g. '5s', '1m').  Must be greater than 0.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
 		"The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
+	fs.StringSliceVar(&s.IpvsIgnoreKey, "ipvs-ignore-key", s.IpvsIgnoreKey,
+		"A ipvs key to ignore when syncing (string '<ip>-<tcp|udp>-<port>' ie '192.168.1.1-tcp-80' or '<fwmark>' ie '1'). Multiple same options accepted.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod,
 		"The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
