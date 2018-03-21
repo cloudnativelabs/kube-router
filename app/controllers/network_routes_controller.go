@@ -696,13 +696,8 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 func (nrc *NetworkRoutingController) UnadvertiseClusterIp(clusterIp string) error {
 	glog.V(2).Infof("Unadvertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
 
-	attrs := []bgp.PathAttributeInterface{
-		bgp.NewPathAttributeOrigin(0),
-		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
-	}
-
 	pathList := []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		clusterIp), true, attrs, time.Now(), false)}
+		clusterIp), true, nil, time.Now(), false)}
 
 	err := nrc.bgpServer.DeletePath([]byte(nil), 0, "", pathList)
 
