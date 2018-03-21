@@ -37,6 +37,30 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+var (
+	podEgressArgs = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
+		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
+		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
+		"-j", "MASQUERADE"}
+	podEgressArgsBad = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
+		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
+		"-j", "MASQUERADE"}}
+)
+
+const (
+	customRouteTableID   = "77"
+	customRouteTableName = "kube-router"
+	podSubnetsIPSetName  = "kube-router-pod-subnets"
+	nodeAddrsIPSetName   = "kube-router-node-ips"
+
+	nodeASNAnnotation      = "kube-router.io/node.asn"
+	peerASNAnnotation      = "kube-router.io/peer.asns"
+	peerIPAnnotation       = "kube-router.io/peer.ips"
+	peerPasswordAnnotation = "kube-router.io/peer.passwords"
+	rrClientAnnotation     = "kube-router.io/rr.client"
+	rrServerAnnotation     = "kube-router.io/rr.server"
+)
+
 // NetworkRoutingController is struct to hold necessary information required by controller
 type NetworkRoutingController struct {
 	nodeIP               net.IP
@@ -71,23 +95,6 @@ type NetworkRoutingController struct {
 	cniConfFile          string
 	initSrcDstCheckDone  bool
 }
-
-var (
-	podEgressArgs = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
-		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
-		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
-		"-j", "MASQUERADE"}
-	podEgressArgsBad = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
-		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
-		"-j", "MASQUERADE"}}
-)
-
-const (
-	customRouteTableID   = "77"
-	customRouteTableName = "kube-router"
-	podSubnetsIPSetName  = "kube-router-pod-subnets"
-	nodeAddrsIPSetName   = "kube-router-node-ips"
-)
 
 // Run runs forever until we are notified on stop channel
 func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
@@ -1079,7 +1086,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		// we are rr-client peer only with rr-server
 		if nrc.bgpRRClient {
-			if _, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; !ok {
+			if _, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; !ok {
 				continue
 			}
 		}
@@ -1087,7 +1094,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		// if node full mesh is not requested then just peer with nodes with same ASN
 		// (run iBGP among same ASN peers)
 		if !nrc.bgpFullMeshMode {
-			nodeasn, ok := node.ObjectMeta.Annotations["kube-router.io/node.asn"]
+			nodeasn, ok := node.ObjectMeta.Annotations[nodeASNAnnotation]
 			if !ok {
 				glog.Infof("Not peering with the Node %s as ASN number of the node is unknown.",
 					nodeIP.String())
@@ -1145,7 +1152,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		// we are rr-server peer with other rr-client with reflection enabled
 		if nrc.bgpRRServer {
-			if _, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
+			if _, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
 				//add rr options with clusterId
 				n.RouteReflector = config.RouteReflector{
 					Config: config.RouteReflectorConfig{
@@ -1358,7 +1365,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	if nrc.bgpFullMeshMode {
 		nodeAsnNumber = nrc.defaultNodeAsnNumber
 	} else {
-		nodeasn, ok := node.ObjectMeta.Annotations["kube-router.io/node.asn"]
+		nodeasn, ok := node.ObjectMeta.Annotations[nodeASNAnnotation]
 		if !ok {
 			return errors.New("Could not find ASN number for the node. " +
 				"Node needs to be annotated with ASN number details to start BGP server.")
@@ -1372,7 +1379,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		nrc.nodeAsnNumber = nodeAsnNumber
 	}
 
-	if clusterid, ok := node.ObjectMeta.Annotations["kube-router.io/rr.server"]; ok {
+	if clusterid, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; ok {
 		glog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
 		clusterId, err := strconv.ParseUint(clusterid, 0, 32)
 		if err != nil {
@@ -1380,7 +1387,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 		nrc.bgpClusterId = uint32(clusterId)
 		nrc.bgpRRServer = true
-	} else if clusterid, ok := node.ObjectMeta.Annotations["kube-router.io/rr.client"]; ok {
+	} else if clusterid, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
 		glog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
 		clusterId, err := strconv.ParseUint(clusterid, 0, 32)
 		if err != nil {
@@ -1424,7 +1431,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	// else attempt to get peers from node specific BGP annotations.
 	if len(nrc.globalPeerRouters) == 0 {
 		// Get Global Peer Router ASN configs
-		nodeBgpPeerAsnsAnnotation, ok := node.ObjectMeta.Annotations["kube-router.io/peer.asns"]
+		nodeBgpPeerAsnsAnnotation, ok := node.ObjectMeta.Annotations[peerASNAnnotation]
 		if !ok {
 			glog.Infof("Could not find BGP peer info for the node in the node annotations so skipping configuring peer.")
 			return nil
@@ -1438,7 +1445,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 
 		// Get Global Peer Router IP Address configs
-		nodeBgpPeersAnnotation, ok := node.ObjectMeta.Annotations["kube-router.io/peer.ips"]
+		nodeBgpPeersAnnotation, ok := node.ObjectMeta.Annotations[peerIPAnnotation]
 		if !ok {
 			glog.Infof("Could not find BGP peer info for the node in the node annotations so skipping configuring peer.")
 			return nil
@@ -1452,7 +1459,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 
 		// Get Global Peer Router Password configs
 		var peerPasswords []string
-		nodeBGPPasswordsAnnotation, ok := node.ObjectMeta.Annotations["kube-router.io/peer.passwords"]
+		nodeBGPPasswordsAnnotation, ok := node.ObjectMeta.Annotations[peerPasswordAnnotation]
 		if !ok {
 			glog.Infof("Could not find BGP peer password info in the node's annotations. Assuming no passwords.")
 		} else {
