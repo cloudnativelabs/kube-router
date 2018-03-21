@@ -684,12 +684,13 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
+
 	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
-	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		clusterIp), false, attrs, time.Now(), false)}); err != nil {
-		return fmt.Errorf(err.Error())
-	}
-	return nil
+
+	_, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
+		clusterIp), false, attrs, time.Now(), false)})
+
+	return err
 }
 
 // UnadvertiseClusterIP  unadvertises the service cluster ip
@@ -701,11 +702,7 @@ func (nrc *NetworkRoutingController) UnadvertiseClusterIp(clusterIp string) erro
 
 	err := nrc.bgpServer.DeletePath([]byte(nil), 0, "", pathList)
 
-	if err != nil {
-		return fmt.Errorf(err.Error())
-	}
-
-	return nil
+	return err
 }
 
 
