@@ -705,7 +705,6 @@ func (nrc *NetworkRoutingController) UnadvertiseClusterIp(clusterIp string) erro
 	return err
 }
 
-
 // Each node advertises its pod CIDR to the nodes with same ASN (iBGP peers) and to the global BGP peer
 // or per node BGP peer. Each node ends up advertising not only pod CIDR assigned to the self but other
 // learned routes to the node pod CIDR's as well to global BGP peer or per node BGP peers. external BGP
