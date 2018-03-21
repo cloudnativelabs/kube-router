@@ -24,6 +24,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const (
+	networkPolicyAnnotation = "net.beta.kubernetes.io/network-policy"
+)
+
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
 // policies. Two different types of iptables chains are used. Each pod running on the node which either
 // requires ingress or egress filtering gets a pod specific chains. Each network policy has a iptable chain, which
@@ -1245,10 +1249,10 @@ func buildBetaNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 func getNameSpaceDefaultPolicy(namespace string) (string, error) {
 	for _, nspw := range watchers.NamespaceWatcher.List() {
 		if strings.Compare(namespace, nspw.Name) == 0 {
-			networkPolicyAnnotation, ok := nspw.ObjectMeta.Annotations["net.beta.kubernetes.io/network-policy"]
+			networkPolicy, ok := nspw.ObjectMeta.Annotations[networkPolicyAnnotation]
 			var annot map[string]map[string]string
 			if ok {
-				err := json.Unmarshal([]byte(networkPolicyAnnotation), &annot)
+				err := json.Unmarshal([]byte(networkPolicy), &annot)
 				if err == nil {
 					return annot["ingress"]["isolation"], nil
 				}

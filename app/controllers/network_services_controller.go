@@ -41,6 +41,11 @@ const (
 	IFACE_HAS_NO_ADDR  = "cannot assign requested address"
 	IPVS_SERVER_EXISTS = "file exists"
 	namespace          = "kube_router"
+
+	svcDSRAnnotation       = "kube-router.io/service.dsr"
+	svcSchedulerAnnotation = "kube-router.io/service.scheduler"
+	svcHairpinAnnotation   = "kube-router.io/service.hairpin"
+	svcLocalAnnotation     = "kube-router.io/service.local"
 )
 
 var (
@@ -847,13 +852,13 @@ func buildServicesInfo() serviceInfoMap {
 				externalIPs: make([]string, len(svc.Spec.ExternalIPs)),
 				local:       false,
 			}
-			dsrMethod, ok := svc.ObjectMeta.Annotations["kube-router.io/service.dsr"]
+			dsrMethod, ok := svc.ObjectMeta.Annotations[svcDSRAnnotation]
 			if ok {
 				svcInfo.directServerReturn = true
 				svcInfo.directServerReturnMethod = dsrMethod
 			}
 			svcInfo.scheduler = ipvs.RoundRobin
-			schedulingMethod, ok := svc.ObjectMeta.Annotations["kube-router.io/service.scheduler"]
+			schedulingMethod, ok := svc.ObjectMeta.Annotations[svcSchedulerAnnotation]
 			if ok {
 				if schedulingMethod == ipvs.RoundRobin {
 					svcInfo.scheduler = ipvs.RoundRobin
@@ -867,8 +872,8 @@ func buildServicesInfo() serviceInfoMap {
 			}
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
 			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == "ClientIP"
-			_, svcInfo.hairpin = svc.ObjectMeta.Annotations["kube-router.io/service.hairpin"]
-			_, svcInfo.local = svc.ObjectMeta.Annotations["kube-router.io/service.local"]
+			_, svcInfo.hairpin = svc.ObjectMeta.Annotations[svcHairpinAnnotation]
+			_, svcInfo.local = svc.ObjectMeta.Annotations[svcLocalAnnotation]
 			if svc.Spec.ExternalTrafficPolicy == api.ServiceExternalTrafficPolicyTypeLocal {
 				svcInfo.local = true
 			}
