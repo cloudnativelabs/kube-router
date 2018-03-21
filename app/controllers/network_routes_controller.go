@@ -392,6 +392,11 @@ func (nrc *NetworkRoutingController) advertiseClusterIPs() {
 				}
 
 				if !nodeHasEndpoints {
+					err := nrc.UnadvertiseClusterIp(svc.Spec.ClusterIP)
+					if err != nil {
+						glog.Errorf("error unadvertising cluster IP: %q error: %v", svc.Spec.ClusterIP, err)
+					}
+
 					continue
 				}
 			}
@@ -421,6 +426,13 @@ func (nrc *NetworkRoutingController) advertiseExternalIPs() {
 				}
 
 				if !nodeHasEndpoints {
+					for _, externalIP := range svc.Spec.ExternalIPs {
+						err := nrc.UnadvertiseClusterIp(externalIP)
+						if err != nil {
+							glog.Errorf("error unadvertising external IP: %q, error: %v", externalIP, err)
+						}
+					}
+
 					continue
 				}
 			}
@@ -672,12 +684,25 @@ func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error 
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
+
 	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
-	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		clusterIp), false, attrs, time.Now(), false)}); err != nil {
-		return fmt.Errorf(err.Error())
-	}
-	return nil
+
+	_, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
+		clusterIp), false, attrs, time.Now(), false)})
+
+	return err
+}
+
+// UnadvertiseClusterIP  unadvertises the service cluster ip
+func (nrc *NetworkRoutingController) UnadvertiseClusterIp(clusterIp string) error {
+	glog.V(2).Infof("Unadvertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
+
+	pathList := []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
+		clusterIp), true, nil, time.Now(), false)}
+
+	err := nrc.bgpServer.DeletePath([]byte(nil), 0, "", pathList)
+
+	return err
 }
 
 // Each node advertises its pod CIDR to the nodes with same ASN (iBGP peers) and to the global BGP peer
