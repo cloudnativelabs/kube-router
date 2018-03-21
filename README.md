@@ -102,7 +102,7 @@ that has been thouroughly tested and optimized.
 
 ## Project status
 
-After the significant incubation period to stabilize the code and incorporate user feedback, project is in Beta stage. The core functionality is stable. We are working toward final Beta release.
+Kube-router is being used in several production clusters by diverse set of users ranging from financial firms, gaming companies to universities. For almost a year we have listened to users and incorporated feedback. The core functionality is stable. We are working toward GA release.
 
 ## Contributing
 
@@ -111,10 +111,8 @@ typos, tests — anything at all. Please read the [contribution guide](./CON
 
 ## Support & Feedback
 
-If you experience any problems please reach us on our gitter
-[community forum](https://gitter.im/kube-router/Lobby)
-for quick help. Feel free to leave feedback or raise questions at any time by
-opening an issue [here](https://github.com/cloudnativelabs/kube-router/issues).
+If you experience any problems please reach us on kube-router [slack channel](https://kubernetes.slack.com/messages/C8DCQGTSB/)
+for quick help. Feel free to leave feedback or raise questions by opening an issue [here](https://github.com/cloudnativelabs/kube-router/issues).
 
 ## Acknowledgement
 
