@@ -11,6 +11,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/osrg/gobgp/config"
 	gobgp "github.com/osrg/gobgp/server"
+	"github.com/osrg/gobgp/table"
 
 	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1017,6 +1018,358 @@ func Test_OnNodeUpdate(t *testing.T) {
 	}
 }
 */
+
+func Test_addExportPolicies(t *testing.T) {
+	testcases := []struct {
+		name                   string
+		nrc                    *NetworkRoutingController
+		existingNodes          []*v1core.Node
+		existingServices       []*v1core.Service
+		podDefinedSet          *config.DefinedSets
+		clusterIPDefinedSet    *config.DefinedSets
+		externalPeerDefinedSet *config.DefinedSets
+		policyStatements       []*config.Statement
+		err                    error
+	}{
+		{
+			"has nodes and services",
+			&NetworkRoutingController{
+				clientset:        fake.NewSimpleClientset(),
+				hostnameOverride: "node-1",
+				bgpFullMeshMode:  false,
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+						Annotations: map[string]string{
+							"kube-router.io/node.asn": "100",
+						},
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+					Spec: v1core.NodeSpec{
+						PodCIDR: "172.20.0.0/24",
+					},
+				},
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:        "ClusterIP",
+						ClusterIP:   "10.0.0.1",
+						ExternalIPs: []string{"1.1.1.1"},
+					},
+				},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "podcidrprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "172.20.0.0/24",
+								MasklengthRange: "24..24",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "clusteripprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "1.1.1.1/32",
+								MasklengthRange: "32..32",
+							},
+							{
+								IpPrefix:        "10.0.0.1/32",
+								MasklengthRange: "32..32",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{},
+			[]*config.Statement{
+				{
+					Name: "kube_router_stmt0",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "podcidrprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+			},
+			nil,
+		},
+		{
+			"has nodes, services with external peers",
+			&NetworkRoutingController{
+				clientset:        fake.NewSimpleClientset(),
+				hostnameOverride: "node-1",
+				bgpFullMeshMode:  false,
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				globalPeerRouters: []*config.NeighborConfig{
+					{
+						NeighborAddress: "10.10.0.1",
+					},
+					{
+						NeighborAddress: "10.10.0.2",
+					},
+				},
+				nodeAsnNumber: 100,
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+						Annotations: map[string]string{
+							"kube-router.io/node.asn": "100",
+						},
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+					Spec: v1core.NodeSpec{
+						PodCIDR: "172.20.0.0/24",
+					},
+				},
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:        "ClusterIP",
+						ClusterIP:   "10.0.0.1",
+						ExternalIPs: []string{"1.1.1.1"},
+					},
+				},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "podcidrprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "172.20.0.0/24",
+								MasklengthRange: "24..24",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "clusteripprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "1.1.1.1/32",
+								MasklengthRange: "32..32",
+							},
+							{
+								IpPrefix:        "10.0.0.1/32",
+								MasklengthRange: "32..32",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "externalpeerset",
+						NeighborInfoList: []string{"10.10.0.1", "10.10.0.2"},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			[]*config.Statement{
+				{
+					Name: "kube_router_stmt0",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "podcidrprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+				{
+					Name: "kube_router_stmt1",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "externalpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+			},
+			nil,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			go testcase.nrc.bgpServer.Serve()
+			err := testcase.nrc.bgpServer.Start(&config.Global{
+				Config: config.GlobalConfig{
+					As:       1,
+					RouterId: "10.0.0.0",
+					Port:     10000,
+				},
+			})
+			if err != nil {
+				t.Fatalf("failed to start BGP server: %v", err)
+			}
+			defer testcase.nrc.bgpServer.Stop()
+
+			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
+				t.Errorf("failed to create existing nodes: %v", err)
+			}
+
+			if err = createServices(testcase.nrc.clientset, testcase.existingServices); err != nil {
+				t.Errorf("failed to create existing nodes: %v", err)
+			}
+
+			err = testcase.nrc.addExportPolicies()
+			if !reflect.DeepEqual(err, testcase.err) {
+				t.Logf("expected err %v", testcase.err)
+				t.Logf("actual err %v", err)
+				t.Error("unexpected error")
+			}
+
+			podDefinedSet, err := testcase.nrc.bgpServer.GetDefinedSet(table.DEFINED_TYPE_PREFIX, "podcidrprefixset")
+			if err != nil {
+				t.Fatalf("error validating defined sets: %v", err)
+			}
+
+			if !podDefinedSet.Equal(testcase.podDefinedSet) {
+				t.Logf("expected pod defined set: %+v", testcase.podDefinedSet.PrefixSets)
+				t.Logf("actual pod defined set: %+v", podDefinedSet.PrefixSets)
+				t.Error("unexpected pod defined set")
+			}
+
+			clusterIPDefinedSet, err := testcase.nrc.bgpServer.GetDefinedSet(table.DEFINED_TYPE_PREFIX, "clusteripprefixset")
+			if err != nil {
+				t.Fatalf("error validating defined sets: %v", err)
+			}
+
+			if !clusterIPDefinedSet.Equal(testcase.clusterIPDefinedSet) {
+				t.Logf("expected cluster ip defined set: %+v", testcase.clusterIPDefinedSet.PrefixSets)
+				t.Logf("actual cluster ip defined set: %+v", clusterIPDefinedSet.PrefixSets)
+				t.Error("unexpected cluster ip defined set")
+			}
+
+			externalPeerDefinedSet, err := testcase.nrc.bgpServer.GetDefinedSet(table.DEFINED_TYPE_NEIGHBOR, "externalpeerset")
+			if err != nil {
+				t.Fatalf("error validating defined sets: %v", err)
+			}
+
+			if !externalPeerDefinedSet.Equal(testcase.externalPeerDefinedSet) {
+				t.Logf("expected external peer defined set: %+v", testcase.externalPeerDefinedSet.NeighborSets)
+				t.Logf("actual external peer defined set: %+v", externalPeerDefinedSet.NeighborSets)
+				t.Error("unexpected external peer defined set")
+			}
+
+			policies := testcase.nrc.bgpServer.GetPolicy()
+			policyExists := false
+			for _, policy := range policies {
+				if policy.Name == "kube_router" {
+					policyExists = true
+					break
+				}
+			}
+			if !policyExists {
+				t.Errorf("policy 'kube_router' was not added")
+			}
+
+			routeType, policyAssignments, err := testcase.nrc.bgpServer.GetPolicyAssignment("", table.POLICY_DIRECTION_EXPORT)
+			if routeType != table.ROUTE_TYPE_REJECT {
+				t.Errorf("expected route type 'reject' for export policy assignment, but got %v", routeType)
+			}
+			if err != nil {
+				t.Fatalf("failed to get policy assignments: %v", err)
+			}
+
+			policyAssignmentExists := false
+			for _, policyAssignment := range policyAssignments {
+				if policyAssignment.Name == "kube_router" {
+					policyAssignmentExists = true
+				}
+			}
+
+			if !policyAssignmentExists {
+				t.Error("export policy assignment 'kube_router' was not added")
+			}
+
+			statements := testcase.nrc.bgpServer.GetStatement()
+			for _, expectedStatement := range testcase.policyStatements {
+				found := false
+				for _, statement := range statements {
+					if statement.Equal(expectedStatement) {
+						found = true
+					}
+				}
+
+				if !found {
+					t.Errorf("statement %v not found", expectedStatement)
+				}
+			}
+		})
+	}
+}
+
 func Test_generateTunnelName(t *testing.T) {
 	testcases := []struct {
 		name       string
