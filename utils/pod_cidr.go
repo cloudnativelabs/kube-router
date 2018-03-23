@@ -14,6 +14,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const (
+	podCIDRAnnotation = "kube-router.io/pod-cidr"
+)
+
 // GetPodCidrFromCniSpec gets pod CIDR allocated to the node from CNI spec file and returns it
 func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 	var podCidr net.IPNet
@@ -110,6 +114,15 @@ func GetPodCidrFromNodeSpec(clientset kubernetes.Interface, hostnameOverride str
 	node, err := GetNodeObject(clientset, hostnameOverride)
 	if err != nil {
 		return "", fmt.Errorf("Failed to get pod CIDR allocated for the node due to: " + err.Error())
+	}
+
+	if cidr, ok := node.Annotations[podCIDRAnnotation]; ok {
+		_, _, err = net.ParseCIDR(cidr)
+		if err != nil {
+			return "", fmt.Errorf("error parsing pod CIDR in node annotation: %v", err)
+		}
+
+		return cidr, nil
 	}
 
 	if node.Spec.PodCIDR == "" {
