@@ -63,6 +63,7 @@ var (
 type NetworkServicesController struct {
 	nodeIP              net.IP
 	nodeHostName        string
+	ipvsIgnoreKey       []string
 	syncPeriod          time.Duration
 	mu                  sync.Mutex
 	serviceMap          serviceInfoMap
@@ -588,6 +589,17 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		} else if ipvsSvc.FWMark != 0 {
 			key = fmt.Sprint(ipvsSvc.FWMark)
 		} else {
+			continue
+		}
+
+		ignoreSvc := false
+		for _, iKey := range nsc.ipvsIgnoreKey {
+			if key == iKey {
+				ignoreSvc = true
+				break
+			}
+		}
+		if ignoreSvc {
 			continue
 		}
 
@@ -1649,6 +1661,7 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 		nsc.MetricsEnabled = true
 	}
 
+	nsc.ipvsIgnoreKey = config.IpvsIgnoreKey
 	nsc.syncPeriod = config.IpvsSyncPeriod
 	nsc.globalHairpin = config.GlobalHairpinMode
 
