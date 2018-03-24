@@ -274,10 +274,11 @@ To selectively disable this behaviour per-service, you can use
 the `kube-router.io/service.skiplbips` annotation as e.g.:
 `$ kubectl annotate service my-external-service "kube-router.io/service.skiplbips=true"`
 
-The `--advertise-loadbalancer-ip` flag will make
-the ingress IP(s) set by the LoadBalancer, in addition to externalIPs, to:
+In concrete, unless the Service is annotated as per above, the
+`--advertise-loadbalancer-ip` flag will make Service's Ingress IP(s)
+set by the LoadBalancer to:
 * be locally added to nodes' `kube-dummy-if` network interface
-* be advertised to BGP peers, unless annotated as per above.
+* be advertised to BGP peers
 
 FYI Above has been successfully tested together with
 [MetalLB](https://github.com/google/metallb) in ARP mode.
