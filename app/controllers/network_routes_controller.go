@@ -94,6 +94,7 @@ type NetworkRoutingController struct {
 	bgpClusterId         uint32
 	cniConfFile          string
 	initSrcDstCheckDone  bool
+	ec2IamAuthorized     bool
 }
 
 // Run runs forever until we are notified on stop channel
@@ -1012,6 +1013,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		if err != nil {
 			awserr := err.(awserr.Error)
 			if awserr.Code() == "UnauthorizedOperation" {
+				nrc.ec2IamAuthorized = false
 				glog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
 				return
 			}
@@ -1021,7 +1023,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		}
 
 		// to prevent EC2 rejecting API call due to API throttling give a delay between the calls
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 }
 
@@ -1376,7 +1378,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdat
 
 	// skip if first round of disableSourceDestinationCheck() is not done yet, this is to prevent
 	// all the nodes for all the node add update trying to perfrom disableSourceDestinationCheck
-	if nrc.initSrcDstCheckDone {
+	if nrc.initSrcDstCheckDone && nrc.ec2IamAuthorized {
 		nrc.disableSourceDestinationCheck()
 	}
 }
@@ -1604,6 +1606,9 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 	nrc.bgpRRServer = false
 	nrc.bgpServerStarted = false
 	nrc.initSrcDstCheckDone = false
+
+	// lets start with assumption we hace necessary IAM creds to access EC2 api
+	nrc.ec2IamAuthorized = true
 
 	nrc.cniConfFile = os.Getenv("KUBE_ROUTER_CNI_CONF_FILE")
 	if nrc.cniConfFile == "" {
