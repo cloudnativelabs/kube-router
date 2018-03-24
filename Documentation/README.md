@@ -266,38 +266,20 @@ kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
 
 ### LoadBalancer IPs
 
-By default Kube-router will only consider externalIPs from the Service
-Spec, if you want to **also** use the IP(s) allocated by the LoadBalancer
-implementation for loadbalancer service types, you can annotate the
-service as per below example (`status.loadBalancer.ingress` IPs):
+If you want to also advertise loadbalancer set IPs
+(`status.loadBalancer.ingress` IPs), e.g. when using it with MetalLb,
+add the `--advertise-loadbalancer-ip` flag (`false` by default).
 
-```
-$ kubectl annotate service my-external-service "kube-router.io/service.uselbips=true"
-$ kubectl get svc my-external-service -oyaml
-apiVersion: v1
-kind: Service
-metadata:
-  annotations:
-    kube-router.io/service.uselbips: "true"
-  name: my-external-service
-  namespace: default
-  externalIPs: []
-[...]
-spec:
-  type: LoadBalancer
-[...]
-status:
-  loadBalancer:
-    ingress:
-    - ip: 192.0.2.1
-```
+To selectively disable this behaviour per-service, you can use
+the `kube-router.io/service.skiplbips` annotation as e.g.:
+`$ kubectl annotate service my-external-service "kube-router.io/service.skiplbips=true"`
 
-The `kube-router.io/service.uselbips` per service annotation will make
+The `--advertise-loadbalancer-ip` flag will make
 the ingress IP(s) set by the LoadBalancer, in addition to externalIPs, to:
-* be locally added to nodes (to `kube-dummy-if` network interface, to LVS)
-* be advertised to BGP peers
+* be locally added to nodes' `kube-dummy-if` network interface
+* be advertised to BGP peers, unless annotated as per above.
 
-Above has been successfully tested together with
+FYI Above has been successfully tested together with
 [MetalLB](https://github.com/google/metallb) in ARP mode.
 
 ### HostPort support
