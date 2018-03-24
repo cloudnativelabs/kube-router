@@ -8,41 +8,42 @@ import (
 )
 
 type KubeRouterConfig struct {
-	AdvertiseClusterIp  bool
-	AdvertiseExternalIp bool
-	BGPGracefulRestart  bool
-	CleanupConfig       bool
-	ClusterAsn          uint
-	ClusterCIDR         string
-	ConfigSyncPeriod    time.Duration
-	EnableiBGP          bool
-	EnableOverlay       bool
-	EnablePodEgress     bool
-	EnablePprof         bool
-	FullMeshMode        bool
-	GlobalHairpinMode   bool
-	HealthPort          uint16
-	HelpRequested       bool
-	HostnameOverride    string
-	IPTablesSyncPeriod  time.Duration
-	IpvsSyncPeriod      time.Duration
-	Kubeconfig          string
-	MasqueradeAll       bool
-	Master              string
-	MetricsEnabled      bool
-	MetricsPath         string
-	MetricsPort         uint16
-	NodePortBindOnAllIp bool
-	PeerASNs            []uint
-	PeerMultihopTtl     uint8
-	PeerPasswords       []string
-	PeerRouters         []net.IP
-	RoutesSyncPeriod    time.Duration
-	RunFirewall         bool
-	RunRouter           bool
-	RunServiceProxy     bool
-	Version             bool
-	VLevel              string
+	AdvertiseClusterIp      bool
+	AdvertiseExternalIp     bool
+	AdvertiseLoadBalancerIp bool
+	BGPGracefulRestart      bool
+	CleanupConfig           bool
+	ClusterAsn              uint
+	ClusterCIDR             string
+	ConfigSyncPeriod        time.Duration
+	EnableiBGP              bool
+	EnableOverlay           bool
+	EnablePodEgress         bool
+	EnablePprof             bool
+	FullMeshMode            bool
+	GlobalHairpinMode       bool
+	HealthPort              uint16
+	HelpRequested           bool
+	HostnameOverride        string
+	IPTablesSyncPeriod      time.Duration
+	IpvsSyncPeriod          time.Duration
+	Kubeconfig              string
+	MasqueradeAll           bool
+	Master                  string
+	MetricsEnabled          bool
+	MetricsPath             string
+	MetricsPort             uint16
+	NodePortBindOnAllIp     bool
+	PeerASNs                []uint
+	PeerMultihopTtl         uint8
+	PeerPasswords           []string
+	PeerRouters             []net.IP
+	RoutesSyncPeriod        time.Duration
+	RunFirewall             bool
+	RunRouter               bool
+	RunServiceProxy         bool
+	Version                 bool
+	VLevel                  string
 	// FullMeshPassword    string
 }
 
@@ -90,6 +91,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseExternalIp, "advertise-external-ip", false,
 		"Add External IP of service to the RIB so that it gets advertised to the BGP peers.")
+	fs.BoolVar(&s.AdvertiseLoadBalancerIp, "advertise-loadbalancer-ip", false,
+		"Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.")
 	fs.IPSliceVar(&s.PeerRouters, "peer-router-ips", s.PeerRouters,
 		"The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's.")
 	fs.UintVar(&s.ClusterAsn, "cluster-asn", s.ClusterAsn,
