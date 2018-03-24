@@ -1100,6 +1100,10 @@ func Test_addExportPolicies(t *testing.T) {
 								MasklengthRange: "32..32",
 							},
 							{
+								IpPrefix:        "2.2.2.2/32",
+								MasklengthRange: "32..32",
+							},
+							{
 								IpPrefix:        "10.0.0.1/32",
 								MasklengthRange: "32..32",
 							},
@@ -1201,6 +1205,10 @@ func Test_addExportPolicies(t *testing.T) {
 						PrefixList: []config.Prefix{
 							{
 								IpPrefix:        "1.1.1.1/32",
+								MasklengthRange: "32..32",
+							},
+							{
+								IpPrefix:        "2.2.2.2/32",
 								MasklengthRange: "32..32",
 							},
 							{
