@@ -47,7 +47,7 @@ const (
 	svcSchedulerAnnotation = "kube-router.io/service.scheduler"
 	svcHairpinAnnotation   = "kube-router.io/service.hairpin"
 	svcLocalAnnotation     = "kube-router.io/service.local"
-	svcUseLbIpsAnnotation  = "kube-router.io/service.uselbips"
+	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
 )
 
 var (
@@ -90,7 +90,7 @@ type serviceInfo struct {
 	scheduler                string
 	directServerReturnMethod string
 	hairpin                  bool
-	uselbips                 bool
+	skipLbIps                bool
 	externalIPs              []string
 	loadBalancerIPs          []string
 	local                    bool
@@ -432,7 +432,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		// without a VIP http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 		// to avoid martian packets
 		extIPSet := sets.NewString(svc.externalIPs...)
-		if svc.uselbips {
+		if !svc.skipLbIps {
 			extIPSet = extIPSet.Union(sets.NewString(svc.loadBalancerIPs...))
 		}
 		glog.V(2).Infof("Service \"%s\" using extIPSet: %v", svc.name, extIPSet.List())
@@ -887,7 +887,7 @@ func buildServicesInfo() serviceInfoMap {
 			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == "ClientIP"
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations[svcHairpinAnnotation]
 			_, svcInfo.local = svc.ObjectMeta.Annotations[svcLocalAnnotation]
-			_, svcInfo.uselbips = svc.ObjectMeta.Annotations[svcUseLbIpsAnnotation]
+			_, svcInfo.skipLbIps = svc.ObjectMeta.Annotations[svcSkipLbIpsAnnotation]
 			if svc.Spec.ExternalTrafficPolicy == api.ServiceExternalTrafficPolicyTypeLocal {
 				svcInfo.local = true
 			}

@@ -362,9 +362,6 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
-						Annotations: map[string]string{
-							"kube-router.io/service.uselbips": "true",
-						},
 					},
 					Spec: v1core.ServiceSpec{
 						Type:      "LoadBalancer",
@@ -398,9 +395,6 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
-						Annotations: map[string]string{
-							"kube-router.io/service.uselbips": "true",
-						},
 					},
 					Spec: v1core.ServiceSpec{
 						Type:      "LoadBalancer",
