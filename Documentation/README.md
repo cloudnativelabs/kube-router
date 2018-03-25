@@ -264,6 +264,25 @@ For destination hashing scheduling use:
 kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
 ```
 
+### LoadBalancer IPs
+
+If you want to also advertise loadbalancer set IPs
+(`status.loadBalancer.ingress` IPs), e.g. when using it with MetalLb,
+add the `--advertise-loadbalancer-ip` flag (`false` by default).
+
+To selectively disable this behaviour per-service, you can use
+the `kube-router.io/service.skiplbips` annotation as e.g.:
+`$ kubectl annotate service my-external-service "kube-router.io/service.skiplbips=true"`
+
+In concrete, unless the Service is annotated as per above, the
+`--advertise-loadbalancer-ip` flag will make Service's Ingress IP(s)
+set by the LoadBalancer to:
+* be locally added to nodes' `kube-dummy-if` network interface
+* be advertised to BGP peers
+
+FYI Above has been successfully tested together with
+[MetalLB](https://github.com/google/metallb) in ARP mode.
+
 ### HostPort support
 
 If you would like to use `HostPort` functionality below changes are required in the manifest.

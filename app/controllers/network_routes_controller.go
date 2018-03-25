@@ -63,38 +63,39 @@ const (
 
 // NetworkRoutingController is struct to hold necessary information required by controller
 type NetworkRoutingController struct {
-	nodeIP               net.IP
-	nodeName             string
-	nodeSubnet           net.IPNet
-	nodeInterface        string
-	activeNodes          map[string]bool
-	mu                   sync.Mutex
-	clientset            kubernetes.Interface
-	bgpServer            *gobgp.BgpServer
-	syncPeriod           time.Duration
-	clusterCIDR          string
-	enablePodEgress      bool
-	hostnameOverride     string
-	advertiseClusterIp   bool
-	advertiseExternalIp  bool
-	defaultNodeAsnNumber uint32
-	nodeAsnNumber        uint32
-	globalPeerRouters    []*config.NeighborConfig
-	nodePeerRouters      []string
-	bgpFullMeshMode      bool
-	bgpEnableInternal    bool
-	bgpGracefulRestart   bool
-	ipSetHandler         *utils.IPSet
-	enableOverlays       bool
-	peerMultihopTtl      uint8
-	MetricsEnabled       bool
-	bgpServerStarted     bool
-	bgpRRClient          bool
-	bgpRRServer          bool
-	bgpClusterId         uint32
-	cniConfFile          string
-	initSrcDstCheckDone  bool
-	ec2IamAuthorized     bool
+	nodeIP                  net.IP
+	nodeName                string
+	nodeSubnet              net.IPNet
+	nodeInterface           string
+	activeNodes             map[string]bool
+	mu                      sync.Mutex
+	clientset               kubernetes.Interface
+	bgpServer               *gobgp.BgpServer
+	syncPeriod              time.Duration
+	clusterCIDR             string
+	enablePodEgress         bool
+	hostnameOverride        string
+	advertiseClusterIp      bool
+	advertiseExternalIp     bool
+	advertiseLoadBalancerIp bool
+	defaultNodeAsnNumber    uint32
+	nodeAsnNumber           uint32
+	globalPeerRouters       []*config.NeighborConfig
+	nodePeerRouters         []string
+	bgpFullMeshMode         bool
+	bgpEnableInternal       bool
+	bgpGracefulRestart      bool
+	ipSetHandler            *utils.IPSet
+	enableOverlays          bool
+	peerMultihopTtl         uint8
+	MetricsEnabled          bool
+	bgpServerStarted        bool
+	bgpRRClient             bool
+	bgpRRServer             bool
+	bgpClusterId            uint32
+	cniConfFile             string
+	initSrcDstCheckDone     bool
+	ec2IamAuthorized        bool
 }
 
 // Run runs forever until we are notified on stop channel
@@ -246,15 +247,9 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat,
 			}
 		}
 
-		// advertise cluster IP for the service to be reachable via host
-		if nrc.advertiseClusterIp {
-			nrc.advertiseClusterIPs()
-		}
-
-		// advertise cluster IP for the service to be reachable via host
-		if nrc.advertiseExternalIp {
-			nrc.advertiseExternalIPs()
-		}
+		// [un]advertise IPs for the services to be reachable via host
+		toAdvertise, toUnAdvertise, _ := nrc.getIpsToAdvertise(true)
+		nrc.advertiseIPs(toAdvertise, toUnAdvertise)
 
 		glog.V(1).Info("Performing periodic sync of the routes")
 		err = nrc.advertiseRoute()
@@ -374,80 +369,6 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 	}
 }
 
-func (nrc *NetworkRoutingController) advertiseClusterIPs() {
-	glog.V(1).Info("Advertising cluster ips of services to the external BGP peers")
-	for _, svc := range watchers.ServiceWatcher.List() {
-		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
-
-			// skip headless services
-			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
-				continue
-			}
-			glog.V(2).Info("found a service of cluster ip type")
-
-			if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
-				nodeHasEndpoints, err := nrc.nodeHasEndpointsForService(svc)
-				if err != nil {
-					glog.Errorf("error determining if node has endpoints for svc: %q error: %v", svc.Name, err)
-					continue
-				}
-
-				if !nodeHasEndpoints {
-					err := nrc.UnadvertiseClusterIp(svc.Spec.ClusterIP)
-					if err != nil {
-						glog.Errorf("error unadvertising cluster IP: %q error: %v", svc.Spec.ClusterIP, err)
-					}
-
-					continue
-				}
-			}
-
-			err := nrc.AdvertiseClusterIp(svc.Spec.ClusterIP)
-			if err != nil {
-				glog.Errorf("error advertising cluster IP: %q error: %v", svc.Spec.ClusterIP, err)
-			}
-		}
-	}
-}
-
-func (nrc *NetworkRoutingController) advertiseExternalIPs() {
-	glog.V(2).Info("Advertising external ips of the services to the external BGP peers")
-	for _, svc := range watchers.ServiceWatcher.List() {
-		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
-			// skip headless services
-			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
-				continue
-			}
-
-			if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
-				nodeHasEndpoints, err := nrc.nodeHasEndpointsForService(svc)
-				if err != nil {
-					glog.Errorf("error determining if node has endpoints for svc: %q error: %v", svc.Name, err)
-					continue
-				}
-
-				if !nodeHasEndpoints {
-					for _, externalIP := range svc.Spec.ExternalIPs {
-						err := nrc.UnadvertiseClusterIp(externalIP)
-						if err != nil {
-							glog.Errorf("error unadvertising external IP: %q, error: %v", externalIP, err)
-						}
-					}
-
-					continue
-				}
-			}
-
-			for _, externalIP := range svc.Spec.ExternalIPs {
-				err := nrc.AdvertiseClusterIp(externalIP)
-				if err != nil {
-					glog.Errorf("error advertising external IP: %q, error: %v", externalIP, err)
-				}
-			}
-		}
-	}
-}
-
 func (nrc *NetworkRoutingController) advertiseRoute() error {
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
@@ -472,34 +393,97 @@ func (nrc *NetworkRoutingController) advertiseRoute() error {
 	return nil
 }
 
-func (nrc *NetworkRoutingController) getClusterIps() ([]string, error) {
-	clusterIpList := make([]string, 0)
-	for _, svc := range watchers.ServiceWatcher.List() {
-		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
+func (nrc *NetworkRoutingController) getClusterIp(svc *v1core.Service) string {
+	clusterIp := ""
+	if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
 
-			// skip headless services
-			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
-				continue
-			}
-			clusterIpList = append(clusterIpList, svc.Spec.ClusterIP)
+		// skip headless services
+		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
+			clusterIp = svc.Spec.ClusterIP
 		}
 	}
-	return clusterIpList, nil
+	return clusterIp
 }
 
-func (nrc *NetworkRoutingController) getExternalIps() ([]string, error) {
+func (nrc *NetworkRoutingController) getExternalIps(svc *v1core.Service) []string {
 	externalIpList := make([]string, 0)
-	for _, svc := range watchers.ServiceWatcher.List() {
-		if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
+	if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
 
-			// skip headless services
-			if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
-				continue
-			}
+		// skip headless services
+		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
 			externalIpList = append(externalIpList, svc.Spec.ExternalIPs...)
 		}
 	}
-	return externalIpList, nil
+	return externalIpList
+}
+
+func (nrc *NetworkRoutingController) getLoadBalancerIps(svc *v1core.Service) []string {
+	loadBalancerIpList := make([]string, 0)
+	if svc.Spec.Type == "LoadBalancer" {
+		// skip headless services
+		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
+			_, skiplbips := svc.ObjectMeta.Annotations["kube-router.io/service.skiplbips"]
+			if !skiplbips {
+				for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
+					loadBalancerIpList = append(loadBalancerIpList, lbIngress.IP)
+				}
+			}
+		}
+	}
+	return loadBalancerIpList
+}
+
+func (nrc *NetworkRoutingController) getIpsToAdvertise(verifyEndpoints bool) ([]string, []string, error) {
+	ipsToAdvertise := make([]string, 0)
+	ipsToUnAdvertise := make([]string, 0)
+	for _, svc := range watchers.ServiceWatcher.List() {
+		ipList := make([]string, 0)
+		var err error
+		nodeHasEndpoints := true
+		if verifyEndpoints {
+			if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
+				nodeHasEndpoints, err = nrc.nodeHasEndpointsForService(svc)
+				if err != nil {
+					glog.Errorf("error determining if node has endpoints for svc: %q error: %v", svc.Name, err)
+					continue
+				}
+			}
+		}
+		if nrc.advertiseClusterIp {
+			clusterIp := nrc.getClusterIp(svc)
+			if clusterIp != "" {
+				ipList = append(ipList, clusterIp)
+			}
+		}
+		if nrc.advertiseExternalIp {
+			ipList = append(ipList, nrc.getExternalIps(svc)...)
+		}
+		if nrc.advertiseLoadBalancerIp {
+			ipList = append(ipList, nrc.getLoadBalancerIps(svc)...)
+		}
+		if nodeHasEndpoints {
+			ipsToAdvertise = append(ipsToAdvertise, ipList...)
+		} else {
+			ipsToUnAdvertise = append(ipsToUnAdvertise, ipList...)
+		}
+	}
+	return ipsToAdvertise, ipsToUnAdvertise, nil
+}
+
+func (nrc *NetworkRoutingController) advertiseIPs(toAdvertise []string, toUnAdvertise []string) error {
+	for _, ip := range toAdvertise {
+		err := nrc.AdvertiseClusterIp(ip)
+		if err != nil {
+			glog.Errorf("error advertising IP: %q, error: %v", ip, err)
+		}
+	}
+	for _, ip := range toUnAdvertise {
+		err := nrc.UnadvertiseClusterIp(ip)
+		if err != nil {
+			glog.Errorf("error unadvertising IP: %q, error: %v", ip, err)
+		}
+	}
+	return nil
 }
 
 // nodeHasEndpointsForService will get the corresponding Endpoints resource for a given Service
@@ -740,19 +724,15 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		nrc.bgpServer.AddDefinedSet(podCidrPrefixSet)
 	}
 
-	// creates prefix set to represent all the cluster IP associated with the services
-	clusterIpPrefixList := make([]config.Prefix, 0)
-	clusterIps, _ := nrc.getClusterIps()
-	for _, ip := range clusterIps {
-		clusterIpPrefixList = append(clusterIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
-	}
-	externalIps, _ := nrc.getExternalIps()
-	for _, ip := range externalIps {
-		clusterIpPrefixList = append(clusterIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
+	// creates prefix set to represent all the advertisable IP associated with the services
+	advIpPrefixList := make([]config.Prefix, 0)
+	advIps, _, _ := nrc.getIpsToAdvertise(false)
+	for _, ip := range advIps {
+		advIpPrefixList = append(advIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
 	}
 	clusterIpPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
 		PrefixSetName: "clusteripprefixset",
-		PrefixList:    clusterIpPrefixList,
+		PrefixList:    advIpPrefixList,
 	})
 	err = nrc.bgpServer.ReplaceDefinedSet(clusterIpPrefixSet)
 	if err != nil {
@@ -1649,6 +1629,7 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 
 	nrc.advertiseClusterIp = kubeRouterConfig.AdvertiseClusterIp
 	nrc.advertiseExternalIp = kubeRouterConfig.AdvertiseExternalIp
+	nrc.advertiseLoadBalancerIp = kubeRouterConfig.AdvertiseLoadBalancerIp
 
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 
