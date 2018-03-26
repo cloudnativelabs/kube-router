@@ -30,6 +30,7 @@ import (
 	"github.com/vishvananda/netns"
 	"golang.org/x/net/context"
 	api "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -46,6 +47,7 @@ const (
 	svcSchedulerAnnotation = "kube-router.io/service.scheduler"
 	svcHairpinAnnotation   = "kube-router.io/service.hairpin"
 	svcLocalAnnotation     = "kube-router.io/service.local"
+	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
 )
 
 var (
@@ -88,7 +90,9 @@ type serviceInfo struct {
 	scheduler                string
 	directServerReturnMethod string
 	hairpin                  bool
+	skipLbIps                bool
 	externalIPs              []string
+	loadBalancerIPs          []string
 	local                    bool
 }
 
@@ -427,7 +431,13 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		// based on FWMARK to enable Direct server return functionality. DSR requires a director
 		// without a VIP http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 		// to avoid martian packets
-		for _, externalIP := range svc.externalIPs {
+		extIPSet := sets.NewString(svc.externalIPs...)
+		if !svc.skipLbIps {
+			extIPSet = extIPSet.Union(sets.NewString(svc.loadBalancerIPs...))
+		}
+		glog.V(2).Infof("Service \"%s\" using extIPSet: %v", svc.name, extIPSet.List())
+
+		for _, externalIP := range extIPSet.List() {
 			var externalIpServiceId string
 			if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
 				ipvsExternalIPSvc, err := ipvsAddFWMarkService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
@@ -871,9 +881,13 @@ func buildServicesInfo() serviceInfoMap {
 				}
 			}
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
+			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
+				svcInfo.loadBalancerIPs = append(svcInfo.loadBalancerIPs, lbIngress.IP)
+			}
 			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == "ClientIP"
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations[svcHairpinAnnotation]
 			_, svcInfo.local = svc.ObjectMeta.Annotations[svcLocalAnnotation]
+			_, svcInfo.skipLbIps = svc.ObjectMeta.Annotations[svcSkipLbIpsAnnotation]
 			if svc.Spec.ExternalTrafficPolicy == api.ServiceExternalTrafficPolicyTypeLocal {
 				svcInfo.local = true
 			}

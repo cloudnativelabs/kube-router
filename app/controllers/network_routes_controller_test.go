@@ -185,7 +185,12 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			}
 
 			waitForListerWithTimeout(time.Second*10, t)
-			testcase.nrc.advertiseClusterIPs()
+			// ClusterIPs
+			testcase.nrc.advertiseClusterIp = true
+			testcase.nrc.advertiseExternalIp = false
+			testcase.nrc.advertiseLoadBalancerIp = false
+			toAdvertise, toUnAdvertise, _ := testcase.nrc.getIpsToAdvertise(false)
+			testcase.nrc.advertiseIPs(toAdvertise, toUnAdvertise)
 
 			watchEvents := waitForBGPWatchEventWithTimeout(time.Second*10, len(testcase.watchEvents), w, t)
 			for _, watchEvent := range watchEvents {
@@ -348,6 +353,95 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				"1.1.1.1/32": true,
 			},
 		},
+		{
+			"add bgp path to loadbalancerIP for service with LoadBalancer IP",
+			&NetworkRoutingController{
+				bgpServer: gobgp.NewBgpServer(),
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "LoadBalancer",
+						ClusterIP: "10.0.0.1",
+					},
+					Status: v1core.ServiceStatus{
+						LoadBalancer: v1core.LoadBalancerStatus{
+							Ingress: []v1core.LoadBalancerIngress{
+								{
+									IP: "10.0.255.1",
+								},
+								{
+									IP: "10.0.255.2",
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.255.1/32": true,
+				"10.0.255.2/32": true,
+			},
+		},
+		{
+			"no bgp path to nil loadbalancerIPs for service with LoadBalancer",
+			&NetworkRoutingController{
+				bgpServer: gobgp.NewBgpServer(),
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "LoadBalancer",
+						ClusterIP: "10.0.0.1",
+					},
+					Status: v1core.ServiceStatus{
+						LoadBalancer: v1core.LoadBalancerStatus{
+							Ingress: []v1core.LoadBalancerIngress{},
+						},
+					},
+				},
+			},
+			map[string]bool{},
+		},
+		{
+			"no bgp path to loadbalancerIPs for service with LoadBalancer and skiplbips annotation",
+			&NetworkRoutingController{
+				bgpServer: gobgp.NewBgpServer(),
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+						Annotations: map[string]string{
+							"kube-router.io/service.skiplbips": "true",
+						},
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "LoadBalancer",
+						ClusterIP: "10.0.0.1",
+					},
+					Status: v1core.ServiceStatus{
+						LoadBalancer: v1core.LoadBalancerStatus{
+							Ingress: []v1core.LoadBalancerIngress{
+								{
+									IP: "10.0.255.1",
+								},
+								{
+									IP: "10.0.255.2",
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{},
+		},
 	}
 
 	for _, testcase := range testcases {
@@ -379,7 +473,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			}
 
 			waitForListerWithTimeout(time.Second*10, t)
-			testcase.nrc.advertiseExternalIPs()
+			// ExternalIPs
+			testcase.nrc.advertiseClusterIp = false
+			testcase.nrc.advertiseExternalIp = true
+			testcase.nrc.advertiseLoadBalancerIp = true
+			toAdvertise, toUnAdvertise, _ := testcase.nrc.getIpsToAdvertise(false)
+			testcase.nrc.advertiseIPs(toAdvertise, toUnAdvertise)
 
 			watchEvents := waitForBGPWatchEventWithTimeout(time.Second*10, len(testcase.watchEvents), w, t)
 			for _, watchEvent := range watchEvents {
@@ -1290,6 +1389,10 @@ func Test_addExportPolicies(t *testing.T) {
 				t.Errorf("failed to create existing nodes: %v", err)
 			}
 
+			// ClusterIPs and ExternalIPs
+			testcase.nrc.advertiseClusterIp = true
+			testcase.nrc.advertiseExternalIp = true
+			testcase.nrc.advertiseLoadBalancerIp = false
 			err = testcase.nrc.addExportPolicies()
 			if !reflect.DeepEqual(err, testcase.err) {
 				t.Logf("expected err %v", testcase.err)
