@@ -1199,10 +1199,6 @@ func Test_addExportPolicies(t *testing.T) {
 								MasklengthRange: "32..32",
 							},
 							{
-								IpPrefix:        "2.2.2.2/32",
-								MasklengthRange: "32..32",
-							},
-							{
 								IpPrefix:        "10.0.0.1/32",
 								MasklengthRange: "32..32",
 							},
@@ -1307,10 +1303,6 @@ func Test_addExportPolicies(t *testing.T) {
 								MasklengthRange: "32..32",
 							},
 							{
-								IpPrefix:        "2.2.2.2/32",
-								MasklengthRange: "32..32",
-							},
-							{
 								IpPrefix:        "10.0.0.1/32",
 								MasklengthRange: "32..32",
 							},
@@ -1381,6 +1373,16 @@ func Test_addExportPolicies(t *testing.T) {
 			}
 			defer testcase.nrc.bgpServer.Stop()
 
+			_, err = watchers.StartServiceWatcher(testcase.nrc.clientset, 0)
+			if err != nil {
+				t.Fatalf("failed to initialize service watcher %v", err)
+			}
+
+			_, err = watchers.StartEndpointsWatcher(testcase.nrc.clientset, 0)
+			if err != nil {
+				t.Fatalf("failed to initialize endpoints watcher %v", err)
+			}
+
 			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
 				t.Errorf("failed to create existing nodes: %v", err)
 			}
@@ -1389,10 +1391,12 @@ func Test_addExportPolicies(t *testing.T) {
 				t.Errorf("failed to create existing nodes: %v", err)
 			}
 
-			// ClusterIPs and ExternalIPs
 			testcase.nrc.advertiseClusterIp = true
 			testcase.nrc.advertiseExternalIp = true
 			testcase.nrc.advertiseLoadBalancerIp = false
+
+			waitForListerWithTimeout(time.Second*10, t)
+
 			err = testcase.nrc.addExportPolicies()
 			if !reflect.DeepEqual(err, testcase.err) {
 				t.Logf("expected err %v", testcase.err)
