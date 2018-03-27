@@ -62,5 +62,7 @@ import:
   version: ^v1.8.36
 - package: github.com/prometheus/client_golang
   version: ~0.8.0
-- package: golang.org/x/sys/unix
+- package: github.com/onsi/ginkgo
+  version: master
+- package: github.com/onsi/gomega
   version: master
