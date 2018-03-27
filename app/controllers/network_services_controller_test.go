@@ -196,7 +196,7 @@ var _ = Describe("NetworkServicesController", func() {
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
 		})
-		It("Should have properly called cleanupMangleTableRule", func() {
+		It("Should have called cleanupMangleTableRule for ExternalIPs", func() {
 			Expect(
 				fmt.Sprintf("%v", mockedLinuxNetworking.cleanupMangleTableRuleCalls())).To(
 				Equal(
@@ -214,13 +214,13 @@ var _ = Describe("NetworkServicesController", func() {
 				mockedLinuxNetworking.getKubeDummyInterfaceCalls()).To(
 				HaveLen(1))
 		})
-		It("Should have properly called setupRoutesForExternalIPForDSR", func() {
+		It("Should have called setupRoutesForExternalIPForDSR with serviceInfoMap", func() {
 			Expect(
 				mockedLinuxNetworking.setupRoutesForExternalIPForDSRCalls()).To(
 				ContainElement(
 					struct{ In1 serviceInfoMap }{In1: nsc.serviceMap}))
 		})
-		It("Should have properly called ipAddrAdd", func() {
+		It("Should have called ipAddrAdd for ClusterIP and ExternalIPs", func() {
 			Expect((func() []string {
 				ret := []string{}
 				for _, addr := range mockedLinuxNetworking.ipAddrAddCalls() {
@@ -230,12 +230,12 @@ var _ = Describe("NetworkServicesController", func() {
 			})()).To(
 				ConsistOf("10.0.0.1", "1.1.1.1", "2.2.2.2"))
 		})
-		It("Should have properly called ipvsDelService", func() {
+		It("Should have called ipvsDelService for pre-existing fooSvc1 fooSvc2", func() {
 			Expect(fmt.Sprintf("%v", mockedLinuxNetworking.ipvsDelServiceCalls())).To(
 				Equal(
 					fmt.Sprintf("[{%p} {%p}]", fooSvc1, fooSvc2)))
 		})
-		It("Should have properly called ipvsAddService", func() {
+		It("Should have called ipvsAddService for ClusterIP and ExternalIPs", func() {
 			Expect(func() []string {
 				ret := []string{}
 				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
@@ -286,7 +286,7 @@ var _ = Describe("NetworkServicesController", func() {
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
 		})
-		It("Should have properly called ipAddrAdd", func() {
+		It("Should have called ipAddrAdd for ClusterIP, ExternalIPs and LoadBalancerIPs", func() {
 			Expect((func() []string {
 				ret := []string{}
 				for _, addr := range mockedLinuxNetworking.ipAddrAddCalls() {
@@ -297,7 +297,7 @@ var _ = Describe("NetworkServicesController", func() {
 				ConsistOf(
 					"10.0.0.1", "1.1.1.1", "2.2.2.2", "10.255.0.1", "10.255.0.2"))
 		})
-		It("Should have properly called ipvsAddService", func() {
+		It("Should have called ipvsAddService for ClusterIP, ExternalIPs and LoadBalancerIPs", func() {
 			Expect(func() []string {
 				ret := []string{}
 				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
@@ -353,7 +353,7 @@ var _ = Describe("NetworkServicesController", func() {
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
 		})
-		It("Should have properly called ipAddrAdd", func() {
+		It("Should have called ipAddrAdd only for ClusterIP and ExternalIPs", func() {
 			Expect((func() []string {
 				ret := []string{}
 				for _, addr := range mockedLinuxNetworking.ipAddrAddCalls() {
@@ -364,7 +364,68 @@ var _ = Describe("NetworkServicesController", func() {
 				ConsistOf(
 					"10.0.0.1", "1.1.1.1", "2.2.2.2"))
 		})
-		It("Should have properly called ipvsAddService", func() {
+		It("Should have called ipvsAddService only for ClusterIP and ExternalIPs", func() {
+			Expect(func() []string {
+				ret := []string{}
+				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
+					ret = append(ret, fmt.Sprintf("%v:%v:%v:%v:%v",
+						args.Vip, args.Protocol, args.Port,
+						args.Persistent, args.Scheduler))
+				}
+				return ret
+			}()).To(
+				ConsistOf(
+					"10.0.0.1:6:8080:false:rr",
+					"1.1.1.1:6:8080:false:rr",
+					"2.2.2.2:6:8080:false:rr"))
+		})
+	})
+	Context("service no endpoints with loadbalancer without IPs", func() {
+		var syncErr error
+		BeforeEach(func() {
+			testcase = &TestCaseSvcEPs{
+				&v1core.Service{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:        "LoadBalancer",
+						ClusterIP:   "10.0.0.1",
+						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
+						Ports: []v1core.ServicePort{
+							{Name: "port-1", Protocol: "TCP", Port: 8080},
+						},
+					},
+					Status: v1core.ServiceStatus{
+						LoadBalancer: v1core.LoadBalancerStatus{
+							Ingress: []v1core.LoadBalancerIngress{
+								{Hostname: "foo-bar.zone.elb.example.com"},
+							},
+						},
+					},
+				},
+				&v1core.Endpoints{},
+				false,
+			}
+		})
+		JustBeforeEach(func() {
+			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		})
+		It("Should have called syncIpvsServices OK", func() {
+			Expect(syncErr).To(Succeed())
+		})
+		It("Should have called ipAddrAdd only for ClusterIP and ExternalIPs", func() {
+			Expect((func() []string {
+				ret := []string{}
+				for _, addr := range mockedLinuxNetworking.ipAddrAddCalls() {
+					ret = append(ret, addr.IP)
+				}
+				return ret
+			})()).To(
+				ConsistOf(
+					"10.0.0.1", "1.1.1.1", "2.2.2.2"))
+		})
+		It("Should have properly ipvsAddService only for ClusterIP and ExternalIPs", func() {
 			Expect(func() []string {
 				ret := []string{}
 				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
@@ -421,7 +482,7 @@ var _ = Describe("NetworkServicesController", func() {
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
 		})
-		It("Should have called properly AddServiceCalls", func() {
+		It("Should have called AddServiceCalls for ClusterIP and ExternalIPs", func() {
 			Expect((func() []string {
 				ret := []string{}
 				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
