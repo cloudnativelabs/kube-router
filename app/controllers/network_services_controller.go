@@ -882,7 +882,9 @@ func buildServicesInfo() serviceInfoMap {
 			}
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
 			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
-				svcInfo.loadBalancerIPs = append(svcInfo.loadBalancerIPs, lbIngress.IP)
+				if len(lbIngress.IP) > 0 {
+					svcInfo.loadBalancerIPs = append(svcInfo.loadBalancerIPs, lbIngress.IP)
+				}
 			}
 			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == "ClientIP"
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations[svcHairpinAnnotation]
