@@ -425,7 +425,9 @@ func (nrc *NetworkRoutingController) getLoadBalancerIps(svc *v1core.Service) []s
 			_, skiplbips := svc.ObjectMeta.Annotations["kube-router.io/service.skiplbips"]
 			if !skiplbips {
 				for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
-					loadBalancerIpList = append(loadBalancerIpList, lbIngress.IP)
+					if len(lbIngress.IP) > 0 {
+						loadBalancerIpList = append(loadBalancerIpList, lbIngress.IP)
+					}
 				}
 			}
 		}

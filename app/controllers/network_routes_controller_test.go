@@ -354,6 +354,33 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			},
 		},
 		{
+			"skip bgp path to loadbalancerIP for service without LoadBalancer IP",
+			&NetworkRoutingController{
+				bgpServer: gobgp.NewBgpServer(),
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "LoadBalancer",
+						ClusterIP: "10.0.0.1",
+					},
+					Status: v1core.ServiceStatus{
+						LoadBalancer: v1core.LoadBalancerStatus{
+							Ingress: []v1core.LoadBalancerIngress{
+								{
+									Hostname: "foo-bar.zone.elb.example.com",
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{},
+		},
+		{
 			"add bgp path to loadbalancerIP for service with LoadBalancer IP",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
