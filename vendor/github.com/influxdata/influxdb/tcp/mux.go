@@ -81,12 +81,26 @@ func (mux *Mux) Serve(ln net.Listener) error {
 		if err != nil {
 			// Wait for all connections to be demux
 			mux.wg.Wait()
-			for _, ln := range mux.m {
-				close(ln.c)
-			}
 
-			if mux.defaultListener != nil {
-				close(mux.defaultListener.c)
+			// Concurrently close all registered listeners.
+			// Because mux.m is keyed by byte, in the worst case we would spawn 256 goroutines here.
+			var wg sync.WaitGroup
+			mux.mu.RLock()
+			for _, ln := range mux.m {
+				wg.Add(1)
+				go func(ln *listener) {
+					defer wg.Done()
+					ln.Close()
+				}(ln)
+			}
+			mux.mu.RUnlock()
+			wg.Wait()
+
+			mux.mu.RLock()
+			dl := mux.defaultListener
+			mux.mu.RUnlock()
+			if dl != nil {
+				dl.Close()
 			}
 
 			return err
@@ -123,7 +137,10 @@ func (mux *Mux) handleConn(conn net.Conn) {
 	}
 
 	// Retrieve handler based on first byte.
+	mux.mu.RLock()
 	handler := mux.m[typ[0]]
+	mux.mu.RUnlock()
+
 	if handler == nil {
 		if mux.defaultListener == nil {
 			conn.Close()
@@ -138,22 +155,15 @@ func (mux *Mux) handleConn(conn net.Conn) {
 		handler = mux.defaultListener
 	}
 
-	// Send connection to handler.  The handler is responsible for closing the connection.
-	timer := time.NewTimer(mux.Timeout)
-	defer timer.Stop()
-
-	select {
-	case handler.c <- conn:
-	case <-timer.C:
-		conn.Close()
-		mux.Logger.Printf("tcp.Mux: handler not ready: %d. Connection from %s closed", typ[0], conn.RemoteAddr())
-		return
-	}
+	handler.HandleConn(conn, typ[0])
 }
 
 // Listen returns a listener identified by header.
 // Any connection accepted by mux is multiplexed based on the initial header byte.
 func (mux *Mux) Listen(header byte) net.Listener {
+	mux.mu.Lock()
+	defer mux.mu.Unlock()
+
 	// Ensure two listeners are not created for the same header byte.
 	if _, ok := mux.m[header]; ok {
 		panic(fmt.Sprintf("listener already registered under header byte: %d", header))
@@ -161,12 +171,27 @@ func (mux *Mux) Listen(header byte) net.Listener {
 
 	// Create a new listener and assign it.
 	ln := &listener{
-		c:   make(chan net.Conn),
-		mux: mux,
+		c:    make(chan net.Conn),
+		done: make(chan struct{}),
+		mux:  mux,
 	}
 	mux.m[header] = ln
 
 	return ln
+}
+
+// release removes the listener from the mux.
+func (mux *Mux) release(ln *listener) bool {
+	mux.mu.Lock()
+	defer mux.mu.Unlock()
+
+	for b, l := range mux.m {
+		if l == ln {
+			delete(mux.m, b)
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultListener will return a net.Listener that will pass-through any
@@ -178,10 +203,13 @@ func (mux *Mux) Listen(header byte) net.Listener {
 // with registered listener bytes and the first character of the HTTP request:
 // 71 ('G') for GET, etc.
 func (mux *Mux) DefaultListener() net.Listener {
+	mux.mu.Lock()
+	defer mux.mu.Unlock()
 	if mux.defaultListener == nil {
 		mux.defaultListener = &listener{
-			c:   make(chan net.Conn),
-			mux: mux,
+			c:    make(chan net.Conn),
+			done: make(chan struct{}),
+			mux:  mux,
 		}
 	}
 
@@ -190,21 +218,65 @@ func (mux *Mux) DefaultListener() net.Listener {
 
 // listener is a receiver for connections received by Mux.
 type listener struct {
-	c   chan net.Conn
 	mux *Mux
+
+	// The done channel is closed before taking a lock on mu to close c.
+	// That way, anyone holding an RLock can release the lock by receiving from done.
+	done chan struct{}
+
+	mu sync.RWMutex
+	c  chan net.Conn
 }
 
 // Accept waits for and returns the next connection to the listener.
-func (ln *listener) Accept() (c net.Conn, err error) {
-	conn, ok := <-ln.c
-	if !ok {
+func (ln *listener) Accept() (net.Conn, error) {
+	ln.mu.RLock()
+	defer ln.mu.RUnlock()
+
+	select {
+	case <-ln.done:
 		return nil, errors.New("network connection closed")
+	case conn := <-ln.c:
+		return conn, nil
 	}
-	return conn, nil
 }
 
-// Close is a no-op. The mux's listener should be closed instead.
-func (ln *listener) Close() error { return nil }
+// Close removes this listener from the parent mux and closes the channel.
+func (ln *listener) Close() error {
+	if ok := ln.mux.release(ln); ok {
+		// Close done to signal to any RLock holders to release their lock.
+		close(ln.done)
+
+		// Hold a lock while reassigning ln.c to nil
+		// so that attempted sends or receives will block forever.
+		ln.mu.Lock()
+		ln.c = nil
+		ln.mu.Unlock()
+	}
+	return nil
+}
+
+// HandleConn handles the connection, if the listener has not been closed.
+func (ln *listener) HandleConn(conn net.Conn, handlerID byte) {
+	ln.mu.RLock()
+	defer ln.mu.RUnlock()
+
+	// Send connection to handler.  The handler is responsible for closing the connection.
+	timer := time.NewTimer(ln.mux.Timeout)
+	defer timer.Stop()
+
+	select {
+	case <-ln.done:
+		// Receive will return immediately if ln.Close has been called.
+		conn.Close()
+	case ln.c <- conn:
+		// Send will block forever if ln.Close has been called.
+	case <-timer.C:
+		conn.Close()
+		ln.mux.Logger.Printf("tcp.Mux: handler not ready: %d. Connection from %s closed", handlerID, conn.RemoteAddr())
+		return
+	}
+}
 
 // Addr returns the Addr of the listener
 func (ln *listener) Addr() net.Addr {

@@ -256,6 +256,18 @@ func init() {
 				exp:     `{"results":[{"statement_id":0,"series":[{"name":"cpu","columns":["time","host","region","val"],"values":[["2000-01-01T00:00:00Z","serverA","uswest",23.2]]}]}]}`,
 				params:  url.Values{"db": []string{"db1"}},
 			},
+			&Query{
+				name:    "Delete remaining instances of series",
+				command: `DELETE FROM cpu WHERE time < '2000-01-04T00:00:00Z'`,
+				exp:     `{"results":[{"statement_id":0}]}`,
+				params:  url.Values{"db": []string{"db0"}},
+			},
+			&Query{
+				name:    "Show series should now be empty",
+				command: `SHOW SERIES`,
+				exp:     `{"results":[{"statement_id":0}]}`,
+				params:  url.Values{"db": []string{"db0"}},
+			},
 		},
 	}
 
@@ -293,6 +305,12 @@ func init() {
 				name:    "Make sure last point still exists",
 				command: `SELECT * FROM cpu`,
 				exp:     `{"results":[{"statement_id":0,"series":[{"name":"cpu","columns":["time","host","region","val"],"values":[["2000-01-01T00:00:00Z","serverB","uswest",23.2],["2000-01-03T00:00:00Z","serverA","uswest",200]]}]}]}`,
+				params:  url.Values{"db": []string{"db0"}},
+			},
+			&Query{
+				name:    "Make sure other points are deleted",
+				command: `SELECT COUNT(val) FROM cpu WHERE "host" = 'serverA'`,
+				exp:     `{"results":[{"statement_id":0,"series":[{"name":"cpu","columns":["time","count"],"values":[["1970-01-01T00:00:00Z",1]]}]}]}`,
 				params:  url.Values{"db": []string{"db0"}},
 			},
 			&Query{

@@ -3,7 +3,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -14,13 +13,21 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/helpers"
+	"github.com/cloudflare/cfssl/initca"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/swarm"
+	"github.com/docker/docker/client"
 	"github.com/docker/docker/integration-cli/checker"
 	"github.com/docker/docker/integration-cli/daemon"
+	"github.com/docker/docker/integration-cli/request"
+	"github.com/docker/swarmkit/ca"
 	"github.com/go-check/check"
+	"github.com/gotestyourself/gotestyourself/assert"
+	is "github.com/gotestyourself/gotestyourself/assert/cmp"
+	"golang.org/x/net/context"
 )
 
 var defaultReconciliationTimeout = 30 * time.Second
@@ -32,6 +39,7 @@ func (s *DockerSwarmSuite) TestAPISwarmInit(c *check.C) {
 	c.Assert(err, checker.IsNil)
 	c.Assert(info.ControlAvailable, checker.True)
 	c.Assert(info.LocalNodeState, checker.Equals, swarm.LocalNodeStateActive)
+	c.Assert(info.Cluster.RootRotationInProgress, checker.False)
 
 	d2 := s.AddDaemon(c, true, false)
 	info, err = d2.SwarmInfo()
@@ -146,9 +154,6 @@ func (s *DockerSwarmSuite) TestAPISwarmJoinToken(c *check.C) {
 }
 
 func (s *DockerSwarmSuite) TestUpdateSwarmAddExternalCA(c *check.C) {
-	// TODO: when root rotation is in, convert to a series of root rotation tests instead.
-	// currently just makes sure that we don't have to provide a CA certificate when
-	// providing an external CA
 	d1 := s.AddDaemon(c, false, false)
 	c.Assert(d1.Init(swarm.InitRequest{}), checker.IsNil)
 	d1.UpdateSwarm(c, func(s *swarm.Spec) {
@@ -157,11 +162,18 @@ func (s *DockerSwarmSuite) TestUpdateSwarmAddExternalCA(c *check.C) {
 				Protocol: swarm.ExternalCAProtocolCFSSL,
 				URL:      "https://thishasnoca.org",
 			},
+			{
+				Protocol: swarm.ExternalCAProtocolCFSSL,
+				URL:      "https://thishasacacert.org",
+				CACert:   "cacert",
+			},
 		}
 	})
 	info, err := d1.SwarmInfo()
 	c.Assert(err, checker.IsNil)
-	c.Assert(info.Cluster.Spec.CAConfig.ExternalCAs, checker.HasLen, 1)
+	c.Assert(info.Cluster.Spec.CAConfig.ExternalCAs, checker.HasLen, 2)
+	c.Assert(info.Cluster.Spec.CAConfig.ExternalCAs[0].CACert, checker.Equals, "")
+	c.Assert(info.Cluster.Spec.CAConfig.ExternalCAs[1].CACert, checker.Equals, "cacert")
 }
 
 func (s *DockerSwarmSuite) TestAPISwarmCAHash(c *check.C) {
@@ -219,17 +231,20 @@ func (s *DockerSwarmSuite) TestAPISwarmPromoteDemote(c *check.C) {
 	node := d1.GetNode(c, d1.NodeID)
 	node.Spec.Role = swarm.NodeRoleWorker
 	url := fmt.Sprintf("/nodes/%s/update?version=%d", node.ID, node.Version.Index)
-	status, out, err := d1.SockRequest("POST", url, node.Spec)
+	res, body, err := request.DoOnHost(d1.Sock(), url, request.Method("POST"), request.JSONBody(node.Spec))
 	c.Assert(err, checker.IsNil)
-	c.Assert(status, checker.Equals, http.StatusInternalServerError, check.Commentf("output: %q", string(out)))
+	b, err := request.ReadBody(body)
+	c.Assert(err, checker.IsNil)
+	c.Assert(res.StatusCode, checker.Equals, http.StatusBadRequest, check.Commentf("output: %q", string(b)))
+
 	// The warning specific to demoting the last manager is best-effort and
 	// won't appear until the Role field of the demoted manager has been
 	// updated.
 	// Yes, I know this looks silly, but checker.Matches is broken, since
 	// it anchors the regexp contrary to the documentation, and this makes
 	// it impossible to match something that includes a line break.
-	if !strings.Contains(string(out), "last manager of the swarm") {
-		c.Assert(string(out), checker.Contains, "this would result in a loss of quorum")
+	if !strings.Contains(string(b), "last manager of the swarm") {
+		c.Assert(string(b), checker.Contains, "this would result in a loss of quorum")
 	}
 	info, err = d1.SwarmInfo()
 	c.Assert(err, checker.IsNil)
@@ -350,15 +365,18 @@ func (s *DockerSwarmSuite) TestAPISwarmRaftQuorum(c *check.C) {
 
 	d3.Stop(c)
 
-	// make sure there is a leader
-	waitAndAssert(c, defaultReconciliationTimeout, d1.CheckLeader, checker.IsNil)
-
 	var service swarm.Service
 	simpleTestService(&service)
 	service.Spec.Name = "top2"
-	status, out, err := d1.SockRequest("POST", "/services/create", service.Spec)
+	cli, err := d1.NewClient()
 	c.Assert(err, checker.IsNil)
-	c.Assert(status, checker.Equals, http.StatusInternalServerError, check.Commentf("deadline exceeded", string(out)))
+	defer cli.Close()
+
+	// d1 will eventually step down from leader because there is no longer an active quorum, wait for that to happen
+	waitAndAssert(c, defaultReconciliationTimeout, func(c *check.C) (interface{}, check.CommentInterface) {
+		_, err = cli.ServiceCreate(context.Background(), service.Spec, types.ServiceCreateOptions{})
+		return err.Error(), nil
+	}, checker.Contains, "Make sure more than half of the managers are online.")
 
 	d2.Start(c)
 
@@ -499,17 +517,17 @@ func (s *DockerSwarmSuite) TestAPISwarmInvalidAddress(c *check.C) {
 	req := swarm.InitRequest{
 		ListenAddr: "",
 	}
-	status, _, err := d.SockRequest("POST", "/swarm/init", req)
+	res, _, err := request.DoOnHost(d.Sock(), "/swarm/init", request.Method("POST"), request.JSONBody(req))
 	c.Assert(err, checker.IsNil)
-	c.Assert(status, checker.Equals, http.StatusBadRequest)
+	c.Assert(res.StatusCode, checker.Equals, http.StatusBadRequest)
 
 	req2 := swarm.JoinRequest{
 		ListenAddr:  "0.0.0.0:2377",
 		RemoteAddrs: []string{""},
 	}
-	status, _, err = d.SockRequest("POST", "/swarm/join", req2)
+	res, _, err = request.DoOnHost(d.Sock(), "/swarm/join", request.Method("POST"), request.JSONBody(req2))
 	c.Assert(err, checker.IsNil)
-	c.Assert(status, checker.Equals, http.StatusBadRequest)
+	c.Assert(res.StatusCode, checker.Equals, http.StatusBadRequest)
 }
 
 func (s *DockerSwarmSuite) TestAPISwarmForceNewCluster(c *check.C) {
@@ -554,7 +572,7 @@ func simpleTestService(s *swarm.Service) {
 
 	s.Spec = swarm.ServiceSpec{
 		TaskTemplate: swarm.TaskSpec{
-			ContainerSpec: swarm.ContainerSpec{
+			ContainerSpec: &swarm.ContainerSpec{
 				Image:   "busybox:latest",
 				Command: []string{"/bin/top"},
 			},
@@ -577,7 +595,7 @@ func serviceForUpdate(s *swarm.Service) {
 
 	s.Spec = swarm.ServiceSpec{
 		TaskTemplate: swarm.TaskSpec{
-			ContainerSpec: swarm.ContainerSpec{
+			ContainerSpec: &swarm.ContainerSpec{
 				Image:   "busybox:latest",
 				Command: []string{"/bin/top"},
 			},
@@ -635,6 +653,9 @@ func setRollbackOrder(order string) daemon.ServiceConstructor {
 
 func setImage(image string) daemon.ServiceConstructor {
 	return func(s *swarm.Service) {
+		if s.Spec.TaskTemplate.ContainerSpec == nil {
+			s.Spec.TaskTemplate.ContainerSpec = &swarm.ContainerSpec{}
+		}
 		s.Spec.TaskTemplate.ContainerSpec.Image = image
 	}
 }
@@ -827,10 +848,11 @@ func (s *DockerSwarmSuite) TestAPISwarmServicesUpdateWithName(c *check.C) {
 	instances = 5
 
 	setInstances(instances)(service)
-	url := fmt.Sprintf("/services/%s/update?version=%d", service.Spec.Name, service.Version.Index)
-	status, out, err := d.SockRequest("POST", url, service.Spec)
+	cli, err := d.NewClient()
 	c.Assert(err, checker.IsNil)
-	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf("output: %q", string(out)))
+	defer cli.Close()
+	_, err = cli.ServiceUpdate(context.Background(), service.Spec.Name, service.Version, service.Spec, types.ServiceUpdateOptions{})
+	c.Assert(err, checker.IsNil)
 	waitAndAssert(c, defaultReconciliationTimeout, d.CheckActiveContainerCount, checker.Equals, instances)
 }
 
@@ -858,56 +880,38 @@ func (s *DockerSwarmSuite) TestAPISwarmErrorHandling(c *check.C) {
 // This test makes sure the fixes correctly output scopes instead.
 func (s *DockerSwarmSuite) TestAPIDuplicateNetworks(c *check.C) {
 	d := s.AddDaemon(c, true, true)
+	cli, err := d.NewClient()
+	c.Assert(err, checker.IsNil)
+	defer cli.Close()
 
 	name := "foo"
-	networkCreateRequest := types.NetworkCreateRequest{
-		Name: name,
-		NetworkCreate: types.NetworkCreate{
-			CheckDuplicate: false,
-		},
+	networkCreate := types.NetworkCreate{
+		CheckDuplicate: false,
 	}
 
-	var n1 types.NetworkCreateResponse
-	networkCreateRequest.NetworkCreate.Driver = "bridge"
+	networkCreate.Driver = "bridge"
 
-	status, out, err := d.SockRequest("POST", "/networks/create", networkCreateRequest)
-	c.Assert(err, checker.IsNil, check.Commentf(string(out)))
-	c.Assert(status, checker.Equals, http.StatusCreated, check.Commentf(string(out)))
+	n1, err := cli.NetworkCreate(context.Background(), name, networkCreate)
+	c.Assert(err, checker.IsNil)
 
-	c.Assert(json.Unmarshal(out, &n1), checker.IsNil)
+	networkCreate.Driver = "overlay"
 
-	var n2 types.NetworkCreateResponse
-	networkCreateRequest.NetworkCreate.Driver = "overlay"
+	n2, err := cli.NetworkCreate(context.Background(), name, networkCreate)
+	c.Assert(err, checker.IsNil)
 
-	status, out, err = d.SockRequest("POST", "/networks/create", networkCreateRequest)
-	c.Assert(err, checker.IsNil, check.Commentf(string(out)))
-	c.Assert(status, checker.Equals, http.StatusCreated, check.Commentf(string(out)))
-
-	c.Assert(json.Unmarshal(out, &n2), checker.IsNil)
-
-	var r1 types.NetworkResource
-
-	status, out, err = d.SockRequest("GET", "/networks/"+n1.ID, nil)
-	c.Assert(err, checker.IsNil, check.Commentf(string(out)))
-	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf(string(out)))
-
-	c.Assert(json.Unmarshal(out, &r1), checker.IsNil)
-
+	r1, err := cli.NetworkInspect(context.Background(), n1.ID, types.NetworkInspectOptions{})
+	c.Assert(err, checker.IsNil)
 	c.Assert(r1.Scope, checker.Equals, "local")
 
-	var r2 types.NetworkResource
-
-	status, out, err = d.SockRequest("GET", "/networks/"+n2.ID, nil)
-	c.Assert(err, checker.IsNil, check.Commentf(string(out)))
-	c.Assert(status, checker.Equals, http.StatusOK, check.Commentf(string(out)))
-
-	c.Assert(json.Unmarshal(out, &r2), checker.IsNil)
-
+	r2, err := cli.NetworkInspect(context.Background(), n2.ID, types.NetworkInspectOptions{})
+	c.Assert(err, checker.IsNil)
 	c.Assert(r2.Scope, checker.Equals, "swarm")
 }
 
 // Test case for 30178
 func (s *DockerSwarmSuite) TestAPISwarmHealthcheckNone(c *check.C) {
+	// Issue #36386 can be a independent one, which is worth further investigation.
+	c.Skip("Root cause of Issue #36386 is needed")
 	d := s.AddDaemon(c, true, true)
 
 	out, err := d.Cmd("network", "create", "-d", "overlay", "lb")
@@ -915,6 +919,9 @@ func (s *DockerSwarmSuite) TestAPISwarmHealthcheckNone(c *check.C) {
 
 	instances := 1
 	d.CreateService(c, simpleTestService, setInstances(instances), func(s *swarm.Service) {
+		if s.Spec.TaskTemplate.ContainerSpec == nil {
+			s.Spec.TaskTemplate.ContainerSpec = &swarm.ContainerSpec{}
+		}
 		s.Spec.TaskTemplate.ContainerSpec.Healthcheck = &container.HealthConfig{}
 		s.Spec.TaskTemplate.Networks = []swarm.NetworkAttachmentConfig{
 			{Target: "lb"},
@@ -927,4 +934,94 @@ func (s *DockerSwarmSuite) TestAPISwarmHealthcheckNone(c *check.C) {
 
 	out, err = d.Cmd("exec", containers[0], "ping", "-c1", "-W3", "top")
 	c.Assert(err, checker.IsNil, check.Commentf(out))
+}
+
+func (s *DockerSwarmSuite) TestSwarmRepeatedRootRotation(c *check.C) {
+	m := s.AddDaemon(c, true, true)
+	w := s.AddDaemon(c, true, false)
+
+	info, err := m.SwarmInfo()
+	c.Assert(err, checker.IsNil)
+
+	currentTrustRoot := info.Cluster.TLSInfo.TrustRoot
+
+	// rotate multiple times
+	for i := 0; i < 4; i++ {
+		var cert, key []byte
+		if i%2 != 0 {
+			cert, _, key, err = initca.New(&csr.CertificateRequest{
+				CN:         "newRoot",
+				KeyRequest: csr.NewBasicKeyRequest(),
+				CA:         &csr.CAConfig{Expiry: ca.RootCAExpiration},
+			})
+			c.Assert(err, checker.IsNil)
+		}
+		expectedCert := string(cert)
+		m.UpdateSwarm(c, func(s *swarm.Spec) {
+			s.CAConfig.SigningCACert = expectedCert
+			s.CAConfig.SigningCAKey = string(key)
+			s.CAConfig.ForceRotate++
+		})
+
+		// poll to make sure update succeeds
+		var clusterTLSInfo swarm.TLSInfo
+		for j := 0; j < 18; j++ {
+			info, err := m.SwarmInfo()
+			c.Assert(err, checker.IsNil)
+
+			// the desired CA cert and key is always redacted
+			c.Assert(info.Cluster.Spec.CAConfig.SigningCAKey, checker.Equals, "")
+			c.Assert(info.Cluster.Spec.CAConfig.SigningCACert, checker.Equals, "")
+
+			clusterTLSInfo = info.Cluster.TLSInfo
+
+			// if root rotation is done and the trust root has changed, we don't have to poll anymore
+			if !info.Cluster.RootRotationInProgress && clusterTLSInfo.TrustRoot != currentTrustRoot {
+				break
+			}
+
+			// root rotation not done
+			time.Sleep(250 * time.Millisecond)
+		}
+		if cert != nil {
+			c.Assert(clusterTLSInfo.TrustRoot, checker.Equals, expectedCert)
+		}
+		// could take another second or two for the nodes to trust the new roots after they've all gotten
+		// new TLS certificates
+		for j := 0; j < 18; j++ {
+			mInfo := m.GetNode(c, m.NodeID).Description.TLSInfo
+			wInfo := m.GetNode(c, w.NodeID).Description.TLSInfo
+
+			if mInfo.TrustRoot == clusterTLSInfo.TrustRoot && wInfo.TrustRoot == clusterTLSInfo.TrustRoot {
+				break
+			}
+
+			// nodes don't trust root certs yet
+			time.Sleep(250 * time.Millisecond)
+		}
+
+		c.Assert(m.GetNode(c, m.NodeID).Description.TLSInfo, checker.DeepEquals, clusterTLSInfo)
+		c.Assert(m.GetNode(c, w.NodeID).Description.TLSInfo, checker.DeepEquals, clusterTLSInfo)
+		currentTrustRoot = clusterTLSInfo.TrustRoot
+	}
+}
+
+func (s *DockerSwarmSuite) TestAPINetworkInspectWithScope(c *check.C) {
+	d := s.AddDaemon(c, true, true)
+
+	name := "test-scoped-network"
+	ctx := context.Background()
+	apiclient, err := d.NewClient()
+	assert.NilError(c, err)
+
+	resp, err := apiclient.NetworkCreate(ctx, name, types.NetworkCreate{Driver: "overlay"})
+	assert.NilError(c, err)
+
+	network, err := apiclient.NetworkInspect(ctx, name, types.NetworkInspectOptions{})
+	assert.NilError(c, err)
+	assert.Check(c, is.Equal("swarm", network.Scope))
+	assert.Check(c, is.Equal(resp.ID, network.ID))
+
+	_, err = apiclient.NetworkInspect(ctx, name, types.NetworkInspectOptions{Scope: "local"})
+	assert.Check(c, client.IsErrNotFound(err))
 }

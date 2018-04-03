@@ -1,24 +1,29 @@
-// +build !solaris
-
-package daemon
+package daemon // import "github.com/docker/docker/daemon"
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/docker/docker/daemon/config"
+	"github.com/docker/docker/daemon/images"
 	"github.com/docker/docker/pkg/discovery"
 	_ "github.com/docker/docker/pkg/discovery/memory"
 	"github.com/docker/docker/registry"
+	"github.com/docker/libnetwork"
+	"github.com/gotestyourself/gotestyourself/assert"
+	is "github.com/gotestyourself/gotestyourself/assert/cmp"
 )
 
 func TestDaemonReloadLabels(t *testing.T) {
-	daemon := &Daemon{}
-	daemon.configStore = &config.Config{
-		CommonConfig: config.CommonConfig{
-			Labels: []string{"foo:bar"},
+	daemon := &Daemon{
+		configStore: &config.Config{
+			CommonConfig: config.CommonConfig{
+				Labels: []string{"foo:bar"},
+			},
 		},
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
 	}
 
 	valuesSets := make(map[string]interface{})
@@ -40,9 +45,68 @@ func TestDaemonReloadLabels(t *testing.T) {
 	}
 }
 
+func TestDaemonReloadAllowNondistributableArtifacts(t *testing.T) {
+	daemon := &Daemon{
+		configStore:  &config.Config{},
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
+	}
+
+	var err error
+	// Initialize daemon with some registries.
+	daemon.RegistryService, err = registry.NewService(registry.ServiceOptions{
+		AllowNondistributableArtifacts: []string{
+			"127.0.0.0/8",
+			"10.10.1.11:5000",
+			"10.10.1.22:5000", // This will be removed during reload.
+			"docker1.com",
+			"docker2.com", // This will be removed during reload.
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	registries := []string{
+		"127.0.0.0/8",
+		"10.10.1.11:5000",
+		"10.10.1.33:5000", // This will be added during reload.
+		"docker1.com",
+		"docker3.com", // This will be added during reload.
+	}
+
+	newConfig := &config.Config{
+		CommonConfig: config.CommonConfig{
+			ServiceOptions: registry.ServiceOptions{
+				AllowNondistributableArtifacts: registries,
+			},
+			ValuesSet: map[string]interface{}{
+				"allow-nondistributable-artifacts": registries,
+			},
+		},
+	}
+
+	if err := daemon.Reload(newConfig); err != nil {
+		t.Fatal(err)
+	}
+
+	actual := []string{}
+	serviceConfig := daemon.RegistryService.ServiceConfig()
+	for _, value := range serviceConfig.AllowNondistributableArtifactsCIDRs {
+		actual = append(actual, value.String())
+	}
+	actual = append(actual, serviceConfig.AllowNondistributableArtifactsHostnames...)
+
+	sort.Strings(registries)
+	sort.Strings(actual)
+	assert.Check(t, is.DeepEqual(registries, actual))
+}
+
 func TestDaemonReloadMirrors(t *testing.T) {
-	daemon := &Daemon{}
-	daemon.RegistryService = registry.NewService(registry.ServiceOptions{
+	daemon := &Daemon{
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
+	}
+	var err error
+	daemon.RegistryService, err = registry.NewService(registry.ServiceOptions{
 		InsecureRegistries: []string{},
 		Mirrors: []string{
 			"https://mirror.test1.com",
@@ -50,6 +114,9 @@ func TestDaemonReloadMirrors(t *testing.T) {
 			"https://mirror.test3.com", // this will be removed when reloading
 		},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	daemon.configStore = &config.Config{}
 
@@ -134,9 +201,12 @@ func TestDaemonReloadMirrors(t *testing.T) {
 }
 
 func TestDaemonReloadInsecureRegistries(t *testing.T) {
-	daemon := &Daemon{}
+	daemon := &Daemon{
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
+	}
+	var err error
 	// initialize daemon with existing insecure registries: "127.0.0.0/8", "10.10.1.11:5000", "10.10.1.22:5000"
-	daemon.RegistryService = registry.NewService(registry.ServiceOptions{
+	daemon.RegistryService, err = registry.NewService(registry.ServiceOptions{
 		InsecureRegistries: []string{
 			"127.0.0.0/8",
 			"10.10.1.11:5000",
@@ -145,6 +215,9 @@ func TestDaemonReloadInsecureRegistries(t *testing.T) {
 			"docker2.com", // this will be removed when reloading
 		},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	daemon.configStore = &config.Config{}
 
@@ -220,7 +293,9 @@ func TestDaemonReloadInsecureRegistries(t *testing.T) {
 }
 
 func TestDaemonReloadNotAffectOthers(t *testing.T) {
-	daemon := &Daemon{}
+	daemon := &Daemon{
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
+	}
 	daemon.configStore = &config.Config{
 		CommonConfig: config.CommonConfig{
 			Labels: []string{"foo:bar"},
@@ -252,7 +327,9 @@ func TestDaemonReloadNotAffectOthers(t *testing.T) {
 }
 
 func TestDaemonDiscoveryReload(t *testing.T) {
-	daemon := &Daemon{}
+	daemon := &Daemon{
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
+	}
 	daemon.configStore = &config.Config{
 		CommonConfig: config.CommonConfig{
 			ClusterStore:     "memory://127.0.0.1",
@@ -329,7 +406,9 @@ func TestDaemonDiscoveryReload(t *testing.T) {
 }
 
 func TestDaemonDiscoveryReloadFromEmptyDiscovery(t *testing.T) {
-	daemon := &Daemon{}
+	daemon := &Daemon{
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
+	}
 	daemon.configStore = &config.Config{}
 
 	valuesSet := make(map[string]interface{})
@@ -374,7 +453,9 @@ func TestDaemonDiscoveryReloadFromEmptyDiscovery(t *testing.T) {
 }
 
 func TestDaemonDiscoveryReloadOnlyClusterAdvertise(t *testing.T) {
-	daemon := &Daemon{}
+	daemon := &Daemon{
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
+	}
 	daemon.configStore = &config.Config{
 		CommonConfig: config.CommonConfig{
 			ClusterStore: "memory://127.0.0.1",
@@ -415,4 +496,74 @@ func TestDaemonDiscoveryReloadOnlyClusterAdvertise(t *testing.T) {
 	case e := <-errCh:
 		t.Fatal(e)
 	}
+}
+
+func TestDaemonReloadNetworkDiagnosticPort(t *testing.T) {
+	daemon := &Daemon{
+		imageService: images.NewImageService(images.ImageServiceConfig{}),
+	}
+	daemon.configStore = &config.Config{}
+
+	valuesSet := make(map[string]interface{})
+	valuesSet["network-diagnostic-port"] = 2000
+	enableConfig := &config.Config{
+		CommonConfig: config.CommonConfig{
+			NetworkDiagnosticPort: 2000,
+			ValuesSet:             valuesSet,
+		},
+	}
+	disableConfig := &config.Config{
+		CommonConfig: config.CommonConfig{},
+	}
+
+	netOptions, err := daemon.networkOptions(enableConfig, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := libnetwork.New(netOptions...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	daemon.netController = controller
+
+	// Enable/Disable the server for some iterations
+	for i := 0; i < 10; i++ {
+		enableConfig.CommonConfig.NetworkDiagnosticPort++
+		if err := daemon.Reload(enableConfig); err != nil {
+			t.Fatal(err)
+		}
+		// Check that the diagnostic is enabled
+		if !daemon.netController.IsDiagnosticEnabled() {
+			t.Fatalf("diagnostic should be enable")
+		}
+
+		// Reload
+		if err := daemon.Reload(disableConfig); err != nil {
+			t.Fatal(err)
+		}
+		// Check that the diagnostic is disabled
+		if daemon.netController.IsDiagnosticEnabled() {
+			t.Fatalf("diagnostic should be disable")
+		}
+	}
+
+	enableConfig.CommonConfig.NetworkDiagnosticPort++
+	// 2 times the enable should not create problems
+	if err := daemon.Reload(enableConfig); err != nil {
+		t.Fatal(err)
+	}
+	// Check that the diagnostic is enabled
+	if !daemon.netController.IsDiagnosticEnabled() {
+		t.Fatalf("diagnostic should be enable")
+	}
+
+	// Check that another reload does not cause issues
+	if err := daemon.Reload(enableConfig); err != nil {
+		t.Fatal(err)
+	}
+	// Check that the diagnostic is enable
+	if !daemon.netController.IsDiagnosticEnabled() {
+		t.Fatalf("diagnostic should be enable")
+	}
+
 }

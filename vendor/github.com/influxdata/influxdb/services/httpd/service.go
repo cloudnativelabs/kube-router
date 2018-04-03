@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb/models"
-	"github.com/uber-go/zap"
+	"go.uber.org/zap"
 )
 
 // statistics gathered by the httpd package.
@@ -60,7 +60,7 @@ type Service struct {
 
 	Handler *Handler
 
-	Logger zap.Logger
+	Logger *zap.Logger
 }
 
 // NewService returns a new instance of Service.
@@ -75,7 +75,7 @@ func NewService(c Config) *Service {
 		unixSocket: c.UnixSocketEnabled,
 		bindSocket: c.BindSocket,
 		Handler:    NewHandler(c),
-		Logger:     zap.New(zap.NullEncoder()),
+		Logger:     zap.NewNop(),
 	}
 	if s.key == "" {
 		s.key = s.cert
@@ -86,8 +86,9 @@ func NewService(c Config) *Service {
 
 // Open starts the service.
 func (s *Service) Open() error {
-	s.Logger.Info("Starting HTTP service")
-	s.Logger.Info(fmt.Sprint("Authentication enabled:", s.Handler.Config.AuthEnabled))
+	s.Logger.Info("Starting HTTP service", zap.Bool("authentication", s.Handler.Config.AuthEnabled))
+
+	s.Handler.Open()
 
 	// Open listener.
 	if s.https {
@@ -103,7 +104,6 @@ func (s *Service) Open() error {
 			return err
 		}
 
-		s.Logger.Info(fmt.Sprint("Listening on HTTPS:", listener.Addr().String()))
 		s.ln = listener
 	} else {
 		listener, err := net.Listen("tcp", s.addr)
@@ -111,9 +111,11 @@ func (s *Service) Open() error {
 			return err
 		}
 
-		s.Logger.Info(fmt.Sprint("Listening on HTTP:", listener.Addr().String()))
 		s.ln = listener
 	}
+	s.Logger.Info("Listening on HTTP",
+		zap.Stringer("addr", s.ln.Addr()),
+		zap.Bool("https", s.https))
 
 	// Open unix socket listener.
 	if s.unixSocket {
@@ -132,7 +134,8 @@ func (s *Service) Open() error {
 			return err
 		}
 
-		s.Logger.Info(fmt.Sprint("Listening on unix socket:", listener.Addr().String()))
+		s.Logger.Info("Listening on unix socket",
+			zap.Stringer("addr", listener.Addr()))
 		s.unixSocketListener = listener
 
 		go s.serveUnixSocket()
@@ -163,6 +166,8 @@ func (s *Service) Open() error {
 
 // Close closes the underlying listener.
 func (s *Service) Close() error {
+	s.Handler.Close()
+
 	if s.ln != nil {
 		if err := s.ln.Close(); err != nil {
 			return err
@@ -177,7 +182,7 @@ func (s *Service) Close() error {
 }
 
 // WithLogger sets the logger for the service.
-func (s *Service) WithLogger(log zap.Logger) {
+func (s *Service) WithLogger(log *zap.Logger) {
 	s.Logger = log.With(zap.String("service", "httpd"))
 	s.Handler.Logger = s.Logger
 }

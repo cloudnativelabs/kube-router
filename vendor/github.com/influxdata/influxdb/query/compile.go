@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
+	"github.com/influxdata/influxql"
 )
 
 // CompileOptions are the customization options for the compiler.
@@ -95,13 +95,13 @@ func newCompiler(opt CompileOptions) *compiledStatement {
 
 func Compile(stmt *influxql.SelectStatement, opt CompileOptions) (Statement, error) {
 	c := newCompiler(opt)
-	if err := c.preprocess(stmt); err != nil {
-		return nil, err
-	}
-	if err := c.compile(stmt); err != nil {
-		return nil, err
-	}
 	c.stmt = stmt.Clone()
+	if err := c.preprocess(c.stmt); err != nil {
+		return nil, err
+	}
+	if err := c.compile(c.stmt); err != nil {
+		return nil, err
+	}
 	c.stmt.TimeAlias = c.TimeFieldName
 	c.stmt.Condition = c.Condition
 
@@ -123,12 +123,16 @@ func (c *compiledStatement) preprocess(stmt *influxql.SelectStatement) error {
 	c.HasTarget = stmt.Target != nil
 
 	valuer := influxql.NowValuer{Now: c.Options.Now, Location: stmt.Location}
-	if cond, t, err := influxql.ConditionExpr(stmt.Condition, &valuer); err != nil {
+	cond, t, err := influxql.ConditionExpr(stmt.Condition, &valuer)
+	if err != nil {
 		return err
-	} else {
-		c.Condition = cond
-		c.TimeRange = t
 	}
+	// Verify that the condition is actually ok to use.
+	if err := c.validateCondition(cond); err != nil {
+		return err
+	}
+	c.Condition = cond
+	c.TimeRange = t
 
 	// Read the dimensions of the query, validate them, and retrieve the interval
 	// if it exists.
@@ -170,6 +174,7 @@ func (c *compiledStatement) compile(stmt *influxql.SelectStatement) error {
 	for _, source := range stmt.Sources {
 		switch source := source.(type) {
 		case *influxql.SubQuery:
+			source.Statement.OmitTime = true
 			if err := c.subquery(source.Statement); err != nil {
 				return err
 			}
@@ -179,6 +184,8 @@ func (c *compiledStatement) compile(stmt *influxql.SelectStatement) error {
 }
 
 func (c *compiledStatement) compileFields(stmt *influxql.SelectStatement) error {
+	valuer := MathValuer{}
+
 	c.Fields = make([]*compiledField, 0, len(stmt.Fields))
 	for _, f := range stmt.Fields {
 		// Remove any time selection (it is automatically selected by default)
@@ -194,13 +201,14 @@ func (c *compiledStatement) compileFields(stmt *influxql.SelectStatement) error 
 		}
 
 		// Append this field to the list of processed fields and compile it.
+		f.Expr = influxql.Reduce(f.Expr, &valuer)
 		field := &compiledField{
 			global:        c,
 			Field:         f,
 			AllowWildcard: true,
 		}
 		c.Fields = append(c.Fields, field)
-		if err := field.compileExpr(f.Expr); err != nil {
+		if err := field.compileExpr(field.Field.Expr); err != nil {
 			return err
 		}
 	}
@@ -241,6 +249,10 @@ func (c *compiledField) compileExpr(expr influxql.Expr) error {
 		c.global.HasAuxiliaryFields = true
 		return nil
 	case *influxql.Call:
+		if isMathFunction(expr) {
+			return c.compileTrigFunction(expr)
+		}
+
 		// Register the function call in the list of function calls.
 		c.global.FunctionCalls = append(c.global.FunctionCalls, expr)
 
@@ -250,7 +262,7 @@ func (c *compiledField) compileExpr(expr influxql.Expr) error {
 		case "sample":
 			return c.compileSample(expr.Args)
 		case "distinct":
-			return c.compileDistinct(expr.Args)
+			return c.compileDistinct(expr.Args, false)
 		case "top", "bottom":
 			return c.compileTopBottom(expr)
 		case "derivative", "non_negative_derivative":
@@ -276,7 +288,7 @@ func (c *compiledField) compileExpr(expr influxql.Expr) error {
 	case *influxql.Distinct:
 		call := expr.NewCall()
 		c.global.FunctionCalls = append(c.global.FunctionCalls, call)
-		return c.compileDistinct(call.Args)
+		return c.compileDistinct(call.Args, false)
 	case *influxql.BinaryExpr:
 		// Disallow wildcards in binary expressions. RewriteFields, which expands
 		// wildcards, is too complicated if we allow wildcards inside of expressions.
@@ -302,6 +314,8 @@ func (c *compiledField) compileExpr(expr influxql.Expr) error {
 		}
 	case *influxql.ParenExpr:
 		return c.compileExpr(expr.Expr)
+	case influxql.Literal:
+		return errors.New("field must contain at least one variable")
 	}
 	return errors.New("unimplemented")
 }
@@ -349,10 +363,10 @@ func (c *compiledField) compileFunction(expr *influxql.Call) error {
 	if expr.Name == "count" {
 		// If we have count(), the argument may be a distinct() call.
 		if arg0, ok := expr.Args[0].(*influxql.Call); ok && arg0.Name == "distinct" {
-			return c.compileDistinct(arg0.Args)
+			return c.compileDistinct(arg0.Args, true)
 		} else if arg0, ok := expr.Args[0].(*influxql.Distinct); ok {
 			call := arg0.NewCall()
-			return c.compileDistinct(call.Args)
+			return c.compileDistinct(call.Args, true)
 		}
 	}
 	return c.compileSymbol(expr.Name, expr.Args[0])
@@ -591,7 +605,7 @@ func (c *compiledField) compileHoltWinters(args []influxql.Expr, withFit bool) e
 	return c.compileExpr(call)
 }
 
-func (c *compiledField) compileDistinct(args []influxql.Expr) error {
+func (c *compiledField) compileDistinct(args []influxql.Expr, nested bool) error {
 	if len(args) == 0 {
 		return errors.New("distinct function requires at least one argument")
 	} else if len(args) != 1 {
@@ -601,7 +615,9 @@ func (c *compiledField) compileDistinct(args []influxql.Expr) error {
 	if _, ok := args[0].(*influxql.VarRef); !ok {
 		return errors.New("expected field argument in distinct()")
 	}
-	c.global.HasDistinct = true
+	if !nested {
+		c.global.HasDistinct = true
+	}
 	c.global.OnlySelectors = false
 	return nil
 }
@@ -652,9 +668,19 @@ func (c *compiledField) compileTopBottom(call *influxql.Call) error {
 	return nil
 }
 
+func (c *compiledField) compileTrigFunction(expr *influxql.Call) error {
+	if exp, got := 1, len(expr.Args); exp != got {
+		return fmt.Errorf("invalid number of arguments for %s, expected %d, got %d", expr.Name, exp, got)
+	}
+	return c.compileExpr(expr.Args[0])
+}
+
 func (c *compiledStatement) compileDimensions(stmt *influxql.SelectStatement) error {
 	for _, d := range stmt.Dimensions {
-		switch expr := d.Expr.(type) {
+		// Reduce the expression before attempting anything. Do not evaluate the call.
+		expr := influxql.Reduce(d.Expr, nil)
+
+		switch expr := expr.(type) {
 		case *influxql.VarRef:
 			if strings.ToLower(expr.Val) == "time" {
 				return errors.New("time() is a function and expects at least one argument")
@@ -686,6 +712,11 @@ func (c *compiledStatement) compileDimensions(stmt *influxql.SelectStatement) er
 						}
 						now := c.Options.Now
 						c.Interval.Offset = now.Sub(now.Truncate(c.Interval.Duration))
+
+						// Use the evaluated offset to replace the argument. Ideally, we would
+						// use the interval assigned above, but the query engine hasn't been changed
+						// to use the compiler information yet.
+						expr.Args[1] = &influxql.DurationLiteral{Val: c.Interval.Offset}
 					case *influxql.StringLiteral:
 						// If literal looks like a date time then parse it as a time literal.
 						if lit.IsTimeLiteral() {
@@ -707,6 +738,9 @@ func (c *compiledStatement) compileDimensions(stmt *influxql.SelectStatement) er
 		default:
 			return errors.New("only time and tag dimensions allowed")
 		}
+
+		// Assign the reduced/changed expression to the dimension.
+		d.Expr = expr
 	}
 	return nil
 }
@@ -747,6 +781,35 @@ func (c *compiledStatement) validateFields() error {
 	return nil
 }
 
+// validateCondition verifies that all elements in the condition are appropriate.
+// For example, aggregate calls don't work in the condition and should throw an
+// error as an invalid expression.
+func (c *compiledStatement) validateCondition(expr influxql.Expr) error {
+	switch expr := expr.(type) {
+	case *influxql.BinaryExpr:
+		// Verify each side of the binary expression. We do not need to
+		// verify the binary expression itself since that should have been
+		// done by influxql.ConditionExpr.
+		if err := c.validateCondition(expr.LHS); err != nil {
+			return err
+		}
+		if err := c.validateCondition(expr.RHS); err != nil {
+			return err
+		}
+		return nil
+	case *influxql.Call:
+		if !isMathFunction(expr) {
+			return fmt.Errorf("invalid function call in condition: %s", expr)
+		}
+		if exp, got := 1, len(expr.Args); exp != got {
+			return fmt.Errorf("invalid number of arguments for %s, expected %d, got %d", expr.Name, exp, got)
+		}
+		return c.validateCondition(expr.Args[0])
+	default:
+		return nil
+	}
+}
+
 // subquery compiles and validates a compiled statement for the subquery using
 // this compiledStatement as the parent.
 func (c *compiledStatement) subquery(stmt *influxql.SelectStatement) error {
@@ -758,8 +821,11 @@ func (c *compiledStatement) subquery(stmt *influxql.SelectStatement) error {
 	// Substitute now() into the subquery condition. Then use ConditionExpr to
 	// validate the expression. Do not store the results. We have no way to store
 	// and read those results at the moment.
-	valuer := influxql.NowValuer{Now: c.Options.Now, Location: stmt.Location}
-	stmt.Condition = influxql.Reduce(stmt.Condition, &valuer)
+	valuer := influxql.MultiValuer(
+		&influxql.NowValuer{Now: c.Options.Now, Location: stmt.Location},
+		&MathValuer{},
+	)
+	stmt.Condition = influxql.Reduce(stmt.Condition, valuer)
 
 	// If the ordering is different and the sort field was specified for the subquery,
 	// throw an error.
@@ -792,7 +858,7 @@ func (c *compiledStatement) Prepare(shardMapper ShardMapper, sopt SelectOptions)
 	// we need to limit the possible time range that can be used when mapping shards but not when actually executing
 	// the select statement. Determine the shard time range here.
 	timeRange := c.TimeRange
-	if sopt.MaxBucketsN > 0 && !c.stmt.IsRawQuery && timeRange.MinTime() == influxql.MinTime {
+	if sopt.MaxBucketsN > 0 && !c.stmt.IsRawQuery && timeRange.MinTimeNano() == influxql.MinTime {
 		interval, err := c.stmt.GroupByInterval()
 		if err != nil {
 			return nil, err
@@ -811,7 +877,7 @@ func (c *compiledStatement) Prepare(shardMapper ShardMapper, sopt SelectOptions)
 					Offset:   offset,
 				},
 			}
-			last, _ := opt.Window(c.TimeRange.MaxTime() - 1)
+			last, _ := opt.Window(c.TimeRange.MaxTimeNano() - 1)
 
 			// Determine the time difference using the number of buckets.
 			// Determine the maximum difference between the buckets based on the end time.
@@ -831,8 +897,15 @@ func (c *compiledStatement) Prepare(shardMapper ShardMapper, sopt SelectOptions)
 	}
 
 	// Rewrite wildcards, if any exist.
-	stmt, err := c.stmt.RewriteFields(shards)
+	mapper := FieldMapper{FieldMapper: shards}
+	stmt, err := c.stmt.RewriteFields(mapper)
 	if err != nil {
+		shards.Close()
+		return nil, err
+	}
+
+	// Validate if the types are correct now that they have been assigned.
+	if err := validateTypes(stmt); err != nil {
 		shards.Close()
 		return nil, err
 	}
@@ -843,10 +916,10 @@ func (c *compiledStatement) Prepare(shardMapper ShardMapper, sopt SelectOptions)
 		shards.Close()
 		return nil, err
 	}
-	opt.StartTime, opt.EndTime = c.TimeRange.MinTime(), c.TimeRange.MaxTime()
+	opt.StartTime, opt.EndTime = c.TimeRange.MinTimeNano(), c.TimeRange.MaxTimeNano()
 	opt.Ascending = c.Ascending
 
-	if sopt.MaxBucketsN > 0 && !stmt.IsRawQuery && c.TimeRange.MinTime() > influxql.MinTime {
+	if sopt.MaxBucketsN > 0 && !stmt.IsRawQuery && c.TimeRange.MinTimeNano() > influxql.MinTime {
 		interval, err := stmt.GroupByInterval()
 		if err != nil {
 			shards.Close()
@@ -869,9 +942,11 @@ func (c *compiledStatement) Prepare(shardMapper ShardMapper, sopt SelectOptions)
 
 	columns := stmt.ColumnNames()
 	return &preparedStatement{
-		stmt:    stmt,
-		opt:     opt,
-		ic:      shards,
-		columns: columns,
+		stmt:      stmt,
+		opt:       opt,
+		ic:        shards,
+		columns:   columns,
+		maxPointN: sopt.MaxPointN,
+		now:       c.Options.Now,
 	}, nil
 }

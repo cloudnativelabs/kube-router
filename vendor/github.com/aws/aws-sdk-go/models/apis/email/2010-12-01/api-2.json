@@ -6,6 +6,7 @@
     "protocol":"query",
     "serviceAbbreviation":"Amazon SES",
     "serviceFullName":"Amazon Simple Email Service",
+    "serviceId":"SES",
     "signatureVersion":"v4",
     "signingName":"ses",
     "uid":"email-2010-12-01",
@@ -81,6 +82,20 @@
         {"shape":"ConfigurationSetDoesNotExistException"},
         {"shape":"TrackingOptionsAlreadyExistsException"},
         {"shape":"InvalidTrackingOptionsException"}
+      ]
+    },
+    "CreateCustomVerificationEmailTemplate":{
+      "name":"CreateCustomVerificationEmailTemplate",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"CreateCustomVerificationEmailTemplateRequest"},
+      "errors":[
+        {"shape":"CustomVerificationEmailTemplateAlreadyExistsException"},
+        {"shape":"FromEmailAddressNotVerifiedException"},
+        {"shape":"CustomVerificationEmailInvalidContentException"},
+        {"shape":"LimitExceededException"}
       ]
     },
     "CreateReceiptFilter":{
@@ -199,6 +214,14 @@
         {"shape":"ConfigurationSetDoesNotExistException"},
         {"shape":"TrackingOptionsDoesNotExistException"}
       ]
+    },
+    "DeleteCustomVerificationEmailTemplate":{
+      "name":"DeleteCustomVerificationEmailTemplate",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"DeleteCustomVerificationEmailTemplateRequest"}
     },
     "DeleteIdentity":{
       "name":"DeleteIdentity",
@@ -344,6 +367,32 @@
         {"shape":"RuleSetDoesNotExistException"}
       ]
     },
+    "GetAccountSendingEnabled":{
+      "name":"GetAccountSendingEnabled",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "output":{
+        "shape":"GetAccountSendingEnabledResponse",
+        "resultWrapper":"GetAccountSendingEnabledResult"
+      }
+    },
+    "GetCustomVerificationEmailTemplate":{
+      "name":"GetCustomVerificationEmailTemplate",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetCustomVerificationEmailTemplateRequest"},
+      "output":{
+        "shape":"GetCustomVerificationEmailTemplateResponse",
+        "resultWrapper":"GetCustomVerificationEmailTemplateResult"
+      },
+      "errors":[
+        {"shape":"CustomVerificationEmailTemplateDoesNotExistException"}
+      ]
+    },
     "GetIdentityDkimAttributes":{
       "name":"GetIdentityDkimAttributes",
       "http":{
@@ -451,6 +500,18 @@
       "output":{
         "shape":"ListConfigurationSetsResponse",
         "resultWrapper":"ListConfigurationSetsResult"
+      }
+    },
+    "ListCustomVerificationEmailTemplates":{
+      "name":"ListCustomVerificationEmailTemplates",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListCustomVerificationEmailTemplatesRequest"},
+      "output":{
+        "shape":"ListCustomVerificationEmailTemplatesResponse",
+        "resultWrapper":"ListCustomVerificationEmailTemplatesResult"
       }
     },
     "ListIdentities":{
@@ -585,7 +646,28 @@
         {"shape":"MessageRejected"},
         {"shape":"MailFromDomainNotVerifiedException"},
         {"shape":"ConfigurationSetDoesNotExistException"},
-        {"shape":"TemplateDoesNotExistException"}
+        {"shape":"TemplateDoesNotExistException"},
+        {"shape":"ConfigurationSetSendingPausedException"},
+        {"shape":"AccountSendingPausedException"}
+      ]
+    },
+    "SendCustomVerificationEmail":{
+      "name":"SendCustomVerificationEmail",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"SendCustomVerificationEmailRequest"},
+      "output":{
+        "shape":"SendCustomVerificationEmailResponse",
+        "resultWrapper":"SendCustomVerificationEmailResult"
+      },
+      "errors":[
+        {"shape":"MessageRejected"},
+        {"shape":"ConfigurationSetDoesNotExistException"},
+        {"shape":"CustomVerificationEmailTemplateDoesNotExistException"},
+        {"shape":"FromEmailAddressNotVerifiedException"},
+        {"shape":"ProductionAccessNotGrantedException"}
       ]
     },
     "SendEmail":{
@@ -602,7 +684,9 @@
       "errors":[
         {"shape":"MessageRejected"},
         {"shape":"MailFromDomainNotVerifiedException"},
-        {"shape":"ConfigurationSetDoesNotExistException"}
+        {"shape":"ConfigurationSetDoesNotExistException"},
+        {"shape":"ConfigurationSetSendingPausedException"},
+        {"shape":"AccountSendingPausedException"}
       ]
     },
     "SendRawEmail":{
@@ -619,7 +703,9 @@
       "errors":[
         {"shape":"MessageRejected"},
         {"shape":"MailFromDomainNotVerifiedException"},
-        {"shape":"ConfigurationSetDoesNotExistException"}
+        {"shape":"ConfigurationSetDoesNotExistException"},
+        {"shape":"ConfigurationSetSendingPausedException"},
+        {"shape":"AccountSendingPausedException"}
       ]
     },
     "SendTemplatedEmail":{
@@ -637,7 +723,9 @@
         {"shape":"MessageRejected"},
         {"shape":"MailFromDomainNotVerifiedException"},
         {"shape":"ConfigurationSetDoesNotExistException"},
-        {"shape":"TemplateDoesNotExistException"}
+        {"shape":"TemplateDoesNotExistException"},
+        {"shape":"ConfigurationSetSendingPausedException"},
+        {"shape":"AccountSendingPausedException"}
       ]
     },
     "SetActiveReceiptRuleSet":{
@@ -748,6 +836,14 @@
         {"shape":"MissingRenderingAttributeException"}
       ]
     },
+    "UpdateAccountSendingEnabled":{
+      "name":"UpdateAccountSendingEnabled",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateAccountSendingEnabledRequest"}
+    },
     "UpdateConfigurationSetEventDestination":{
       "name":"UpdateConfigurationSetEventDestination",
       "http":{
@@ -767,6 +863,28 @@
         {"shape":"InvalidSNSDestinationException"}
       ]
     },
+    "UpdateConfigurationSetReputationMetricsEnabled":{
+      "name":"UpdateConfigurationSetReputationMetricsEnabled",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateConfigurationSetReputationMetricsEnabledRequest"},
+      "errors":[
+        {"shape":"ConfigurationSetDoesNotExistException"}
+      ]
+    },
+    "UpdateConfigurationSetSendingEnabled":{
+      "name":"UpdateConfigurationSetSendingEnabled",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateConfigurationSetSendingEnabledRequest"},
+      "errors":[
+        {"shape":"ConfigurationSetDoesNotExistException"}
+      ]
+    },
     "UpdateConfigurationSetTrackingOptions":{
       "name":"UpdateConfigurationSetTrackingOptions",
       "http":{
@@ -782,6 +900,19 @@
         {"shape":"ConfigurationSetDoesNotExistException"},
         {"shape":"TrackingOptionsDoesNotExistException"},
         {"shape":"InvalidTrackingOptionsException"}
+      ]
+    },
+    "UpdateCustomVerificationEmailTemplate":{
+      "name":"UpdateCustomVerificationEmailTemplate",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateCustomVerificationEmailTemplateRequest"},
+      "errors":[
+        {"shape":"CustomVerificationEmailTemplateDoesNotExistException"},
+        {"shape":"FromEmailAddressNotVerifiedException"},
+        {"shape":"CustomVerificationEmailInvalidContentException"}
       ]
     },
     "UpdateReceiptRule":{
@@ -866,6 +997,17 @@
     }
   },
   "shapes":{
+    "AccountSendingPausedException":{
+      "type":"structure",
+      "members":{
+      },
+      "error":{
+        "code":"AccountSendingPausedException",
+        "httpStatusCode":400,
+        "senderFault":true
+      },
+      "exception":true
+    },
     "AddHeaderAction":{
       "type":"structure",
       "required":[
@@ -990,6 +1132,8 @@
         "AccountThrottled",
         "AccountDailyQuotaExceeded",
         "InvalidSendingPoolName",
+        "AccountSendingPaused",
+        "ConfigurationSetSendingPaused",
         "InvalidParameterValue",
         "TransientFailure",
         "Failed"
@@ -1072,7 +1216,8 @@
       "type":"string",
       "enum":[
         "eventDestinations",
-        "trackingOptions"
+        "trackingOptions",
+        "reputationOptions"
       ]
     },
     "ConfigurationSetAttributeList":{
@@ -1092,6 +1237,18 @@
       "exception":true
     },
     "ConfigurationSetName":{"type":"string"},
+    "ConfigurationSetSendingPausedException":{
+      "type":"structure",
+      "members":{
+        "ConfigurationSetName":{"shape":"ConfigurationSetName"}
+      },
+      "error":{
+        "code":"ConfigurationSetSendingPausedException",
+        "httpStatusCode":400,
+        "senderFault":true
+      },
+      "exception":true
+    },
     "ConfigurationSets":{
       "type":"list",
       "member":{"shape":"ConfigurationSet"}
@@ -1147,6 +1304,25 @@
     "CreateConfigurationSetTrackingOptionsResponse":{
       "type":"structure",
       "members":{
+      }
+    },
+    "CreateCustomVerificationEmailTemplateRequest":{
+      "type":"structure",
+      "required":[
+        "TemplateName",
+        "FromEmailAddress",
+        "TemplateSubject",
+        "TemplateContent",
+        "SuccessRedirectionURL",
+        "FailureRedirectionURL"
+      ],
+      "members":{
+        "TemplateName":{"shape":"TemplateName"},
+        "FromEmailAddress":{"shape":"FromAddress"},
+        "TemplateSubject":{"shape":"Subject"},
+        "TemplateContent":{"shape":"TemplateContent"},
+        "SuccessRedirectionURL":{"shape":"SuccessRedirectionURL"},
+        "FailureRedirectionURL":{"shape":"FailureRedirectionURL"}
       }
     },
     "CreateReceiptFilterRequest":{
@@ -1212,6 +1388,55 @@
       ]
     },
     "CustomRedirectDomain":{"type":"string"},
+    "CustomVerificationEmailInvalidContentException":{
+      "type":"structure",
+      "members":{
+      },
+      "error":{
+        "code":"CustomVerificationEmailInvalidContent",
+        "httpStatusCode":400,
+        "senderFault":true
+      },
+      "exception":true
+    },
+    "CustomVerificationEmailTemplate":{
+      "type":"structure",
+      "members":{
+        "TemplateName":{"shape":"TemplateName"},
+        "FromEmailAddress":{"shape":"FromAddress"},
+        "TemplateSubject":{"shape":"Subject"},
+        "SuccessRedirectionURL":{"shape":"SuccessRedirectionURL"},
+        "FailureRedirectionURL":{"shape":"FailureRedirectionURL"}
+      }
+    },
+    "CustomVerificationEmailTemplateAlreadyExistsException":{
+      "type":"structure",
+      "members":{
+        "CustomVerificationEmailTemplateName":{"shape":"TemplateName"}
+      },
+      "error":{
+        "code":"CustomVerificationEmailTemplateAlreadyExists",
+        "httpStatusCode":400,
+        "senderFault":true
+      },
+      "exception":true
+    },
+    "CustomVerificationEmailTemplateDoesNotExistException":{
+      "type":"structure",
+      "members":{
+        "CustomVerificationEmailTemplateName":{"shape":"TemplateName"}
+      },
+      "error":{
+        "code":"CustomVerificationEmailTemplateDoesNotExist",
+        "httpStatusCode":400,
+        "senderFault":true
+      },
+      "exception":true
+    },
+    "CustomVerificationEmailTemplates":{
+      "type":"list",
+      "member":{"shape":"CustomVerificationEmailTemplate"}
+    },
     "DefaultDimensionValue":{"type":"string"},
     "DeleteConfigurationSetEventDestinationRequest":{
       "type":"structure",
@@ -1251,6 +1476,13 @@
     "DeleteConfigurationSetTrackingOptionsResponse":{
       "type":"structure",
       "members":{
+      }
+    },
+    "DeleteCustomVerificationEmailTemplateRequest":{
+      "type":"structure",
+      "required":["TemplateName"],
+      "members":{
+        "TemplateName":{"shape":"TemplateName"}
       }
     },
     "DeleteIdentityPolicyRequest":{
@@ -1365,7 +1597,8 @@
       "members":{
         "ConfigurationSet":{"shape":"ConfigurationSet"},
         "EventDestinations":{"shape":"EventDestinations"},
-        "TrackingOptions":{"shape":"TrackingOptions"}
+        "TrackingOptions":{"shape":"TrackingOptions"},
+        "ReputationOptions":{"shape":"ReputationOptions"}
       }
     },
     "DescribeReceiptRuleRequest":{
@@ -1517,6 +1750,44 @@
     },
     "ExtensionFieldName":{"type":"string"},
     "ExtensionFieldValue":{"type":"string"},
+    "FailureRedirectionURL":{"type":"string"},
+    "FromAddress":{"type":"string"},
+    "FromEmailAddressNotVerifiedException":{
+      "type":"structure",
+      "members":{
+        "FromEmailAddress":{"shape":"FromAddress"}
+      },
+      "error":{
+        "code":"FromEmailAddressNotVerified",
+        "httpStatusCode":400,
+        "senderFault":true
+      },
+      "exception":true
+    },
+    "GetAccountSendingEnabledResponse":{
+      "type":"structure",
+      "members":{
+        "Enabled":{"shape":"Enabled"}
+      }
+    },
+    "GetCustomVerificationEmailTemplateRequest":{
+      "type":"structure",
+      "required":["TemplateName"],
+      "members":{
+        "TemplateName":{"shape":"TemplateName"}
+      }
+    },
+    "GetCustomVerificationEmailTemplateResponse":{
+      "type":"structure",
+      "members":{
+        "TemplateName":{"shape":"TemplateName"},
+        "FromEmailAddress":{"shape":"FromAddress"},
+        "TemplateSubject":{"shape":"Subject"},
+        "TemplateContent":{"shape":"TemplateContent"},
+        "SuccessRedirectionURL":{"shape":"SuccessRedirectionURL"},
+        "FailureRedirectionURL":{"shape":"FailureRedirectionURL"}
+      }
+    },
     "GetIdentityDkimAttributesRequest":{
       "type":"structure",
       "required":["Identities"],
@@ -1844,6 +2115,7 @@
       }
     },
     "LastAttemptDate":{"type":"timestamp"},
+    "LastFreshStart":{"type":"timestamp"},
     "LimitExceededException":{
       "type":"structure",
       "members":{
@@ -1866,6 +2138,20 @@
       "type":"structure",
       "members":{
         "ConfigurationSets":{"shape":"ConfigurationSets"},
+        "NextToken":{"shape":"NextToken"}
+      }
+    },
+    "ListCustomVerificationEmailTemplatesRequest":{
+      "type":"structure",
+      "members":{
+        "NextToken":{"shape":"NextToken"},
+        "MaxResults":{"shape":"MaxResults"}
+      }
+    },
+    "ListCustomVerificationEmailTemplatesResponse":{
+      "type":"structure",
+      "members":{
+        "CustomVerificationEmailTemplates":{"shape":"CustomVerificationEmailTemplates"},
         "NextToken":{"shape":"NextToken"}
       }
     },
@@ -1962,6 +2248,12 @@
     },
     "Max24HourSend":{"type":"double"},
     "MaxItems":{"type":"integer"},
+    "MaxResults":{
+      "type":"integer",
+      "box":true,
+      "max":50,
+      "min":1
+    },
     "MaxSendRate":{"type":"double"},
     "Message":{
       "type":"structure",
@@ -2057,6 +2349,17 @@
     "PolicyNameList":{
       "type":"list",
       "member":{"shape":"PolicyName"}
+    },
+    "ProductionAccessNotGrantedException":{
+      "type":"structure",
+      "members":{
+      },
+      "error":{
+        "code":"ProductionAccessNotGranted",
+        "httpStatusCode":400,
+        "senderFault":true
+      },
+      "exception":true
     },
     "PutIdentityPolicyRequest":{
       "type":"structure",
@@ -2207,6 +2510,14 @@
       }
     },
     "ReportingMta":{"type":"string"},
+    "ReputationOptions":{
+      "type":"structure",
+      "members":{
+        "SendingEnabled":{"shape":"Enabled"},
+        "ReputationMetricsEnabled":{"shape":"Enabled"},
+        "LastFreshStart":{"shape":"LastFreshStart"}
+      }
+    },
     "RuleDoesNotExistException":{
       "type":"structure",
       "members":{
@@ -2314,6 +2625,24 @@
       "required":["Status"],
       "members":{
         "Status":{"shape":"BulkEmailDestinationStatusList"}
+      }
+    },
+    "SendCustomVerificationEmailRequest":{
+      "type":"structure",
+      "required":[
+        "EmailAddress",
+        "TemplateName"
+      ],
+      "members":{
+        "EmailAddress":{"shape":"Address"},
+        "TemplateName":{"shape":"TemplateName"},
+        "ConfigurationSetName":{"shape":"ConfigurationSetName"}
+      }
+    },
+    "SendCustomVerificationEmailResponse":{
+      "type":"structure",
+      "members":{
+        "MessageId":{"shape":"MessageId"}
       }
     },
     "SendDataPoint":{
@@ -2528,7 +2857,9 @@
       "type":"string",
       "enum":["RuleSet"]
     },
+    "Subject":{"type":"string"},
     "SubjectPart":{"type":"string"},
+    "SuccessRedirectionURL":{"type":"string"},
     "Template":{
       "type":"structure",
       "required":["TemplateName"],
@@ -2539,6 +2870,7 @@
         "HtmlPart":{"shape":"HtmlPart"}
       }
     },
+    "TemplateContent":{"type":"string"},
     "TemplateData":{
       "type":"string",
       "max":262144
@@ -2623,6 +2955,12 @@
       },
       "exception":true
     },
+    "UpdateAccountSendingEnabledRequest":{
+      "type":"structure",
+      "members":{
+        "Enabled":{"shape":"Enabled"}
+      }
+    },
     "UpdateConfigurationSetEventDestinationRequest":{
       "type":"structure",
       "required":[
@@ -2639,6 +2977,28 @@
       "members":{
       }
     },
+    "UpdateConfigurationSetReputationMetricsEnabledRequest":{
+      "type":"structure",
+      "required":[
+        "ConfigurationSetName",
+        "Enabled"
+      ],
+      "members":{
+        "ConfigurationSetName":{"shape":"ConfigurationSetName"},
+        "Enabled":{"shape":"Enabled"}
+      }
+    },
+    "UpdateConfigurationSetSendingEnabledRequest":{
+      "type":"structure",
+      "required":[
+        "ConfigurationSetName",
+        "Enabled"
+      ],
+      "members":{
+        "ConfigurationSetName":{"shape":"ConfigurationSetName"},
+        "Enabled":{"shape":"Enabled"}
+      }
+    },
     "UpdateConfigurationSetTrackingOptionsRequest":{
       "type":"structure",
       "required":[
@@ -2653,6 +3013,18 @@
     "UpdateConfigurationSetTrackingOptionsResponse":{
       "type":"structure",
       "members":{
+      }
+    },
+    "UpdateCustomVerificationEmailTemplateRequest":{
+      "type":"structure",
+      "required":["TemplateName"],
+      "members":{
+        "TemplateName":{"shape":"TemplateName"},
+        "FromEmailAddress":{"shape":"FromAddress"},
+        "TemplateSubject":{"shape":"Subject"},
+        "TemplateContent":{"shape":"TemplateContent"},
+        "SuccessRedirectionURL":{"shape":"SuccessRedirectionURL"},
+        "FailureRedirectionURL":{"shape":"FailureRedirectionURL"}
       }
     },
     "UpdateReceiptRuleRequest":{

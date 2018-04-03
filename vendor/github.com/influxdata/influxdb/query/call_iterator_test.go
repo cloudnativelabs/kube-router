@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/query"
+	"github.com/influxdata/influxql"
 )
 
 // Ensure that a float iterator can be created for a count() call.
@@ -1210,12 +1210,4 @@ func (g *FloatPointGenerator) Next() (*query.FloatPoint, error) {
 	p := g.Fn(g.i)
 	g.i++
 	return p, nil
-}
-
-func MustCallIterator(input query.Iterator, opt query.IteratorOptions) query.Iterator {
-	itr, err := query.NewCallIterator(input, opt)
-	if err != nil {
-		panic(err)
-	}
-	return itr
 }

@@ -1,4 +1,4 @@
-package daemon
+package daemon // import "github.com/docker/docker/daemon"
 
 import (
 	"bufio"
@@ -8,8 +8,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/mount"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // On Linux, plugins use a static path for storing execution state,
@@ -66,9 +68,29 @@ func (daemon *Daemon) cleanupMountsFromReaderByID(reader io.Reader, id string, u
 	return nil
 }
 
-// cleanupMounts umounts shm/mqueue mounts for old containers
+// cleanupMounts umounts used by container resources and the daemon root mount
 func (daemon *Daemon) cleanupMounts() error {
-	return daemon.cleanupMountsByID("")
+	if err := daemon.cleanupMountsByID(""); err != nil {
+		return err
+	}
+
+	infos, err := mount.GetMounts()
+	if err != nil {
+		return errors.Wrap(err, "error reading mount table for cleanup")
+	}
+
+	info := getMountInfo(infos, daemon.root)
+	// `info.Root` here is the root mountpoint of the passed in path (`daemon.root`).
+	// The ony cases that need to be cleaned up is when the daemon has performed a
+	//   `mount --bind /daemon/root /daemon/root && mount --make-shared /daemon/root`
+	// This is only done when the daemon is started up and `/daemon/root` is not
+	// already on a shared mountpoint.
+	if !shouldUnmountRoot(daemon.root, info) {
+		return nil
+	}
+
+	logrus.WithField("mountpoint", daemon.root).Debug("unmounting daemon root")
+	return mount.Unmount(daemon.root)
 }
 
 func getCleanPatterns(id string) (regexps []*regexp.Regexp) {
@@ -85,4 +107,21 @@ func getCleanPatterns(id string) (regexps []*regexp.Regexp) {
 		}
 	}
 	return
+}
+
+func getRealPath(path string) (string, error) {
+	return fileutils.ReadSymlinkedDirectory(path)
+}
+
+func shouldUnmountRoot(root string, info *mount.Info) bool {
+	if info == nil {
+		return false
+	}
+	if info.Mountpoint != root {
+		return false
+	}
+	if !strings.HasSuffix(root, info.Root) {
+		return false
+	}
+	return hasMountinfoOption(info.Optional, sharedPropagationOption)
 }

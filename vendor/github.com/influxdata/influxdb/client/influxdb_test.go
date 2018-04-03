@@ -655,7 +655,6 @@ func emptyTestServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(50 * time.Millisecond)
 		w.Header().Set("X-Influxdb-Version", "x.x")
-		return
 	}))
 }
 
@@ -744,6 +743,61 @@ func TestClient_NoTimeout(t *testing.T) {
 	_, err = c.Query(query)
 	if err != nil {
 		t.Fatalf("unexpected error.  expected %v, actual %v", nil, err)
+	}
+}
+
+func TestClient_ParseConnectionString(t *testing.T) {
+	for _, tt := range []struct {
+		addr string
+		ssl  bool
+		exp  string
+	}{
+		{
+			addr: "localhost",
+			exp:  "http://localhost:8086",
+		},
+		{
+			addr: "localhost:8086",
+			exp:  "http://localhost:8086",
+		},
+		{
+			addr: "localhost:80",
+			exp:  "http://localhost",
+		},
+		{
+			addr: "localhost",
+			exp:  "https://localhost:8086",
+			ssl:  true,
+		},
+		{
+			addr: "localhost:443",
+			exp:  "https://localhost",
+			ssl:  true,
+		},
+		{
+			addr: "localhost:80",
+			exp:  "https://localhost:80",
+			ssl:  true,
+		},
+		{
+			addr: "localhost:443",
+			exp:  "http://localhost:443",
+		},
+	} {
+		name := tt.addr
+		if tt.ssl {
+			name += "+ssl"
+		}
+		t.Run(name, func(t *testing.T) {
+			u, err := client.ParseConnectionString(tt.addr, tt.ssl)
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			if got, want := u.String(), tt.exp; got != want {
+				t.Fatalf("unexpected connection string: got=%s want=%s", got, want)
+			}
+		})
 	}
 }
 
@@ -901,5 +955,36 @@ func TestChunkedResponse(t *testing.T) {
 		t.Fatalf("unexpected error.  expected %v, actual %v", nil, err)
 	} else if resp != nil {
 		t.Fatalf("unexpected response.  expected %v, actual %v", nil, resp)
+	}
+}
+
+func TestClient_Proxy(t *testing.T) {
+	pinged := false
+	server := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		if got, want := req.URL.String(), "http://example.com:8086/ping"; got != want {
+			t.Errorf("invalid url in request: got=%s want=%s", got, want)
+		}
+		resp.WriteHeader(http.StatusNoContent)
+		pinged = true
+	}))
+	defer server.Close()
+
+	proxyURL, _ := url.Parse(server.URL)
+	c, err := client.NewClient(client.Config{
+		URL: url.URL{
+			Scheme: "http",
+			Host:   "example.com:8086",
+		},
+		Proxy: http.ProxyURL(proxyURL),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if _, _, err := c.Ping(); err != nil {
+		t.Fatalf("could not ping server: %s", err)
+	}
+
+	if !pinged {
+		t.Fatalf("no http request was received")
 	}
 }

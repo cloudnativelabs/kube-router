@@ -5,12 +5,16 @@ import (
 	"testing"
 
 	"github.com/influxdata/influxdb/models"
+	"github.com/influxdata/influxdb/tsdb"
 	"github.com/influxdata/influxdb/tsdb/index/tsi1"
 )
 
 // Ensure a simple index file can be built and opened.
 func TestCreateIndexFile(t *testing.T) {
-	f, err := CreateIndexFile([]Series{
+	sfile := MustOpenSeriesFile()
+	defer sfile.Close()
+
+	f, err := CreateIndexFile(sfile.SeriesFile, []Series{
 		{Name: []byte("cpu"), Tags: models.NewTags(map[string]string{"region": "east"})},
 		{Name: []byte("cpu"), Tags: models.NewTags(map[string]string{"region": "west"})},
 		{Name: []byte("mem"), Tags: models.NewTags(map[string]string{"region": "east"})},
@@ -28,8 +32,11 @@ func TestCreateIndexFile(t *testing.T) {
 
 // Ensure index file generation can be successfully built.
 func TestGenerateIndexFile(t *testing.T) {
+	sfile := MustOpenSeriesFile()
+	defer sfile.Close()
+
 	// Build generated index file.
-	f, err := GenerateIndexFile(10, 3, 4)
+	f, err := GenerateIndexFile(sfile.SeriesFile, 10, 3, 4)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,15 +49,41 @@ func TestGenerateIndexFile(t *testing.T) {
 	}
 }
 
+// Ensure a MeasurementHashSeries returns false when all series are tombstoned.
+func TestIndexFile_MeasurementHasSeries_Tombstoned(t *testing.T) {
+	sfile := MustOpenSeriesFile()
+	defer sfile.Close()
+
+	f, err := CreateIndexFile(sfile.SeriesFile, []Series{
+		{Name: []byte("cpu"), Tags: models.NewTags(map[string]string{"region": "east"})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate all series are tombstoned
+	ss := tsdb.NewSeriesIDSet()
+
+	if f.MeasurementHasSeries(ss, []byte("cpu")) {
+		t.Fatalf("MeasurementHasSeries got true, exp false")
+	}
+}
+
 func BenchmarkIndexFile_TagValueSeries(b *testing.B) {
 	b.Run("M=1,K=2,V=3", func(b *testing.B) {
-		benchmarkIndexFile_TagValueSeries(b, MustFindOrGenerateIndexFile(1, 2, 3))
+		sfile := MustOpenSeriesFile()
+		defer sfile.Close()
+		benchmarkIndexFile_TagValueSeries(b, MustFindOrGenerateIndexFile(sfile.SeriesFile, 1, 2, 3))
 	})
 	b.Run("M=10,K=5,V=5", func(b *testing.B) {
-		benchmarkIndexFile_TagValueSeries(b, MustFindOrGenerateIndexFile(10, 5, 5))
+		sfile := MustOpenSeriesFile()
+		defer sfile.Close()
+		benchmarkIndexFile_TagValueSeries(b, MustFindOrGenerateIndexFile(sfile.SeriesFile, 10, 5, 5))
 	})
 	b.Run("M=10,K=7,V=5", func(b *testing.B) {
-		benchmarkIndexFile_TagValueSeries(b, MustFindOrGenerateIndexFile(10, 7, 7))
+		sfile := MustOpenSeriesFile()
+		defer sfile.Close()
+		benchmarkIndexFile_TagValueSeries(b, MustFindOrGenerateIndexFile(sfile.SeriesFile, 10, 7, 7))
 	})
 }
 
@@ -68,51 +101,51 @@ func benchmarkIndexFile_TagValueSeries(b *testing.B, idx *tsi1.IndexFile) {
 }
 
 // CreateIndexFile creates an index file with a given set of series.
-func CreateIndexFile(series []Series) (*tsi1.IndexFile, error) {
-	lf, err := CreateLogFile(series)
+func CreateIndexFile(sfile *tsdb.SeriesFile, series []Series) (*tsi1.IndexFile, error) {
+	lf, err := CreateLogFile(sfile, series)
 	if err != nil {
 		return nil, err
 	}
 
 	// Write index file to buffer.
 	var buf bytes.Buffer
-	if _, err := lf.CompactTo(&buf, M, K); err != nil {
+	if _, err := lf.CompactTo(&buf, M, K, nil); err != nil {
 		return nil, err
 	}
 
 	// Load index file from buffer.
-	var f tsi1.IndexFile
+	f := tsi1.NewIndexFile(sfile)
 	if err := f.UnmarshalBinary(buf.Bytes()); err != nil {
 		return nil, err
 	}
-	return &f, nil
+	return f, nil
 }
 
 // GenerateIndexFile generates an index file from a set of series based on the count arguments.
 // Total series returned will equal measurementN * tagN * valueN.
-func GenerateIndexFile(measurementN, tagN, valueN int) (*tsi1.IndexFile, error) {
+func GenerateIndexFile(sfile *tsdb.SeriesFile, measurementN, tagN, valueN int) (*tsi1.IndexFile, error) {
 	// Generate a new log file first.
-	lf, err := GenerateLogFile(measurementN, tagN, valueN)
+	lf, err := GenerateLogFile(sfile, measurementN, tagN, valueN)
 	if err != nil {
 		return nil, err
 	}
 
 	// Compact log file to buffer.
 	var buf bytes.Buffer
-	if _, err := lf.CompactTo(&buf, M, K); err != nil {
+	if _, err := lf.CompactTo(&buf, M, K, nil); err != nil {
 		return nil, err
 	}
 
 	// Load index file from buffer.
-	var f tsi1.IndexFile
+	f := tsi1.NewIndexFile(sfile)
 	if err := f.UnmarshalBinary(buf.Bytes()); err != nil {
 		return nil, err
 	}
-	return &f, nil
+	return f, nil
 }
 
-func MustGenerateIndexFile(measurementN, tagN, valueN int) *tsi1.IndexFile {
-	f, err := GenerateIndexFile(measurementN, tagN, valueN)
+func MustGenerateIndexFile(sfile *tsdb.SeriesFile, measurementN, tagN, valueN int) *tsi1.IndexFile {
+	f, err := GenerateIndexFile(sfile, measurementN, tagN, valueN)
 	if err != nil {
 		panic(err)
 	}
@@ -128,7 +161,7 @@ var indexFileCache struct {
 }
 
 // MustFindOrGenerateIndexFile returns a cached index file or generates one if it doesn't exist.
-func MustFindOrGenerateIndexFile(measurementN, tagN, valueN int) *tsi1.IndexFile {
+func MustFindOrGenerateIndexFile(sfile *tsdb.SeriesFile, measurementN, tagN, valueN int) *tsi1.IndexFile {
 	// Use cache if fields match and the index file has been generated.
 	if indexFileCache.MeasurementN == measurementN &&
 		indexFileCache.TagN == tagN &&
@@ -141,7 +174,7 @@ func MustFindOrGenerateIndexFile(measurementN, tagN, valueN int) *tsi1.IndexFile
 	indexFileCache.MeasurementN = measurementN
 	indexFileCache.TagN = tagN
 	indexFileCache.ValueN = valueN
-	indexFileCache.IndexFile = MustGenerateIndexFile(measurementN, tagN, valueN)
+	indexFileCache.IndexFile = MustGenerateIndexFile(sfile, measurementN, tagN, valueN)
 	return indexFileCache.IndexFile
 }
 

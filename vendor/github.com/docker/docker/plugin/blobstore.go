@@ -1,4 +1,4 @@
-package plugin
+package plugin // import "github.com/docker/docker/plugin"
 
 import (
 	"fmt"
@@ -6,15 +6,18 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/distribution/xfer"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/docker/docker/pkg/chrootarchive"
 	"github.com/docker/docker/pkg/progress"
 	"github.com/opencontainers/go-digest"
+	specs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 )
 
@@ -125,7 +128,7 @@ type downloadManager struct {
 	configDigest digest.Digest
 }
 
-func (dm *downloadManager) Download(ctx context.Context, initialRootFS image.RootFS, layers []xfer.DownloadDescriptor, progressOutput progress.Output) (image.RootFS, func(), error) {
+func (dm *downloadManager) Download(ctx context.Context, initialRootFS image.RootFS, os string, layers []xfer.DownloadDescriptor, progressOutput progress.Output) (image.RootFS, func(), error) {
 	for _, l := range layers {
 		b, err := dm.blobStore.New()
 		if err != nil {
@@ -143,7 +146,7 @@ func (dm *downloadManager) Download(ctx context.Context, initialRootFS image.Roo
 			return initialRootFS, nil, err
 		}
 		digester := digest.Canonical.Digester()
-		if _, err := archive.ApplyLayer(dm.tmpDir, io.TeeReader(inflatedLayerData, digester.Hash())); err != nil {
+		if _, err := chrootarchive.ApplyLayer(dm.tmpDir, io.TeeReader(inflatedLayerData, digester.Hash())); err != nil {
 			return initialRootFS, nil, err
 		}
 		initialRootFS.Append(layer.DiffID(digester.Digest()))
@@ -179,4 +182,8 @@ func (dm *downloadManager) Get(d digest.Digest) ([]byte, error) {
 }
 func (dm *downloadManager) RootFSFromConfig(c []byte) (*image.RootFS, error) {
 	return configToRootFS(c)
+}
+func (dm *downloadManager) PlatformFromConfig(c []byte) (*specs.Platform, error) {
+	// TODO: LCOW/Plugins. This will need revisiting. For now use the runtime OS
+	return &specs.Platform{OS: runtime.GOOS}, nil
 }

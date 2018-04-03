@@ -6,12 +6,16 @@
 
 package tsm1
 
+import "sort"
+
 // merge combines the next set of blocks into merged blocks.
 func (k *tsmKeyIterator) mergeFloat() {
 	// No blocks left, or pending merged values, we're done
 	if len(k.blocks) == 0 && len(k.merged) == 0 && len(k.mergedFloatValues) == 0 {
 		return
 	}
+
+	sort.Stable(k.blocks)
 
 	dedup := len(k.mergedFloatValues) != 0
 	if len(k.blocks) > 0 && !dedup {
@@ -22,7 +26,7 @@ func (k *tsmKeyIterator) mergeFloat() {
 		// we need to dedup as there may be duplicate points now
 		for i := 1; !dedup && i < len(k.blocks); i++ {
 			dedup = k.blocks[i].partiallyRead() ||
-				k.blocks[i].minTime <= k.blocks[i-1].maxTime ||
+				k.blocks[i].overlapsTimeRange(k.blocks[i-1].minTime, k.blocks[i-1].maxTime) ||
 				len(k.blocks[i].tombstones) > 0
 		}
 
@@ -210,6 +214,8 @@ func (k *tsmKeyIterator) mergeInteger() {
 		return
 	}
 
+	sort.Stable(k.blocks)
+
 	dedup := len(k.mergedIntegerValues) != 0
 	if len(k.blocks) > 0 && !dedup {
 		// If we have more than one block or any partially tombstoned blocks, we many need to dedup
@@ -219,7 +225,7 @@ func (k *tsmKeyIterator) mergeInteger() {
 		// we need to dedup as there may be duplicate points now
 		for i := 1; !dedup && i < len(k.blocks); i++ {
 			dedup = k.blocks[i].partiallyRead() ||
-				k.blocks[i].minTime <= k.blocks[i-1].maxTime ||
+				k.blocks[i].overlapsTimeRange(k.blocks[i-1].minTime, k.blocks[i-1].maxTime) ||
 				len(k.blocks[i].tombstones) > 0
 		}
 
@@ -407,6 +413,8 @@ func (k *tsmKeyIterator) mergeUnsigned() {
 		return
 	}
 
+	sort.Stable(k.blocks)
+
 	dedup := len(k.mergedUnsignedValues) != 0
 	if len(k.blocks) > 0 && !dedup {
 		// If we have more than one block or any partially tombstoned blocks, we many need to dedup
@@ -416,7 +424,7 @@ func (k *tsmKeyIterator) mergeUnsigned() {
 		// we need to dedup as there may be duplicate points now
 		for i := 1; !dedup && i < len(k.blocks); i++ {
 			dedup = k.blocks[i].partiallyRead() ||
-				k.blocks[i].minTime <= k.blocks[i-1].maxTime ||
+				k.blocks[i].overlapsTimeRange(k.blocks[i-1].minTime, k.blocks[i-1].maxTime) ||
 				len(k.blocks[i].tombstones) > 0
 		}
 
@@ -604,6 +612,8 @@ func (k *tsmKeyIterator) mergeString() {
 		return
 	}
 
+	sort.Stable(k.blocks)
+
 	dedup := len(k.mergedStringValues) != 0
 	if len(k.blocks) > 0 && !dedup {
 		// If we have more than one block or any partially tombstoned blocks, we many need to dedup
@@ -613,7 +623,7 @@ func (k *tsmKeyIterator) mergeString() {
 		// we need to dedup as there may be duplicate points now
 		for i := 1; !dedup && i < len(k.blocks); i++ {
 			dedup = k.blocks[i].partiallyRead() ||
-				k.blocks[i].minTime <= k.blocks[i-1].maxTime ||
+				k.blocks[i].overlapsTimeRange(k.blocks[i-1].minTime, k.blocks[i-1].maxTime) ||
 				len(k.blocks[i].tombstones) > 0
 		}
 
@@ -801,6 +811,8 @@ func (k *tsmKeyIterator) mergeBoolean() {
 		return
 	}
 
+	sort.Stable(k.blocks)
+
 	dedup := len(k.mergedBooleanValues) != 0
 	if len(k.blocks) > 0 && !dedup {
 		// If we have more than one block or any partially tombstoned blocks, we many need to dedup
@@ -810,7 +822,7 @@ func (k *tsmKeyIterator) mergeBoolean() {
 		// we need to dedup as there may be duplicate points now
 		for i := 1; !dedup && i < len(k.blocks); i++ {
 			dedup = k.blocks[i].partiallyRead() ||
-				k.blocks[i].minTime <= k.blocks[i-1].maxTime ||
+				k.blocks[i].overlapsTimeRange(k.blocks[i-1].minTime, k.blocks[i-1].maxTime) ||
 				len(k.blocks[i].tombstones) > 0
 		}
 

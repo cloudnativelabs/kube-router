@@ -16,16 +16,21 @@ import (
 	"github.com/influxdata/influxdb/pkg/escape"
 )
 
+type escapeSet struct {
+	k   [1]byte
+	esc [2]byte
+}
+
 var (
-	measurementEscapeCodes = map[byte][]byte{
-		',': []byte(`\,`),
-		' ': []byte(`\ `),
+	measurementEscapeCodes = [...]escapeSet{
+		{k: [1]byte{','}, esc: [2]byte{'\\', ','}},
+		{k: [1]byte{' '}, esc: [2]byte{'\\', ' '}},
 	}
 
-	tagEscapeCodes = map[byte][]byte{
-		',': []byte(`\,`),
-		' ': []byte(`\ `),
-		'=': []byte(`\=`),
+	tagEscapeCodes = [...]escapeSet{
+		{k: [1]byte{','}, esc: [2]byte{'\\', ','}},
+		{k: [1]byte{' '}, esc: [2]byte{'\\', ' '}},
+		{k: [1]byte{'='}, esc: [2]byte{'\\', '='}},
 	}
 
 	// ErrPointMustHaveAField is returned when operating on a point that does not have any fields.
@@ -63,6 +68,9 @@ type Point interface {
 
 	// Tags returns the tag set for the point.
 	Tags() Tags
+
+	// ForEachTag iterates over each tag invoking fn.  If fn return false, iteration stops.
+	ForEachTag(fn func(k, v []byte) bool)
 
 	// AddTag adds or replaces a tag value for a point.
 	AddTag(key, value string)
@@ -263,6 +271,11 @@ func ParsePointsString(buf string) ([]Point, error) {
 // NOTE: to minimize heap allocations, the returned Tags will refer to subslices of buf.
 // This can have the unintended effect preventing buf from being garbage collected.
 func ParseKey(buf []byte) (string, Tags) {
+	meas, tags := ParseKeyBytes(buf)
+	return string(meas), tags
+}
+
+func ParseKeyBytes(buf []byte) ([]byte, Tags) {
 	// Ignore the error because scanMeasurement returns "missing fields" which we ignore
 	// when just parsing a key
 	state, i, _ := scanMeasurement(buf, 0)
@@ -271,13 +284,13 @@ func ParseKey(buf []byte) (string, Tags) {
 	if state == tagKeyState {
 		tags = parseTags(buf)
 		// scanMeasurement returns the location of the comma if there are tags, strip that off
-		return string(buf[:i-1]), tags
+		return buf[:i-1], tags
 	}
-	return string(buf[:i]), tags
+	return buf[:i], tags
 }
 
-func ParseTags(buf []byte) (Tags, error) {
-	return parseTags(buf), nil
+func ParseTags(buf []byte) Tags {
+	return parseTags(buf)
 }
 
 func ParseName(buf []byte) ([]byte, error) {
@@ -1064,7 +1077,7 @@ func scanLine(buf []byte, i int) (int, []byte) {
 		}
 
 		// skip past escaped characters
-		if buf[i] == '\\' {
+		if buf[i] == '\\' && i+2 < len(buf) {
 			i += 2
 			continue
 		}
@@ -1194,23 +1207,33 @@ func scanFieldValue(buf []byte, i int) (int, []byte) {
 }
 
 func EscapeMeasurement(in []byte) []byte {
-	for b, esc := range measurementEscapeCodes {
-		in = bytes.Replace(in, []byte{b}, esc, -1)
+	for _, c := range measurementEscapeCodes {
+		if bytes.IndexByte(in, c.k[0]) != -1 {
+			in = bytes.Replace(in, c.k[:], c.esc[:], -1)
+		}
 	}
 	return in
 }
 
 func unescapeMeasurement(in []byte) []byte {
-	for b, esc := range measurementEscapeCodes {
-		in = bytes.Replace(in, esc, []byte{b}, -1)
+	if bytes.IndexByte(in, '\\') == -1 {
+		return in
+	}
+
+	for i := range measurementEscapeCodes {
+		c := &measurementEscapeCodes[i]
+		if bytes.IndexByte(in, c.k[0]) != -1 {
+			in = bytes.Replace(in, c.esc[:], c.k[:], -1)
+		}
 	}
 	return in
 }
 
 func escapeTag(in []byte) []byte {
-	for b, esc := range tagEscapeCodes {
-		if bytes.IndexByte(in, b) != -1 {
-			in = bytes.Replace(in, []byte{b}, esc, -1)
+	for i := range tagEscapeCodes {
+		c := &tagEscapeCodes[i]
+		if bytes.IndexByte(in, c.k[0]) != -1 {
+			in = bytes.Replace(in, c.k[:], c.esc[:], -1)
 		}
 	}
 	return in
@@ -1221,9 +1244,10 @@ func unescapeTag(in []byte) []byte {
 		return in
 	}
 
-	for b, esc := range tagEscapeCodes {
-		if bytes.IndexByte(in, b) != -1 {
-			in = bytes.Replace(in, esc, []byte{b}, -1)
+	for i := range tagEscapeCodes {
+		c := &tagEscapeCodes[i]
+		if bytes.IndexByte(in, c.k[0]) != -1 {
+			in = bytes.Replace(in, c.esc[:], c.k[:], -1)
 		}
 	}
 	return in
@@ -1440,6 +1464,10 @@ func (p *point) Tags() Tags {
 	return p.cachedTags
 }
 
+func (p *point) ForEachTag(fn func(k, v []byte) bool) {
+	walkTags(p.key, fn)
+}
+
 func (p *point) HasTag(tag []byte) bool {
 	if len(p.key) == 0 {
 		return false
@@ -1523,9 +1551,12 @@ func parseTags(buf []byte) Tags {
 		return nil
 	}
 
+	// Series keys can contain escaped commas, therefore the number of commas
+	// in a series key only gives an estimation of the upper bound on the number
+	// of tags.
 	tags := make(Tags, 0, bytes.Count(buf, []byte(",")))
 	walkTags(buf, func(key, value []byte) bool {
-		tags = append(tags, NewTag(key, value))
+		tags = append(tags, Tag{Key: key, Value: value})
 		return true
 	})
 	return tags
@@ -1533,9 +1564,16 @@ func parseTags(buf []byte) Tags {
 
 // MakeKey creates a key for a set of tags.
 func MakeKey(name []byte, tags Tags) []byte {
+	return AppendMakeKey(nil, name, tags)
+}
+
+// AppendMakeKey appends the key derived from name and tags to dst and returns the extended buffer.
+func AppendMakeKey(dst []byte, name []byte, tags Tags) []byte {
 	// unescape the name and then re-escape it to avoid double escaping.
 	// The key should always be stored in escaped form.
-	return append(EscapeMeasurement(unescapeMeasurement(name)), tags.HashKey()...)
+	dst = append(dst, EscapeMeasurement(unescapeMeasurement(name))...)
+	dst = tags.AppendHashKey(dst)
+	return dst
 }
 
 // SetTags replaces the tags for the point.
@@ -1684,10 +1722,7 @@ func (p *point) UnmarshalBinary(b []byte) error {
 	p.fields, b = b[:n], b[n:]
 
 	// Read timestamp.
-	if err := p.time.UnmarshalBinary(b); err != nil {
-		return err
-	}
-	return nil
+	return p.time.UnmarshalBinary(b)
 }
 
 // PrecisionString returns a string representation of the point. If there
@@ -1906,8 +1941,8 @@ func (a Tags) String() string {
 // for data structures or delimiters for example.
 func (a Tags) Size() int {
 	var total int
-	for _, t := range a {
-		total += t.Size()
+	for i := range a {
+		total += a[i].Size()
 	}
 	return total
 }
@@ -2040,42 +2075,78 @@ func (a Tags) Merge(other map[string]string) Tags {
 
 // HashKey hashes all of a tag's keys.
 func (a Tags) HashKey() []byte {
+	return a.AppendHashKey(nil)
+}
+
+func (a Tags) needsEscape() bool {
+	for i := range a {
+		t := &a[i]
+		for j := range tagEscapeCodes {
+			c := &tagEscapeCodes[j]
+			if bytes.IndexByte(t.Key, c.k[0]) != -1 || bytes.IndexByte(t.Value, c.k[0]) != -1 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// AppendHashKey appends the result of hashing all of a tag's keys and values to dst and returns the extended buffer.
+func (a Tags) AppendHashKey(dst []byte) []byte {
 	// Empty maps marshal to empty bytes.
 	if len(a) == 0 {
-		return nil
+		return dst
 	}
 
 	// Type invariant: Tags are sorted
 
-	escaped := make(Tags, 0, len(a))
 	sz := 0
-	for _, t := range a {
-		ek := escapeTag(t.Key)
-		ev := escapeTag(t.Value)
-
-		if len(ev) > 0 {
-			escaped = append(escaped, Tag{Key: ek, Value: ev})
-			sz += len(ek) + len(ev)
+	var escaped Tags
+	if a.needsEscape() {
+		var tmp [20]Tag
+		if len(a) < len(tmp) {
+			escaped = tmp[:len(a)]
+		} else {
+			escaped = make(Tags, len(a))
 		}
+
+		for i := range a {
+			t := &a[i]
+			nt := &escaped[i]
+			nt.Key = escapeTag(t.Key)
+			nt.Value = escapeTag(t.Value)
+			sz += len(nt.Key) + len(nt.Value)
+		}
+	} else {
+		sz = a.Size()
+		escaped = a
 	}
 
 	sz += len(escaped) + (len(escaped) * 2) // separators
 
 	// Generate marshaled bytes.
-	b := make([]byte, sz)
-	buf := b
+	if cap(dst)-len(dst) < sz {
+		nd := make([]byte, len(dst), len(dst)+sz)
+		copy(nd, dst)
+		dst = nd
+	}
+	buf := dst[len(dst) : len(dst)+sz]
 	idx := 0
-	for _, k := range escaped {
+	for i := range escaped {
+		k := &escaped[i]
+		if len(k.Value) == 0 {
+			continue
+		}
 		buf[idx] = ','
 		idx++
-		copy(buf[idx:idx+len(k.Key)], k.Key)
+		copy(buf[idx:], k.Key)
 		idx += len(k.Key)
 		buf[idx] = '='
 		idx++
-		copy(buf[idx:idx+len(k.Value)], k.Value)
+		copy(buf[idx:], k.Value)
 		idx += len(k.Value)
 	}
-	return b[:idx]
+	return dst[:len(dst)+idx]
 }
 
 // CopyTags returns a shallow copy of tags.
@@ -2321,9 +2392,3 @@ func appendField(b []byte, k string, v interface{}) []byte {
 
 	return b
 }
-
-type byteSlices [][]byte
-
-func (a byteSlices) Len() int           { return len(a) }
-func (a byteSlices) Less(i, j int) bool { return bytes.Compare(a[i], a[j]) == -1 }
-func (a byteSlices) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }

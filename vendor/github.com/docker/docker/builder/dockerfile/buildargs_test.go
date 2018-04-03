@@ -1,8 +1,12 @@
-package dockerfile
+package dockerfile // import "github.com/docker/docker/builder/dockerfile"
 
 import (
-	"github.com/docker/docker/pkg/testutil/assert"
+	"bytes"
+	"strings"
 	"testing"
+
+	"github.com/gotestyourself/gotestyourself/assert"
+	is "github.com/gotestyourself/gotestyourself/assert/cmp"
 )
 
 func strPtr(source string) *string {
@@ -18,7 +22,7 @@ func TestGetAllAllowed(t *testing.T) {
 	})
 
 	buildArgs.AddMetaArg("ArgFromMeta", strPtr("frommeta1"))
-	buildArgs.AddMetaArg("ArgFromMetaOverriden", strPtr("frommeta2"))
+	buildArgs.AddMetaArg("ArgFromMetaOverridden", strPtr("frommeta2"))
 	buildArgs.AddMetaArg("ArgFromMetaNotUsed", strPtr("frommeta3"))
 
 	buildArgs.AddArg("ArgOverriddenByOptions", strPtr("fromdockerfile2"))
@@ -26,7 +30,7 @@ func TestGetAllAllowed(t *testing.T) {
 	buildArgs.AddArg("ArgNoDefaultInDockerfile", nil)
 	buildArgs.AddArg("ArgNoDefaultInDockerfileFromOptions", nil)
 	buildArgs.AddArg("ArgFromMeta", nil)
-	buildArgs.AddArg("ArgFromMetaOverriden", strPtr("fromdockerfile3"))
+	buildArgs.AddArg("ArgFromMetaOverridden", strPtr("fromdockerfile3"))
 
 	all := buildArgs.GetAllAllowed()
 	expected := map[string]string{
@@ -35,9 +39,9 @@ func TestGetAllAllowed(t *testing.T) {
 		"ArgWithDefaultInDockerfile":          "fromdockerfile1",
 		"ArgNoDefaultInDockerfileFromOptions": "fromopt3",
 		"ArgFromMeta":                         "frommeta1",
-		"ArgFromMetaOverriden":                "fromdockerfile3",
+		"ArgFromMetaOverridden":               "fromdockerfile3",
 	}
-	assert.DeepEqual(t, all, expected)
+	assert.Check(t, is.DeepEqual(expected, all))
 }
 
 func TestGetAllMeta(t *testing.T) {
@@ -59,5 +63,40 @@ func TestGetAllMeta(t *testing.T) {
 		"ArgOverriddenByOptions":        "fromopt2",
 		"ArgNoDefaultInMetaFromOptions": "fromopt3",
 	}
-	assert.DeepEqual(t, all, expected)
+	assert.Check(t, is.DeepEqual(expected, all))
+}
+
+func TestWarnOnUnusedBuildArgs(t *testing.T) {
+	buildArgs := newBuildArgs(map[string]*string{
+		"ThisArgIsUsed":    strPtr("fromopt1"),
+		"ThisArgIsNotUsed": strPtr("fromopt2"),
+		"HTTPS_PROXY":      strPtr("referenced builtin"),
+		"HTTP_PROXY":       strPtr("unreferenced builtin"),
+	})
+	buildArgs.AddArg("ThisArgIsUsed", nil)
+	buildArgs.AddArg("HTTPS_PROXY", nil)
+
+	buffer := new(bytes.Buffer)
+	buildArgs.WarnOnUnusedBuildArgs(buffer)
+	out := buffer.String()
+	assert.Assert(t, !strings.Contains(out, "ThisArgIsUsed"), out)
+	assert.Assert(t, !strings.Contains(out, "HTTPS_PROXY"), out)
+	assert.Assert(t, !strings.Contains(out, "HTTP_PROXY"), out)
+	assert.Check(t, is.Contains(out, "ThisArgIsNotUsed"))
+}
+
+func TestIsUnreferencedBuiltin(t *testing.T) {
+	buildArgs := newBuildArgs(map[string]*string{
+		"ThisArgIsUsed":    strPtr("fromopt1"),
+		"ThisArgIsNotUsed": strPtr("fromopt2"),
+		"HTTPS_PROXY":      strPtr("referenced builtin"),
+		"HTTP_PROXY":       strPtr("unreferenced builtin"),
+	})
+	buildArgs.AddArg("ThisArgIsUsed", nil)
+	buildArgs.AddArg("HTTPS_PROXY", nil)
+
+	assert.Check(t, buildArgs.IsReferencedOrNotBuiltin("ThisArgIsUsed"))
+	assert.Check(t, buildArgs.IsReferencedOrNotBuiltin("ThisArgIsNotUsed"))
+	assert.Check(t, buildArgs.IsReferencedOrNotBuiltin("HTTPS_PROXY"))
+	assert.Check(t, !buildArgs.IsReferencedOrNotBuiltin("HTTP_PROXY"))
 }

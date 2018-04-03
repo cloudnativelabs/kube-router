@@ -3,6 +3,7 @@ package bloom_test
 import (
 	"encoding/binary"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/influxdata/influxdb/pkg/bloom"
@@ -10,6 +11,10 @@ import (
 
 // Ensure filter can insert values and verify they exist.
 func TestFilter_InsertContains(t *testing.T) {
+	if testing.Short() || os.Getenv("GORACE") != "" || os.Getenv("APPVEYOR") != "" {
+		t.Skip("Skipping test in short, race and appveyor mode.")
+	}
+
 	// Short, less comprehensive test.
 	testShortFilter_InsertContains(t)
 
@@ -23,7 +28,7 @@ func TestFilter_InsertContains(t *testing.T) {
 	// with 0.001 false positive rate (1 in 1000 values will be incorrectly
 	// identified as being present in the set).
 	filter := bloom.NewFilter(143775876, 10)
-	v := make([]byte, 4, 4)
+	v := make([]byte, 4)
 	for i := 0; i < 10000000; i++ {
 		binary.BigEndian.PutUint32(v, uint32(i))
 		filter.Insert(v)

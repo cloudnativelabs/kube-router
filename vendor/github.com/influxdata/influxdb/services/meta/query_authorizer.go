@@ -3,7 +3,7 @@ package meta
 import (
 	"fmt"
 
-	"github.com/influxdata/influxdb/influxql"
+	"github.com/influxdata/influxql"
 )
 
 // QueryAuthorizer determines whether a user is authorized to execute a given query.
@@ -29,7 +29,7 @@ func (a *QueryAuthorizer) AuthorizeQuery(u User, query *influxql.Query, database
 		if len(query.Statements) > 0 {
 			// First statement in the query must create a user with admin privilege.
 			cu, ok := query.Statements[0].(*influxql.CreateUserStatement)
-			if ok && cu.Admin == true {
+			if ok && cu.Admin {
 				return nil
 			}
 		}

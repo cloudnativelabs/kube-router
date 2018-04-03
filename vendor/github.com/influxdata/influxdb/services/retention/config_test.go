@@ -19,7 +19,7 @@ check-interval = "1s"
 	}
 
 	// Validate configuration.
-	if c.Enabled != true {
+	if !c.Enabled {
 		t.Fatalf("unexpected enabled state: %v", c.Enabled)
 	} else if time.Duration(c.CheckInterval) != time.Second {
 		t.Fatalf("unexpected check interval: %v", c.CheckInterval)
@@ -42,5 +42,10 @@ func TestConfig_Validate(t *testing.T) {
 	c.CheckInterval *= -1
 	if err := c.Validate(); err == nil {
 		t.Fatal("expected error for negative check-interval, got nil")
+	}
+
+	c.Enabled = false
+	if err := c.Validate(); err != nil {
+		t.Fatalf("unexpected validation fail from disabled config: %s", err)
 	}
 }

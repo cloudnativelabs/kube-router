@@ -90,6 +90,14 @@ func (blk *TagBlock) UnmarshalBinary(data []byte) error {
 // TagKeyElem returns an element for a tag key.
 // Returns an element with a nil key if not found.
 func (blk *TagBlock) TagKeyElem(key []byte) TagKeyElem {
+	var elem TagBlockKeyElem
+	if !blk.DecodeTagKeyElem(key, &elem) {
+		return nil
+	}
+	return &elem
+}
+
+func (blk *TagBlock) DecodeTagKeyElem(key []byte, elem *TagBlockKeyElem) bool {
 	keyN := int64(binary.BigEndian.Uint64(blk.hashData[:TagKeyNSize]))
 	hash := rhh.HashKey(key)
 	pos := hash % keyN
@@ -100,21 +108,20 @@ func (blk *TagBlock) TagKeyElem(key []byte) TagKeyElem {
 		// Find offset of tag key.
 		offset := binary.BigEndian.Uint64(blk.hashData[TagKeyNSize+(pos*TagKeyOffsetSize):])
 		if offset == 0 {
-			return nil
+			return false
 		}
 
 		// Parse into element.
-		var e TagBlockKeyElem
-		e.unmarshal(blk.data[offset:], blk.data)
+		elem.unmarshal(blk.data[offset:], blk.data)
 
 		// Return if keys match.
-		if bytes.Equal(e.key, key) {
-			return &e
+		if bytes.Equal(elem.key, key) {
+			return true
 		}
 
 		// Check if we've exceeded the probe distance.
-		if d > rhh.Dist(rhh.HashKey(e.key), pos, keyN) {
-			return nil
+		if d > rhh.Dist(rhh.HashKey(elem.key), pos, keyN) {
+			return false
 		}
 
 		// Move position forward.
@@ -122,21 +129,39 @@ func (blk *TagBlock) TagKeyElem(key []byte) TagKeyElem {
 		d++
 
 		if d > keyN {
-			return nil
+			return false
 		}
 	}
 }
 
 // TagValueElem returns an element for a tag value.
 func (blk *TagBlock) TagValueElem(key, value []byte) TagValueElem {
-	// Find key element, exit if not found.
-	kelem, _ := blk.TagKeyElem(key).(*TagBlockKeyElem)
-	if kelem == nil {
+	var valueElem TagBlockValueElem
+	if !blk.DecodeTagValueElem(key, value, &valueElem) {
 		return nil
+	}
+	return &valueElem
+}
+
+// TagValueElem returns an element for a tag value.
+func (blk *TagBlock) TagValueSeriesData(key, value []byte) (uint64, []byte) {
+	var valueElem TagBlockValueElem
+	if !blk.DecodeTagValueElem(key, value, &valueElem) {
+		return 0, nil
+	}
+	return valueElem.series.n, valueElem.series.data
+}
+
+// DecodeTagValueElem returns an element for a tag value.
+func (blk *TagBlock) DecodeTagValueElem(key, value []byte, valueElem *TagBlockValueElem) bool {
+	// Find key element, exit if not found.
+	var keyElem TagBlockKeyElem
+	if !blk.DecodeTagKeyElem(key, &keyElem) {
+		return false
 	}
 
 	// Slice hash index data.
-	hashData := kelem.hashIndex.buf
+	hashData := keyElem.hashIndex.buf
 
 	valueN := int64(binary.BigEndian.Uint64(hashData[:TagValueNSize]))
 	hash := rhh.HashKey(value)
@@ -148,22 +173,21 @@ func (blk *TagBlock) TagValueElem(key, value []byte) TagValueElem {
 		// Find offset of tag value.
 		offset := binary.BigEndian.Uint64(hashData[TagValueNSize+(pos*TagValueOffsetSize):])
 		if offset == 0 {
-			return nil
+			return false
 		}
 
 		// Parse into element.
-		var e TagBlockValueElem
-		e.unmarshal(blk.data[offset:])
+		valueElem.unmarshal(blk.data[offset:])
 
 		// Return if values match.
-		if bytes.Equal(e.value, value) {
-			return &e
+		if bytes.Equal(valueElem.value, value) {
+			return true
 		}
 
 		// Check if we've exceeded the probe distance.
-		max := rhh.Dist(rhh.HashKey(e.value), pos, valueN)
+		max := rhh.Dist(rhh.HashKey(valueElem.value), pos, valueN)
 		if d > max {
-			return nil
+			return false
 		}
 
 		// Move position forward.
@@ -171,7 +195,7 @@ func (blk *TagBlock) TagValueElem(key, value []byte) TagValueElem {
 		d++
 
 		if d > valueN {
-			return nil
+			return false
 		}
 	}
 }
@@ -247,9 +271,6 @@ type TagBlockKeyElem struct {
 	}
 
 	size int
-
-	// Reusable iterator.
-	itr tagBlockValueIterator
 }
 
 // Deleted returns true if the key has been tombstoned.
@@ -300,7 +321,7 @@ type TagBlockValueElem struct {
 	flag   byte
 	value  []byte
 	series struct {
-		n    uint32 // Series count
+		n    uint64 // Series count
 		data []byte // Raw series data
 	}
 
@@ -314,25 +335,25 @@ func (e *TagBlockValueElem) Deleted() bool { return (e.flag & TagValueTombstoneF
 func (e *TagBlockValueElem) Value() []byte { return e.value }
 
 // SeriesN returns the series count.
-func (e *TagBlockValueElem) SeriesN() uint32 { return e.series.n }
+func (e *TagBlockValueElem) SeriesN() uint64 { return e.series.n }
 
 // SeriesData returns the raw series data.
 func (e *TagBlockValueElem) SeriesData() []byte { return e.series.data }
 
 // SeriesID returns series ID at an index.
-func (e *TagBlockValueElem) SeriesID(i int) uint32 {
-	return binary.BigEndian.Uint32(e.series.data[i*SeriesIDSize:])
+func (e *TagBlockValueElem) SeriesID(i int) uint64 {
+	return binary.BigEndian.Uint64(e.series.data[i*SeriesIDSize:])
 }
 
 // SeriesIDs returns a list decoded series ids.
-func (e *TagBlockValueElem) SeriesIDs() []uint32 {
-	a := make([]uint32, 0, e.series.n)
-	var prev uint32
+func (e *TagBlockValueElem) SeriesIDs() []uint64 {
+	a := make([]uint64, 0, e.series.n)
+	var prev uint64
 	for data := e.series.data; len(data) > 0; {
 		delta, n := binary.Uvarint(data)
 		data = data[n:]
 
-		seriesID := prev + uint32(delta)
+		seriesID := prev + uint64(delta)
 		a = append(a, seriesID)
 		prev = seriesID
 	}
@@ -355,7 +376,7 @@ func (e *TagBlockValueElem) unmarshal(buf []byte) {
 
 	// Parse series count.
 	v, n := binary.Uvarint(buf)
-	e.series.n = uint32(v)
+	e.series.n = uint64(v)
 	buf = buf[n:]
 
 	// Parse data block size.
@@ -461,7 +482,7 @@ func ReadTagBlockTrailer(data []byte) (TagBlockTrailer, error) {
 	t.HashIndex.Size, buf = int64(binary.BigEndian.Uint64(buf[0:8])), buf[8:]
 
 	// Read total size.
-	t.Size, buf = int64(binary.BigEndian.Uint64(buf[0:8])), buf[8:]
+	t.Size = int64(binary.BigEndian.Uint64(buf[0:8]))
 
 	return t, nil
 }
@@ -479,7 +500,8 @@ type TagBlockEncoder struct {
 	trailer TagBlockTrailer
 
 	// Track tag keys.
-	keys []tagKeyEncodeEntry
+	keys      []tagKeyEncodeEntry
+	prevValue []byte
 }
 
 // NewTagBlockEncoder returns a new TagBlockEncoder.
@@ -527,16 +549,26 @@ func (enc *TagBlockEncoder) EncodeKey(key []byte, deleted bool) error {
 
 	enc.keys = append(enc.keys, entry)
 
+	// Clear previous value.
+	enc.prevValue = nil
+
 	return nil
 }
 
 // EncodeValue writes a tag value to the underlying writer.
 // The tag key must be lexicographical sorted after the previous encoded tag key.
-func (enc *TagBlockEncoder) EncodeValue(value []byte, deleted bool, seriesIDs []uint32) error {
+func (enc *TagBlockEncoder) EncodeValue(value []byte, deleted bool, seriesIDs []uint64) error {
 	if len(enc.keys) == 0 {
 		return fmt.Errorf("tag key must be encoded before encoding values")
 	} else if len(value) == 0 {
 		return fmt.Errorf("zero length tag value not allowed")
+	}
+
+	// Validate that keys are in-order.
+	if cmp := bytes.Compare(enc.prevValue, value); cmp == 1 {
+		return fmt.Errorf("tag value out of order: prev=%s, new=%s", enc.prevValue, value)
+	} else if cmp == 0 {
+		return fmt.Errorf("tag value already encoded: %s", value)
 	}
 
 	// Save offset to hash map.
@@ -556,7 +588,7 @@ func (enc *TagBlockEncoder) EncodeValue(value []byte, deleted bool, seriesIDs []
 
 	// Build series data in buffer.
 	enc.buf.Reset()
-	var prev uint32
+	var prev uint64
 	for _, seriesID := range seriesIDs {
 		delta := seriesID - prev
 
@@ -582,6 +614,9 @@ func (enc *TagBlockEncoder) EncodeValue(value []byte, deleted bool, seriesIDs []
 	if enc.n += nn; err != nil {
 		return err
 	}
+
+	// Save previous value.
+	enc.prevValue = value
 
 	return nil
 }
@@ -609,11 +644,7 @@ func (enc *TagBlockEncoder) Close() error {
 	// Write trailer.
 	nn, err := enc.trailer.WriteTo(enc.w)
 	enc.n += nn
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 // ensureHeaderWritten writes a single byte to offset the rest of the block.

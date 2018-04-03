@@ -6,9 +6,81 @@ import (
 	"sort"
 	"time"
 
-	"github.com/influxdata/influxdb/influxql"
-	"github.com/influxdata/influxdb/influxql/neldermead"
+	"github.com/influxdata/influxdb/query/neldermead"
+	"github.com/influxdata/influxql"
 )
+
+// FieldMapper is a FieldMapper that wraps another FieldMapper and exposes
+// the functions implemented by the query engine.
+type FieldMapper struct {
+	influxql.FieldMapper
+}
+
+func (m FieldMapper) CallType(name string, args []influxql.DataType) (influxql.DataType, error) {
+	if mapper, ok := m.FieldMapper.(influxql.CallTypeMapper); ok {
+		typ, err := mapper.CallType(name, args)
+		if err != nil {
+			return influxql.Unknown, err
+		} else if typ != influxql.Unknown {
+			return typ, nil
+		}
+	}
+
+	// Use the default FunctionTypeMapper for the query engine.
+	typmap := FunctionTypeMapper{}
+	return typmap.CallType(name, args)
+}
+
+// CallTypeMapper returns the types for call iterator functions.
+// Call iterator functions are commonly implemented within the storage engine
+// so this mapper is limited to only the return values of those functions.
+type CallTypeMapper struct{}
+
+func (CallTypeMapper) MapType(measurement *influxql.Measurement, field string) influxql.DataType {
+	return influxql.Unknown
+}
+
+func (CallTypeMapper) CallType(name string, args []influxql.DataType) (influxql.DataType, error) {
+	// If the function is not implemented by the embedded field mapper, then
+	// see if we implement the function and return the type here.
+	switch name {
+	case "mean":
+		return influxql.Float, nil
+	case "count":
+		return influxql.Integer, nil
+	case "min", "max", "sum", "first", "last":
+		// TODO(jsternberg): Verify the input type.
+		return args[0], nil
+	}
+	return influxql.Unknown, nil
+}
+
+// FunctionTypeMapper handles the type mapping for all functions implemented by the
+// query engine.
+type FunctionTypeMapper struct {
+	CallTypeMapper
+}
+
+func (FunctionTypeMapper) MapType(measurement *influxql.Measurement, field string) influxql.DataType {
+	return influxql.Unknown
+}
+
+func (m FunctionTypeMapper) CallType(name string, args []influxql.DataType) (influxql.DataType, error) {
+	if typ, err := m.CallTypeMapper.CallType(name, args); typ != influxql.Unknown || err != nil {
+		return typ, err
+	}
+
+	// Handle functions implemented by the query engine.
+	switch name {
+	case "median", "integral", "stddev":
+		return influxql.Float, nil
+	case "elapsed":
+		return influxql.Integer, nil
+	default:
+		// TODO(jsternberg): Do not use default for this.
+		return args[0], nil
+	}
+}
 
 // FloatMeanReducer calculates the mean of the aggregated points.
 type FloatMeanReducer struct {

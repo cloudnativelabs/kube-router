@@ -1,6 +1,6 @@
 //go:generate pluginrpc-gen -i $GOFILE -o proxy.go -type volumeDriver -name VolumeDriver
 
-package volumedrivers
+package volumedrivers // import "github.com/docker/docker/volume/drivers"
 
 import (
 	"fmt"
@@ -10,6 +10,8 @@ import (
 	"github.com/docker/docker/pkg/locker"
 	getter "github.com/docker/docker/pkg/plugingetter"
 	"github.com/docker/docker/volume"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // currently created by hand. generation tool would generate this like:
@@ -23,14 +25,15 @@ var drivers = &driverExtpoint{
 const extName = "VolumeDriver"
 
 // NewVolumeDriver returns a driver has the given name mapped on the given client.
-func NewVolumeDriver(name string, baseHostPath string, c client) volume.Driver {
+func NewVolumeDriver(name string, scopePath func(string) string, c client) volume.Driver {
 	proxy := &volumeDriverProxy{c}
-	return &volumeDriverAdapter{name: name, baseHostPath: baseHostPath, proxy: proxy}
+	return &volumeDriverAdapter{name: name, scopePath: scopePath, proxy: proxy}
 }
 
 // volumeDriver defines the available functions that volume plugins must implement.
 // This interface is only defined to generate the proxy objects.
 // It's not intended to be public or reused.
+// nolint: deadcode
 type volumeDriver interface {
 	// Create a volume with the given name
 	Create(name string, opts map[string]string) (err error)
@@ -99,6 +102,14 @@ func Unregister(name string) bool {
 	return true
 }
 
+type driverNotFoundError string
+
+func (e driverNotFoundError) Error() string {
+	return "volume driver not found: " + string(e)
+}
+
+func (driverNotFoundError) NotFound() {}
+
 // lookup returns the driver associated with the given name. If a
 // driver with the given name has not been registered it checks if
 // there is a VolumeDriver plugin available with the given name.
@@ -115,11 +126,17 @@ func lookup(name string, mode int) (volume.Driver, error) {
 	if drivers.plugingetter != nil {
 		p, err := drivers.plugingetter.Get(name, extName, mode)
 		if err != nil {
-			return nil, fmt.Errorf("Error looking up volume plugin %s: %v", name, err)
+			return nil, errors.Wrap(err, "error looking up volume plugin "+name)
 		}
 
-		d := NewVolumeDriver(p.Name(), p.BasePath(), p.Client())
+		d := NewVolumeDriver(p.Name(), p.ScopedPath, p.Client())
 		if err := validateDriver(d); err != nil {
+			if mode > 0 {
+				// Undo any reference count changes from the initial `Get`
+				if _, err := drivers.plugingetter.Get(name, extName, mode*-1); err != nil {
+					logrus.WithError(err).WithField("action", "validate-driver").WithField("plugin", name).Error("error releasing reference to plugin")
+				}
+			}
 			return nil, err
 		}
 
@@ -130,7 +147,7 @@ func lookup(name string, mode int) (volume.Driver, error) {
 		}
 		return d, nil
 	}
-	return nil, fmt.Errorf("Error looking up volume plugin %s", name)
+	return nil, driverNotFoundError(name)
 }
 
 func validateDriver(vd volume.Driver) error {
@@ -159,9 +176,9 @@ func CreateDriver(name string) (volume.Driver, error) {
 	return lookup(name, getter.Acquire)
 }
 
-// RemoveDriver returns a volume driver by its name and decrements RefCount..
+// ReleaseDriver returns a volume driver by its name and decrements RefCount..
 // If the driver is empty, it looks for the local driver.
-func RemoveDriver(name string) (volume.Driver, error) {
+func ReleaseDriver(name string) (volume.Driver, error) {
 	if name == "" {
 		name = volume.DefaultDriverName
 	}
@@ -207,7 +224,7 @@ func GetAllDrivers() ([]volume.Driver, error) {
 			continue
 		}
 
-		ext := NewVolumeDriver(name, p.BasePath(), p.Client())
+		ext := NewVolumeDriver(name, p.ScopedPath, p.Client())
 		if p.IsV1() {
 			drivers.extensions[name] = ext
 		}

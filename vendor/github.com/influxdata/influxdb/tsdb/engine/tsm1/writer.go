@@ -97,6 +97,10 @@ const (
 
 	// max length of a key in an index entry (measurement + tags)
 	maxKeyLength = (1 << (2 * 8)) - 1
+
+	// The threshold amount data written before we periodically fsync a TSM file.  This helps avoid
+	// long pauses due to very large fsyncs at the end of writing a TSM file.
+	fsyncEvery = 25 * 1024 * 1024
 )
 
 var (
@@ -233,7 +237,7 @@ func (e *IndexEntry) String() string {
 
 // NewIndexWriter returns a new IndexWriter.
 func NewIndexWriter() IndexWriter {
-	buf := bytes.NewBuffer(make([]byte, 0, 4096))
+	buf := bytes.NewBuffer(make([]byte, 0, 1024*1024))
 	return &directIndex{buf: buf, w: bufio.NewWriter(buf)}
 }
 
@@ -242,10 +246,9 @@ func NewDiskIndexWriter(f *os.File) IndexWriter {
 	return &directIndex{fd: f, w: bufio.NewWriterSize(f, 1024*1024)}
 }
 
-// indexBlock represent an index information for a series within a TSM file.
-type indexBlock struct {
-	key     []byte
-	entries *indexEntries
+type syncer interface {
+	Name() string
+	Sync() error
 }
 
 // directIndex is a simple in-memory index implementation for a TSM file.  The full index
@@ -253,8 +256,13 @@ type indexBlock struct {
 type directIndex struct {
 	keyCount int
 	size     uint32
+
+	// The bytes written count of when we last fsync'd
+	lastSync uint32
 	fd       *os.File
 	buf      *bytes.Buffer
+
+	f syncer
 
 	w *bufio.Writer
 
@@ -360,6 +368,48 @@ func (d *directIndex) KeyCount() int {
 	return d.keyCount
 }
 
+// copyBuffer is the actual implementation of Copy and CopyBuffer.
+// if buf is nil, one is allocated.  This is copied from the Go stdlib
+// in order to remove the fast path WriteTo calls which circumvent any
+// IO throttling as well as to add periodic fsyncs to avoid long stalls.
+func copyBuffer(f syncer, dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
+	if buf == nil {
+		buf = make([]byte, 32*1024)
+	}
+	var lastSync int64
+	for {
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			nw, ew := dst.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+
+			if written-lastSync > fsyncEvery {
+				if err := f.Sync(); err != nil {
+					return 0, err
+				}
+				lastSync = written
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			break
+		}
+	}
+	return written, err
+}
+
 func (d *directIndex) WriteTo(w io.Writer) (int64, error) {
 	if _, err := d.flush(d.w); err != nil {
 		return 0, err
@@ -370,14 +420,14 @@ func (d *directIndex) WriteTo(w io.Writer) (int64, error) {
 	}
 
 	if d.fd == nil {
-		return io.Copy(w, d.buf)
+		return copyBuffer(d.f, w, d.buf, nil)
 	}
 
 	if _, err := d.fd.Seek(0, io.SeekStart); err != nil {
 		return 0, err
 	}
 
-	return io.Copy(w, bufio.NewReader(d.fd))
+	return io.Copy(w, bufio.NewReaderSize(d.fd, 1024*1024))
 }
 
 func (d *directIndex) flush(w io.Writer) (int64, error) {
@@ -435,6 +485,15 @@ func (d *directIndex) flush(w io.Writer) (int64, error) {
 	d.indexEntries.Type = 0
 	d.indexEntries.entries = d.indexEntries.entries[:0]
 
+	// If this is a disk based index and we've written more than the fsync threshold,
+	// fsync the data to avoid long pauses later on.
+	if d.fd != nil && d.size-d.lastSync > fsyncEvery {
+		if err := d.fd.Sync(); err != nil {
+			return N, err
+		}
+		d.lastSync = d.size
+	}
+
 	return N, nil
 
 }
@@ -486,18 +545,30 @@ type tsmWriter struct {
 	w       *bufio.Writer
 	index   IndexWriter
 	n       int64
+
+	// The bytes written count of when we last fsync'd
+	lastSync int64
 }
 
 // NewTSMWriter returns a new TSMWriter writing to w.
 func NewTSMWriter(w io.Writer) (TSMWriter, error) {
+	index := NewIndexWriter()
+	return &tsmWriter{wrapped: w, w: bufio.NewWriterSize(w, 1024*1024), index: index}, nil
+}
+
+// NewTSMWriterWithDiskBuffer returns a new TSMWriter writing to w and will use a disk
+// based buffer for the TSM index if possible.
+func NewTSMWriterWithDiskBuffer(w io.Writer) (TSMWriter, error) {
 	var index IndexWriter
-	if fw, ok := w.(*os.File); ok && !strings.HasSuffix(fw.Name(), "01.tsm.tmp") {
-		f, err := os.OpenFile(strings.TrimSuffix(fw.Name(), ".tsm.tmp")+".idx.tmp", os.O_CREATE|os.O_RDWR|os.O_EXCL|os.O_SYNC, 0666)
+	// Make sure is a File so we can write the temp index alongside it.
+	if fw, ok := w.(syncer); ok {
+		f, err := os.OpenFile(strings.TrimSuffix(fw.Name(), ".tsm.tmp")+".idx.tmp", os.O_CREATE|os.O_RDWR|os.O_EXCL, 0666)
 		if err != nil {
 			return nil, err
 		}
 		index = NewDiskIndexWriter(f)
 	} else {
+		// w is not a file, just use an inmem index
 		index = NewIndexWriter()
 	}
 
@@ -564,6 +635,11 @@ func (t *tsmWriter) Write(key []byte, values Values) error {
 
 	// Increment file position pointer
 	t.n += int64(n)
+
+	if len(t.index.Entries(key)) >= maxIndexEntries {
+		return ErrMaxBlocksExceeded
+	}
+
 	return nil
 }
 
@@ -612,6 +688,14 @@ func (t *tsmWriter) WriteBlock(key []byte, minTime, maxTime int64, block []byte)
 	// Increment file position pointer (checksum + block len)
 	t.n += int64(n)
 
+	// fsync the file periodically to avoid long pauses with very big files.
+	if t.n-t.lastSync > fsyncEvery {
+		if err := t.sync(); err != nil {
+			return err
+		}
+		t.lastSync = t.n
+	}
+
 	if len(t.index.Entries(key)) >= maxIndexEntries {
 		return ErrMaxBlocksExceeded
 	}
@@ -626,6 +710,12 @@ func (t *tsmWriter) WriteIndex() error {
 
 	if t.index.KeyCount() == 0 {
 		return ErrNoValues
+	}
+
+	// Set the destination file on the index so we can periodically
+	// fsync while writing the index.
+	if f, ok := t.wrapped.(syncer); ok {
+		t.index.(*directIndex).f = f
 	}
 
 	// Write the index
@@ -646,6 +736,10 @@ func (t *tsmWriter) Flush() error {
 		return err
 	}
 
+	return t.sync()
+}
+
+func (t *tsmWriter) sync() error {
 	if f, ok := t.wrapped.(*os.File); ok {
 		if err := f.Sync(); err != nil {
 			return err

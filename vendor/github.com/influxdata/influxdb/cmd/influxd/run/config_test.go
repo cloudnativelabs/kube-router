@@ -2,11 +2,18 @@ package run_test
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/influxdata/influxdb/cmd/influxd/run"
+	influxtoml "github.com/influxdata/influxdb/toml"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
 )
 
 // Ensure the configuration can be parsed.
@@ -86,9 +93,9 @@ enabled = true
 		t.Fatalf("unexpected opentsdb bind address: %s", c.OpenTSDBInputs[2].BindAddress)
 	} else if c.UDPInputs[0].BindAddress != ":4444" {
 		t.Fatalf("unexpected udp bind address: %s", c.UDPInputs[0].BindAddress)
-	} else if c.Subscriber.Enabled != true {
+	} else if !c.Subscriber.Enabled {
 		t.Fatalf("unexpected subscriber enabled: %v", c.Subscriber.Enabled)
-	} else if c.ContinuousQuery.Enabled != true {
+	} else if !c.ContinuousQuery.Enabled {
 		t.Fatalf("unexpected continuous query enabled: %v", c.ContinuousQuery.Enabled)
 	}
 }
@@ -147,40 +154,36 @@ enabled = true
 		t.Fatal(err)
 	}
 
-	if err := os.Setenv("INFLUXDB_UDP_BIND_ADDRESS", ":1234"); err != nil {
-		t.Fatalf("failed to set env var: %v", err)
+	getenv := func(s string) string {
+		switch s {
+		case "INFLUXDB_UDP_BIND_ADDRESS":
+			return ":1234"
+		case "INFLUXDB_UDP_0_BIND_ADDRESS":
+			return ":5555"
+		case "INFLUXDB_GRAPHITE_0_TEMPLATES_0":
+			return "override.* .template.0"
+		case "INFLUXDB_GRAPHITE_1_TEMPLATES":
+			return "override.* .template.1.1,override.* .template.1.2"
+		case "INFLUXDB_GRAPHITE_1_PROTOCOL":
+			return "udp"
+		case "INFLUXDB_COLLECTD_1_BIND_ADDRESS":
+			return ":1020"
+		case "INFLUXDB_OPENTSDB_0_BIND_ADDRESS":
+			return ":2020"
+		case "INFLUXDB_DATA_CACHE_MAX_MEMORY_SIZE":
+			// uint64 type
+			return "1000"
+		case "INFLUXDB_LOGGING_LEVEL":
+			// logging type
+			return "warn"
+		case "INFLUXDB_COORDINATOR_QUERY_TIMEOUT":
+			// duration type
+			return "1m"
+		}
+		return ""
 	}
 
-	if err := os.Setenv("INFLUXDB_UDP_0_BIND_ADDRESS", ":5555"); err != nil {
-		t.Fatalf("failed to set env var: %v", err)
-	}
-
-	if err := os.Setenv("INFLUXDB_GRAPHITE_0_TEMPLATES_0", "overide.* .template.0"); err != nil {
-		t.Fatalf("failed to set env var: %v", err)
-	}
-
-	if err := os.Setenv("INFLUXDB_GRAPHITE_1_TEMPLATES", "overide.* .template.1.1,overide.* .template.1.2"); err != nil {
-		t.Fatalf("failed to set env var: %v", err)
-	}
-
-	if err := os.Setenv("INFLUXDB_GRAPHITE_1_PROTOCOL", "udp"); err != nil {
-		t.Fatalf("failed to set env var: %v", err)
-	}
-
-	if err := os.Setenv("INFLUXDB_COLLECTD_1_BIND_ADDRESS", ":1020"); err != nil {
-		t.Fatalf("failed to set env var: %v", err)
-	}
-
-	if err := os.Setenv("INFLUXDB_OPENTSDB_0_BIND_ADDRESS", ":2020"); err != nil {
-		t.Fatalf("failed to set env var: %v", err)
-	}
-
-	// uint64 type
-	if err := os.Setenv("INFLUXDB_DATA_CACHE_MAX_MEMORY_SIZE", "1000"); err != nil {
-		t.Fatalf("failed to set env var: %v", err)
-	}
-
-	if err := c.ApplyEnvOverrides(os.Getenv); err != nil {
+	if err := c.ApplyEnvOverrides(getenv); err != nil {
 		t.Fatalf("failed to apply env overrides: %v", err)
 	}
 
@@ -192,11 +195,11 @@ enabled = true
 		t.Fatalf("unexpected udp bind address: %s", c.UDPInputs[1].BindAddress)
 	}
 
-	if len(c.GraphiteInputs[0].Templates) != 1 || c.GraphiteInputs[0].Templates[0] != "overide.* .template.0" {
+	if len(c.GraphiteInputs[0].Templates) != 1 || c.GraphiteInputs[0].Templates[0] != "override.* .template.0" {
 		t.Fatalf("unexpected graphite 0 templates: %+v", c.GraphiteInputs[0].Templates)
 	}
 
-	if len(c.GraphiteInputs[1].Templates) != 2 || c.GraphiteInputs[1].Templates[1] != "overide.* .template.1.2" {
+	if len(c.GraphiteInputs[1].Templates) != 2 || c.GraphiteInputs[1].Templates[1] != "override.* .template.1.2" {
 		t.Fatalf("unexpected graphite 1 templates: %+v", c.GraphiteInputs[1].Templates)
 	}
 
@@ -214,6 +217,14 @@ enabled = true
 
 	if c.Data.CacheMaxMemorySize != 1000 {
 		t.Fatalf("unexpected cache max memory size: %v", c.Data.CacheMaxMemorySize)
+	}
+
+	if c.Logging.Level != zapcore.WarnLevel {
+		t.Fatalf("unexpected logging level: %v", c.Logging.Level)
+	}
+
+	if c.Coordinator.QueryTimeout != influxtoml.Duration(time.Minute) {
+		t.Fatalf("unexpected query timeout: %v", c.Coordinator.QueryTimeout)
 	}
 }
 
@@ -308,5 +319,190 @@ func TestConfig_InvalidSubsections(t *testing.T) {
 		if err := c.Validate(); err == nil {
 			t.Fatalf("expected error but got nil for config: %s", s)
 		}
+	}
+}
+
+// Ensure the configuration can be parsed when a Byte-Order-Mark is present.
+func TestConfig_Parse_UTF8_ByteOrderMark(t *testing.T) {
+	// Parse configuration.
+	var c run.Config
+	f, err := ioutil.TempFile("", "influxd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	f.WriteString("\ufeff")
+	f.WriteString(`
+[meta]
+dir = "/tmp/meta"
+
+[data]
+dir = "/tmp/data"
+
+[coordinator]
+
+[http]
+bind-address = ":8087"
+
+[[graphite]]
+protocol = "udp"
+
+[[graphite]]
+protocol = "tcp"
+
+[[collectd]]
+bind-address = ":1000"
+
+[[collectd]]
+bind-address = ":1010"
+
+[[opentsdb]]
+bind-address = ":2000"
+
+[[opentsdb]]
+bind-address = ":2010"
+
+[[opentsdb]]
+bind-address = ":2020"
+
+[[udp]]
+bind-address = ":4444"
+
+[monitoring]
+enabled = true
+
+[subscriber]
+enabled = true
+
+[continuous_queries]
+enabled = true
+`)
+	if err := c.FromTomlFile(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Validate configuration.
+	if c.Meta.Dir != "/tmp/meta" {
+		t.Fatalf("unexpected meta dir: %s", c.Meta.Dir)
+	} else if c.Data.Dir != "/tmp/data" {
+		t.Fatalf("unexpected data dir: %s", c.Data.Dir)
+	} else if c.HTTPD.BindAddress != ":8087" {
+		t.Fatalf("unexpected api bind address: %s", c.HTTPD.BindAddress)
+	} else if len(c.GraphiteInputs) != 2 {
+		t.Fatalf("unexpected graphiteInputs count: %d", len(c.GraphiteInputs))
+	} else if c.GraphiteInputs[0].Protocol != "udp" {
+		t.Fatalf("unexpected graphite protocol(0): %s", c.GraphiteInputs[0].Protocol)
+	} else if c.GraphiteInputs[1].Protocol != "tcp" {
+		t.Fatalf("unexpected graphite protocol(1): %s", c.GraphiteInputs[1].Protocol)
+	} else if c.CollectdInputs[0].BindAddress != ":1000" {
+		t.Fatalf("unexpected collectd bind address: %s", c.CollectdInputs[0].BindAddress)
+	} else if c.CollectdInputs[1].BindAddress != ":1010" {
+		t.Fatalf("unexpected collectd bind address: %s", c.CollectdInputs[1].BindAddress)
+	} else if c.OpenTSDBInputs[0].BindAddress != ":2000" {
+		t.Fatalf("unexpected opentsdb bind address: %s", c.OpenTSDBInputs[0].BindAddress)
+	} else if c.OpenTSDBInputs[1].BindAddress != ":2010" {
+		t.Fatalf("unexpected opentsdb bind address: %s", c.OpenTSDBInputs[1].BindAddress)
+	} else if c.OpenTSDBInputs[2].BindAddress != ":2020" {
+		t.Fatalf("unexpected opentsdb bind address: %s", c.OpenTSDBInputs[2].BindAddress)
+	} else if c.UDPInputs[0].BindAddress != ":4444" {
+		t.Fatalf("unexpected udp bind address: %s", c.UDPInputs[0].BindAddress)
+	} else if !c.Subscriber.Enabled {
+		t.Fatalf("unexpected subscriber enabled: %v", c.Subscriber.Enabled)
+	} else if !c.ContinuousQuery.Enabled {
+		t.Fatalf("unexpected continuous query enabled: %v", c.ContinuousQuery.Enabled)
+	}
+}
+
+// Ensure the configuration can be parsed when a Byte-Order-Mark is present.
+func TestConfig_Parse_UTF16_ByteOrderMark(t *testing.T) {
+	// Parse configuration.
+	var c run.Config
+	f, err := ioutil.TempFile("", "influxd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	utf16 := unicode.UTF16(unicode.BigEndian, unicode.UseBOM)
+	w := transform.NewWriter(f, utf16.NewEncoder())
+	io.WriteString(w, `
+[meta]
+dir = "/tmp/meta"
+
+[data]
+dir = "/tmp/data"
+
+[coordinator]
+
+[http]
+bind-address = ":8087"
+
+[[graphite]]
+protocol = "udp"
+
+[[graphite]]
+protocol = "tcp"
+
+[[collectd]]
+bind-address = ":1000"
+
+[[collectd]]
+bind-address = ":1010"
+
+[[opentsdb]]
+bind-address = ":2000"
+
+[[opentsdb]]
+bind-address = ":2010"
+
+[[opentsdb]]
+bind-address = ":2020"
+
+[[udp]]
+bind-address = ":4444"
+
+[monitoring]
+enabled = true
+
+[subscriber]
+enabled = true
+
+[continuous_queries]
+enabled = true
+`)
+	if err := c.FromTomlFile(f.Name()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Validate configuration.
+	if c.Meta.Dir != "/tmp/meta" {
+		t.Fatalf("unexpected meta dir: %s", c.Meta.Dir)
+	} else if c.Data.Dir != "/tmp/data" {
+		t.Fatalf("unexpected data dir: %s", c.Data.Dir)
+	} else if c.HTTPD.BindAddress != ":8087" {
+		t.Fatalf("unexpected api bind address: %s", c.HTTPD.BindAddress)
+	} else if len(c.GraphiteInputs) != 2 {
+		t.Fatalf("unexpected graphiteInputs count: %d", len(c.GraphiteInputs))
+	} else if c.GraphiteInputs[0].Protocol != "udp" {
+		t.Fatalf("unexpected graphite protocol(0): %s", c.GraphiteInputs[0].Protocol)
+	} else if c.GraphiteInputs[1].Protocol != "tcp" {
+		t.Fatalf("unexpected graphite protocol(1): %s", c.GraphiteInputs[1].Protocol)
+	} else if c.CollectdInputs[0].BindAddress != ":1000" {
+		t.Fatalf("unexpected collectd bind address: %s", c.CollectdInputs[0].BindAddress)
+	} else if c.CollectdInputs[1].BindAddress != ":1010" {
+		t.Fatalf("unexpected collectd bind address: %s", c.CollectdInputs[1].BindAddress)
+	} else if c.OpenTSDBInputs[0].BindAddress != ":2000" {
+		t.Fatalf("unexpected opentsdb bind address: %s", c.OpenTSDBInputs[0].BindAddress)
+	} else if c.OpenTSDBInputs[1].BindAddress != ":2010" {
+		t.Fatalf("unexpected opentsdb bind address: %s", c.OpenTSDBInputs[1].BindAddress)
+	} else if c.OpenTSDBInputs[2].BindAddress != ":2020" {
+		t.Fatalf("unexpected opentsdb bind address: %s", c.OpenTSDBInputs[2].BindAddress)
+	} else if c.UDPInputs[0].BindAddress != ":4444" {
+		t.Fatalf("unexpected udp bind address: %s", c.UDPInputs[0].BindAddress)
+	} else if !c.Subscriber.Enabled {
+		t.Fatalf("unexpected subscriber enabled: %v", c.Subscriber.Enabled)
+	} else if !c.ContinuousQuery.Enabled {
+		t.Fatalf("unexpected continuous query enabled: %v", c.ContinuousQuery.Enabled)
 	}
 }

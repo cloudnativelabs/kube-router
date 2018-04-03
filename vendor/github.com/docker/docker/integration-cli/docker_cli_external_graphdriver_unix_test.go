@@ -53,7 +53,7 @@ type graphEventsCounter struct {
 
 func (s *DockerExternalGraphdriverSuite) SetUpTest(c *check.C) {
 	s.d = daemon.New(c, dockerBinary, dockerdBinary, daemon.Config{
-		Experimental: testEnv.ExperimentalDaemon(),
+		Experimental: testEnv.DaemonInfo.ExperimentalBuild,
 	})
 }
 
@@ -111,7 +111,7 @@ func (s *DockerExternalGraphdriverSuite) setUpPlugin(c *check.C, name string, ex
 	}
 
 	respond := func(w http.ResponseWriter, data interface{}) {
-		w.Header().Set("Content-Type", "appplication/vnd.docker.plugins.v1+json")
+		w.Header().Set("Content-Type", "application/vnd.docker.plugins.v1+json")
 		switch t := data.(type) {
 		case error:
 			fmt.Fprintln(w, fmt.Sprintf(`{"Err": %q}`, t.Error()))
@@ -198,12 +198,13 @@ func (s *DockerExternalGraphdriverSuite) setUpPlugin(c *check.C, name string, ex
 			return
 		}
 
+		// TODO @gupta-ak: Figure out what to do here.
 		dir, err := driver.Get(req.ID, req.MountLabel)
 		if err != nil {
 			respond(w, err)
 			return
 		}
-		respond(w, &graphDriverResponse{Dir: dir})
+		respond(w, &graphDriverResponse{Dir: dir.Path()})
 	})
 
 	mux.HandleFunc("/GraphDriver.Put", func(w http.ResponseWriter, r *http.Request) {
@@ -346,7 +347,7 @@ func (s *DockerExternalGraphdriverSuite) TearDownSuite(c *check.C) {
 }
 
 func (s *DockerExternalGraphdriverSuite) TestExternalGraphDriver(c *check.C) {
-	testRequires(c, ExperimentalDaemon)
+	testRequires(c, ExperimentalDaemon, SameHostDaemon)
 
 	s.testExternalGraphDriver("test-external-graph-driver", "spec", c)
 	s.testExternalGraphDriver("json-external-graph-driver", "json", c)
@@ -394,7 +395,7 @@ func (s *DockerExternalGraphdriverSuite) testExternalGraphDriver(name string, ex
 }
 
 func (s *DockerExternalGraphdriverSuite) TestExternalGraphDriverPull(c *check.C) {
-	testRequires(c, Network, ExperimentalDaemon)
+	testRequires(c, Network, ExperimentalDaemon, SameHostDaemon)
 
 	s.d.Start(c)
 

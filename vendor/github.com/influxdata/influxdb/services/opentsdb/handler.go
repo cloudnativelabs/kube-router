@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -15,7 +14,7 @@ import (
 
 	"github.com/influxdata/influxdb"
 	"github.com/influxdata/influxdb/models"
-	"github.com/uber-go/zap"
+	"go.uber.org/zap"
 )
 
 // Handler is an http.Handler for the OpenTSDB service.
@@ -27,7 +26,7 @@ type Handler struct {
 		WritePointsPrivileged(database, retentionPolicy string, consistencyLevel models.ConsistencyLevel, points []models.Point) error
 	}
 
-	Logger zap.Logger
+	Logger *zap.Logger
 
 	stats *Statistics
 }
@@ -116,7 +115,7 @@ func (h *Handler) servePut(w http.ResponseWriter, r *http.Request) {
 
 		pt, err := models.NewPoint(p.Metric, models.NewTags(p.Tags), map[string]interface{}{"value": p.Value}, ts)
 		if err != nil {
-			h.Logger.Info(fmt.Sprintf("Dropping point %v: %v", p.Metric, err))
+			h.Logger.Info("Dropping point", zap.String("name", p.Metric), zap.Error(err))
 			if h.stats != nil {
 				atomic.AddInt64(&h.stats.InvalidDroppedPoints, 1)
 			}
@@ -127,11 +126,11 @@ func (h *Handler) servePut(w http.ResponseWriter, r *http.Request) {
 
 	// Write points.
 	if err := h.PointsWriter.WritePointsPrivileged(h.Database, h.RetentionPolicy, models.ConsistencyLevelAny, points); influxdb.IsClientError(err) {
-		h.Logger.Info(fmt.Sprint("write series error: ", err))
+		h.Logger.Info("Write series error", zap.Error(err))
 		http.Error(w, "write series error: "+err.Error(), http.StatusBadRequest)
 		return
 	} else if err != nil {
-		h.Logger.Info(fmt.Sprint("write series error: ", err))
+		h.Logger.Info("Write series error", zap.Error(err))
 		http.Error(w, "write series error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

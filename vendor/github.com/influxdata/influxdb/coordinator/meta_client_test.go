@@ -3,8 +3,8 @@ package coordinator_test
 import (
 	"time"
 
-	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/services/meta"
+	"github.com/influxdata/influxql"
 )
 
 // MetaClient is a mockable implementation of cluster.MetaClient.
@@ -32,6 +32,7 @@ type MetaClient struct {
 	SetAdminPrivilegeFn                 func(username string, admin bool) error
 	SetPrivilegeFn                      func(username, database string, p influxql.Privilege) error
 	ShardGroupsByTimeRangeFn            func(database, policy string, min, max time.Time) (a []meta.ShardGroupInfo, err error)
+	TruncateShardGroupsFn               func(t time.Time) error
 	UpdateRetentionPolicyFn             func(database, name string, rpu *meta.RetentionPolicyUpdate, makeDefault bool) error
 	UpdateUserFn                        func(name, password string) error
 	UserPrivilegeFn                     func(username, database string) (*influxql.Privilege, error)
@@ -129,6 +130,10 @@ func (c *MetaClient) SetPrivilege(username, database string, p influxql.Privileg
 
 func (c *MetaClient) ShardGroupsByTimeRange(database, policy string, min, max time.Time) (a []meta.ShardGroupInfo, err error) {
 	return c.ShardGroupsByTimeRangeFn(database, policy, min, max)
+}
+
+func (c *MetaClient) TruncateShardGroups(t time.Time) error {
+	return c.TruncateShardGroupsFn(t)
 }
 
 func (c *MetaClient) UpdateRetentionPolicy(database, name string, rpu *meta.RetentionPolicyUpdate, makeDefault bool) error {

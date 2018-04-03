@@ -2,6 +2,7 @@ package coordinator_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -12,13 +13,13 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/influxdata/influxdb/coordinator"
-	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/internal"
+	"github.com/influxdata/influxdb/logger"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxdb/services/meta"
 	"github.com/influxdata/influxdb/tsdb"
-	"github.com/uber-go/zap"
+	"github.com/influxdata/influxql"
 )
 
 const (
@@ -50,7 +51,7 @@ func TestQueryExecutor_ExecuteQuery_SelectStatement(t *testing.T) {
 		}
 
 		var sh MockShard
-		sh.CreateIteratorFn = func(m string, opt query.IteratorOptions) (query.Iterator, error) {
+		sh.CreateIteratorFn = func(_ context.Context, _ *influxql.Measurement, _ query.IteratorOptions) (query.Iterator, error) {
 			return &FloatIterator{Points: []query.FloatPoint{
 				{Name: "cpu", Time: int64(0 * time.Second), Aux: []interface{}{float64(100)}},
 				{Name: "cpu", Time: int64(1 * time.Second), Aux: []interface{}{float64(200)}},
@@ -103,7 +104,7 @@ func TestQueryExecutor_ExecuteQuery_MaxSelectBucketsN(t *testing.T) {
 		}
 
 		var sh MockShard
-		sh.CreateIteratorFn = func(m string, opt query.IteratorOptions) (query.Iterator, error) {
+		sh.CreateIteratorFn = func(_ context.Context, _ *influxql.Measurement, _ query.IteratorOptions) (query.Iterator, error) {
 			return &FloatIterator{
 				Points: []query.FloatPoint{{Name: "cpu", Time: int64(0 * time.Second), Aux: []interface{}{float64(100)}}},
 			}, nil
@@ -215,7 +216,7 @@ func (m *mockAuthorizer) AuthorizeSeriesWrite(database string, measurement []byt
 }
 
 func TestQueryExecutor_ExecuteQuery_ShowDatabases(t *testing.T) {
-	qe := query.NewQueryExecutor()
+	qe := query.NewExecutor()
 	qe.StatementExecutor = &coordinator.StatementExecutor{
 		MetaClient: &internal.MetaClientMock{
 			DatabasesFn: func() []meta.DatabaseInfo {
@@ -259,43 +260,54 @@ func TestQueryExecutor_ExecuteQuery_ShowDatabases(t *testing.T) {
 
 // QueryExecutor is a test wrapper for coordinator.QueryExecutor.
 type QueryExecutor struct {
-	*query.QueryExecutor
+	*query.Executor
 
 	MetaClient        MetaClient
-	TSDBStore         TSDBStore
+	TSDBStore         *internal.TSDBStoreMock
 	StatementExecutor *coordinator.StatementExecutor
 	LogOutput         bytes.Buffer
 }
 
-// NewQueryExecutor returns a new instance of QueryExecutor.
+// NewQueryExecutor returns a new instance of Executor.
 // This query executor always has a node id of 0.
 func NewQueryExecutor() *QueryExecutor {
 	e := &QueryExecutor{
-		QueryExecutor: query.NewQueryExecutor(),
+		Executor:  query.NewExecutor(),
+		TSDBStore: &internal.TSDBStoreMock{},
 	}
+
+	e.TSDBStore.CreateShardFn = func(database, policy string, shardID uint64, enabled bool) error {
+		return nil
+	}
+
+	e.TSDBStore.MeasurementNamesFn = func(auth query.Authorizer, database string, cond influxql.Expr) ([][]byte, error) {
+		return nil, nil
+	}
+
+	e.TSDBStore.TagValuesFn = func(_ query.Authorizer, _ []uint64, _ influxql.Expr) ([]tsdb.TagValues, error) {
+		return nil, nil
+	}
+
 	e.StatementExecutor = &coordinator.StatementExecutor{
 		MetaClient: &e.MetaClient,
-		TSDBStore:  &e.TSDBStore,
+		TSDBStore:  e.TSDBStore,
 		ShardMapper: &coordinator.LocalShardMapper{
 			MetaClient: &e.MetaClient,
-			TSDBStore:  &e.TSDBStore,
+			TSDBStore:  e.TSDBStore,
 		},
 	}
-	e.QueryExecutor.StatementExecutor = e.StatementExecutor
+	e.Executor.StatementExecutor = e.StatementExecutor
 
 	var out io.Writer = &e.LogOutput
 	if testing.Verbose() {
 		out = io.MultiWriter(out, os.Stderr)
 	}
-	e.QueryExecutor.WithLogger(zap.New(
-		zap.NewTextEncoder(),
-		zap.Output(zap.AddSync(out)),
-	))
+	e.Executor.WithLogger(logger.New(out))
 
 	return e
 }
 
-// DefaultQueryExecutor returns a QueryExecutor with a database (db0) and retention policy (rp0).
+// DefaultQueryExecutor returns a Executor with a database (db0) and retention policy (rp0).
 func DefaultQueryExecutor() *QueryExecutor {
 	e := NewQueryExecutor()
 	e.MetaClient.DatabaseFn = DefaultMetaClientDatabaseFn
@@ -304,87 +316,16 @@ func DefaultQueryExecutor() *QueryExecutor {
 
 // ExecuteQuery parses query and executes against the database.
 func (e *QueryExecutor) ExecuteQuery(q, database string, chunkSize int) <-chan *query.Result {
-	return e.QueryExecutor.ExecuteQuery(MustParseQuery(q), query.ExecutionOptions{
+	return e.Executor.ExecuteQuery(MustParseQuery(q), query.ExecutionOptions{
 		Database:  database,
 		ChunkSize: chunkSize,
 	}, make(chan struct{}))
 }
 
-// TSDBStore is a mockable implementation of coordinator.TSDBStore.
-type TSDBStore struct {
-	CreateShardFn  func(database, policy string, shardID uint64, enabled bool) error
-	WriteToShardFn func(shardID uint64, points []models.Point) error
-
-	RestoreShardFn func(id uint64, r io.Reader) error
-	BackupShardFn  func(id uint64, since time.Time, w io.Writer) error
-
-	DeleteDatabaseFn        func(name string) error
-	DeleteMeasurementFn     func(database, name string) error
-	DeleteRetentionPolicyFn func(database, name string) error
-	DeleteShardFn           func(id uint64) error
-	DeleteSeriesFn          func(database string, sources []influxql.Source, condition influxql.Expr) error
-	ShardGroupFn            func(ids []uint64) tsdb.ShardGroup
-}
-
-func (s *TSDBStore) CreateShard(database, policy string, shardID uint64, enabled bool) error {
-	if s.CreateShardFn == nil {
-		return nil
-	}
-	return s.CreateShardFn(database, policy, shardID, enabled)
-}
-
-func (s *TSDBStore) WriteToShard(shardID uint64, points []models.Point) error {
-	return s.WriteToShardFn(shardID, points)
-}
-
-func (s *TSDBStore) RestoreShard(id uint64, r io.Reader) error {
-	return s.RestoreShardFn(id, r)
-}
-
-func (s *TSDBStore) BackupShard(id uint64, since time.Time, w io.Writer) error {
-	return s.BackupShardFn(id, since, w)
-}
-
-func (s *TSDBStore) DeleteDatabase(name string) error {
-	return s.DeleteDatabaseFn(name)
-}
-
-func (s *TSDBStore) DeleteMeasurement(database, name string) error {
-	return s.DeleteMeasurementFn(database, name)
-}
-
-func (s *TSDBStore) DeleteRetentionPolicy(database, name string) error {
-	return s.DeleteRetentionPolicyFn(database, name)
-}
-
-func (s *TSDBStore) DeleteShard(id uint64) error {
-	return s.DeleteShardFn(id)
-}
-
-func (s *TSDBStore) DeleteSeries(database string, sources []influxql.Source, condition influxql.Expr) error {
-	return s.DeleteSeriesFn(database, sources, condition)
-}
-
-func (s *TSDBStore) ShardGroup(ids []uint64) tsdb.ShardGroup {
-	return s.ShardGroupFn(ids)
-}
-
-func (s *TSDBStore) Measurements(database string, cond influxql.Expr) ([]string, error) {
-	return nil, nil
-}
-
-func (s *TSDBStore) MeasurementNames(database string, cond influxql.Expr) ([][]byte, error) {
-	return nil, nil
-}
-
-func (s *TSDBStore) TagValues(_ query.Authorizer, database string, cond influxql.Expr) ([]tsdb.TagValues, error) {
-	return nil, nil
-}
-
 type MockShard struct {
 	Measurements      []string
 	FieldDimensionsFn func(measurements []string) (fields map[string]influxql.DataType, dimensions map[string]struct{}, err error)
-	CreateIteratorFn  func(m string, opt query.IteratorOptions) (query.Iterator, error)
+	CreateIteratorFn  func(ctx context.Context, m *influxql.Measurement, opt query.IteratorOptions) (query.Iterator, error)
 	IteratorCostFn    func(m string, opt query.IteratorOptions) (query.IteratorCost, error)
 	ExpandSourcesFn   func(sources influxql.Sources) (influxql.Sources, error)
 }
@@ -417,8 +358,8 @@ func (sh *MockShard) MapType(measurement, field string) influxql.DataType {
 	return influxql.Unknown
 }
 
-func (sh *MockShard) CreateIterator(measurement string, opt query.IteratorOptions) (query.Iterator, error) {
-	return sh.CreateIteratorFn(measurement, opt)
+func (sh *MockShard) CreateIterator(ctx context.Context, measurement *influxql.Measurement, opt query.IteratorOptions) (query.Iterator, error) {
+	return sh.CreateIteratorFn(ctx, measurement, opt)
 }
 
 func (sh *MockShard) IteratorCost(measurement string, opt query.IteratorOptions) (query.IteratorCost, error) {
