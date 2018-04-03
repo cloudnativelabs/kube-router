@@ -1131,7 +1131,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		n := &config.Neighbor{
 			Config: config.NeighborConfig{
 				NeighborAddress: nodeIP.String(),
-				PeerAs:          nrc.defaultNodeAsnNumber,
+				PeerAs:          nrc.nodeAsnNumber,
 			},
 		}
 
