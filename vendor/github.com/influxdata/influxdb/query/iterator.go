@@ -1,17 +1,18 @@
 package query
 
 import (
+	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
-	"sync"
+	"regexp"
 	"time"
 
-	"regexp"
-
 	"github.com/gogo/protobuf/proto"
-	"github.com/influxdata/influxdb/influxql"
+	"github.com/influxdata/influxdb/pkg/tracing"
 	internal "github.com/influxdata/influxdb/query/internal"
+	"github.com/influxdata/influxql"
 )
 
 // ErrUnknownCall is returned when operating on an unknown function call.
@@ -402,176 +403,43 @@ func NewCloseInterruptIterator(input Iterator, closing <-chan struct{}) Iterator
 	}
 }
 
-// AuxIterator represents an iterator that can split off separate auxiliary iterators.
-type AuxIterator interface {
-	Iterator
+// IteratorScanner is used to scan the results of an iterator into a map.
+type IteratorScanner interface {
+	// Peek retrieves information about the next point. It returns a timestamp, the name, and the tags.
+	Peek() (int64, string, Tags)
 
-	// Auxilary iterator
-	Iterator(name string, typ influxql.DataType) Iterator
+	// ScanAt will take a time, name, and tags and scan the point that matches those into the map.
+	ScanAt(ts int64, name string, tags Tags, values map[string]interface{})
 
-	// Start starts writing to the created iterators.
-	Start()
+	// Stats returns the IteratorStats from the Iterator.
+	Stats() IteratorStats
 
-	// Backgrounds the iterator so that, when start is called, it will
-	// continuously read from the iterator.
-	Background()
+	// Err returns an error that was encountered while scanning.
+	Err() error
+
+	io.Closer
 }
 
-// NewAuxIterator returns a new instance of AuxIterator.
-func NewAuxIterator(input Iterator, opt IteratorOptions) AuxIterator {
+// SkipDefault is a sentinel value to tell the IteratorScanner to skip setting the
+// default value if none was present. This causes the map to use the previous value
+// if it was previously set.
+var SkipDefault = interface{}(0)
+
+// NewIteratorScanner produces an IteratorScanner for the Iterator.
+func NewIteratorScanner(input Iterator, keys []influxql.VarRef, defaultValue interface{}) IteratorScanner {
 	switch input := input.(type) {
 	case FloatIterator:
-		return newFloatAuxIterator(input, opt)
+		return newFloatIteratorScanner(input, keys, defaultValue)
 	case IntegerIterator:
-		return newIntegerAuxIterator(input, opt)
+		return newIntegerIteratorScanner(input, keys, defaultValue)
 	case UnsignedIterator:
-		return newUnsignedAuxIterator(input, opt)
+		return newUnsignedIteratorScanner(input, keys, defaultValue)
 	case StringIterator:
-		return newStringAuxIterator(input, opt)
+		return newStringIteratorScanner(input, keys, defaultValue)
 	case BooleanIterator:
-		return newBooleanAuxIterator(input, opt)
+		return newBooleanIteratorScanner(input, keys, defaultValue)
 	default:
-		panic(fmt.Sprintf("unsupported aux iterator type: %T", input))
-	}
-}
-
-// auxIteratorField represents an auxilary field within an AuxIterator.
-type auxIteratorField struct {
-	name string            // field name
-	typ  influxql.DataType // detected data type
-	itrs []Iterator        // auxillary iterators
-	mu   sync.Mutex
-	opt  IteratorOptions
-}
-
-func (f *auxIteratorField) append(itr Iterator) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.itrs = append(f.itrs, itr)
-}
-
-func (f *auxIteratorField) close() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, itr := range f.itrs {
-		itr.Close()
-	}
-}
-
-type auxIteratorFields struct {
-	fields     []*auxIteratorField
-	dimensions []string
-}
-
-// newAuxIteratorFields returns a new instance of auxIteratorFields from a list of field names.
-func newAuxIteratorFields(opt IteratorOptions) *auxIteratorFields {
-	fields := make([]*auxIteratorField, len(opt.Aux))
-	for i, ref := range opt.Aux {
-		fields[i] = &auxIteratorField{name: ref.Val, typ: ref.Type, opt: opt}
-	}
-	return &auxIteratorFields{
-		fields:     fields,
-		dimensions: opt.GetDimensions(),
-	}
-}
-
-func (a *auxIteratorFields) close() {
-	for _, f := range a.fields {
-		f.close()
-	}
-}
-
-// iterator creates a new iterator for a named auxilary field.
-func (a *auxIteratorFields) iterator(name string, typ influxql.DataType) Iterator {
-	for _, f := range a.fields {
-		// Skip field if it's name doesn't match.
-		// Exit if no points were received by the iterator.
-		if f.name != name || (typ != influxql.Unknown && f.typ != typ) {
-			continue
-		}
-
-		// Create channel iterator by data type.
-		switch f.typ {
-		case influxql.Float:
-			itr := &floatChanIterator{cond: sync.NewCond(&sync.Mutex{})}
-			f.append(itr)
-			return itr
-		case influxql.Integer:
-			itr := &integerChanIterator{cond: sync.NewCond(&sync.Mutex{})}
-			f.append(itr)
-			return itr
-		case influxql.Unsigned:
-			itr := &unsignedChanIterator{cond: sync.NewCond(&sync.Mutex{})}
-			f.append(itr)
-			return itr
-		case influxql.String, influxql.Tag:
-			itr := &stringChanIterator{cond: sync.NewCond(&sync.Mutex{})}
-			f.append(itr)
-			return itr
-		case influxql.Boolean:
-			itr := &booleanChanIterator{cond: sync.NewCond(&sync.Mutex{})}
-			f.append(itr)
-			return itr
-		default:
-			break
-		}
-	}
-
-	return &nilFloatIterator{}
-}
-
-// send sends a point to all field iterators.
-func (a *auxIteratorFields) send(p Point) (ok bool) {
-	values := p.aux()
-	for i, f := range a.fields {
-		var v interface{}
-		if i < len(values) {
-			v = values[i]
-		}
-
-		tags := p.tags()
-		tags = tags.Subset(a.dimensions)
-
-		// Send new point for each aux iterator.
-		// Primitive pointers represent nil values.
-		for _, itr := range f.itrs {
-			switch itr := itr.(type) {
-			case *floatChanIterator:
-				ok = itr.setBuf(p.name(), tags, p.time(), v) || ok
-			case *integerChanIterator:
-				ok = itr.setBuf(p.name(), tags, p.time(), v) || ok
-			case *unsignedChanIterator:
-				ok = itr.setBuf(p.name(), tags, p.time(), v) || ok
-			case *stringChanIterator:
-				ok = itr.setBuf(p.name(), tags, p.time(), v) || ok
-			case *booleanChanIterator:
-				ok = itr.setBuf(p.name(), tags, p.time(), v) || ok
-			default:
-				panic(fmt.Sprintf("invalid aux itr type: %T", itr))
-			}
-		}
-	}
-	return ok
-}
-
-func (a *auxIteratorFields) sendError(err error) {
-	for _, f := range a.fields {
-		for _, itr := range f.itrs {
-			switch itr := itr.(type) {
-			case *floatChanIterator:
-				itr.setErr(err)
-			case *integerChanIterator:
-				itr.setErr(err)
-			case *unsignedChanIterator:
-				itr.setErr(err)
-			case *stringChanIterator:
-				itr.setErr(err)
-			case *booleanChanIterator:
-				itr.setErr(err)
-			default:
-				panic(fmt.Sprintf("invalid aux itr type: %T", itr))
-			}
-		}
+		panic(fmt.Sprintf("unsupported type for iterator scanner: %T", input))
 	}
 }
 
@@ -640,18 +508,18 @@ func DrainIterators(itrs []Iterator) {
 }
 
 // NewReaderIterator returns an iterator that streams from a reader.
-func NewReaderIterator(r io.Reader, typ influxql.DataType, stats IteratorStats) Iterator {
+func NewReaderIterator(ctx context.Context, r io.Reader, typ influxql.DataType, stats IteratorStats) Iterator {
 	switch typ {
 	case influxql.Float:
-		return newFloatReaderIterator(r, stats)
+		return newFloatReaderIterator(ctx, r, stats)
 	case influxql.Integer:
-		return newIntegerReaderIterator(r, stats)
+		return newIntegerReaderIterator(ctx, r, stats)
 	case influxql.Unsigned:
-		return newUnsignedReaderIterator(r, stats)
+		return newUnsignedReaderIterator(ctx, r, stats)
 	case influxql.String:
-		return newStringReaderIterator(r, stats)
+		return newStringReaderIterator(ctx, r, stats)
 	case influxql.Boolean:
-		return newBooleanReaderIterator(r, stats)
+		return newBooleanReaderIterator(ctx, r, stats)
 	default:
 		return &nilFloatReaderIterator{r: r}
 	}
@@ -660,7 +528,7 @@ func NewReaderIterator(r io.Reader, typ influxql.DataType, stats IteratorStats) 
 // IteratorCreator is an interface to create Iterators.
 type IteratorCreator interface {
 	// Creates a simple iterator for use in an InfluxQL query.
-	CreateIterator(source *influxql.Measurement, opt IteratorOptions) (Iterator, error)
+	CreateIterator(ctx context.Context, source *influxql.Measurement, opt IteratorOptions) (Iterator, error)
 
 	// Determines the potential cost for creating an iterator.
 	IteratorCost(source *influxql.Measurement, opt IteratorOptions) (IteratorCost, error)
@@ -790,13 +658,12 @@ func newIteratorOptionsStmt(stmt *influxql.SelectStatement, sopt SelectOptions) 
 	opt.Limit, opt.Offset = stmt.Limit, stmt.Offset
 	opt.SLimit, opt.SOffset = stmt.SLimit, stmt.SOffset
 	opt.MaxSeriesN = sopt.MaxSeriesN
-	opt.InterruptCh = sopt.InterruptCh
 	opt.Authorizer = sopt.Authorizer
 
 	return opt, nil
 }
 
-func newIteratorOptionsSubstatement(stmt *influxql.SelectStatement, opt IteratorOptions) (IteratorOptions, error) {
+func newIteratorOptionsSubstatement(ctx context.Context, stmt *influxql.SelectStatement, opt IteratorOptions) (IteratorOptions, error) {
 	subOpt, err := newIteratorOptionsStmt(stmt, SelectOptions{})
 	if err != nil {
 		return IteratorOptions{}, err
@@ -807,6 +674,11 @@ func newIteratorOptionsSubstatement(stmt *influxql.SelectStatement, opt Iterator
 	}
 	if subOpt.EndTime > opt.EndTime {
 		subOpt.EndTime = opt.EndTime
+	}
+	if !subOpt.Interval.IsZero() && subOpt.EndTime == influxql.MaxTime {
+		if now := ctx.Value("now"); now != nil {
+			subOpt.EndTime = now.(time.Time).UnixNano()
+		}
 	}
 	// Propagate the dimensions to the inner subquery.
 	subOpt.Dimensions = opt.Dimensions
@@ -823,11 +695,11 @@ func newIteratorOptionsSubstatement(stmt *influxql.SelectStatement, opt Iterator
 	subOpt.Condition = cond
 	// If the time range is more constrained, use it instead. A less constrained time
 	// range should be ignored.
-	if !t.Min.IsZero() && t.MinTime() > opt.StartTime {
-		subOpt.StartTime = t.MinTime()
+	if !t.Min.IsZero() && t.MinTimeNano() > opt.StartTime {
+		subOpt.StartTime = t.MinTimeNano()
 	}
-	if !t.Max.IsZero() && t.MaxTime() < opt.EndTime {
-		subOpt.EndTime = t.MaxTime()
+	if !t.Max.IsZero() && t.MaxTimeNano() < opt.EndTime {
+		subOpt.EndTime = t.MaxTimeNano()
 	}
 
 	// Propagate the SLIMIT and SOFFSET from the outer query.
@@ -875,6 +747,15 @@ func (opt IteratorOptions) SeekTime() int64 {
 		return opt.StartTime
 	}
 	return opt.EndTime
+}
+
+// StopTime returns the time the iterator should end at.
+// For ascending iterators this is the end time, for descending iterators it's the start time.
+func (opt IteratorOptions) StopTime() int64 {
+	if opt.Ascending {
+		return opt.EndTime
+	}
+	return opt.StartTime
 }
 
 // Window returns the time window [start,end) that t falls within.
@@ -1197,6 +1078,7 @@ func encodeMeasurement(mm *influxql.Measurement) *internal.Measurement {
 		Database:        proto.String(mm.Database),
 		RetentionPolicy: proto.String(mm.RetentionPolicy),
 		Name:            proto.String(mm.Name),
+		SystemIterator:  proto.String(mm.SystemIterator),
 		IsTarget:        proto.Bool(mm.IsTarget),
 	}
 	if mm.Regex != nil {
@@ -1210,6 +1092,7 @@ func decodeMeasurement(pb *internal.Measurement) (*influxql.Measurement, error) 
 		Database:        pb.GetDatabase(),
 		RetentionPolicy: pb.GetRetentionPolicy(),
 		Name:            pb.GetName(),
+		SystemIterator:  pb.GetSystemIterator(),
 		IsTarget:        pb.GetIsTarget(),
 	}
 
@@ -1222,50 +1105,6 @@ func decodeMeasurement(pb *internal.Measurement) (*influxql.Measurement, error) 
 	}
 
 	return mm, nil
-}
-
-// selectInfo represents an object that stores info about select fields.
-type selectInfo struct {
-	calls map[*influxql.Call]struct{}
-	refs  map[*influxql.VarRef]struct{}
-}
-
-// newSelectInfo creates a object with call and var ref info from stmt.
-func newSelectInfo(stmt *influxql.SelectStatement) *selectInfo {
-	info := &selectInfo{
-		calls: make(map[*influxql.Call]struct{}),
-		refs:  make(map[*influxql.VarRef]struct{}),
-	}
-	influxql.Walk(info, stmt.Fields)
-	return info
-}
-
-func (v *selectInfo) Visit(n influxql.Node) influxql.Visitor {
-	switch n := n.(type) {
-	case *influxql.Call:
-		v.calls[n] = struct{}{}
-		return nil
-	case *influxql.VarRef:
-		v.refs[n] = struct{}{}
-		return nil
-	}
-	return v
-}
-
-// FindSelector returns a selector from the selectInfo. This will only
-// return a selector if the Call is a selector and it's the only function
-// in the selectInfo.
-func (v *selectInfo) FindSelector() *influxql.Call {
-	if len(v.calls) != 1 {
-		return nil
-	}
-
-	for s := range v.calls {
-		if influxql.IsSelector(s) {
-			return s
-		}
-	}
-	return nil
 }
 
 // Interval represents a repeating interval for a query.
@@ -1325,79 +1164,6 @@ func (itr *nilFloatReaderIterator) Close() error {
 }
 func (*nilFloatReaderIterator) Next() (*FloatPoint, error) { return nil, nil }
 
-// integerFloatTransformIterator executes a function to modify an existing point for every
-// output of the input iterator.
-type integerFloatTransformIterator struct {
-	input IntegerIterator
-	fn    integerFloatTransformFunc
-}
-
-// Stats returns stats from the input iterator.
-func (itr *integerFloatTransformIterator) Stats() IteratorStats { return itr.input.Stats() }
-
-// Close closes the iterator and all child iterators.
-func (itr *integerFloatTransformIterator) Close() error { return itr.input.Close() }
-
-// Next returns the minimum value for the next available interval.
-func (itr *integerFloatTransformIterator) Next() (*FloatPoint, error) {
-	p, err := itr.input.Next()
-	if err != nil {
-		return nil, err
-	} else if p != nil {
-		return itr.fn(p), nil
-	}
-	return nil, nil
-}
-
-// integerFloatTransformFunc creates or modifies a point.
-// The point passed in may be modified and returned rather than allocating a
-// new point if possible.
-type integerFloatTransformFunc func(p *IntegerPoint) *FloatPoint
-
-type integerFloatCastIterator struct {
-	input IntegerIterator
-	point FloatPoint
-}
-
-func (itr *integerFloatCastIterator) Stats() IteratorStats { return itr.input.Stats() }
-func (itr *integerFloatCastIterator) Close() error         { return itr.input.Close() }
-func (itr *integerFloatCastIterator) Next() (*FloatPoint, error) {
-	p, err := itr.input.Next()
-	if p == nil || err != nil {
-		return nil, err
-	}
-
-	itr.point.Name = p.Name
-	itr.point.Tags = p.Tags
-	itr.point.Time = p.Time
-	itr.point.Nil = p.Nil
-	itr.point.Value = float64(p.Value)
-	itr.point.Aux = p.Aux
-	return &itr.point, nil
-}
-
-type unsignedFloatCastIterator struct {
-	input UnsignedIterator
-	point FloatPoint
-}
-
-func (itr *unsignedFloatCastIterator) Stats() IteratorStats { return itr.input.Stats() }
-func (itr *unsignedFloatCastIterator) Close() error         { return itr.input.Close() }
-func (itr *unsignedFloatCastIterator) Next() (*FloatPoint, error) {
-	p, err := itr.input.Next()
-	if p == nil || err != nil {
-		return nil, err
-	}
-
-	itr.point.Name = p.Name
-	itr.point.Tags = p.Tags
-	itr.point.Time = p.Time
-	itr.point.Nil = p.Nil
-	itr.point.Value = float64(p.Value)
-	itr.point.Aux = p.Aux
-	return &itr.point, nil
-}
-
 // IteratorStats represents statistics about an iterator.
 // Some statistics are available immediately upon iterator creation while
 // some are derived as the iterator processes data.
@@ -1424,6 +1190,22 @@ func decodeIteratorStats(pb *internal.IteratorStats) IteratorStats {
 		SeriesN: int(pb.GetSeriesN()),
 		PointN:  int(pb.GetPointN()),
 	}
+}
+
+func decodeIteratorTrace(ctx context.Context, data []byte) error {
+	pt := tracing.TraceFromContext(ctx)
+	if pt == nil {
+		return nil
+	}
+
+	var ct tracing.Trace
+	if err := ct.UnmarshalBinary(data); err != nil {
+		return err
+	}
+
+	pt.Merge(&ct)
+
+	return nil
 }
 
 // IteratorCost contains statistics retrieved for explaining what potential
@@ -1529,4 +1311,87 @@ func abs(v int64) int64 {
 		return -v
 	}
 	return v
+}
+
+// IteratorEncoder is an encoder for encoding an iterator's points to w.
+type IteratorEncoder struct {
+	w io.Writer
+
+	// Frequency with which stats are emitted.
+	StatsInterval time.Duration
+}
+
+// NewIteratorEncoder encodes an iterator's points to w.
+func NewIteratorEncoder(w io.Writer) *IteratorEncoder {
+	return &IteratorEncoder{
+		w: w,
+
+		StatsInterval: DefaultStatsInterval,
+	}
+}
+
+// EncodeIterator encodes and writes all of itr's points to the underlying writer.
+func (enc *IteratorEncoder) EncodeIterator(itr Iterator) error {
+	switch itr := itr.(type) {
+	case FloatIterator:
+		return enc.encodeFloatIterator(itr)
+	case IntegerIterator:
+		return enc.encodeIntegerIterator(itr)
+	case StringIterator:
+		return enc.encodeStringIterator(itr)
+	case BooleanIterator:
+		return enc.encodeBooleanIterator(itr)
+	default:
+		panic(fmt.Sprintf("unsupported iterator for encoder: %T", itr))
+	}
+}
+
+func (enc *IteratorEncoder) EncodeTrace(trace *tracing.Trace) error {
+	data, err := trace.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	buf, err := proto.Marshal(&internal.Point{
+		Name: proto.String(""),
+		Tags: proto.String(""),
+		Time: proto.Int64(0),
+		Nil:  proto.Bool(false),
+
+		Trace: data,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err = binary.Write(enc.w, binary.BigEndian, uint32(len(buf))); err != nil {
+		return err
+	}
+	if _, err = enc.w.Write(buf); err != nil {
+		return err
+	}
+	return nil
+}
+
+// encode a stats object in the point stream.
+func (enc *IteratorEncoder) encodeStats(stats IteratorStats) error {
+	buf, err := proto.Marshal(&internal.Point{
+		Name: proto.String(""),
+		Tags: proto.String(""),
+		Time: proto.Int64(0),
+		Nil:  proto.Bool(false),
+
+		Stats: encodeIteratorStats(&stats),
+	})
+	if err != nil {
+		return err
+	}
+
+	if err = binary.Write(enc.w, binary.BigEndian, uint32(len(buf))); err != nil {
+		return err
+	}
+	if _, err = enc.w.Write(buf); err != nil {
+		return err
+	}
+	return nil
 }

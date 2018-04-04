@@ -21,11 +21,11 @@ import:
   - server
   - table
 - package: github.com/docker/docker
-  version: v17.05.0-ce
+  version: master
 - package: github.com/spf13/pflag
   version: master
 - package: github.com/vishvananda/netlink
-  version: master
+  version: v1.0.0
 - package: github.com/vishvananda/netns
   version: master
 - package: k8s.io/apimachinery
@@ -62,3 +62,5 @@ import:
   version: ^v1.8.36
 - package: github.com/prometheus/client_golang
   version: ~0.8.0
+- package: golang.org/x/sys/unix
+  version: master

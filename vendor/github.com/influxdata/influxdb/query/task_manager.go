@@ -1,13 +1,14 @@
 package query
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
-	"github.com/uber-go/zap"
+	"github.com/influxdata/influxql"
+	"go.uber.org/zap"
 )
 
 const (
@@ -51,10 +52,10 @@ type TaskManager struct {
 
 	// Logger to use for all logging.
 	// Defaults to discarding all log output.
-	Logger zap.Logger
+	Logger *zap.Logger
 
 	// Used for managing and tracking running queries.
-	queries  map[uint64]*QueryTask
+	queries  map[uint64]*Task
 	nextID   uint64
 	mu       sync.RWMutex
 	shutdown bool
@@ -64,14 +65,14 @@ type TaskManager struct {
 func NewTaskManager() *TaskManager {
 	return &TaskManager{
 		QueryTimeout: DefaultQueryTimeout,
-		Logger:       zap.New(zap.NullEncoder()),
-		queries:      make(map[uint64]*QueryTask),
+		Logger:       zap.NewNop(),
+		queries:      make(map[uint64]*Task),
 		nextID:       1,
 	}
 }
 
 // ExecuteStatement executes a statement containing one of the task management queries.
-func (t *TaskManager) ExecuteStatement(stmt influxql.Statement, ctx ExecutionContext) error {
+func (t *TaskManager) ExecuteStatement(stmt influxql.Statement, ctx *ExecutionContext) error {
 	switch stmt := stmt.(type) {
 	case *influxql.ShowQueriesStatement:
 		rows, err := t.executeShowQueriesStatement(stmt)
@@ -79,10 +80,9 @@ func (t *TaskManager) ExecuteStatement(stmt influxql.Statement, ctx ExecutionCon
 			return err
 		}
 
-		ctx.Results <- &Result{
-			StatementID: ctx.StatementID,
-			Series:      rows,
-		}
+		ctx.Send(&Result{
+			Series: rows,
+		})
 	case *influxql.KillQueryStatement:
 		var messages []*Message
 		if ctx.ReadOnly {
@@ -92,10 +92,9 @@ func (t *TaskManager) ExecuteStatement(stmt influxql.Statement, ctx ExecutionCon
 		if err := t.executeKillQueryStatement(stmt); err != nil {
 			return err
 		}
-		ctx.Results <- &Result{
-			StatementID: ctx.StatementID,
-			Messages:    messages,
-		}
+		ctx.Send(&Result{
+			Messages: messages,
+		})
 	default:
 		return ErrInvalidQuery
 	}
@@ -150,22 +149,22 @@ func (t *TaskManager) queryError(qid uint64, err error) {
 // query finishes running.
 //
 // After a query finishes running, the system is free to reuse a query id.
-func (t *TaskManager) AttachQuery(q *influxql.Query, database string, interrupt <-chan struct{}) (uint64, *QueryTask, error) {
+func (t *TaskManager) AttachQuery(q *influxql.Query, opt ExecutionOptions, interrupt <-chan struct{}) (*ExecutionContext, func(), error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if t.shutdown {
-		return 0, nil, ErrQueryEngineShutdown
+		return nil, nil, ErrQueryEngineShutdown
 	}
 
 	if t.MaxConcurrentQueries > 0 && len(t.queries) >= t.MaxConcurrentQueries {
-		return 0, nil, ErrMaxConcurrentQueriesLimitExceeded(len(t.queries), t.MaxConcurrentQueries)
+		return nil, nil, ErrMaxConcurrentQueriesLimitExceeded(len(t.queries), t.MaxConcurrentQueries)
 	}
 
 	qid := t.nextID
-	query := &QueryTask{
+	query := &Task{
 		query:     q.String(),
-		database:  database,
+		database:  opt.Database,
 		status:    RunningTask,
 		startTime: time.Now(),
 		closing:   make(chan struct{}),
@@ -189,7 +188,15 @@ func (t *TaskManager) AttachQuery(q *influxql.Query, database string, interrupt 
 		})
 	}
 	t.nextID++
-	return qid, query, nil
+
+	ctx := &ExecutionContext{
+		Context:          context.Background(),
+		QueryID:          qid,
+		task:             query,
+		ExecutionOptions: opt,
+	}
+	ctx.watch()
+	return ctx, func() { t.DetachQuery(qid) }, nil
 }
 
 // KillQuery enters a query into the killed state and closes the channel
@@ -197,16 +204,13 @@ func (t *TaskManager) AttachQuery(q *influxql.Query, database string, interrupt 
 // running query.
 func (t *TaskManager) KillQuery(qid uint64) error {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	query := t.queries[qid]
+	t.mu.Unlock()
+
 	if query == nil {
 		return fmt.Errorf("no such query id: %d", qid)
 	}
-
-	close(query.closing)
-	query.status = KilledTask
-	return nil
+	return query.kill()
 }
 
 // DetachQuery removes a query from the query table. If the query is not in the
@@ -220,9 +224,7 @@ func (t *TaskManager) DetachQuery(qid uint64) error {
 		return fmt.Errorf("no such query id: %d", qid)
 	}
 
-	if query.status != KilledTask {
-		close(query.closing)
-	}
+	query.close()
 	delete(t.queries, qid)
 	return nil
 }
@@ -287,7 +289,7 @@ func (t *TaskManager) Close() error {
 	t.shutdown = true
 	for _, query := range t.queries {
 		query.setError(ErrQueryEngineShutdown)
-		close(query.closing)
+		query.close()
 	}
 	t.queries = nil
 	return nil

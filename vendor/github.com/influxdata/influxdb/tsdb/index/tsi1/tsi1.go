@@ -3,14 +3,10 @@ package tsi1
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io"
-	"os"
 
-	"github.com/influxdata/influxdb/influxql"
-	"github.com/influxdata/influxdb/models"
-	"github.com/influxdata/influxdb/query"
+	"github.com/influxdata/influxdb/tsdb"
 )
 
 // LoadFactor is the fill percent for RHH indexes.
@@ -20,6 +16,7 @@ const LoadFactor = 80
 type MeasurementElem interface {
 	Name() []byte
 	Deleted() bool
+	// HasSeries() bool
 }
 
 // MeasurementElems represents a list of MeasurementElem.
@@ -114,28 +111,31 @@ func (p measurementMergeElem) Deleted() bool {
 	return p[0].Deleted()
 }
 
-// filterUndeletedMeasurementIterator returns all measurements which are not deleted.
-type filterUndeletedMeasurementIterator struct {
+// tsdbMeasurementIteratorAdapter wraps MeasurementIterator to match the TSDB interface.
+// This is needed because TSDB doesn't have a concept of "deleted" measurements.
+type tsdbMeasurementIteratorAdapter struct {
 	itr MeasurementIterator
 }
 
-// FilterUndeletedMeasurementIterator returns an iterator which filters all deleted measurement.
-func FilterUndeletedMeasurementIterator(itr MeasurementIterator) MeasurementIterator {
+// NewTSDBMeasurementIteratorAdapter return an iterator which implements tsdb.MeasurementIterator.
+func NewTSDBMeasurementIteratorAdapter(itr MeasurementIterator) tsdb.MeasurementIterator {
 	if itr == nil {
 		return nil
 	}
-	return &filterUndeletedMeasurementIterator{itr: itr}
+	return &tsdbMeasurementIteratorAdapter{itr: itr}
 }
 
-func (itr *filterUndeletedMeasurementIterator) Next() MeasurementElem {
+func (itr *tsdbMeasurementIteratorAdapter) Close() error { return nil }
+
+func (itr *tsdbMeasurementIteratorAdapter) Next() ([]byte, error) {
 	for {
 		e := itr.itr.Next()
 		if e == nil {
-			return nil
+			return nil, nil
 		} else if e.Deleted() {
 			continue
 		}
-		return e
+		return e.Name(), nil
 	}
 }
 
@@ -149,6 +149,34 @@ type TagKeyElem interface {
 // TagKeyIterator represents a iterator over a list of tag keys.
 type TagKeyIterator interface {
 	Next() TagKeyElem
+}
+
+// tsdbTagKeyIteratorAdapter wraps TagKeyIterator to match the TSDB interface.
+// This is needed because TSDB doesn't have a concept of "deleted" tag keys.
+type tsdbTagKeyIteratorAdapter struct {
+	itr TagKeyIterator
+}
+
+// NewTSDBTagKeyIteratorAdapter return an iterator which implements tsdb.TagKeyIterator.
+func NewTSDBTagKeyIteratorAdapter(itr TagKeyIterator) tsdb.TagKeyIterator {
+	if itr == nil {
+		return nil
+	}
+	return &tsdbTagKeyIteratorAdapter{itr: itr}
+}
+
+func (itr *tsdbTagKeyIteratorAdapter) Close() error { return nil }
+
+func (itr *tsdbTagKeyIteratorAdapter) Next() ([]byte, error) {
+	for {
+		e := itr.itr.Next()
+		if e == nil {
+			return nil, nil
+		} else if e.Deleted() {
+			continue
+		}
+		return e.Key(), nil
+	}
 }
 
 // MergeTagKeyIterators returns an iterator that merges a set of iterators.
@@ -261,6 +289,34 @@ type TagValueIterator interface {
 	Next() TagValueElem
 }
 
+// tsdbTagValueIteratorAdapter wraps TagValueIterator to match the TSDB interface.
+// This is needed because TSDB doesn't have a concept of "deleted" tag values.
+type tsdbTagValueIteratorAdapter struct {
+	itr TagValueIterator
+}
+
+// NewTSDBTagValueIteratorAdapter return an iterator which implements tsdb.TagValueIterator.
+func NewTSDBTagValueIteratorAdapter(itr TagValueIterator) tsdb.TagValueIterator {
+	if itr == nil {
+		return nil
+	}
+	return &tsdbTagValueIteratorAdapter{itr: itr}
+}
+
+func (itr *tsdbTagValueIteratorAdapter) Close() error { return nil }
+
+func (itr *tsdbTagValueIteratorAdapter) Next() ([]byte, error) {
+	for {
+		e := itr.itr.Next()
+		if e == nil {
+			return nil, nil
+		} else if e.Deleted() {
+			continue
+		}
+		return e.Value(), nil
+	}
+}
+
 // MergeTagValueIterators returns an iterator that merges a set of iterators.
 // Iterators that are first in the list take precendence and a deletion by those
 // early iterators will invalidate elements by later iterators.
@@ -341,388 +397,80 @@ func (p tagValueMergeElem) Deleted() bool {
 	return p[0].Deleted()
 }
 
-// SeriesElem represents a generic series element.
-type SeriesElem interface {
-	Name() []byte
-	Tags() models.Tags
-	Deleted() bool
-
-	// InfluxQL expression associated with series during filtering.
-	Expr() influxql.Expr
+/*
+type SeriesPointMergeIterator interface {
+	Next() (*query.FloatPoint, error)
+	Close() error
+	Stats() query.IteratorStats
 }
 
-// SeriesElemKey encodes e as a series key.
-func SeriesElemKey(e SeriesElem) []byte {
-	name, tags := e.Name(), e.Tags()
-
-	// TODO: Precompute allocation size.
-	// FIXME: Handle escaping.
-
-	var buf []byte
-	buf = append(buf, name...)
-	for _, t := range tags {
-		buf = append(buf, ',')
-		buf = append(buf, t.Key...)
-		buf = append(buf, '=')
-		buf = append(buf, t.Value...)
-	}
-	return buf
-}
-
-// CompareSeriesElem returns -1 if a < b, 1 if a > b, and 0 if equal.
-func CompareSeriesElem(a, b SeriesElem) int {
-	if cmp := bytes.Compare(a.Name(), b.Name()); cmp != 0 {
-		return cmp
-	}
-	return models.CompareTags(a.Tags(), b.Tags())
-}
-
-// seriesElem represents an in-memory implementation of SeriesElem.
-type seriesElem struct {
-	name    []byte
-	tags    models.Tags
-	deleted bool
-}
-
-func (e *seriesElem) Name() []byte        { return e.name }
-func (e *seriesElem) Tags() models.Tags   { return e.tags }
-func (e *seriesElem) Deleted() bool       { return e.deleted }
-func (e *seriesElem) Expr() influxql.Expr { return nil }
-
-// SeriesIterator represents a iterator over a list of series.
-type SeriesIterator interface {
-	Next() SeriesElem
-}
-
-// MergeSeriesIterators returns an iterator that merges a set of iterators.
-// Iterators that are first in the list take precendence and a deletion by those
-// early iterators will invalidate elements by later iterators.
-func MergeSeriesIterators(itrs ...SeriesIterator) SeriesIterator {
+func MergeSeriesPointIterators(itrs ...*seriesPointIterator) SeriesPointMergeIterator {
 	if n := len(itrs); n == 0 {
 		return nil
 	} else if n == 1 {
 		return itrs[0]
 	}
 
-	return &seriesMergeIterator{
-		buf:  make([]SeriesElem, len(itrs)),
+	return &seriesPointMergeIterator{
+		buf:  make([]*query.FloatPoint, len(itrs)),
 		itrs: itrs,
 	}
 }
 
-// seriesMergeIterator is an iterator that merges multiple iterators together.
-type seriesMergeIterator struct {
-	buf  []SeriesElem
-	itrs []SeriesIterator
+type seriesPointMergeIterator struct {
+	buf  []*query.FloatPoint
+	itrs []*seriesPointIterator
 }
 
-// Next returns the element with the next lowest name/tags across the iterators.
-//
-// If multiple iterators contain the same name/tags then the first is returned
-// and the remaining ones are skipped.
-func (itr *seriesMergeIterator) Next() SeriesElem {
-	// Find next lowest name/tags amongst the buffers.
-	var name []byte
-	var tags models.Tags
+func (itr *seriesPointMergeIterator) Close() error {
+	for i := range itr.itrs {
+		itr.itrs[i].Close()
+	}
+	return nil
+}
+func (itr *seriesPointMergeIterator) Stats() query.IteratorStats {
+	return query.IteratorStats{}
+}
+
+func (itr *seriesPointMergeIterator) Next() (_ *query.FloatPoint, err error) {
+	// Find next lowest point amongst the buffers.
+	var key []byte
 	for i, buf := range itr.buf {
 		// Fill buffer.
 		if buf == nil {
-			if buf = itr.itrs[i].Next(); buf != nil {
+			if buf, err = itr.itrs[i].Next(); err != nil {
+				return nil, err
+			} else if buf != nil {
 				itr.buf[i] = buf
 			} else {
 				continue
 			}
 		}
 
-		// If the name is not set the pick the first non-empty name.
-		if name == nil {
-			name, tags = buf.Name(), buf.Tags()
-			continue
-		}
-
-		// Set name/tags if they are lower than what has been seen.
-		if cmp := bytes.Compare(buf.Name(), name); cmp == -1 || (cmp == 0 && models.CompareTags(buf.Tags(), tags) == -1) {
-			name, tags = buf.Name(), buf.Tags()
+		// Find next lowest key.
+		if key == nil || bytes.Compare(buf.Key(), key) == -1 {
+			key = buf.Key()
 		}
 	}
 
 	// Return nil if no elements remaining.
-	if name == nil {
-		return nil
+	if key == nil {
+		return nil, nil
 	}
 
-	// Refill buffer.
-	var e SeriesElem
+	// Merge elements together & clear buffer.
+	itr.e = itr.e[:0]
 	for i, buf := range itr.buf {
-		if buf == nil || !bytes.Equal(buf.Name(), name) || models.CompareTags(buf.Tags(), tags) != 0 {
+		if buf == nil || !bytes.Equal(buf.Key(), key) {
 			continue
 		}
-
-		// Copy first matching buffer to the return buffer.
-		if e == nil {
-			e = buf
-		}
-
-		// Clear buffer.
+		itr.e = append(itr.e, buf)
 		itr.buf[i] = nil
 	}
-	return e
+
+	return itr.e, nil
 }
-
-// IntersectSeriesIterators returns an iterator that only returns series which
-// occur in both iterators. If both series have associated expressions then
-// they are combined together.
-func IntersectSeriesIterators(itr0, itr1 SeriesIterator) SeriesIterator {
-	if itr0 == nil || itr1 == nil {
-		return nil
-	}
-
-	return &seriesIntersectIterator{itrs: [2]SeriesIterator{itr0, itr1}}
-}
-
-// seriesIntersectIterator is an iterator that merges two iterators together.
-type seriesIntersectIterator struct {
-	e    seriesExprElem
-	buf  [2]SeriesElem
-	itrs [2]SeriesIterator
-}
-
-// Next returns the next element which occurs in both iterators.
-func (itr *seriesIntersectIterator) Next() (e SeriesElem) {
-	for {
-		// Fill buffers.
-		if itr.buf[0] == nil {
-			itr.buf[0] = itr.itrs[0].Next()
-		}
-		if itr.buf[1] == nil {
-			itr.buf[1] = itr.itrs[1].Next()
-		}
-
-		// Exit if either buffer is still empty.
-		if itr.buf[0] == nil || itr.buf[1] == nil {
-			return nil
-		}
-
-		// Skip if both series are not equal.
-		if cmp := CompareSeriesElem(itr.buf[0], itr.buf[1]); cmp == -1 {
-			itr.buf[0] = nil
-			continue
-		} else if cmp == 1 {
-			itr.buf[1] = nil
-			continue
-		}
-
-		// Merge series together if equal.
-		itr.e.SeriesElem = itr.buf[0]
-
-		// Attach expression.
-		expr0 := itr.buf[0].Expr()
-		expr1 := itr.buf[1].Expr()
-		if expr0 == nil {
-			itr.e.expr = expr1
-		} else if expr1 == nil {
-			itr.e.expr = expr0
-		} else {
-			itr.e.expr = influxql.Reduce(&influxql.BinaryExpr{
-				Op:  influxql.AND,
-				LHS: expr0,
-				RHS: expr1,
-			}, nil)
-		}
-
-		itr.buf[0], itr.buf[1] = nil, nil
-		return &itr.e
-	}
-}
-
-// UnionSeriesIterators returns an iterator that returns series from both
-// both iterators. If both series have associated expressions then they are
-// combined together.
-func UnionSeriesIterators(itr0, itr1 SeriesIterator) SeriesIterator {
-	// Return other iterator if either one is nil.
-	if itr0 == nil {
-		return itr1
-	} else if itr1 == nil {
-		return itr0
-	}
-
-	return &seriesUnionIterator{itrs: [2]SeriesIterator{itr0, itr1}}
-}
-
-// seriesUnionIterator is an iterator that unions two iterators together.
-type seriesUnionIterator struct {
-	e    seriesExprElem
-	buf  [2]SeriesElem
-	itrs [2]SeriesIterator
-}
-
-// Next returns the next element which occurs in both iterators.
-func (itr *seriesUnionIterator) Next() (e SeriesElem) {
-	// Fill buffers.
-	if itr.buf[0] == nil {
-		itr.buf[0] = itr.itrs[0].Next()
-	}
-	if itr.buf[1] == nil {
-		itr.buf[1] = itr.itrs[1].Next()
-	}
-
-	// Return the other iterator if either one is empty.
-	if itr.buf[0] == nil {
-		e, itr.buf[1] = itr.buf[1], nil
-		return e
-	} else if itr.buf[1] == nil {
-		e, itr.buf[0] = itr.buf[0], nil
-		return e
-	}
-
-	// Return lesser series.
-	if cmp := CompareSeriesElem(itr.buf[0], itr.buf[1]); cmp == -1 {
-		e, itr.buf[0] = itr.buf[0], nil
-		return e
-	} else if cmp == 1 {
-		e, itr.buf[1] = itr.buf[1], nil
-		return e
-	}
-
-	// Attach element.
-	itr.e.SeriesElem = itr.buf[0]
-
-	// Attach expression.
-	expr0 := itr.buf[0].Expr()
-	expr1 := itr.buf[1].Expr()
-	if expr0 != nil && expr1 != nil {
-		itr.e.expr = influxql.Reduce(&influxql.BinaryExpr{
-			Op:  influxql.OR,
-			LHS: expr0,
-			RHS: expr1,
-		}, nil)
-	} else {
-		itr.e.expr = nil
-	}
-
-	itr.buf[0], itr.buf[1] = nil, nil
-	return &itr.e
-}
-
-// DifferenceSeriesIterators returns an iterator that only returns series which
-// occur the first iterator but not the second iterator.
-func DifferenceSeriesIterators(itr0, itr1 SeriesIterator) SeriesIterator {
-	if itr0 != nil && itr1 == nil {
-		return itr0
-	} else if itr0 == nil {
-		return nil
-	}
-	return &seriesDifferenceIterator{itrs: [2]SeriesIterator{itr0, itr1}}
-}
-
-// seriesDifferenceIterator is an iterator that merges two iterators together.
-type seriesDifferenceIterator struct {
-	buf  [2]SeriesElem
-	itrs [2]SeriesIterator
-}
-
-// Next returns the next element which occurs only in the first iterator.
-func (itr *seriesDifferenceIterator) Next() (e SeriesElem) {
-	for {
-		// Fill buffers.
-		if itr.buf[0] == nil {
-			itr.buf[0] = itr.itrs[0].Next()
-		}
-		if itr.buf[1] == nil {
-			itr.buf[1] = itr.itrs[1].Next()
-		}
-
-		// Exit if first buffer is still empty.
-		if itr.buf[0] == nil {
-			return nil
-		} else if itr.buf[1] == nil {
-			e, itr.buf[0] = itr.buf[0], nil
-			return e
-		}
-
-		// Return first series if it's less.
-		// If second series is less then skip it.
-		// If both series are equal then skip both.
-		if cmp := CompareSeriesElem(itr.buf[0], itr.buf[1]); cmp == -1 {
-			e, itr.buf[0] = itr.buf[0], nil
-			return e
-		} else if cmp == 1 {
-			itr.buf[1] = nil
-			continue
-		} else {
-			itr.buf[0], itr.buf[1] = nil, nil
-			continue
-		}
-	}
-}
-
-// filterUndeletedSeriesIterator returns all series which are not deleted.
-type filterUndeletedSeriesIterator struct {
-	itr SeriesIterator
-}
-
-// FilterUndeletedSeriesIterator returns an iterator which filters all deleted series.
-func FilterUndeletedSeriesIterator(itr SeriesIterator) SeriesIterator {
-	if itr == nil {
-		return nil
-	}
-	return &filterUndeletedSeriesIterator{itr: itr}
-}
-
-func (itr *filterUndeletedSeriesIterator) Next() SeriesElem {
-	for {
-		e := itr.itr.Next()
-		if e == nil {
-			return nil
-		} else if e.Deleted() {
-			continue
-		}
-		return e
-	}
-}
-
-// seriesExprElem holds a series and its associated filter expression.
-type seriesExprElem struct {
-	SeriesElem
-	expr influxql.Expr
-}
-
-// Expr returns the associated expression.
-func (e *seriesExprElem) Expr() influxql.Expr { return e.expr }
-
-// seriesExprIterator is an iterator that attaches an associated expression.
-type seriesExprIterator struct {
-	itr SeriesIterator
-	e   seriesExprElem
-}
-
-// newSeriesExprIterator returns a new instance of seriesExprIterator.
-func newSeriesExprIterator(itr SeriesIterator, expr influxql.Expr) SeriesIterator {
-	if itr == nil {
-		return nil
-	}
-
-	return &seriesExprIterator{
-		itr: itr,
-		e: seriesExprElem{
-			expr: expr,
-		},
-	}
-}
-
-// Next returns the next element in the iterator.
-func (itr *seriesExprIterator) Next() SeriesElem {
-	itr.e.SeriesElem = itr.itr.Next()
-	if itr.e.SeriesElem == nil {
-		return nil
-	}
-	return &itr.e
-}
-
-// seriesIDIterator represents a iterator over a list of series ids.
-type seriesIDIterator interface {
-	next() uint32
-}
+*/
 
 // writeTo writes write v into w. Updates n.
 func writeTo(w io.Writer, v []byte, n *int64) error {
@@ -747,15 +495,6 @@ func writeUint16To(w io.Writer, v uint16, n *int64) error {
 	return err
 }
 
-// writeUint32To writes write v into w using big endian encoding. Updates n.
-func writeUint32To(w io.Writer, v uint32, n *int64) error {
-	var buf [4]byte
-	binary.BigEndian.PutUint32(buf[:], v)
-	nn, err := w.Write(buf[:])
-	*n += int64(nn)
-	return err
-}
-
 // writeUint64To writes write v into w using big endian encoding. Updates n.
 func writeUint64To(w io.Writer, v uint64, n *int64) error {
 	var buf [8]byte
@@ -774,12 +513,6 @@ func writeUvarintTo(w io.Writer, v uint64, n *int64) error {
 	return err
 }
 
-type uint32Slice []uint32
-
-func (a uint32Slice) Len() int           { return len(a) }
-func (a uint32Slice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a uint32Slice) Less(i, j int) bool { return a[i] < a[j] }
-
 type uint64Slice []uint64
 
 func (a uint64Slice) Len() int           { return len(a) }
@@ -792,16 +525,6 @@ func (a byteSlices) Len() int           { return len(a) }
 func (a byteSlices) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byteSlices) Less(i, j int) bool { return bytes.Compare(a[i], a[j]) == -1 }
 
-// copyBytes returns a copy of b.
-func copyBytes(b []byte) []byte {
-	if b == nil {
-		return nil
-	}
-	buf := make([]byte, len(b))
-	copy(buf, b)
-	return buf
-}
-
 // assert will panic with a given formatted message if the given condition is false.
 func assert(condition bool, msg string, v ...interface{}) {
 	if !condition {
@@ -809,11 +532,10 @@ func assert(condition bool, msg string, v ...interface{}) {
 	}
 }
 
-type byTagKey []*query.TagSet
-
-func (t byTagKey) Len() int           { return len(t) }
-func (t byTagKey) Less(i, j int) bool { return bytes.Compare(t[i].Key, t[j].Key) < 0 }
-func (t byTagKey) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
-
 // hexdump is a helper for dumping binary data to stderr.
-func hexdump(data []byte) { os.Stderr.Write([]byte(hex.Dump(data))) }
+// func hexdump(data []byte) { os.Stderr.Write([]byte(hex.Dump(data))) }
+
+// stack is a helper for dumping a stack trace.
+// func stack() string {
+// 	return "------------------------\n" + string(debug.Stack()) + "------------------------\n\n"
+// }

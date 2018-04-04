@@ -42,6 +42,7 @@ type Importer struct {
 	failedInserts         int
 	totalCommands         int
 	throttlePointsWritten int
+	startTime             time.Time
 	lastWrite             time.Time
 	throttle              *time.Ticker
 
@@ -109,10 +110,12 @@ func (i *Importer) Import() error {
 	}
 
 	// Get our reader
-	scanner := bufio.NewScanner(r)
+	scanner := bufio.NewReader(r)
 
 	// Process the DDL
-	i.processDDL(scanner)
+	if err := i.processDDL(scanner); err != nil {
+		return fmt.Errorf("reading standard input: %s", err)
+	}
 
 	// Set up our throttle channel.  Since there is effectively no other activity at this point
 	// the smaller resolution gets us much closer to the requested PPS
@@ -123,10 +126,7 @@ func (i *Importer) Import() error {
 	i.lastWrite = time.Now()
 
 	// Process the DML
-	i.processDML(scanner)
-
-	// Check if we had any errors scanning the file
-	if err := scanner.Err(); err != nil {
+	if err := i.processDML(scanner); err != nil {
 		return fmt.Errorf("reading standard input: %s", err)
 	}
 
@@ -144,12 +144,17 @@ func (i *Importer) Import() error {
 	return nil
 }
 
-func (i *Importer) processDDL(scanner *bufio.Scanner) {
-	for scanner.Scan() {
-		line := scanner.Text()
+func (i *Importer) processDDL(scanner *bufio.Reader) error {
+	for {
+		line, err := scanner.ReadString(byte('\n'))
+		if err != nil && err != io.EOF {
+			return err
+		} else if err == io.EOF {
+			return nil
+		}
 		// If we find the DML token, we are done with DDL
 		if strings.HasPrefix(line, "# DML") {
-			return
+			return nil
 		}
 		if strings.HasPrefix(line, "#") {
 			continue
@@ -162,14 +167,23 @@ func (i *Importer) processDDL(scanner *bufio.Scanner) {
 	}
 }
 
-func (i *Importer) processDML(scanner *bufio.Scanner) {
-	start := time.Now()
-	for scanner.Scan() {
-		line := scanner.Text()
+func (i *Importer) processDML(scanner *bufio.Reader) error {
+	i.startTime = time.Now()
+	for {
+		line, err := scanner.ReadString(byte('\n'))
+		if err != nil && err != io.EOF {
+			return err
+		} else if err == io.EOF {
+			// Call batchWrite one last time to flush anything out in the batch
+			i.batchWrite()
+			return nil
+		}
 		if strings.HasPrefix(line, "# CONTEXT-DATABASE:") {
+			i.batchWrite()
 			i.database = strings.TrimSpace(strings.Split(line, ":")[1])
 		}
 		if strings.HasPrefix(line, "# CONTEXT-RETENTION-POLICY:") {
+			i.batchWrite()
 			i.retentionPolicy = strings.TrimSpace(strings.Split(line, ":")[1])
 		}
 		if strings.HasPrefix(line, "#") {
@@ -179,10 +193,8 @@ func (i *Importer) processDML(scanner *bufio.Scanner) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		i.batchAccumulator(line, start)
+		i.batchAccumulator(line)
 	}
-	// Call batchWrite one last time to flush anything out in the batch
-	i.batchWrite()
 }
 
 func (i *Importer) execute(command string) {
@@ -201,22 +213,19 @@ func (i *Importer) queryExecutor(command string) {
 	i.execute(command)
 }
 
-func (i *Importer) batchAccumulator(line string, start time.Time) {
+func (i *Importer) batchAccumulator(line string) {
 	i.batch = append(i.batch, line)
 	if len(i.batch) == batchSize {
 		i.batchWrite()
-		i.batch = i.batch[:0]
-		// Give some status feedback every 100000 lines processed
-		processed := i.totalInserts + i.failedInserts
-		if processed%100000 == 0 {
-			since := time.Since(start)
-			pps := float64(processed) / since.Seconds()
-			i.stdoutLogger.Printf("Processed %d lines.  Time elapsed: %s.  Points per second (PPS): %d", processed, since.String(), int64(pps))
-		}
 	}
 }
 
 func (i *Importer) batchWrite() {
+	// Exit early if there are no points in the batch.
+	if len(i.batch) == 0 {
+		return
+	}
+
 	// Accumulate the batch size to see how many points we have written this second
 	i.throttlePointsWritten += len(i.batch)
 
@@ -252,5 +261,14 @@ func (i *Importer) batchWrite() {
 	}
 	i.throttlePointsWritten = 0
 	i.lastWrite = time.Now()
-	return
+
+	// Clear the batch and record the number of processed points.
+	i.batch = i.batch[:0]
+	// Give some status feedback every 100000 lines processed
+	processed := i.totalInserts + i.failedInserts
+	if processed%100000 == 0 {
+		since := time.Since(i.startTime)
+		pps := float64(processed) / since.Seconds()
+		i.stdoutLogger.Printf("Processed %d lines.  Time elapsed: %s.  Points per second (PPS): %d", processed, since.String(), int64(pps))
+	}
 }

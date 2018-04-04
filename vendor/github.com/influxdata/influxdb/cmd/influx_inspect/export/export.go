@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/pkg/escape"
 	"github.com/influxdata/influxdb/tsdb/engine/tsm1"
+	"github.com/influxdata/influxql"
 )
 
 // Command represents the program execution for "influx_inspect export".
@@ -344,7 +344,7 @@ func (cmd *Command) exportWALFile(walFilePath string, w io.Writer, warnDelete fu
 		entry, err := r.Read()
 		if err != nil {
 			n := r.Count()
-			fmt.Fprintf(cmd.Stderr, "file %s corrupt at position %d", walFilePath, n)
+			fmt.Fprintf(cmd.Stderr, "file %s corrupt at position %d: %v", walFilePath, n, err)
 			break
 		}
 

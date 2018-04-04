@@ -2,17 +2,17 @@ package query_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
-	"math"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/influxdata/influxdb/influxql"
 	"github.com/influxdata/influxdb/pkg/deep"
 	"github.com/influxdata/influxdb/query"
+	"github.com/influxdata/influxql"
 )
 
 // Ensure that a set of iterators can be merged together, sorted by window and name/tag.
@@ -769,44 +769,6 @@ func TestLimitIterator_Boolean(t *testing.T) {
 	}
 }
 
-// Ensure auxiliary iterators can be created for auxilary fields.
-func TestFloatAuxIterator(t *testing.T) {
-	itr := query.NewAuxIterator(
-		&FloatIterator{Points: []query.FloatPoint{
-			{Time: 0, Value: 1, Aux: []interface{}{float64(100), float64(200)}},
-			{Time: 1, Value: 2, Aux: []interface{}{float64(500), math.NaN()}},
-		}},
-		query.IteratorOptions{Aux: []influxql.VarRef{{Val: "f0", Type: influxql.Float}, {Val: "f1", Type: influxql.Float}}},
-	)
-
-	itrs := []query.Iterator{
-		itr,
-		itr.Iterator("f0", influxql.Unknown),
-		itr.Iterator("f1", influxql.Unknown),
-		itr.Iterator("f0", influxql.Unknown),
-	}
-	itr.Start()
-
-	if a, err := Iterators(itrs).ReadAll(); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	} else if !deep.Equal(a, [][]query.Point{
-		{
-			&query.FloatPoint{Time: 0, Value: 1, Aux: []interface{}{float64(100), float64(200)}},
-			&query.FloatPoint{Time: 0, Value: float64(100)},
-			&query.FloatPoint{Time: 0, Value: float64(200)},
-			&query.FloatPoint{Time: 0, Value: float64(100)},
-		},
-		{
-			&query.FloatPoint{Time: 1, Value: 2, Aux: []interface{}{float64(500), math.NaN()}},
-			&query.FloatPoint{Time: 1, Value: float64(500)},
-			&query.FloatPoint{Time: 1, Value: math.NaN()},
-			&query.FloatPoint{Time: 1, Value: float64(500)},
-		},
-	}) {
-		t.Fatalf("unexpected points: %s", spew.Sdump(a))
-	}
-}
-
 // Ensure limit iterator returns a subset of points.
 func TestLimitIterator(t *testing.T) {
 	itr := query.NewLimitIterator(
@@ -1525,7 +1487,7 @@ func TestIterator_EncodeDecode(t *testing.T) {
 	}
 
 	// Decode from the buffer.
-	dec := query.NewReaderIterator(&buf, influxql.Float, itr.Stats())
+	dec := query.NewReaderIterator(context.Background(), &buf, influxql.Float, itr.Stats())
 
 	// Initial stats should exist immediately.
 	fdec := dec.(query.FloatIterator)
@@ -1551,40 +1513,13 @@ func TestIterator_EncodeDecode(t *testing.T) {
 	}
 }
 
-// IteratorCreator is a mockable implementation of SelectStatementExecutor.IteratorCreator.
-type IteratorCreator struct {
-	CreateIteratorFn  func(m *influxql.Measurement, opt query.IteratorOptions) (query.Iterator, error)
-	FieldDimensionsFn func(m *influxql.Measurement) (fields map[string]influxql.DataType, dimensions map[string]struct{}, err error)
-}
-
-func (ic *IteratorCreator) CreateIterator(m *influxql.Measurement, opt query.IteratorOptions) (query.Iterator, error) {
-	return ic.CreateIteratorFn(m, opt)
-}
-
-func (ic *IteratorCreator) FieldDimensions(m *influxql.Measurement) (fields map[string]influxql.DataType, dimensions map[string]struct{}, err error) {
-	return ic.FieldDimensionsFn(m)
-}
-
-func (ic *IteratorCreator) MapType(m *influxql.Measurement, field string) influxql.DataType {
-	f, d, err := ic.FieldDimensions(m)
-	if err != nil {
-		return influxql.Unknown
-	}
-
-	if typ, ok := f[field]; ok {
-		return typ
-	}
-	if _, ok := d[field]; ok {
-		return influxql.Tag
-	}
-	return influxql.Unknown
-}
-
 // Test implementation of influxql.FloatIterator
 type FloatIterator struct {
-	Points []query.FloatPoint
-	Closed bool
-	stats  query.IteratorStats
+	Context context.Context
+	Points  []query.FloatPoint
+	Closed  bool
+	Delay   time.Duration
+	stats   query.IteratorStats
 }
 
 func (itr *FloatIterator) Stats() query.IteratorStats { return itr.stats }
@@ -1596,6 +1531,22 @@ func (itr *FloatIterator) Next() (*query.FloatPoint, error) {
 		return nil, nil
 	}
 
+	// If we have asked for a delay, then delay the returning of the point
+	// until either an (optional) context is done or the time has passed.
+	if itr.Delay > 0 {
+		var done <-chan struct{}
+		if itr.Context != nil {
+			done = itr.Context.Done()
+		}
+
+		timer := time.NewTimer(itr.Delay)
+		select {
+		case <-timer.C:
+		case <-done:
+			timer.Stop()
+			return nil, itr.Context.Err()
+		}
+	}
 	v := &itr.Points[0]
 	itr.Points = itr.Points[1:]
 	return v, nil

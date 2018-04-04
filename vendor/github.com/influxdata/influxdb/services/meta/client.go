@@ -7,7 +7,6 @@ import (
 	crand "crypto/rand"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -19,8 +18,9 @@ import (
 	"time"
 
 	"github.com/influxdata/influxdb"
-	"github.com/influxdata/influxdb/influxql"
-	"github.com/uber-go/zap"
+	"github.com/influxdata/influxdb/logger"
+	"github.com/influxdata/influxql"
+	"go.uber.org/zap"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -47,7 +47,7 @@ var (
 // Client is used to execute commands on and read data from
 // a meta service cluster.
 type Client struct {
-	logger zap.Logger
+	logger *zap.Logger
 
 	mu        sync.RWMutex
 	closing   chan struct{}
@@ -77,8 +77,8 @@ func NewClient(config *Config) *Client {
 		},
 		closing:             make(chan struct{}),
 		changed:             make(chan struct{}),
-		logger:              zap.New(zap.NullEncoder()),
-		authCache:           make(map[string]authUser, 0),
+		logger:              zap.NewNop(),
+		authCache:           make(map[string]authUser),
 		path:                config.Dir,
 		retentionAutoCreate: config.RetentionAutoCreate,
 	}
@@ -458,11 +458,7 @@ func (c *Client) UpdateUser(name, password string) error {
 
 	delete(c.authCache, name)
 
-	if err := c.commit(data); err != nil {
-		return err
-	}
-
-	return nil
+	return c.commit(data)
 }
 
 // DropUser removes the user with the given name.
@@ -672,6 +668,16 @@ func (c *Client) DropShard(id uint64) error {
 	return c.commit(data)
 }
 
+// TruncateShardGroups truncates any shard group that could contain timestamps beyond t.
+func (c *Client) TruncateShardGroups(t time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	data := c.cacheData.Clone()
+	data.TruncateShardGroups(t)
+	return c.commit(data)
+}
+
 // PruneShardGroups remove deleted shard groups from the data store.
 func (c *Client) PruneShardGroups() error {
 	var changed bool
@@ -794,16 +800,23 @@ func (c *Client) PrecreateShardGroups(from, to time.Time) error {
 				nextShardGroupTime := g.EndTime.Add(1 * time.Nanosecond)
 				// if it already exists, continue
 				if sg, _ := data.ShardGroupByTimestamp(di.Name, rp.Name, nextShardGroupTime); sg != nil {
-					c.logger.Info(fmt.Sprintf("shard group %d exists for database %s, retention policy %s", sg.ID, di.Name, rp.Name))
+					c.logger.Info("Shard group already exists",
+						logger.ShardGroup(sg.ID),
+						logger.Database(di.Name),
+						logger.RetentionPolicy(rp.Name))
 					continue
 				}
 				newGroup, err := createShardGroup(data, di.Name, rp.Name, nextShardGroupTime)
 				if err != nil {
-					c.logger.Info(fmt.Sprintf("failed to precreate successive shard group for group %d: %s", g.ID, err.Error()))
+					c.logger.Info("Failed to precreate successive shard group",
+						zap.Uint64("group_id", g.ID), zap.Error(err))
 					continue
 				}
 				changed = true
-				c.logger.Info(fmt.Sprintf("new shard group %d successfully precreated for database %s, retention policy %s", newGroup.ID, di.Name, rp.Name))
+				c.logger.Info("New shard group successfully precreated",
+					logger.ShardGroup(newGroup.ID),
+					logger.Database(di.Name),
+					logger.RetentionPolicy(rp.Name))
 			}
 		}
 	}
@@ -979,7 +992,7 @@ func (c *Client) MarshalBinary() ([]byte, error) {
 }
 
 // WithLogger sets the logger for the client.
-func (c *Client) WithLogger(log zap.Logger) {
+func (c *Client) WithLogger(log *zap.Logger) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.logger = log.With(zap.String("service", "metaclient"))

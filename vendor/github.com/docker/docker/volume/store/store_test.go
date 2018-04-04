@@ -1,14 +1,20 @@
-package store
+package store // import "github.com/docker/docker/volume/store"
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/docker/docker/volume"
 	"github.com/docker/docker/volume/drivers"
 	volumetestutils "github.com/docker/docker/volume/testutils"
+	"github.com/google/go-cmp/cmp"
+	"github.com/gotestyourself/gotestyourself/assert"
+	is "github.com/gotestyourself/gotestyourself/assert/cmp"
 )
 
 func TestCreate(t *testing.T) {
@@ -212,7 +218,7 @@ func TestDerefMultipleOfSameRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	defer os.RemoveAll(dir)
 	s, err := New(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -230,5 +236,193 @@ func TestDerefMultipleOfSameRef(t *testing.T) {
 	s.Dereference(v, "volReference")
 	if err := s.Remove(v); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCreateKeepOptsLabelsWhenExistsRemotely(t *testing.T) {
+	vd := volumetestutils.NewFakeDriver("fake")
+	volumedrivers.Register(vd, "fake")
+	dir, err := ioutil.TempDir("", "test-same-deref")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	s, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a volume in the driver directly
+	if _, err := vd.Create("foo", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := s.Create("foo", "fake", nil, map[string]string{"hello": "world"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	switch dv := v.(type) {
+	case volume.DetailedVolume:
+		if dv.Labels()["hello"] != "world" {
+			t.Fatalf("labels don't match")
+		}
+	default:
+		t.Fatalf("got unexpected type: %T", v)
+	}
+}
+
+func TestDefererencePluginOnCreateError(t *testing.T) {
+	var (
+		l   net.Listener
+		err error
+	)
+
+	for i := 32768; l == nil && i < 40000; i++ {
+		l, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", i))
+	}
+	if l == nil {
+		t.Fatalf("could not create listener: %v", err)
+	}
+	defer l.Close()
+
+	d := volumetestutils.NewFakeDriver("TestDefererencePluginOnCreateError")
+	p, err := volumetestutils.MakeFakePlugin(d, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pg := volumetestutils.NewFakePluginGetter(p)
+	volumedrivers.RegisterPluginGetter(pg)
+	defer volumedrivers.RegisterPluginGetter(nil)
+
+	dir, err := ioutil.TempDir("", "test-plugin-deref-err")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	s, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// create a good volume so we have a plugin reference
+	_, err = s.Create("fake1", d.Name(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Now create another one expecting an error
+	_, err = s.Create("fake2", d.Name(), map[string]string{"error": "some error"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "some error") {
+		t.Fatalf("expected an error on create: %v", err)
+	}
+
+	// There should be only 1 plugin reference
+	if refs := volumetestutils.FakeRefs(p); refs != 1 {
+		t.Fatalf("expected 1 plugin reference, got: %d", refs)
+	}
+}
+
+func TestRefDerefRemove(t *testing.T) {
+	t.Parallel()
+
+	driverName := "test-ref-deref-remove"
+	s, cleanup := setupTest(t, driverName)
+	defer cleanup(t)
+
+	v, err := s.CreateWithRef("test", driverName, "test-ref", nil, nil)
+	assert.NilError(t, err)
+
+	err = s.Remove(v)
+	assert.Assert(t, is.ErrorContains(err, ""))
+	assert.Equal(t, errVolumeInUse, err.(*OpErr).Err)
+
+	s.Dereference(v, "test-ref")
+	err = s.Remove(v)
+	assert.NilError(t, err)
+}
+
+func TestGet(t *testing.T) {
+	t.Parallel()
+
+	driverName := "test-get"
+	s, cleanup := setupTest(t, driverName)
+	defer cleanup(t)
+
+	_, err := s.Get("not-exist")
+	assert.Assert(t, is.ErrorContains(err, ""))
+	assert.Equal(t, errNoSuchVolume, err.(*OpErr).Err)
+
+	v1, err := s.Create("test", driverName, nil, map[string]string{"a": "1"})
+	assert.NilError(t, err)
+
+	v2, err := s.Get("test")
+	assert.NilError(t, err)
+	assert.DeepEqual(t, v1, v2, cmpVolume)
+
+	dv := v2.(volume.DetailedVolume)
+	assert.Equal(t, "1", dv.Labels()["a"])
+
+	err = s.Remove(v1)
+	assert.NilError(t, err)
+}
+
+func TestGetWithRef(t *testing.T) {
+	t.Parallel()
+
+	driverName := "test-get-with-ref"
+	s, cleanup := setupTest(t, driverName)
+	defer cleanup(t)
+
+	_, err := s.GetWithRef("not-exist", driverName, "test-ref")
+	assert.Assert(t, is.ErrorContains(err, ""))
+
+	v1, err := s.Create("test", driverName, nil, map[string]string{"a": "1"})
+	assert.NilError(t, err)
+
+	v2, err := s.GetWithRef("test", driverName, "test-ref")
+	assert.NilError(t, err)
+	assert.DeepEqual(t, v1, v2, cmpVolume)
+
+	err = s.Remove(v2)
+	assert.Assert(t, is.ErrorContains(err, ""))
+	assert.Equal(t, errVolumeInUse, err.(*OpErr).Err)
+
+	s.Dereference(v2, "test-ref")
+	err = s.Remove(v2)
+	assert.NilError(t, err)
+}
+
+var cmpVolume = cmp.AllowUnexported(volumetestutils.FakeVolume{}, volumeWrapper{})
+
+func setupTest(t *testing.T, name string) (*VolumeStore, func(*testing.T)) {
+	t.Helper()
+	s, cleanup := newTestStore(t)
+
+	volumedrivers.Register(volumetestutils.NewFakeDriver(name), name)
+	return s, func(t *testing.T) {
+		cleanup(t)
+		volumedrivers.Unregister(name)
+	}
+}
+
+func newTestStore(t *testing.T) (*VolumeStore, func(*testing.T)) {
+	t.Helper()
+
+	dir, err := ioutil.TempDir("", "store-root")
+	assert.NilError(t, err)
+
+	cleanup := func(t *testing.T) {
+		err := os.RemoveAll(dir)
+		assert.Check(t, err)
+	}
+
+	s, err := New(dir)
+	assert.Check(t, err)
+	return s, func(t *testing.T) {
+		s.Shutdown()
+		cleanup(t)
 	}
 }

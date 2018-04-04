@@ -6,10 +6,13 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/influxdata/influxdb/influxql"
+	"github.com/influxdata/influxdb/pkg/metrics"
+	"github.com/influxdata/influxdb/pkg/tracing"
+	"github.com/influxdata/influxdb/pkg/tracing/fields"
 	"github.com/influxdata/influxdb/query"
 	"github.com/influxdata/influxdb/tsdb"
-	"github.com/uber-go/zap"
+	"github.com/influxdata/influxql"
+	"go.uber.org/zap"
 )
 
 type cursor interface {
@@ -27,6 +30,7 @@ type cursorAt interface {
 
 type nilCursor struct {}
 func (nilCursor) next() (int64, interface{}) { return tsdb.EOF, nil }
+func (nilCursor) close() error { return nil }
 
 // bufCursor implements a bufferred cursor.
 type bufCursor struct {
@@ -45,6 +49,10 @@ func newBufCursor(cur cursor, ascending bool) *bufCursor {
 }
 
 func (c *bufCursor) close() error {
+	if c.cur == nil {
+		return nil
+	}
+
 	err := c.cur.close()
 	c.cur = nil
 	return err
@@ -118,25 +126,58 @@ const statsBufferCopyIntervalN = 100
 
 type {{.name}}FinalizerIterator struct {
 	query.{{.Name}}Iterator
-	logger zap.Logger
+	logger *zap.Logger
 }
 
-func new{{.Name}}FinalizerIterator(inner query.{{.Name}}Iterator, logger zap.Logger) *{{.name}}FinalizerIterator {
+func new{{.Name}}FinalizerIterator(inner query.{{.Name}}Iterator, logger *zap.Logger) *{{.name}}FinalizerIterator {
 	itr := &{{.name}}FinalizerIterator{ {{.Name}}Iterator: inner, logger: logger}
 	runtime.SetFinalizer(itr, (*{{.name}}FinalizerIterator).closeGC)
 	return itr
 }
 
 func (itr *{{.name}}FinalizerIterator) closeGC() {
-	runtime.SetFinalizer(itr, nil)
-	itr.logger.Error("{{.Name}}Iterator finalized by GC")
-	itr.Close()
+	go func() {
+		itr.logger.Error("{{.Name}}Iterator finalized by GC")
+		itr.Close()
+	}()
 }
 
 func (itr *{{.name}}FinalizerIterator) Close() error {
 	runtime.SetFinalizer(itr, nil)
 	return itr.{{.Name}}Iterator.Close()
 }
+
+
+type {{.name}}InstrumentedIterator struct {
+	query.{{.Name}}Iterator
+	span  *tracing.Span
+	group *metrics.Group
+}
+
+func new{{.Name}}InstrumentedIterator(inner query.{{.Name}}Iterator, span *tracing.Span, group *metrics.Group) *{{.name}}InstrumentedIterator {
+	return &{{.name}}InstrumentedIterator{ {{.Name}}Iterator: inner, span: span, group: group}
+}
+
+func (itr *{{.name}}InstrumentedIterator) Close() error {
+	var f fields.Fields
+	itr.group.ForEach(func(v metrics.Metric) {
+		switch m := v.(type) {
+		case *metrics.Counter:
+			f = append(f, fields.Int64(m.Name(), m.Value()))
+
+		case *metrics.Timer:
+			f = append(f, fields.Duration(m.Name(), m.Value()))
+
+		default:
+			panic("unexpected metrics")
+		}
+	})
+	itr.span.SetFields(f)
+	itr.span.Finish()
+
+	return itr.{{.Name}}Iterator.Close()
+}
+
 
 type {{.name}}Iterator struct {
 	cur   {{.name}}Cursor
@@ -373,6 +414,10 @@ func (c *{{.name}}AscendingCursor) peekTSM() (t int64, v {{.Type}}) {
 
 // close closes the cursor and any dependent cursors.
 func (c *{{.name}}AscendingCursor) close() (error) {
+	if c.tsm.keyCursor == nil {
+		return nil
+	}
+
 	c.tsm.keyCursor.Close()
 	c.tsm.keyCursor = nil
 	c.cache.values = nil
@@ -490,6 +535,10 @@ func (c *{{.name}}DescendingCursor) peekTSM() (t int64, v {{.Type}}) {
 
 // close closes the cursor and any dependent cursors.
 func (c *{{.name}}DescendingCursor) close() (error) {
+	if c.tsm.keyCursor == nil {
+		return nil
+	}
+
 	c.tsm.keyCursor.Close()
 	c.tsm.keyCursor = nil
 	c.cache.values = nil

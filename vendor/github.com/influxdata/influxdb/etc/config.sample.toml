@@ -71,11 +71,15 @@
 
   # CacheMaxMemorySize is the maximum size a shard's cache can
   # reach before it starts rejecting writes.
-  # cache-max-memory-size = 1048576000
+  # Valid size suffixes are k, m, or g (case insensitive, 1024 = 1k).
+  # Values without a size suffix are in bytes.
+  # cache-max-memory-size = "1g"
 
   # CacheSnapshotMemorySize is the size at which the engine will
   # snapshot the cache and write it to a TSM file, freeing up memory
-  # cache-snapshot-memory-size = 26214400
+  # Valid size suffixes are k, m, or g (case insensitive, 1024 = 1k).
+  # Values without a size suffix are in bytes.
+  # cache-snapshot-memory-size = "25m"
 
   # CacheSnapshotWriteColdDuration is the length of time at
   # which the engine will snapshot the cache and write it to
@@ -92,6 +96,15 @@
   # than 0 limits compactions to that value.  This setting does not apply
   # to cache snapshotting.
   # max-concurrent-compactions = 0
+
+  # The threshold, in bytes, when an index write-ahead log file will compact
+  # into an index file. Lower sizes will cause log files to be compacted more
+  # quickly and result in lower heap usage at the expense of write throughput.
+  # Higher sizes will be compacted less frequently, store more series in-memory,
+  # and provide higher write throughput.
+  # Valid size suffixes are k, m, or g (case insensitive, 1024 = 1k).
+  # Values without a size suffix are in bytes.
+  # max-index-log-file-size = "1m"
 
   # The maximum series allowed per database before writes are dropped.  This limit can prevent
   # high cardinality issues at the database level.  This limit can be disabled by setting it to
@@ -213,6 +226,14 @@
   # Determines whether HTTP request logging is enabled.
   # log-enabled = true
 
+  # When HTTP request logging is enabled, this option specifies the path where
+  # log entries should be written. If unspecified, the default is to write to stderr, which
+  # intermingles HTTP logs with internal InfluxDB logging.
+  #
+  # If influxd is unable to access the specified path, it will log an error and fall back to writing
+  # the request log to stderr.
+  # access-log-path = ""
+
   # Determines whether detailed write logging is enabled.
   # write-tracing = false
 
@@ -247,6 +268,47 @@
 
   # The maximum size of a client request body, in bytes. Setting this value to 0 disables the limit.
   # max-body-size = 25000000
+
+
+###
+### [ifql]
+###
+### Configures the ifql RPC API.
+###
+
+[ifql]
+  # Determines whether the RPC service is enabled.
+  # enabled = true
+
+  # Determines whether additional logging is enabled.
+  # log-enabled = true
+
+  # The bind address used by the ifql RPC service.
+  # bind-address = ":8082"
+
+
+###
+### [logging]
+###
+### Controls how the logger emits logs to the output.
+###
+
+[logging]
+  # Determines which log encoder to use for logs. Available options
+  # are auto, logfmt, and json. auto will use a more a more user-friendly
+  # output format if the output terminal is a TTY, but the format is not as
+  # easily machine-readable. When the output is a non-TTY, auto will use
+  # logfmt.
+  # format = "auto"
+
+  # Determines which level of logs will be emitted. The available levels
+  # are error, warn, info, and debug. Logs that are equal to or above the
+  # specified level will be emitted.
+  # level = "info"
+
+  # Suppresses the logo output that is printed when the program is started.
+  # The logo is always suppressed if STDOUT is not a TTY.
+  # suppress-logo = false
 
 ###
 ### [subscriber]
