@@ -224,7 +224,7 @@ Please read below blog on how to user DSR in combination with `--advertise-exter
 https://cloudnativelabs.github.io/post/2017-11-01-kube-high-available-ingress/
 
 You can enable DSR(Direct Server Return) functionality per service. When enabled service endpoint
-will directly respond to the client by passign the service proxy. When DSR is enabled Kube-router 
+will directly respond to the client by passing the service proxy. When DSR is enabled Kube-router 
 will uses LVS's tunneling mode to achieve this.
 
 To enable DSR you need to annotate service with `kube-router.io/service.dsr=tunnel` annotation. For e.g.
