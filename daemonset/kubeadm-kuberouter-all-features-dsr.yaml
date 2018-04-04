@@ -74,6 +74,7 @@ spec:
           readOnly: true
         - name: run
           mountPath: /var/run/docker.sock
+          readOnly: true
       initContainers:
       - name: install-cni
         image: busybox
