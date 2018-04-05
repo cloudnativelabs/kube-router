@@ -71,6 +71,7 @@ spec:
           mountPath: /etc/cni/net.d
         - name: kubeconfig
           mountPath: /var/lib/kube-router
+          readOnly: true
         - name: run
           mountPath: /var/run/docker.sock
           readOnly: true
