@@ -562,11 +562,12 @@ func stringSliceB64Decode(s []string) ([]string, error) {
 	ss := make([]string, 0)
 	for _, b64String := range s {
 		decoded, err := base64.StdEncoding.DecodeString(b64String)
+		decodedStr := strings.TrimSuffix(string(decoded), "\n")
 		if err != nil {
 			return nil, fmt.Errorf("Could not parse \"%s\" as a base64 encoded string",
 				b64String)
 		}
-		ss = append(ss, string(decoded))
+		ss = append(ss, decodedStr)
 	}
 	return ss, nil
 }
