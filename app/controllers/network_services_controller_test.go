@@ -92,7 +92,12 @@ func fatalf(format string, a ...interface{}) {
 	msg := fmt.Sprintf("FATAL: "+format+"\n", a...)
 	Fail(msg)
 }
-func waitForListerWithTimeout_(timeout time.Duration) {
+
+// There's waitForListerWithTimeout in network_routes_controller_test.go
+// that receives a 2nd *testing argument - mixing testing and ginkgo
+// is discouraged (latter uses own GinkgoWriter), so need to create
+// our own here.
+func waitForListerWithTimeoutG(timeout time.Duration) {
 	tick := time.Tick(100 * time.Millisecond)
 	timeoutCh := time.After(timeout)
 	for {
@@ -157,7 +162,7 @@ var _ = Describe("NetworkServicesController", func() {
 			fatalf("failed to create existing services: %v", err)
 		}
 
-		waitForListerWithTimeout_(time.Second * 10)
+		waitForListerWithTimeoutG(time.Second * 10)
 
 		nsc = &NetworkServicesController{
 			nodeIP:       net.ParseIP("10.0.0.0"),

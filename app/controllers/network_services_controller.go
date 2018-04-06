@@ -54,7 +54,7 @@ var (
 	h *ipvs.Handle
 )
 
-type Ipvs interface {
+type ipvsCalls interface {
 	ipvsNewService(ipvsSvc *ipvs.Service) error
 	ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error)
 	ipvsDelService(ipvsSvc *ipvs.Service) error
@@ -68,7 +68,7 @@ type Ipvs interface {
 	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error)
 }
 
-type Netlink interface {
+type netlinkCalls interface {
 	ipAddrAdd(iface netlink.Link, ip string) error
 	ipAddrDel(iface netlink.Link, ip string) error
 	prepareEndpointForDsr(containerId string, endpointIP string, vip string) error
@@ -78,14 +78,15 @@ type Netlink interface {
 	cleanupMangleTableRule(ip string, protocol string, port string, fwmark string) error
 }
 
-//go:generate moq -out network_services_controller_moq.go . LinuxNetworking
+// LinuxNetworking interface contains all linux networking subsystem calls
+// go:generate moq -out network_services_controller_moq.go . LinuxNetworking
 type LinuxNetworking interface {
-	Ipvs
-	Netlink
+	ipvsCalls
+	netlinkCalls
 }
 
 type linuxNetworking struct {
-	ipvs_h *ipvs.Handle
+	ipvsHandle *ipvs.Handle
 }
 
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
@@ -109,37 +110,37 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string) error {
 	return nil
 }
 func (ln *linuxNetworking) ipvsGetServices() ([]*ipvs.Service, error) {
-	return ln.ipvs_h.GetServices()
+	return ln.ipvsHandle.GetServices()
 }
 func (ln *linuxNetworking) ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
-	return ln.ipvs_h.GetDestinations(ipvsSvc)
+	return ln.ipvsHandle.GetDestinations(ipvsSvc)
 }
 func (ln *linuxNetworking) ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-	return ln.ipvs_h.DelDestination(ipvsSvc, ipvsDst)
+	return ln.ipvsHandle.DelDestination(ipvsSvc, ipvsDst)
 }
 func (ln *linuxNetworking) ipvsNewDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-	return ln.ipvs_h.NewDestination(ipvsSvc, ipvsDst)
+	return ln.ipvsHandle.NewDestination(ipvsSvc, ipvsDst)
 }
 func (ln *linuxNetworking) ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-	return ln.ipvs_h.UpdateDestination(ipvsSvc, ipvsDst)
+	return ln.ipvsHandle.UpdateDestination(ipvsSvc, ipvsDst)
 }
 func (ln *linuxNetworking) ipvsDelService(ipvsSvc *ipvs.Service) error {
-	return ln.ipvs_h.DelService(ipvsSvc)
+	return ln.ipvsHandle.DelService(ipvsSvc)
 }
 func (ln *linuxNetworking) ipvsUpdateService(ipvsSvc *ipvs.Service) error {
-	return ln.ipvs_h.UpdateService(ipvsSvc)
+	return ln.ipvsHandle.UpdateService(ipvsSvc)
 }
 func (ln *linuxNetworking) ipvsNewService(ipvsSvc *ipvs.Service) error {
-	return ln.ipvs_h.NewService(ipvsSvc)
+	return ln.ipvsHandle.NewService(ipvsSvc)
 }
 
-func NewLinuxNetworking() (*linuxNetworking, error) {
+func newLinuxNetworking() (*linuxNetworking, error) {
 	ln := &linuxNetworking{}
-	ipvs_h, err := ipvs.New("")
+	ipvsHandle, err := ipvs.New("")
 	if err != nil {
 		return nil, err
 	}
-	ln.ipvs_h = ipvs_h
+	ln.ipvsHandle = ipvsHandle
 	return ln, nil
 }
 
@@ -1721,7 +1722,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
 
 	var err error
-	ln, err := NewLinuxNetworking()
+	ln, err := newLinuxNetworking()
 	if err != nil {
 		return nil, err
 	}
