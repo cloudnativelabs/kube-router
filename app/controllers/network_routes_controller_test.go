@@ -8,15 +8,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/osrg/gobgp/config"
 	gobgp "github.com/osrg/gobgp/server"
 	"github.com/osrg/gobgp/table"
 
 	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 )
 
 func Test_advertiseClusterIPs(t *testing.T) {
@@ -173,18 +174,15 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
-
-			_, err = watchers.StartServiceWatcher(clientset, 0)
-			if err != nil {
-				t.Fatalf("failed to initialize service watcher: %v", err)
-			}
+			startInformersForRoutes(testcase.nrc, clientset)
 
 			err = createServices(clientset, testcase.existingServices)
 			if err != nil {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
-			waitForListerWithTimeout(time.Second*10, t)
+			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
+
 			// ClusterIPs
 			testcase.nrc.advertiseClusterIp = true
 			testcase.nrc.advertiseExternalIp = false
@@ -488,18 +486,15 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
-
-			_, err = watchers.StartServiceWatcher(clientset, 0)
-			if err != nil {
-				t.Fatalf("failed to initialize service watcher: %v", err)
-			}
+			startInformersForRoutes(testcase.nrc, clientset)
 
 			err = createServices(clientset, testcase.existingServices)
 			if err != nil {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
-			waitForListerWithTimeout(time.Second*10, t)
+			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
+
 			// ExternalIPs
 			testcase.nrc.advertiseClusterIp = false
 			testcase.nrc.advertiseExternalIp = true
@@ -613,18 +608,9 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			clientset := fake.NewSimpleClientset()
+			startInformersForRoutes(testcase.nrc, clientset)
 
-			_, err := watchers.StartServiceWatcher(clientset, 0)
-			if err != nil {
-				t.Fatalf("failed to initialize service watcher: %v", err)
-			}
-
-			_, err = watchers.StartEndpointsWatcher(clientset, 0)
-			if err != nil {
-				t.Fatalf("failed to initialize endpoints watcher: %v", err)
-			}
-
-			_, err = clientset.CoreV1().Endpoints("default").Create(testcase.existingEndpoint)
+			_, err := clientset.CoreV1().Endpoints("default").Create(testcase.existingEndpoint)
 			if err != nil {
 				t.Fatalf("failed to create existing endpoints: %v", err)
 			}
@@ -634,7 +620,8 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
-			waitForListerWithTimeout(time.Second*10, t)
+			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
+			waitForListerWithTimeout(testcase.nrc.epLister, time.Second*10, t)
 
 			nodeHasEndpoints, err := testcase.nrc.nodeHasEndpointsForService(testcase.existingService)
 			if !reflect.DeepEqual(err, testcase.err) {
@@ -1400,15 +1387,7 @@ func Test_addExportPolicies(t *testing.T) {
 			}
 			defer testcase.nrc.bgpServer.Stop()
 
-			_, err = watchers.StartServiceWatcher(testcase.nrc.clientset, 0)
-			if err != nil {
-				t.Fatalf("failed to initialize service watcher %v", err)
-			}
-
-			_, err = watchers.StartEndpointsWatcher(testcase.nrc.clientset, 0)
-			if err != nil {
-				t.Fatalf("failed to initialize endpoints watcher %v", err)
-			}
+			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
 
 			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
 				t.Errorf("failed to create existing nodes: %v", err)
@@ -1419,11 +1398,11 @@ func Test_addExportPolicies(t *testing.T) {
 			}
 
 			// ClusterIPs and ExternalIPs
+			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
+
 			testcase.nrc.advertiseClusterIp = true
 			testcase.nrc.advertiseExternalIp = true
 			testcase.nrc.advertiseLoadBalancerIp = false
-
-			waitForListerWithTimeout(time.Second*10, t)
 
 			err = testcase.nrc.addExportPolicies()
 			if !reflect.DeepEqual(err, testcase.err) {
@@ -1565,7 +1544,19 @@ func createNodes(clientset kubernetes.Interface, nodes []*v1core.Node) error {
 	return nil
 }
 
-func waitForListerWithTimeout(timeout time.Duration, t *testing.T) {
+func startInformersForRoutes(nrc *NetworkRoutingController, clientset kubernetes.Interface) {
+	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
+	svcInformer := informerFactory.Core().V1().Services().Informer()
+	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+
+	go informerFactory.Start(nil)
+	informerFactory.WaitForCacheSync(nil)
+
+	nrc.svcLister = svcInformer.GetIndexer()
+	nrc.epLister = epInformer.GetIndexer()
+}
+
+func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *testing.T) {
 	tick := time.Tick(100 * time.Millisecond)
 	timeoutCh := time.After(timeout)
 	for {
@@ -1573,7 +1564,7 @@ func waitForListerWithTimeout(timeout time.Duration, t *testing.T) {
 		case <-timeoutCh:
 			t.Fatal("timeout exceeded waiting for service lister to fill cache")
 		case <-tick:
-			if len(watchers.ServiceWatcher.List()) != 0 {
+			if len(lister.List()) != 0 {
 				return
 			}
 		}

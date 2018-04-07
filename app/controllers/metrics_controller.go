@@ -154,7 +154,7 @@ func (mc *MetricsController) Run(healthChan chan<- *ControllerHeartbeat, stopCh 
 }
 
 // NewMetricsController returns new MetricController object
-func NewMetricsController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*MetricsController, error) {
+func NewMetricsController(clientset kubernetes.Interface, config *options.KubeRouterConfig) (*MetricsController, error) {
 	mc := MetricsController{}
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort

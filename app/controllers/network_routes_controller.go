@@ -20,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
@@ -31,6 +30,7 @@ import (
 	"github.com/osrg/gobgp/table"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
+
 	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -96,6 +96,12 @@ type NetworkRoutingController struct {
 	cniConfFile             string
 	initSrcDstCheckDone     bool
 	ec2IamAuthorized        bool
+
+	nodeLister cache.Indexer
+	svcLister  cache.Indexer
+	epLister   cache.Indexer
+
+	NodeEventHandler cache.ResourceEventHandler
 }
 
 // Run runs forever until we are notified on stop channel
@@ -438,7 +444,9 @@ func (nrc *NetworkRoutingController) getLoadBalancerIps(svc *v1core.Service) []s
 func (nrc *NetworkRoutingController) getIpsToAdvertise(verifyEndpoints bool) ([]string, []string, error) {
 	ipsToAdvertise := make([]string, 0)
 	ipsToUnAdvertise := make([]string, 0)
-	for _, svc := range watchers.ServiceWatcher.List() {
+	for _, obj := range nrc.svcLister.List() {
+		svc := obj.(*v1core.Service)
+
 		ipList := make([]string, 0)
 		var err error
 		nodeHasEndpoints := true
@@ -497,7 +505,7 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 	if err != nil {
 		return false, err
 	}
-	item, exists, err := watchers.EndpointsWatcher.GetByKey(key)
+	item, exists, err := nrc.epLister.GetByKey(key)
 	if err != nil {
 		return false, err
 	}
@@ -1343,17 +1351,11 @@ func rtTablesAdd(tableNumber, tableName string) error {
 // OnNodeUpdate Handle updates from Node watcher. Node watcher calls this method whenever there is
 // new node is added or old node is deleted. So peer up with new node and drop peering
 // from old node
-func (nrc *NetworkRoutingController) OnNodeUpdate(nodeUpdate *watchers.NodeUpdate) {
+func (nrc *NetworkRoutingController) OnNodeUpdate(obj interface{}) {
 	if !nrc.bgpServerStarted {
 		return
 	}
-	node := nodeUpdate.Node
-	nodeIP, _ := utils.GetNodeIP(node)
-	if nodeUpdate.Op == watchers.ADD {
-		glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
-	} else if nodeUpdate.Op == watchers.REMOVE {
-		glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
-	}
+
 	if nrc.bgpEnableInternal {
 		nrc.syncInternalPeers()
 	}
@@ -1559,11 +1561,35 @@ func generateTunnelName(nodeIP string) string {
 	return "tun" + hash
 }
 
+func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			node := obj.(*v1core.Node)
+			nodeIP, _ := utils.GetNodeIP(node)
+
+			glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			nrc.OnNodeUpdate(newObj)
+
+		},
+		DeleteFunc: func(obj interface{}) {
+			node := obj.(*v1core.Node)
+			nodeIP, _ := utils.GetNodeIP(node)
+
+			glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
+
+		},
+	}
+}
+
 // func (nrc *NetworkRoutingController) getExternalNodeIPs(
 
 // NewNetworkRoutingController returns new NetworkRoutingController object
-func NewNetworkRoutingController(clientset *kubernetes.Clientset,
-	kubeRouterConfig *options.KubeRouterConfig) (*NetworkRoutingController, error) {
+func NewNetworkRoutingController(clientset kubernetes.Interface,
+	kubeRouterConfig *options.KubeRouterConfig,
+	nodeInformer cache.SharedIndexInformer, svcInformer cache.SharedIndexInformer,
+	epInformer cache.SharedIndexInformer) (*NetworkRoutingController, error) {
 
 	var err error
 
@@ -1676,9 +1702,11 @@ func NewNetworkRoutingController(clientset *kubernetes.Clientset,
 			"which its configured: " + err.Error())
 	}
 
-	if nrc.bgpEnableInternal {
-		watchers.NodeWatcher.RegisterHandler(&nrc)
-	}
+	nrc.svcLister = svcInformer.GetIndexer()
+	nrc.epLister = epInformer.GetIndexer()
+
+	nrc.nodeLister = nodeInformer.GetIndexer()
+	nrc.NodeEventHandler = nrc.newNodeEventHandler()
 
 	return &nrc, nil
 }

@@ -5,14 +5,16 @@ import (
 	"net"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/docker/libnetwork/ipvs"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
 	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 )
 
 type LinuxNetworkingMockImpl struct {
@@ -87,7 +89,7 @@ func fatalf(format string, a ...interface{}) {
 // that receives a 2nd *testing argument - mixing testing and ginkgo
 // is discouraged (latter uses own GinkgoWriter), so need to create
 // our own here.
-func waitForListerWithTimeoutG(timeout time.Duration) {
+func waitForListerWithTimeoutG(lister cache.Indexer, timeout time.Duration) {
 	tick := time.Tick(100 * time.Millisecond)
 	timeoutCh := time.After(timeout)
 	for {
@@ -95,7 +97,7 @@ func waitForListerWithTimeoutG(timeout time.Duration) {
 		case <-timeoutCh:
 			fatalf("timeout exceeded waiting for service lister to fill cache")
 		case <-tick:
-			if len(watchers.ServiceWatcher.List()) != 0 {
+			if len(lister.List()) != 0 {
 				return
 			}
 		}
@@ -132,17 +134,7 @@ var _ = Describe("NetworkServicesController", func() {
 	JustBeforeEach(func() {
 		clientset := fake.NewSimpleClientset()
 
-		_, err := watchers.StartServiceWatcher(clientset, 0)
-		if err != nil {
-			fatalf("failed to initialize service watcher: %v", err)
-		}
-
-		_, err = watchers.StartEndpointsWatcher(clientset, 0)
-		if err != nil {
-			fatalf("failed to initialize endpoints watcher: %v", err)
-		}
-
-		_, err = clientset.CoreV1().Endpoints("default").Create(testcase.existingEndpoint)
+		_, err := clientset.CoreV1().Endpoints("default").Create(testcase.existingEndpoint)
 		if err != nil {
 			fatalf("failed to create existing endpoints: %v", err)
 		}
@@ -152,15 +144,18 @@ var _ = Describe("NetworkServicesController", func() {
 			fatalf("failed to create existing services: %v", err)
 		}
 
-		waitForListerWithTimeoutG(time.Second * 10)
-
 		nsc = &NetworkServicesController{
 			nodeIP:       net.ParseIP("10.0.0.0"),
 			nodeHostName: "node-1",
 			ln:           mockedLinuxNetworking,
-			serviceMap:   buildServicesInfo(),
-			endpointsMap: buildEndpointsInfo(),
 		}
+
+		startInformersForServiceProxy(nsc, clientset)
+		waitForListerWithTimeoutG(nsc.svcLister, time.Second*10)
+		waitForListerWithTimeoutG(nsc.epLister, time.Second*10)
+
+		nsc.serviceMap = nsc.buildServicesInfo()
+		nsc.endpointsMap = nsc.buildEndpointsInfo()
 	})
 	Context("service no endpoints with externalIPs", func() {
 		var fooSvc1, fooSvc2 *ipvs.Service
@@ -507,3 +502,17 @@ var _ = Describe("NetworkServicesController", func() {
 		})
 	})
 })
+
+func startInformersForServiceProxy(nsc *NetworkServicesController, clientset kubernetes.Interface) {
+	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
+	svcInformer := informerFactory.Core().V1().Services().Informer()
+	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+	podInformer := informerFactory.Core().V1().Pods().Informer()
+
+	go informerFactory.Start(nil)
+	informerFactory.WaitForCacheSync(nil)
+
+	nsc.svcLister = svcInformer.GetIndexer()
+	nsc.epLister = epInformer.GetIndexer()
+	nsc.podLister = podInformer.GetIndexer()
+}
