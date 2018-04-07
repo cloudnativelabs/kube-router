@@ -14,7 +14,14 @@ import (
 )
 
 func main() {
+	if err := Main(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
 
+func Main() error {
 	config := options.NewKubeRouterConfig()
 	config.AddFlags(pflag.CommandLine)
 	pflag.Parse()
@@ -28,28 +35,26 @@ func main() {
 
 	if config.HelpRequested {
 		pflag.Usage()
-		os.Exit(0)
+		return nil
 	}
 
 	if config.Version {
 		app.PrintVersion(false)
-		os.Exit(0)
+		return nil
 	}
 
 	if os.Geteuid() != 0 {
-		fmt.Fprintf(os.Stderr, "kube-router needs to be run with privileges to execute iptables, ipset and configure ipvs\n")
-		os.Exit(1)
+		return fmt.Errorf("kube-router needs to be run with privileges to execute iptables, ipset and configure ipvs")
 	}
 
 	if config.CleanupConfig {
 		app.CleanupConfigAndExit()
-		os.Exit(0)
+		return nil
 	}
 
 	kubeRouter, err := app.NewKubeRouterDefault(config)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse kube-router config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("Failed to parse kube-router config: %v", err)
 	}
 
 	if config.EnablePprof {
@@ -60,7 +65,8 @@ func main() {
 
 	err = kubeRouter.Run()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to run kube-router: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("Failed to run kube-router: %v", err)
 	}
+
+	return nil
 }
