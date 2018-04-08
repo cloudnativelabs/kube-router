@@ -14,17 +14,6 @@ import (
 	"time"
 )
 
-type LinuxNetworkingMocker interface {
-	getKubeDummyInterfaceMock() (netlink.Link, error)
-	setupPolicyRoutingForDSRMock() error
-	setupRoutesForExternalIPForDSRMock(s serviceInfoMap) error
-	ipvsGetServicesMock() ([]*ipvs.Service, error)
-	ipAddrAddMock(iface netlink.Link, addr string) error
-	ipvsAddServerMock(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination, local bool, podCidr string) error
-	ipvsAddServiceMock(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error)
-	cleanupMangleTableRuleMock(ip string, protocol string, port string, fwmark string) error
-}
-
 type LinuxNetworkingMockImpl struct {
 	ipvsSvcs []*ipvs.Service
 }
@@ -36,31 +25,31 @@ func NewLinuxNetworkMock() *LinuxNetworkingMockImpl {
 	return lnm
 }
 
-func (lnm *LinuxNetworkingMockImpl) getKubeDummyInterfaceMock() (netlink.Link, error) {
+func (lnm *LinuxNetworkingMockImpl) getKubeDummyInterface() (netlink.Link, error) {
 	var iface netlink.Link
 	iface, err := netlink.LinkByName("lo")
 	return iface, err
 }
-func (lnm *LinuxNetworkingMockImpl) setupPolicyRoutingForDSRMock() error {
+func (lnm *LinuxNetworkingMockImpl) setupPolicyRoutingForDSR() error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) setupRoutesForExternalIPForDSRMock(s serviceInfoMap) error {
+func (lnm *LinuxNetworkingMockImpl) setupRoutesForExternalIPForDSR(s serviceInfoMap) error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsGetServicesMock() ([]*ipvs.Service, error) {
+func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {
 	// need to return a copy, else if the caller does `range svcs` and then calls
 	// DelService (on the returned svcs reference), it'll skip the "next" element
 	svcsCopy := make([]*ipvs.Service, len(lnm.ipvsSvcs))
 	copy(svcsCopy, lnm.ipvsSvcs)
 	return svcsCopy, nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipAddrAddMock(iface netlink.Link, addr string) error {
+func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr string) error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsAddServerMock(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination, local bool, podCidr string) error {
+func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination, local bool, podCidr string) error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsAddServiceMock(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
+func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
 	svc := &ipvs.Service{
 		Address:  vip,
 		Protocol: protocol,
@@ -69,7 +58,7 @@ func (lnm *LinuxNetworkingMockImpl) ipvsAddServiceMock(svcs []*ipvs.Service, vip
 	lnm.ipvsSvcs = append(lnm.ipvsSvcs, svc)
 	return svc, nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsDelServiceMock(ipvsSvc *ipvs.Service) error {
+func (lnm *LinuxNetworkingMockImpl) ipvsDelService(ipvsSvc *ipvs.Service) error {
 	for idx, svc := range lnm.ipvsSvcs {
 		if svc.Address.Equal(ipvsSvc.Address) && svc.Protocol == ipvsSvc.Protocol && svc.Port == ipvsSvc.Port {
 			lnm.ipvsSvcs = append(lnm.ipvsSvcs[:idx], lnm.ipvsSvcs[idx+1:]...)
@@ -78,10 +67,10 @@ func (lnm *LinuxNetworkingMockImpl) ipvsDelServiceMock(ipvsSvc *ipvs.Service) er
 	}
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsGetDestinationsMock(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
+func (lnm *LinuxNetworkingMockImpl) ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
 	return []*ipvs.Destination{}, nil
 }
-func (lnm *LinuxNetworkingMockImpl) cleanupMangleTableRuleMock(ip string, protocol string, port string, fwmark string) error {
+func (lnm *LinuxNetworkingMockImpl) cleanupMangleTableRule(ip string, protocol string, port string, fwmark string) error {
 	return nil
 }
 
@@ -126,16 +115,16 @@ var _ = Describe("NetworkServicesController", func() {
 	BeforeEach(func() {
 		lnm = NewLinuxNetworkMock()
 		mockedLinuxNetworking = &LinuxNetworkingMock{
-			cleanupMangleTableRuleFunc:         lnm.cleanupMangleTableRuleMock,
-			getKubeDummyInterfaceFunc:          lnm.getKubeDummyInterfaceMock,
-			ipAddrAddFunc:                      lnm.ipAddrAddMock,
-			ipvsAddServerFunc:                  lnm.ipvsAddServerMock,
-			ipvsAddServiceFunc:                 lnm.ipvsAddServiceMock,
-			ipvsDelServiceFunc:                 lnm.ipvsDelServiceMock,
-			ipvsGetDestinationsFunc:            lnm.ipvsGetDestinationsMock,
-			ipvsGetServicesFunc:                lnm.ipvsGetServicesMock,
-			setupPolicyRoutingForDSRFunc:       lnm.setupPolicyRoutingForDSRMock,
-			setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSRMock,
+			cleanupMangleTableRuleFunc:         lnm.cleanupMangleTableRule,
+			getKubeDummyInterfaceFunc:          lnm.getKubeDummyInterface,
+			ipAddrAddFunc:                      lnm.ipAddrAdd,
+			ipvsAddServerFunc:                  lnm.ipvsAddServer,
+			ipvsAddServiceFunc:                 lnm.ipvsAddService,
+			ipvsDelServiceFunc:                 lnm.ipvsDelService,
+			ipvsGetDestinationsFunc:            lnm.ipvsGetDestinations,
+			ipvsGetServicesFunc:                lnm.ipvsGetServices,
+			setupPolicyRoutingForDSRFunc:       lnm.setupPolicyRoutingForDSR,
+			setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSR,
 		}
 
 	})
@@ -194,8 +183,8 @@ var _ = Describe("NetworkServicesController", func() {
 		})
 		JustBeforeEach(func() {
 			// pre-inject some foo ipvs Service to verify its deletion
-			fooSvc1, _ = lnm.ipvsAddServiceMock(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, "rr")
-			fooSvc2, _ = lnm.ipvsAddServiceMock(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, "rr")
+			fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, "rr")
+			fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, "rr")
 			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {

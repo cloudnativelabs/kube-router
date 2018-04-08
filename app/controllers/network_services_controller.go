@@ -79,7 +79,7 @@ type netlinkCalls interface {
 }
 
 // LinuxNetworking interface contains all linux networking subsystem calls
-// go:generate moq -out network_services_controller_moq.go . LinuxNetworking
+//go:generate moq -out network_services_controller_moq.go . LinuxNetworking
 type LinuxNetworking interface {
 	ipvsCalls
 	netlinkCalls
