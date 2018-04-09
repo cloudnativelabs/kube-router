@@ -39,8 +39,7 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Starting kube-router binary build.
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router golang:alpine \
 	    sh -c ' \
-		apk add -U git build-base linux-headers \
-	    && GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
+	    GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
 		-ldflags "-X github.com/cloudnativelabs/kube-router/app.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/app.buildDate=$(BUILD_DATE)" \
 		-o kube-router kube-router.go'
 	@echo Finished kube-router binary build.
