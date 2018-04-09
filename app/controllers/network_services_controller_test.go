@@ -2,6 +2,9 @@ package controllers
 
 import (
 	"fmt"
+	"net"
+	"time"
+
 	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/docker/libnetwork/ipvs"
 	. "github.com/onsi/ginkgo"
@@ -10,8 +13,6 @@ import (
 	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
-	"net"
-	"time"
 )
 
 type LinuxNetworkingMockImpl struct {
