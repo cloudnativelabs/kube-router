@@ -38,7 +38,7 @@ kube-router:
 	GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/app.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/app.buildDate=$(BUILD_DATE)' -o kube-router kube-router.go
 	@echo Finished kube-router binary build.
 
-test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
+test: gofmt gomoqs ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 	go test github.com/cloudnativelabs/kube-router github.com/cloudnativelabs/kube-router/app/... github.com/cloudnativelabs/kube-router/utils/
 
 vagrant-up: export docker=$(DOCKER)
@@ -127,6 +127,16 @@ gofmt: ## Tells you what files need to be gofmt'd.
 gofmt-fix: ## Fixes files that need to be gofmt'd.
 	gofmt -s -w $(LOCAL_PACKAGES)
 
+# List of all file_moq.go files which would need to be regenerated
+# from file.go if changed
+gomoqs: ./app/controllers/network_services_controller_moq.go
+
+# file_moq.go file is generated from file.go "//go:generate moq ..." in-file
+# annotation, as it needs to know which interfaces to create mock stubs for
+%_moq.go: %.go
+	@test -x $(GOPATH)/bin/moq && exit 0; echo "ERROR: 'moq' tool is needed to update mock test files, install it with: \ngo get github.com/matryer/moq\n"; exit 1
+	go generate -v $(*).go
+
 gopath: ## Warns about issues building from a directory that does not match upstream.
 	@echo 'Checking project path for import issues...'
 	@echo '- Project dir: $(MAKEFILE_DIR)'
@@ -205,7 +215,7 @@ ifeq (vagrant,$(firstword $(MAKECMDGOALS)))
   $(eval $(VAGRANT_RUN_ARGS):;@:)
 endif
 
-.PHONY: build clean container run release goreleaser push gofmt gofmt-fix
+.PHONY: build clean container run release goreleaser push gofmt gofmt-fix gomoqs
 .PHONY: update-glide test docker-login push-release github-release help
 .PHONY: gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant

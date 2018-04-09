@@ -1418,6 +1418,7 @@ func Test_addExportPolicies(t *testing.T) {
 				t.Errorf("failed to create existing nodes: %v", err)
 			}
 
+			// ClusterIPs and ExternalIPs
 			testcase.nrc.advertiseClusterIp = true
 			testcase.nrc.advertiseExternalIp = true
 			testcase.nrc.advertiseLoadBalancerIp = false
