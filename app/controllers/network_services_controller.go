@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/cloudnativelabs/kube-router/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/docker/docker/client"
@@ -29,9 +28,11 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/net/context"
+
 	api "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 )
 
 const (
@@ -162,10 +163,17 @@ type NetworkServicesController struct {
 	podCidr             string
 	masqueradeAll       bool
 	globalHairpin       bool
-	client              *kubernetes.Clientset
+	client              kubernetes.Interface
 	nodeportBindOnAllIp bool
 	MetricsEnabled      bool
 	ln                  LinuxNetworking
+
+	svcLister cache.Indexer
+	epLister  cache.Indexer
+	podLister cache.Indexer
+
+	ServiceEventHandler   cache.ResourceEventHandler
+	EndpointsEventHandler cache.ResourceEventHandler
 }
 
 // internal representation of kubernetes service
@@ -229,16 +237,12 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *ControllerHeartbeat
 		default:
 		}
 
-		if watchers.PodWatcher.HasSynced() && watchers.NetworkPolicyWatcher.HasSynced() {
-			glog.V(1).Info("Performing periodic sync of ipvs services")
-			err := nsc.sync()
-			if err != nil {
-				glog.Errorf("Error during periodic ipvs sync: " + err.Error())
-			} else {
-				sendHeartBeat(healthChan, "NSC")
-			}
+		glog.V(1).Info("Performing periodic sync of ipvs services")
+		err := nsc.sync()
+		if err != nil {
+			glog.Errorf("Error during periodic ipvs sync: " + err.Error())
 		} else {
-			continue
+			sendHeartBeat(healthChan, "NSC")
 		}
 
 		select {
@@ -255,8 +259,8 @@ func (nsc *NetworkServicesController) sync() error {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
-	nsc.serviceMap = buildServicesInfo()
-	nsc.endpointsMap = buildEndpointsInfo()
+	nsc.serviceMap = nsc.buildServicesInfo()
+	nsc.endpointsMap = nsc.buildEndpointsInfo()
 	err = nsc.syncHairpinIptablesRules()
 	if err != nil {
 		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
@@ -343,18 +347,14 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
-func (nsc *NetworkServicesController) OnEndpointsUpdate(endpointsUpdate *watchers.EndpointsUpdate) {
-
+func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
 	glog.V(1).Info("Received endpoints update from watch API")
-	if !(watchers.ServiceWatcher.HasSynced() && watchers.EndpointsWatcher.HasSynced()) {
-		glog.V(1).Info("Skipping ipvs server sync as local cache is not synced yet")
-	}
 
 	// build new endpoints map to reflect the change
-	newEndpointsMap := buildEndpointsInfo()
+	newEndpointsMap := nsc.buildEndpointsInfo()
 
 	if len(newEndpointsMap) != len(nsc.endpointsMap) || !reflect.DeepEqual(newEndpointsMap, nsc.endpointsMap) {
 		nsc.endpointsMap = newEndpointsMap
@@ -365,18 +365,14 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(endpointsUpdate *watcher
 }
 
 // OnServiceUpdate handle change in service update from the API server
-func (nsc *NetworkServicesController) OnServiceUpdate(serviceUpdate *watchers.ServiceUpdate) {
-
+func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
 	glog.V(1).Info("Received service update from watch API")
-	if !(watchers.ServiceWatcher.HasSynced() && watchers.EndpointsWatcher.HasSynced()) {
-		glog.V(1).Info("Skipping ipvs server sync as local cache is not synced yet")
-	}
 
 	// build new services map to reflect the change
-	newServiceMap := buildServicesInfo()
+	newServiceMap := nsc.buildServicesInfo()
 
 	if len(newServiceMap) != len(nsc.serviceMap) || !reflect.DeepEqual(newServiceMap, nsc.serviceMap) {
 		nsc.serviceMap = newServiceMap
@@ -636,7 +632,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				// For now just support IPVS tunnel mode, we can add other ways of DSR in future
 				if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
 
-					podObj, err := getPodObjectForEndpoint(endpoint.ip)
+					podObj, err := nsc.getPodObjectForEndpoint(endpoint.ip)
 					if err != nil {
 						glog.Errorf("Failed to find endpoint with ip: " + endpoint.ip + ". so skipping peparing endpoint for DSR")
 						continue
@@ -746,8 +742,9 @@ func isLocalEndpoint(ip, podCidr string) (bool, error) {
 	return false, nil
 }
 
-func getPodObjectForEndpoint(endpointIP string) (*api.Pod, error) {
-	for _, pod := range watchers.PodWatcher.List() {
+func (nsc *NetworkServicesController) getPodObjectForEndpoint(endpointIP string) (*api.Pod, error) {
+	for _, obj := range nsc.podLister.List() {
+		pod := obj.(*api.Pod)
 		if strings.Compare(pod.Status.PodIP, endpointIP) == 0 {
 			return pod, nil
 		}
@@ -919,9 +916,10 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	return nil
 }
 
-func buildServicesInfo() serviceInfoMap {
+func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 	serviceMap := make(serviceInfoMap)
-	for _, svc := range watchers.ServiceWatcher.List() {
+	for _, obj := range nsc.svcLister.List() {
+		svc := obj.(*api.Service)
 
 		if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
 			glog.V(2).Infof("Skipping service name:%s namespace:%s as there is no cluster IP", svc.Name, svc.Namespace)
@@ -991,9 +989,11 @@ func shuffle(endPoints []endpointsInfo) []endpointsInfo {
 	return endPoints
 }
 
-func buildEndpointsInfo() endpointsInfoMap {
+func (nsc *NetworkServicesController) buildEndpointsInfo() endpointsInfoMap {
 	endpointsMap := make(endpointsInfoMap)
-	for _, ep := range watchers.EndpointsWatcher.List() {
+	for _, obj := range nsc.epLister.List() {
+		ep := obj.(*api.Endpoints)
+
 		for _, epSubset := range ep.Subsets {
 			for _, port := range epSubset.Ports {
 				svcId := generateServiceId(ep.Namespace, ep.Name, port.Name)
@@ -1718,8 +1718,41 @@ func (nsc *NetworkServicesController) Cleanup() {
 	glog.Infof("Successfully cleaned the ipvs configuration done by kube-router")
 }
 
+func (nsc *NetworkServicesController) newEndpointsEventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			nsc.OnEndpointsUpdate(obj)
+
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			nsc.OnEndpointsUpdate(newObj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			nsc.OnEndpointsUpdate(obj)
+
+		},
+	}
+}
+
+func (nsc *NetworkServicesController) newSvcEventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			nsc.OnServiceUpdate(obj)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			nsc.OnServiceUpdate(newObj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			nsc.OnServiceUpdate(obj)
+		},
+	}
+
+}
+
 // NewNetworkServicesController returns NetworkServicesController object
-func NewNetworkServicesController(clientset *kubernetes.Clientset, config *options.KubeRouterConfig) (*NetworkServicesController, error) {
+func NewNetworkServicesController(clientset kubernetes.Interface,
+	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
+	epInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer) (*NetworkServicesController, error) {
 
 	var err error
 	ln, err := newLinuxNetworking()
@@ -1781,8 +1814,13 @@ func NewNetworkServicesController(clientset *kubernetes.Clientset, config *optio
 	}
 	nsc.nodeIP = nodeIP
 
-	watchers.EndpointsWatcher.RegisterHandler(&nsc)
-	watchers.ServiceWatcher.RegisterHandler(&nsc)
+	nsc.podLister = podInformer.GetIndexer()
+
+	nsc.svcLister = svcInformer.GetIndexer()
+	nsc.ServiceEventHandler = nsc.newSvcEventHandler()
+
+	nsc.epLister = epInformer.GetIndexer()
+	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
 
 	rand.Seed(time.Now().UnixNano())
 

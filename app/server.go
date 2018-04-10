@@ -11,8 +11,9 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/app/controllers"
 	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/cloudnativelabs/kube-router/app/watchers"
 	"github.com/golang/glog"
+
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -24,7 +25,7 @@ var buildDate string
 
 // KubeRouter holds the information needed to run server
 type KubeRouter struct {
-	Client *kubernetes.Clientset
+	Client kubernetes.Interface
 	Config *options.KubeRouterConfig
 }
 
@@ -67,53 +68,6 @@ func CleanupConfigAndExit() {
 	nrc.Cleanup()
 }
 
-// start API watchers to get notification on changes
-func (kr *KubeRouter) startApiWatchers() error {
-
-	var err error
-
-	_, err = watchers.StartPodWatcher(kr.Client, kr.Config.ConfigSyncPeriod)
-	if err != nil {
-		return errors.New("Failed to launch pod api watcher: " + err.Error())
-	}
-
-	_, err = watchers.StartEndpointsWatcher(kr.Client, kr.Config.ConfigSyncPeriod)
-	if err != nil {
-		return errors.New("Failed to launch endpoint api watcher: " + err.Error())
-	}
-
-	_, err = watchers.StartNetworkPolicyWatcher(kr.Client, kr.Config.ConfigSyncPeriod)
-	if err != nil {
-		return errors.New("Failed to launch network policy api watcher: " + err.Error())
-	}
-
-	_, err = watchers.StartNamespaceWatcher(kr.Client, kr.Config.ConfigSyncPeriod)
-	if err != nil {
-		return errors.New("Failed to launch namespace api watcher: " + err.Error())
-	}
-
-	_, err = watchers.StartServiceWatcher(kr.Client, kr.Config.ConfigSyncPeriod)
-	if err != nil {
-		return errors.New("Failed to launch service api watcher: " + err.Error())
-	}
-
-	_, err = watchers.StartNodeWatcher(kr.Client, kr.Config.ConfigSyncPeriod)
-	if err != nil {
-		return errors.New("Failed to launch nodes api watcher: " + err.Error())
-	}
-
-	return nil
-}
-
-func (kr *KubeRouter) stopApiWatchers() {
-	watchers.StopPodWatcher()
-	watchers.StopEndpointsWatcher()
-	watchers.StopNetworkPolicyWatcher()
-	watchers.StopNamespaceWatcher()
-	watchers.StopServiceWatcher()
-	watchers.StopNodeWatcher()
-}
-
 // Run starts the controllers and waits forever till we get SIGINT or SIGTERM
 func (kr *KubeRouter) Run() error {
 	var err error
@@ -123,11 +77,6 @@ func (kr *KubeRouter) Run() error {
 	defer close(healthChan)
 
 	stopCh := make(chan struct{})
-
-	err = kr.startApiWatchers()
-	if err != nil {
-		return errors.New("Failed to start API watchers: " + err.Error())
-	}
 
 	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
 		glog.Info("Router, Firewall or Service proxy functionality must be specified. Exiting!")
@@ -157,31 +106,54 @@ func (kr *KubeRouter) Run() error {
 		kr.Config.MetricsEnabled = false
 	}
 
+	informerFactory := informers.NewSharedInformerFactory(kr.Client, kr.Config.ConfigSyncPeriod)
+
+	svcInformer := informerFactory.Core().V1().Services().Informer()
+	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+	podInformer := informerFactory.Core().V1().Pods().Informer()
+	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
+	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
+	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
+
+	go informerFactory.Start(stopCh)
+	informerFactory.WaitForCacheSync(stopCh)
+
 	if kr.Config.RunFirewall {
-		npc, err := controllers.NewNetworkPolicyController(kr.Client, kr.Config)
+		npc, err := controllers.NewNetworkPolicyController(kr.Client,
+			kr.Config, podInformer, npInformer, nsInformer)
 		if err != nil {
 			return errors.New("Failed to create network policy controller: " + err.Error())
 		}
+
+		podInformer.AddEventHandler(npc.PodEventHandler)
+		nsInformer.AddEventHandler(npc.NamespaceEventHandler)
+		npInformer.AddEventHandler(npc.NetworkPolicyEventHandler)
 
 		wg.Add(1)
 		go npc.Run(healthChan, stopCh, &wg)
 	}
 
 	if kr.Config.RunRouter {
-		nrc, err := controllers.NewNetworkRoutingController(kr.Client, kr.Config)
+		nrc, err := controllers.NewNetworkRoutingController(kr.Client, kr.Config, nodeInformer, svcInformer, epInformer)
 		if err != nil {
 			return errors.New("Failed to create network routing controller: " + err.Error())
 		}
+
+		nodeInformer.AddEventHandler(nrc.NodeEventHandler)
 
 		wg.Add(1)
 		go nrc.Run(healthChan, stopCh, &wg)
 	}
 
 	if kr.Config.RunServiceProxy {
-		nsc, err := controllers.NewNetworkServicesController(kr.Client, kr.Config)
+		nsc, err := controllers.NewNetworkServicesController(kr.Client, kr.Config,
+			svcInformer, epInformer, podInformer)
 		if err != nil {
 			return errors.New("Failed to create network services controller: " + err.Error())
 		}
+
+		svcInformer.AddEventHandler(nsc.ServiceEventHandler)
+		epInformer.AddEventHandler(nsc.EndpointsEventHandler)
 
 		wg.Add(1)
 		go nsc.Run(healthChan, stopCh, &wg)
@@ -194,8 +166,6 @@ func (kr *KubeRouter) Run() error {
 
 	glog.Infof("Shutting down the controllers")
 	close(stopCh)
-
-	kr.stopApiWatchers()
 
 	wg.Wait()
 	return nil
