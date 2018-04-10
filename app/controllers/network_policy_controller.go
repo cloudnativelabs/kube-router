@@ -280,8 +280,14 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains() (map[string]bool, 
 			currnetPodIps = append(currnetPodIps, ip)
 		}
 
-		targetSourcePodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
-		targetDestPodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
+		err = targetSourcePodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
+		if err != nil {
+			glog.Errorf("failed to refresh targetSourcePodIpSet: " + err.Error())
+		}
+		err = targetDestPodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
+		if err != nil {
+			glog.Errorf("failed to refresh targetDestPodIpSet: " + err.Error())
+		}
 
 		// TODO use iptables-restore to better implement the logic, than flush and add rules
 		err = iptablesCmdHandler.ClearChain("filter", policyChainName)
@@ -338,7 +344,10 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			for _, pod := range ingressRule.srcPods {
 				ingressRuleSrcPodIps = append(ingressRuleSrcPodIps, pod.ip)
 			}
-			srcPodIpSet.Refresh(ingressRuleSrcPodIps, utils.OptionTimeout, "0")
+			err = srcPodIpSet.Refresh(ingressRuleSrcPodIps, utils.OptionTimeout, "0")
+			if err != nil {
+				glog.Errorf("failed to refresh srcPodIpSet: " + err.Error())
+			}
 
 			if len(ingressRule.ports) != 0 {
 				// case where 'ports' details and 'from' details specified in the ingress rule
@@ -1047,6 +1056,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 		newPolicy.targetPods = make(map[string]podInfo)
 		if err == nil {
 			for _, matchingPod := range matchingPods {
+				if matchingPod.Status.PodIP == "" {
+					continue
+				}
 				newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ip: matchingPod.Status.PodIP,
 					name:      matchingPod.ObjectMeta.Name,
 					namespace: matchingPod.ObjectMeta.Namespace,
@@ -1114,6 +1126,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 					}
 					if err == nil {
 						for _, matchingPod := range matchingPods {
+							if matchingPod.Status.PodIP == "" {
+								continue
+							}
 							ingressRule.srcPods = append(ingressRule.srcPods,
 								podInfo{ip: matchingPod.Status.PodIP,
 									name:      matchingPod.ObjectMeta.Name,
@@ -1228,6 +1243,9 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 		newPolicy.ingressRules = make([]ingressRule, 0)
 		if err == nil {
 			for _, matchingPod := range matchingPods {
+				if matchingPod.Status.PodIP == "" {
+					continue
+				}
 				newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ip: matchingPod.Status.PodIP,
 					name:      matchingPod.ObjectMeta.Name,
 					namespace: matchingPod.ObjectMeta.Namespace,
@@ -1249,6 +1267,9 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 				matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, peer.PodSelector.MatchLabels)
 				if err == nil {
 					for _, matchingPod := range matchingPods {
+						if matchingPod.Status.PodIP == "" {
+							continue
+						}
 						ingressRule.srcPods = append(ingressRule.srcPods,
 							podInfo{ip: matchingPod.Status.PodIP,
 								name:      matchingPod.ObjectMeta.Name,
