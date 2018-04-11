@@ -140,6 +140,8 @@ func (kr *KubeRouter) Run() error {
 		}
 
 		nodeInformer.AddEventHandler(nrc.NodeEventHandler)
+		svcInformer.AddEventHandler(nrc.ServiceEventHandler)
+		epInformer.AddEventHandler(nrc.EndpointsEventHandler)
 
 		wg.Add(1)
 		go nrc.Run(healthChan, stopCh, &wg)
