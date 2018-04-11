@@ -187,8 +187,10 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			testcase.nrc.advertiseClusterIp = true
 			testcase.nrc.advertiseExternalIp = false
 			testcase.nrc.advertiseLoadBalancerIp = false
-			toAdvertise, toUnAdvertise, _ := testcase.nrc.getIpsToAdvertise(false)
-			testcase.nrc.advertiseIPs(toAdvertise, toUnAdvertise)
+
+			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
+			testcase.nrc.advertiseVIPs(toAdvertise)
+			testcase.nrc.withdrawVIPs(toWithdraw)
 
 			watchEvents := waitForBGPWatchEventWithTimeout(time.Second*10, len(testcase.watchEvents), w, t)
 			for _, watchEvent := range watchEvents {
@@ -499,8 +501,10 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			testcase.nrc.advertiseClusterIp = false
 			testcase.nrc.advertiseExternalIp = true
 			testcase.nrc.advertiseLoadBalancerIp = true
-			toAdvertise, toUnAdvertise, _ := testcase.nrc.getIpsToAdvertise(false)
-			testcase.nrc.advertiseIPs(toAdvertise, toUnAdvertise)
+
+			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
+			testcase.nrc.advertiseVIPs(toAdvertise)
+			testcase.nrc.withdrawVIPs(toWithdraw)
 
 			watchEvents := waitForBGPWatchEventWithTimeout(time.Second*10, len(testcase.watchEvents), w, t)
 			for _, watchEvent := range watchEvents {
@@ -639,7 +643,7 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 	}
 }
 
-func Test_advertiseRoute(t *testing.T) {
+func Test_advertisePodRoute(t *testing.T) {
 	testcases := []struct {
 		name        string
 		nrc         *NetworkRoutingController
@@ -750,7 +754,7 @@ func Test_advertiseRoute(t *testing.T) {
 			os.Setenv("NODE_NAME", testcase.envNodeName)
 			defer os.Unsetenv("NODE_NAME")
 
-			err = testcase.nrc.advertiseRoute()
+			err = testcase.nrc.advertisePodRoute()
 			if !reflect.DeepEqual(err, testcase.err) {
 				t.Logf("actual error: %v", err)
 				t.Logf("expected error: %v", testcase.err)

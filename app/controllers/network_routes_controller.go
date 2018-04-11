@@ -101,7 +101,9 @@ type NetworkRoutingController struct {
 	svcLister  cache.Indexer
 	epLister   cache.Indexer
 
-	NodeEventHandler cache.ResourceEventHandler
+	NodeEventHandler      cache.ResourceEventHandler
+	ServiceEventHandler   cache.ResourceEventHandler
+	EndpointsEventHandler cache.ResourceEventHandler
 }
 
 // Run runs forever until we are notified on stop channel
@@ -253,12 +255,17 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat,
 			}
 		}
 
-		// [un]advertise IPs for the services to be reachable via host
-		toAdvertise, toUnAdvertise, _ := nrc.getIpsToAdvertise(true)
-		nrc.advertiseIPs(toAdvertise, toUnAdvertise)
+		// advertise or withdraw IPs for the services to be reachable via host
+		toAdvertise, toWithdraw, err := nrc.getActiveVIPs()
+		if err != nil {
+			glog.Errorf("failed to get routes to advertise/withdraw %s", err)
+		}
+
+		nrc.advertiseVIPs(toAdvertise)
+		nrc.withdrawVIPs(toWithdraw)
 
 		glog.V(1).Info("Performing periodic sync of the routes")
-		err = nrc.advertiseRoute()
+		err = nrc.advertisePodRoute()
 		if err != nil {
 			glog.Errorf("Error advertising route: %s", err.Error())
 		}
@@ -375,7 +382,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 	}
 }
 
-func (nrc *NetworkRoutingController) advertiseRoute() error {
+func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
 		return err
@@ -441,59 +448,88 @@ func (nrc *NetworkRoutingController) getLoadBalancerIps(svc *v1core.Service) []s
 	return loadBalancerIpList
 }
 
-func (nrc *NetworkRoutingController) getIpsToAdvertise(verifyEndpoints bool) ([]string, []string, error) {
-	ipsToAdvertise := make([]string, 0)
-	ipsToUnAdvertise := make([]string, 0)
+func (nrc *NetworkRoutingController) getAllVIPs() ([]string, []string, error) {
+	return nrc.getVIPs(false)
+}
+
+func (nrc *NetworkRoutingController) getActiveVIPs() ([]string, []string, error) {
+	return nrc.getVIPs(true)
+}
+
+func (nrc *NetworkRoutingController) getVIPs(onlyActiveEndpoints bool) ([]string, []string, error) {
+	toAdvertiseList := make([]string, 0)
+	toWithdrawList := make([]string, 0)
+
 	for _, obj := range nrc.svcLister.List() {
 		svc := obj.(*v1core.Service)
 
-		ipList := make([]string, 0)
-		var err error
-		nodeHasEndpoints := true
-		if verifyEndpoints {
-			if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
-				nodeHasEndpoints, err = nrc.nodeHasEndpointsForService(svc)
-				if err != nil {
-					glog.Errorf("error determining if node has endpoints for svc: %q error: %v", svc.Name, err)
-					continue
-				}
-			}
+		toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, onlyActiveEndpoints)
+		if err != nil {
+			return nil, nil, err
 		}
-		if nrc.advertiseClusterIp {
-			clusterIp := nrc.getClusterIp(svc)
-			if clusterIp != "" {
-				ipList = append(ipList, clusterIp)
-			}
+
+		if len(toAdvertise) > 0 {
+			toAdvertiseList = append(toAdvertiseList, toAdvertise...)
 		}
-		if nrc.advertiseExternalIp {
-			ipList = append(ipList, nrc.getExternalIps(svc)...)
-		}
-		if nrc.advertiseLoadBalancerIp {
-			ipList = append(ipList, nrc.getLoadBalancerIps(svc)...)
-		}
-		if nodeHasEndpoints {
-			ipsToAdvertise = append(ipsToAdvertise, ipList...)
-		} else {
-			ipsToUnAdvertise = append(ipsToUnAdvertise, ipList...)
+
+		if len(toWithdraw) > 0 {
+			toWithdrawList = append(toWithdrawList, toWithdraw...)
 		}
 	}
-	return ipsToAdvertise, ipsToUnAdvertise, nil
+
+	return toAdvertiseList, toWithdrawList, nil
 }
 
-func (nrc *NetworkRoutingController) advertiseIPs(toAdvertise []string, toUnAdvertise []string) error {
-	for _, ip := range toAdvertise {
-		err := nrc.AdvertiseClusterIp(ip)
-		if err != nil {
-			glog.Errorf("error advertising IP: %q, error: %v", ip, err)
+func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, onlyActiveEndpoints bool) ([]string, []string, error) {
+	ipList := make([]string, 0)
+	var err error
+
+	nodeHasEndpoints := true
+	if onlyActiveEndpoints {
+		if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
+			nodeHasEndpoints, err = nrc.nodeHasEndpointsForService(svc)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 	}
-	for _, ip := range toUnAdvertise {
-		err := nrc.UnadvertiseClusterIp(ip)
-		if err != nil {
-			glog.Errorf("error unadvertising IP: %q, error: %v", ip, err)
+
+	if nrc.advertiseClusterIp {
+		clusterIp := nrc.getClusterIp(svc)
+		if clusterIp != "" {
+			ipList = append(ipList, clusterIp)
 		}
 	}
-	return nil
+	if nrc.advertiseExternalIp {
+		ipList = append(ipList, nrc.getExternalIps(svc)...)
+	}
+	if nrc.advertiseLoadBalancerIp {
+		ipList = append(ipList, nrc.getLoadBalancerIps(svc)...)
+	}
+
+	if !nodeHasEndpoints {
+		return nil, ipList, nil
+	}
+
+	return ipList, nil, nil
+}
+
+func (nrc *NetworkRoutingController) advertiseVIPs(vips []string) {
+	for _, vip := range vips {
+		err := nrc.bgpAdvertiseVIP(vip)
+		if err != nil {
+			glog.Errorf("error advertising IP: %q, error: %v", vip, err)
+		}
+	}
+}
+
+func (nrc *NetworkRoutingController) withdrawVIPs(vips []string) {
+	for _, vip := range vips {
+		err := nrc.bgpWithdrawVIP(vip)
+		if err != nil {
+			glog.Errorf("error withdrawing IP: %q, error: %v", vip, err)
+		}
+	}
 }
 
 // nodeHasEndpointsForService will get the corresponding Endpoints resource for a given Service
@@ -528,6 +564,29 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 	}
 
 	return false, nil
+}
+
+func (nrc *NetworkRoutingController) serviceForEndpoints(ep *v1core.Endpoints) (*v1core.Service, error) {
+	key, err := cache.MetaNamespaceKeyFunc(ep)
+	if err != nil {
+		return nil, err
+	}
+
+	item, exists, err := nrc.svcLister.GetByKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("service resource doesn't exist for endpoints: %q", ep.Name)
+	}
+
+	svc, ok := item.(*v1core.Service)
+	if !ok {
+		return nil, errors.New("type assertion failed for object in service indexer")
+	}
+
+	return svc, nil
 }
 
 // Used for processing Annotations that may contain multiple items
@@ -673,27 +732,27 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerConfigs []*config.Ne
 }
 
 // AdvertiseClusterIp  advertises the service cluster ip the configured peers
-func (nrc *NetworkRoutingController) AdvertiseClusterIp(clusterIp string) error {
+func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
 	attrs := []bgp.PathAttributeInterface{
 		bgp.NewPathAttributeOrigin(0),
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
 
-	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
+	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
 	_, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		clusterIp), false, attrs, time.Now(), false)})
+		vip), false, attrs, time.Now(), false)})
 
 	return err
 }
 
 // UnadvertiseClusterIP  unadvertises the service cluster ip
-func (nrc *NetworkRoutingController) UnadvertiseClusterIp(clusterIp string) error {
-	glog.V(2).Infof("Unadvertising route: '%s/%s via %s' to peers", clusterIp, strconv.Itoa(32), nrc.nodeIP.String())
+func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
+	glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
 	pathList := []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		clusterIp), true, nil, time.Now(), false)}
+		vip), true, nil, time.Now(), false)}
 
 	err := nrc.bgpServer.DeletePath([]byte(nil), 0, "", pathList)
 
@@ -736,7 +795,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	// creates prefix set to represent all the advertisable IP associated with the services
 	advIpPrefixList := make([]config.Prefix, 0)
-	advIps, _, _ := nrc.getIpsToAdvertise(false)
+	advIps, _, _ := nrc.getAllVIPs()
 	for _, ip := range advIps {
 		advIpPrefixList = append(advIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
 	}
@@ -1367,6 +1426,90 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(obj interface{}) {
 	}
 }
 
+func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
+	if !nrc.bgpServerStarted {
+		return
+	}
+
+	svc, ok := obj.(*v1core.Service)
+	if !ok {
+		glog.Errorf("cache indexer returned obj that is not type *v1.Service")
+		return
+	}
+
+	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
+	if err != nil {
+		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
+		return
+	}
+
+	if len(toAdvertise) > 0 {
+		nrc.advertiseVIPs(toAdvertise)
+	}
+
+	if len(toWithdraw) > 0 {
+		nrc.withdrawVIPs(toWithdraw)
+	}
+}
+
+func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
+	if !nrc.bgpServerStarted {
+		return
+	}
+
+	svc, ok := obj.(*v1core.Service)
+	if !ok {
+		glog.Errorf("cache indexer returned obj that is not type *v1.Service")
+		return
+	}
+
+	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
+	if err != nil {
+		glog.Errorf("failed to get clean up routes for deleted service %s", svc.Name)
+		return
+	}
+
+	if len(toAdvertise) > 0 {
+		nrc.withdrawVIPs(toWithdraw)
+	}
+
+	if len(toWithdraw) > 0 {
+		nrc.withdrawVIPs(toWithdraw)
+	}
+}
+
+func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
+	if !nrc.bgpServerStarted {
+		return
+	}
+
+	ep, ok := obj.(*v1core.Endpoints)
+	if !ok {
+		glog.Errorf("cache indexer returned obj that is not type *v1.Endpoints")
+		return
+	}
+
+	svc, err := nrc.serviceForEndpoints(ep)
+	if err != nil {
+		glog.Errorf("failed to convert endpoints resource to service: %s", err)
+		return
+	}
+
+	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
+	if err != nil {
+		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
+		return
+	}
+
+	if len(toAdvertise) > 0 {
+		nrc.advertiseVIPs(toAdvertise)
+	}
+
+	if len(toWithdraw) > 0 {
+		nrc.withdrawVIPs(toWithdraw)
+	}
+}
+
 func (nrc *NetworkRoutingController) startBgpServer() error {
 	var nodeAsnNumber uint32
 	node, err := utils.GetNodeObject(nrc.clientset, nrc.hostnameOverride)
@@ -1583,6 +1726,36 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 	}
 }
 
+func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			nrc.OnServiceUpdate(obj)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			nrc.OnServiceUpdate(newObj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			nrc.OnServiceDelete(obj)
+		},
+	}
+}
+
+func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			nrc.OnEndpointsUpdate(obj)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			nrc.OnEndpointsUpdate(newObj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			// don't do anything if an endpoints resource is deleted since
+			// the service delete event handles route withdrawls
+			return
+		},
+	}
+}
+
 // func (nrc *NetworkRoutingController) getExternalNodeIPs(
 
 // NewNetworkRoutingController returns new NetworkRoutingController object
@@ -1703,7 +1876,10 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 
 	nrc.svcLister = svcInformer.GetIndexer()
+	nrc.ServiceEventHandler = nrc.newServiceEventHandler()
+
 	nrc.epLister = epInformer.GetIndexer()
+	nrc.EndpointsEventHandler = nrc.newEndpointsEventHandler()
 
 	nrc.nodeLister = nodeInformer.GetIndexer()
 	nrc.NodeEventHandler = nrc.newNodeEventHandler()
