@@ -17,6 +17,7 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=false
+DOCKER_BUILD_IMAGE?=golang:1.8.7-alpine
 ifeq ($(GOARCH), arm)
 QEMU_ARCH=arm
 ARCH_TAG_PREFIX=$(GOARCH)
@@ -37,7 +38,7 @@ all: test kube-router container ## Default target. Runs tests, builds binaries a
 kube-router:
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Starting kube-router binary build.
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router golang:alpine \
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c ' \
 	    GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
 		-ldflags "-X github.com/cloudnativelabs/kube-router/app.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/app.buildDate=$(BUILD_DATE)" \
@@ -49,7 +50,7 @@ endif
 
 test: gofmt gomoqs ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router golang:alpine \
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c 'go test github.com/cloudnativelabs/kube-router github.com/cloudnativelabs/kube-router/app/... github.com/cloudnativelabs/kube-router/utils/'
 else
 		go test github.com/cloudnativelabs/kube-router github.com/cloudnativelabs/kube-router/app/... github.com/cloudnativelabs/kube-router/utils/
@@ -188,7 +189,7 @@ else
 endif
 
 gobgp: vendor/github.com/osrg/gobgp/gobgp
-	$(DOCKER) run -v $(PWD):/pwd golang:alpine \
+	$(DOCKER) run -v $(PWD):/pwd $(DOCKER_BUILD_IMAGE) \
 	    sh -c ' \
 	    apk add -U git && \
 	    ln -s /pwd/vendor /go/src && \
