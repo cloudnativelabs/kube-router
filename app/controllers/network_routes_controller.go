@@ -486,7 +486,8 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 
 	nodeHasEndpoints := true
 	if onlyActiveEndpoints {
-		if svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
+		_, isLocal := svc.Annotations[svcLocalAnnotation]
+		if isLocal || svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
 			nodeHasEndpoints, err = nrc.nodeHasEndpointsForService(svc)
 			if err != nil {
 				return nil, nil, err
