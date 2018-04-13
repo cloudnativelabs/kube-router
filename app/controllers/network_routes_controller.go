@@ -1566,7 +1566,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	var localAddressList []string
 
 	if ipv4IsEnabled() {
-		localAddressList = append(localAddressList, "0.0.0.0")
+		localAddressList = append(localAddressList, nrc.nodeIP.String())
 	}
 
 	if ipv6IsEnabled() {
