@@ -49,6 +49,8 @@ const (
 	svcHairpinAnnotation   = "kube-router.io/service.hairpin"
 	svcLocalAnnotation     = "kube-router.io/service.local"
 	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
+
+	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
 
 var (
@@ -352,6 +354,16 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 	defer nsc.mu.Unlock()
 
 	glog.V(1).Info("Received endpoints update from watch API")
+
+	ep, ok := obj.(*api.Endpoints)
+	if !ok {
+		glog.Error("could not convert endpoints update object to *v1.Endpoints")
+		return
+	}
+
+	if isEndpointsForLeaderElection(ep) {
+		return
+	}
 
 	// build new endpoints map to reflect the change
 	newEndpointsMap := nsc.buildEndpointsInfo()
@@ -1615,6 +1627,11 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 	// TODO: cleanup routes for non-active exteranl IP's
 
 	return nil
+}
+
+func isEndpointsForLeaderElection(ep *api.Endpoints) bool {
+	_, isLeaderElection := ep.Annotations[LeaderElectionRecordAnnotationKey]
+	return isLeaderElection
 }
 
 // unique identifier for a load-balanced service (namespace + name + portname)
