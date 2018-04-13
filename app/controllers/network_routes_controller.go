@@ -1490,6 +1490,10 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 		return
 	}
 
+	if isEndpointsForLeaderElection(ep) {
+		return
+	}
+
 	svc, err := nrc.serviceForEndpoints(ep)
 	if err != nil {
 		glog.Errorf("failed to convert endpoints resource to service: %s", err)
