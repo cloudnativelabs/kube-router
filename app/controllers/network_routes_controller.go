@@ -1716,9 +1716,11 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			nodeIP, _ := utils.GetNodeIP(node)
 
 			glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
+			nrc.OnNodeUpdate(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			nrc.OnNodeUpdate(newObj)
+			// we are interested only node add/delete, so skip update
+			return
 
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -1726,7 +1728,7 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			nodeIP, _ := utils.GetNodeIP(node)
 
 			glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
-
+			nrc.OnNodeUpdate(obj)
 		},
 	}
 }
