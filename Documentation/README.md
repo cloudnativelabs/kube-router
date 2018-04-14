@@ -108,6 +108,7 @@ Usage of kube-router:
       --cluster-asn uint                 ASN number under which cluster nodes will run iBGP.
       --cluster-cidr string              CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.
       --config-sync-period duration      The delay between apiserver configuration synchronizations (e.g. '5s', '1m').  Must be greater than 0. (default 1m0s)
+      --enable-gobgp-logging             Set --enable-gobgp-logging=true to print GoBGP logs
       --enable-ibgp                      Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers (default true)
       --enable-overlay                   When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
       --enable-pod-egress                SNAT traffic from Pods to destinations outside the cluster. (default true)

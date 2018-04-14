@@ -17,6 +17,7 @@ type KubeRouterConfig struct {
 	ClusterCIDR             string
 	ConfigSyncPeriod        time.Duration
 	EnableiBGP              bool
+	EnableGoBGPLogging      bool
 	EnableOverlay           bool
 	EnablePodEgress         bool
 	EnablePprof             bool
@@ -126,4 +127,5 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
 	fs.Uint16Var(&s.HealthPort, "health-port", 20244, "Health check port, 0 = Disabled")
+	fs.BoolVar(&s.EnableGoBGPLogging, "enable-gobgp-logging", s.EnableGoBGPLogging, "Set --enable-gobgp-logging=true to print GoBGP logs")
 }
