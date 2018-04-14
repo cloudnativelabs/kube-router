@@ -106,18 +106,12 @@ func SetDefaultNeighborConfigValues(n *Neighbor, asn uint32) error {
 
 func setDefaultNeighborConfigValuesWithViper(v *viper.Viper, n *Neighbor, asn uint32) error {
 	if v == nil {
-		// Determines this function is called against the same Neighbor struct,
-		// and if already called, returns immediately.
-		if n.State.LocalAs != 0 {
-			return nil
-		}
 		v = viper.New()
 	}
 
 	if n.Config.LocalAs == 0 {
 		n.Config.LocalAs = asn
 	}
-	n.State.LocalAs = n.Config.LocalAs
 
 	if n.Config.PeerAs != n.Config.LocalAs {
 		n.Config.PeerType = PEER_TYPE_EXTERNAL
@@ -205,19 +199,17 @@ func setDefaultNeighborConfigValuesWithViper(v *viper.Viper, n *Neighbor, asn ui
 		if err != nil {
 			return err
 		}
-		for i := range n.AfiSafis {
+		for i, af := range n.AfiSafis {
 			vv := viper.New()
 			if len(afs) > i {
 				vv.Set("afi-safi", afs[i])
 			}
-			if _, err := bgp.GetRouteFamily(string(n.AfiSafis[i].Config.AfiSafiName)); err != nil {
-				return err
+			af.State.AfiSafiName = af.Config.AfiSafiName
+			if !vv.IsSet("afi-safi.config") {
+				af.Config.Enabled = true
 			}
-			n.AfiSafis[i].State.AfiSafiName = n.AfiSafis[i].Config.AfiSafiName
-			if !vv.IsSet("afi-safi.config.enabled") {
-				n.AfiSafis[i].Config.Enabled = true
-			}
-			n.AfiSafis[i].MpGracefulRestart.State.Enabled = n.AfiSafis[i].MpGracefulRestart.Config.Enabled
+			af.MpGracefulRestart.State.Enabled = af.MpGracefulRestart.Config.Enabled
+			n.AfiSafis[i] = af
 		}
 	}
 

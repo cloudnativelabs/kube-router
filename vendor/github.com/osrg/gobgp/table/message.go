@@ -278,16 +278,8 @@ func createUpdateMsgFromPath(path *Path, msg *bgp.BGPMessage) *bgp.BGPMessage {
 				u := msg.Body.(*bgp.BGPUpdate)
 				u.NLRI = append(u.NLRI, nlri)
 			} else {
-				attrs := make([]bgp.PathAttributeInterface, 0, 8)
-				for _, p := range path.GetPathAttrs() {
-					switch p.GetType() {
-					case bgp.BGP_ATTR_TYPE_MP_REACH_NLRI:
-					case bgp.BGP_ATTR_TYPE_MP_UNREACH_NLRI:
-					default:
-						attrs = append(attrs, p)
-					}
-				}
-				return bgp.NewBGPUpdateMessage(nil, attrs, []*bgp.IPAddrPrefix{nlri})
+				pathAttrs := path.GetPathAttrs()
+				return bgp.NewBGPUpdateMessage(nil, pathAttrs, []*bgp.IPAddrPrefix{nlri})
 			}
 		}
 	} else {
@@ -323,12 +315,11 @@ func createUpdateMsgFromPath(path *Path, msg *bgp.BGPMessage) *bgp.BGPMessage {
 				}
 			} else {
 				attrs := make([]bgp.PathAttributeInterface, 0, 8)
+
 				for _, p := range path.GetPathAttrs() {
-					switch p.GetType() {
-					case bgp.BGP_ATTR_TYPE_MP_REACH_NLRI:
+					if p.GetType() == bgp.BGP_ATTR_TYPE_MP_REACH_NLRI {
 						attrs = append(attrs, bgp.NewPathAttributeMpReachNLRI(path.GetNexthop().String(), []bgp.AddrPrefixInterface{path.GetNlri()}))
-					case bgp.BGP_ATTR_TYPE_MP_UNREACH_NLRI:
-					default:
+					} else {
 						attrs = append(attrs, p)
 					}
 				}
