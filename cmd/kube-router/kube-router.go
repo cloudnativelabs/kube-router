@@ -8,8 +8,8 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/cloudnativelabs/kube-router/app"
-	"github.com/cloudnativelabs/kube-router/app/options"
+	"github.com/cloudnativelabs/kube-router/pkg/cmd"
+	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/spf13/pflag"
 )
 
@@ -39,7 +39,7 @@ func Main() error {
 	}
 
 	if config.Version {
-		app.PrintVersion(false)
+		cmd.PrintVersion(false)
 		return nil
 	}
 
@@ -48,11 +48,11 @@ func Main() error {
 	}
 
 	if config.CleanupConfig {
-		app.CleanupConfigAndExit()
+		cmd.CleanupConfigAndExit()
 		return nil
 	}
 
-	kubeRouter, err := app.NewKubeRouterDefault(config)
+	kubeRouter, err := cmd.NewKubeRouterDefault(config)
 	if err != nil {
 		return fmt.Errorf("Failed to parse kube-router config: %v", err)
 	}

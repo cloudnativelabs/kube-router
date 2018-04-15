@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/cloudnativelabs/kube-router/utils"
+	"github.com/cloudnativelabs/kube-router/pkg/options"
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/docker/docker/client"
 	"github.com/docker/libnetwork/ipvs"

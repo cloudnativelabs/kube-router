@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/app/options"
-	"github.com/cloudnativelabs/kube-router/utils"
+	"github.com/cloudnativelabs/kube-router/pkg/options"
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
