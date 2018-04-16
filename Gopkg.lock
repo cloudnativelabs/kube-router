@@ -314,6 +314,12 @@
   version = "v0.3.4"
 
 [[projects]]
+  name = "github.com/inconshreveable/mousetrap"
+  packages = ["."]
+  revision = "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
+  version = "v1.0"
+
+[[projects]]
   name = "github.com/influxdata/influxdb"
   packages = [
     "client/v2",
@@ -443,7 +449,10 @@
   name = "github.com/osrg/gobgp"
   packages = [
     "api",
+    "client",
     "config",
+    "gobgp",
+    "gobgp/cmd",
     "packet/bgp",
     "packet/bmp",
     "packet/mrt",
@@ -541,6 +550,12 @@
   packages = ["."]
   revision = "8965335b8c7107321228e3e3702cab9832751bac"
   version = "v1.2.0"
+
+[[projects]]
+  name = "github.com/spf13/cobra"
+  packages = ["."]
+  revision = "a1f051bc3eba734da4772d60e2d677f47cf93ef4"
+  version = "v0.0.2"
 
 [[projects]]
   branch = "master"
@@ -918,6 +933,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "73f86f4fcb90382ee7e158e3df0b1133935046592ca2699d3f17b6c132f4e7b7"
+  inputs-digest = "8a4f3749150643c2859542029817de5a535282c2c2946fe3fe38cc0444b2b64f"
   solver-name = "gps-cdcl"
   solver-version = 1
