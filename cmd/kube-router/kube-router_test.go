@@ -32,9 +32,9 @@ func TestMainHelp(t *testing.T) {
 	stderrW.Close()
 	wg.Wait()
 
-	docF, err := os.Open("Documentation/README.md")
+	docF, err := os.Open("../../docs/README.md")
 	if err != nil {
-		t.Fatalf("could not open Documentation/README.md: %s\n", err)
+		t.Fatalf("could not open docs/README.md: %s\n", err)
 	}
 	docBuf := bytes.NewBuffer(nil)
 	docBuf.ReadFrom(docF)
@@ -44,6 +44,6 @@ func TestMainHelp(t *testing.T) {
 	exp = append(exp, []byte("```\n")...)
 
 	if !bytes.Contains(docBuf.Bytes(), exp) {
-		t.Errorf("Documentation/README.md 'command line options' section does not match `kube-router --help`.\nExpected:\n%s", exp)
+		t.Errorf("docs/README.md 'command line options' section does not match `kube-router --help`.\nExpected:\n%s", exp)
 	}
 }

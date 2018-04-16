@@ -20,7 +20,7 @@ single DaemonSet/Binary. It doesn't get any easier.
 ### IPVS/LVS based service proxy | `--run-service-proxy`
 
 kube-router uses the Linux kernel's LVS/IPVS features to implement its K8s Services
-Proxy. Kube-router fully leverages power off LVS/IPVS to provide rich set of [scheduling options](/Documentation#load-balancing-scheduling-algorithms) and unique features like DSR (Direct Server Return), L3 load balancing with ECMP for deployments where high throughput, minimal latency and high-availability are crucial.
+Proxy. Kube-router fully leverages power off LVS/IPVS to provide rich set of [scheduling options](/docs#load-balancing-scheduling-algorithms) and unique features like DSR (Direct Server Return), L3 load balancing with ECMP for deployments where high throughput, minimal latency and high-availability are crucial.
 
 Read more about the advantages of IPVS for container load balancing:
 - [Kubernetes network services proxy with IPVS/LVS](https://cloudnativelabs.github.io/post/2017-05-10-kube-network-service-proxy/)
@@ -68,18 +68,18 @@ configured BGP peers. Kube-routes also support MD5 password based authentication
 uses strict export policies so you can be assured routes are advertised to underlay
 only as you intended.
 
-For more details please refer to the [BGP documentation](Documentation/bgp.md).
+For more details please refer to the [BGP documentation](docs/bgp.md).
 
 ### Standard Linux Networking
 
 A key design tenet of Kube-router is to use standard Linux networking stack and toolset. There is no overlays or 
 SDN pixie dust, but just plain good old networking. You can use standard Linux networking tools like iptables, ipvsadm, ipset,
-iproute, traceroute, tcpdump etc. to troubleshoot or observe data path. When kube-router is ran as a daemonset, image also ships with these [tools](./Documentation/pod-toolbox.md#pod-toolbox) automatically configured for your cluster.
+iproute, traceroute, tcpdump etc. to troubleshoot or observe data path. When kube-router is ran as a daemonset, image also ships with these [tools](./docs/pod-toolbox.md#pod-toolbox) automatically configured for your cluster.
 
 ### Small Footprint
 
 Although it does the work of several of its peers in one binary, kube-router
-does it all with a relatively [tiny codebase](https://github.com/cloudnativelabs/kube-router/tree/master/app/controllers), partly because IPVS is already
+does it all with a relatively [tiny codebase](https://github.com/cloudnativelabs/kube-router/tree/master/pkg/controllers), partly because IPVS is already
 there on your Kuberneres nodes waiting to help you do amazing things.
 kube-router brings that and GoBGP's modern BGP interface to you in an elegant
 package designed from the ground up for Kubernetes.
@@ -94,11 +94,11 @@ that has been thouroughly tested and optimized.
 
 ## Getting Started
 
-- [How it Works](./Documentation/how-it-works.md)
-- [Architecture](./Documentation/README.md#architecture)
-- [See Kube-router in action](./Documentation#see-kube-router-in-action)
-- [User Guide](./Documentation/README.md#user-guide)
-- [Developer Guide](./Documentation/developing.md)
+- [How it Works](./docs/how-it-works.md)
+- [Architecture](./docs/README.md#architecture)
+- [See Kube-router in action](./docs/README.md#see-kube-router-in-action)
+- [User Guide](./docs/README.md#user-guide)
+- [Developer Guide](./docs/developing.md)
 
 ## Project status
 

@@ -41,11 +41,11 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c ' \
 	    GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
-		-ldflags "-X github.com/cloudnativelabs/kube-router/app.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/app.buildDate=$(BUILD_DATE)" \
-		-o kube-router kube-router.go'
+		-ldflags "-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)" \
+		-o kube-router cmd/kube-router/kube-router.go'
 	@echo Finished kube-router binary build.
 else
-	GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/app.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/app.buildDate=$(BUILD_DATE)' -o kube-router kube-router.go
+	GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)' -o kube-router cmd/kube-router/kube-router.go
 endif
 
 test: gofmt gomoqs ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
@@ -53,7 +53,7 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c 'go test github.com/cloudnativelabs/kube-router github.com/cloudnativelabs/kube-router/app/... github.com/cloudnativelabs/kube-router/utils/'
 else
-		go test github.com/cloudnativelabs/kube-router github.com/cloudnativelabs/kube-router/app/... github.com/cloudnativelabs/kube-router/utils/
+		go test github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...
 endif
 
 vagrant-up: export docker=$(DOCKER)
@@ -144,7 +144,7 @@ gofmt-fix: ## Fixes files that need to be gofmt'd.
 
 # List of all file_moq.go files which would need to be regenerated
 # from file.go if changed
-gomoqs: ./app/controllers/network_services_controller_moq.go
+gomoqs: ./pkg/controllers/network_services_controller_moq.go
 
 # file_moq.go file is generated from file.go "//go:generate moq ..." in-file
 # annotation, as it needs to know which interfaces to create mock stubs for

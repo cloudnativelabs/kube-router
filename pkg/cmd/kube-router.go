@@ -1,4 +1,4 @@
-package app
+package cmd
 
 import (
 	"errors"
@@ -9,8 +9,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/cloudnativelabs/kube-router/app/controllers"
-	"github.com/cloudnativelabs/kube-router/app/options"
+	"github.com/cloudnativelabs/kube-router/pkg/controllers"
+	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/golang/glog"
 
 	"k8s.io/client-go/informers"

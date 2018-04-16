@@ -79,16 +79,16 @@ However BGP can be leveraged to other use cases like advertising the cluster ip,
 The best way to get started is to deploy Kubernetes with Kube-router is with a cluster installer.
 
 #### kops
-Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/kops.md) to deploy Kubernetes cluster with Kube-router using [Kops](https://github.com/kubernetes/kops)
+Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/kops.md) to deploy Kubernetes cluster with Kube-router using [Kops](https://github.com/kubernetes/kops)
 
 #### bootkube
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/master/contrib/bootkube) to deploy Kubernetes cluster with Kube-router using [bootkube](https://github.com/kubernetes-incubator/bootkube)
 
 #### kubeadm
-Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/kubeadm.md) to deploy Kubernetes cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/)
+Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/kubeadm.md) to deploy Kubernetes cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/)
 
 #### generic
-Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/Documentation/generic.md) to deploy kube-router on manually installed clusters
+Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/generic.md) to deploy kube-router on manually installed clusters
 
 ### deployment
 
