@@ -79,7 +79,7 @@ iproute, traceroute, tcpdump etc. to troubleshoot or observe data path. When kub
 ### Small Footprint
 
 Although it does the work of several of its peers in one binary, kube-router
-does it all with a relatively [tiny codebase](https://github.com/cloudnativelabs/kube-router/tree/master/app/controllers), partly because IPVS is already
+does it all with a relatively [tiny codebase](https://github.com/cloudnativelabs/kube-router/tree/master/pkg/controllers), partly because IPVS is already
 there on your Kuberneres nodes waiting to help you do amazing things.
 kube-router brings that and GoBGP's modern BGP interface to you in an elegant
 package designed from the ground up for Kubernetes.
