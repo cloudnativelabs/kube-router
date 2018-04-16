@@ -188,13 +188,9 @@ else
 	@echo
 endif
 
-gobgp: vendor/github.com/osrg/gobgp/gobgp
-	$(DOCKER) run -v $(PWD):/pwd $(DOCKER_BUILD_IMAGE) \
-	    sh -c ' \
-	    apk add -U git && \
-	    ln -s /pwd/vendor /go/src && \
-	    CGO_ENABLED=0 GOARCH=$(GOARCH) go get github.com/osrg/gobgp/gobgp && \
-	    cp `find /go/bin -type f -name gobgp` /pwd'
+gobgp:
+	cd vendor/github.com/osrg/gobgp/gobgp && \
+	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go build -o $(MAKEFILE_DIR)/gobgp
 
 multiarch-check:
 	@[ -z "$(QEMU_ARCH)" ] && exit 0; \
