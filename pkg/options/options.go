@@ -48,10 +48,10 @@ type KubeRouterConfig struct {
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
-	return &KubeRouterConfig{ConfigSyncPeriod: 1 * time.Minute,
-		IpvsSyncPeriod:     1 * time.Minute,
-		IPTablesSyncPeriod: 1 * time.Minute,
-		RoutesSyncPeriod:   1 * time.Minute,
+	return &KubeRouterConfig{ConfigSyncPeriod: 0 * time.Minute,
+		IpvsSyncPeriod:     5 * time.Minute,
+		IPTablesSyncPeriod: 5 * time.Minute,
+		RoutesSyncPeriod:   5 * time.Minute,
 		EnableOverlay:      true,
 	}
 }

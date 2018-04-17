@@ -353,8 +353,6 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
-	glog.V(1).Info("Received endpoints update from watch API")
-
 	ep, ok := obj.(*api.Endpoints)
 	if !ok {
 		glog.Error("could not convert endpoints update object to *v1.Endpoints")
@@ -365,14 +363,19 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 		return
 	}
 
-	// build new endpoints map to reflect the change
+	glog.V(1).Infof("Received update to endpoints Name: %v in Namespace %v from watch API", ep.Name, ep.Namespace)
+
+	// build new service and endpoints map to reflect the change
+	newServiceMap := nsc.buildServicesInfo()
 	newEndpointsMap := nsc.buildEndpointsInfo()
 
 	if len(newEndpointsMap) != len(nsc.endpointsMap) || !reflect.DeepEqual(newEndpointsMap, nsc.endpointsMap) {
 		nsc.endpointsMap = newEndpointsMap
+		nsc.serviceMap = newServiceMap
+		glog.V(1).Infof("Syncing IPVS services sync on endpoint Name: %v in Namespace %v update.", ep.Name, ep.Namespace)
 		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 	} else {
-		glog.V(1).Info("Skipping ipvs server sync on endpoints because nothing changed")
+		glog.V(1).Infof("Skipping IPVS services sync on endpoint Name: %v in Namespace %v update as nothing changed", ep.Name, ep.Namespace)
 	}
 }
 
@@ -381,16 +384,25 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
-	glog.V(1).Info("Received service update from watch API")
+	svc, ok := obj.(*api.Service)
+	if !ok {
+		glog.Error("could not convert service update object to *v1.Service")
+		return
+	}
 
-	// build new services map to reflect the change
+	glog.V(1).Infof("Received update to service Name: %v in Namespace %v from watch API", svc.Name, svc.Namespace)
+
+	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
+	newEndpointsMap := nsc.buildEndpointsInfo()
 
 	if len(newServiceMap) != len(nsc.serviceMap) || !reflect.DeepEqual(newServiceMap, nsc.serviceMap) {
+		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
+		glog.V(1).Infof("Syncing IPVS services sync on update to service Name: %v in Namespace %v update.", svc.Name, svc.Namespace)
 		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 	} else {
-		glog.V(1).Info("Skipping ipvs server sync on service update because nothing changed")
+		glog.V(1).Infof("Skipping syncing IPVS services on service Name: %v in Namespace %v update as nothing changed", svc.Name, svc.Namespace)
 	}
 }
 
@@ -532,7 +544,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		if !svc.skipLbIps {
 			extIPSet = extIPSet.Union(sets.NewString(svc.loadBalancerIPs...))
 		}
-		glog.V(2).Infof("Service \"%s\" using extIPSet: %v", svc.name, extIPSet.List())
 
 		for _, externalIP := range extIPSet.List() {
 			var externalIpServiceId string

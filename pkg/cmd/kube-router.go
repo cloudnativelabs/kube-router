@@ -115,7 +115,7 @@ func (kr *KubeRouter) Run() error {
 	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
 	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
 
-	go informerFactory.Start(stopCh)
+	informerFactory.Start(stopCh)
 	informerFactory.WaitForCacheSync(stopCh)
 
 	if kr.Config.RunFirewall {

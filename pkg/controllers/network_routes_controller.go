@@ -261,10 +261,11 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat,
 			glog.Errorf("failed to get routes to advertise/withdraw %s", err)
 		}
 
+		glog.V(1).Infof("Performing periodic sync of service VIP routes")
 		nrc.advertiseVIPs(toAdvertise)
 		nrc.withdrawVIPs(toWithdraw)
 
-		glog.V(1).Info("Performing periodic sync of the routes")
+		glog.V(1).Info("Performing periodic sync of pod CIDR routes")
 		err = nrc.advertisePodRoute()
 		if err != nil {
 			glog.Errorf("Error advertising route: %s", err.Error())
@@ -1438,6 +1439,7 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
 		return
 	}
 
+	glog.V(1).Infof("Received update to service Name: %v in Namespace %v from watch API", svc.Name, svc.Namespace)
 	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
 	if err != nil {
 		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
@@ -1464,6 +1466,7 @@ func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
 		return
 	}
 
+	glog.V(1).Infof("Received event to delete service Name: %v in Namespace %v from watch API", svc.Name, svc.Namespace)
 	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
 	if err != nil {
 		glog.Errorf("failed to get clean up routes for deleted service %s", svc.Name)

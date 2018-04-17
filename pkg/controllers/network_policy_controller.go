@@ -160,6 +160,8 @@ func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 
 // OnNetworkPolicyUpdate handles updates to network policy from the kubernetes api server
 func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
+	netpol := obj.(*networking.NetworkPolicy)
+	glog.V(2).Infof("Received network policy update namespace:%s netpol name:%s", netpol.Namespace, netpol.Name)
 	err := npc.Sync()
 	if err != nil {
 		glog.Errorf("Error syncing on network policy update: %s", err)
@@ -168,12 +170,12 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
 
 // OnNamespaceUpdate handles updates to namespace from kubernetes api server
 func (npc *NetworkPolicyController) OnNamespaceUpdate(obj interface{}) {
+	namespace := obj.(*api.Namespace)
+	glog.V(2).Infof("Received namespece: %v update", namespace.Name)
 	// namespace (and annotations on it) has no significance in GA ver of network policy
 	if npc.v1NetworkPolicy {
 		return
 	}
-
-	namespace := obj.(*api.Namespace)
 	glog.V(2).Infof("Received update for namespace: %s", namespace.Name)
 
 	err := npc.Sync()
