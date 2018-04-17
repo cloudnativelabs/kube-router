@@ -15,7 +15,6 @@ type KubeRouterConfig struct {
 	CleanupConfig           bool
 	ClusterAsn              uint
 	ClusterCIDR             string
-	ConfigSyncPeriod        time.Duration
 	EnableiBGP              bool
 	EnableOverlay           bool
 	EnablePodEgress         bool
@@ -48,7 +47,7 @@ type KubeRouterConfig struct {
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
-	return &KubeRouterConfig{ConfigSyncPeriod: 0 * time.Minute,
+	return &KubeRouterConfig{
 		IpvsSyncPeriod:     5 * time.Minute,
 		IPTablesSyncPeriod: 5 * time.Minute,
 		RoutesSyncPeriod:   5 * time.Minute,
@@ -79,8 +78,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.")
 	fs.BoolVar(&s.EnablePodEgress, "enable-pod-egress", true,
 		"SNAT traffic from Pods to destinations outside the cluster.")
-	fs.DurationVar(&s.ConfigSyncPeriod, "config-sync-period", s.ConfigSyncPeriod,
-		"The delay between apiserver configuration synchronizations (e.g. '5s', '1m').  Must be greater than 0.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
 		"The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod,

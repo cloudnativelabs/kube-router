@@ -106,7 +106,7 @@ func (kr *KubeRouter) Run() error {
 		kr.Config.MetricsEnabled = false
 	}
 
-	informerFactory := informers.NewSharedInformerFactory(kr.Client, kr.Config.ConfigSyncPeriod)
+	informerFactory := informers.NewSharedInformerFactory(kr.Client, 0)
 
 	svcInformer := informerFactory.Core().V1().Services().Informer()
 	epInformer := informerFactory.Core().V1().Endpoints().Informer()

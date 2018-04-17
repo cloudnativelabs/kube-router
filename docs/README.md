@@ -107,7 +107,6 @@ Usage of kube-router:
       --cleanup-config                   Cleanup iptables rules, ipvs, ipset configuration and exit.
       --cluster-asn uint                 ASN number under which cluster nodes will run iBGP.
       --cluster-cidr string              CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.
-      --config-sync-period duration      The delay between apiserver configuration synchronizations (e.g. '5s', '1m').  Must be greater than 0. (default 1m0s)
       --enable-ibgp                      Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers (default true)
       --enable-overlay                   When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
       --enable-pod-egress                SNAT traffic from Pods to destinations outside the cluster. (default true)
@@ -116,8 +115,8 @@ Usage of kube-router:
       --health-port uint16               Health check port, 0 = Disabled (default 20244)
   -h, --help                             Print usage information.
       --hostname-override string         Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
-      --iptables-sync-period duration    The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
-      --ipvs-sync-period duration        The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
+      --iptables-sync-period duration    The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
+      --ipvs-sync-period duration        The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --kubeconfig string                Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --masquerade-all                   SNAT all traffic to cluster IP/node port.
       --master string                    The address of the Kubernetes API server (overrides any value in kubeconfig).
@@ -129,7 +128,7 @@ Usage of kube-router:
       --peer-router-ips ipSlice          The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's. (default [])
       --peer-router-multihop-ttl uint8   Enable eBGP multihop supports -- sets multihop-ttl. (Relevant only if ttl >= 2)
       --peer-router-passwords strings    Password for authenticating against the BGP peer defined with "--peer-router-ips".
-      --routes-sync-period duration      The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
+      --routes-sync-period duration      The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --run-firewall                     Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-router                       Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
       --run-service-proxy                Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
