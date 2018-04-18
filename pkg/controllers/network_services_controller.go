@@ -363,7 +363,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 		return
 	}
 
-	glog.V(1).Infof("Received update to endpoints Name: %v in Namespace %v from watch API", ep.Name, ep.Namespace)
+	glog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
 
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
@@ -372,10 +372,10 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 	if len(newEndpointsMap) != len(nsc.endpointsMap) || !reflect.DeepEqual(newEndpointsMap, nsc.endpointsMap) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
-		glog.V(1).Infof("Syncing IPVS services sync on endpoint Name: %v in Namespace %v update.", ep.Name, ep.Namespace)
+		glog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
 		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 	} else {
-		glog.V(1).Infof("Skipping IPVS services sync on endpoint Name: %v in Namespace %v update as nothing changed", ep.Name, ep.Namespace)
+		glog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", ep.Namespace, ep.Name)
 	}
 }
 
@@ -390,7 +390,7 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 		return
 	}
 
-	glog.V(1).Infof("Received update to service Name: %v in Namespace %v from watch API", svc.Name, svc.Namespace)
+	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
 
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
@@ -399,10 +399,10 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 	if len(newServiceMap) != len(nsc.serviceMap) || !reflect.DeepEqual(newServiceMap, nsc.serviceMap) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
-		glog.V(1).Infof("Syncing IPVS services sync on update to service Name: %v in Namespace %v update.", svc.Name, svc.Namespace)
+		glog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
 		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 	} else {
-		glog.V(1).Infof("Skipping syncing IPVS services on service Name: %v in Namespace %v update as nothing changed", svc.Name, svc.Namespace)
+		glog.V(1).Infof("Skipping syncing IPVS services for update to service: %s/%s as nothing changed", svc.Namespace, svc.Name)
 	}
 }
 

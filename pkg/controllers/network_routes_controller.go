@@ -1439,7 +1439,7 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
 		return
 	}
 
-	glog.V(1).Infof("Received update to service Name: %v in Namespace %v from watch API", svc.Name, svc.Namespace)
+	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
 	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
 	if err != nil {
 		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
@@ -1466,10 +1466,10 @@ func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
 		return
 	}
 
-	glog.V(1).Infof("Received event to delete service Name: %v in Namespace %v from watch API", svc.Name, svc.Namespace)
+	glog.V(1).Infof("Received event to delete service: %s/%s from watch API", svc.Namespace, svc.Name)
 	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
 	if err != nil {
-		glog.Errorf("failed to get clean up routes for deleted service %s", svc.Name)
+		glog.Errorf("failed to get clean up routes for deleted service: %s/%s", svc.Namespace, svc.Name)
 		return
 	}
 
