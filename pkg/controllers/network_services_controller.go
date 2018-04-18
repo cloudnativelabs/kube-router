@@ -169,6 +169,7 @@ type NetworkServicesController struct {
 	nodeportBindOnAllIp bool
 	MetricsEnabled      bool
 	ln                  LinuxNetworking
+	readyForUpdates     bool
 
 	svcLister cache.Indexer
 	epLister  cache.Indexer
@@ -246,7 +247,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *ControllerHeartbeat
 		} else {
 			sendHeartBeat(healthChan, "NSC")
 		}
-
+		nsc.readyForUpdates = true
 		select {
 		case <-stopCh:
 			glog.Info("Shutting down network services controller")
@@ -350,9 +351,6 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
 func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
-	nsc.mu.Lock()
-	defer nsc.mu.Unlock()
-
 	ep, ok := obj.(*api.Endpoints)
 	if !ok {
 		glog.Error("could not convert endpoints update object to *v1.Endpoints")
@@ -364,6 +362,12 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 	}
 
 	glog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
+	if !nsc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
+		return
+	}
+	nsc.mu.Lock()
+	defer nsc.mu.Unlock()
 
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
@@ -381,9 +385,6 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 
 // OnServiceUpdate handle change in service update from the API server
 func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
-	nsc.mu.Lock()
-	defer nsc.mu.Unlock()
-
 	svc, ok := obj.(*api.Service)
 	if !ok {
 		glog.Error("could not convert service update object to *v1.Service")
@@ -391,6 +392,12 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 	}
 
 	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
+	if !nsc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
+		return
+	}
+	nsc.mu.Lock()
+	defer nsc.mu.Unlock()
 
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
