@@ -1429,10 +1429,6 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(obj interface{}) {
 }
 
 func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
-	if !nrc.bgpServerStarted {
-		return
-	}
-
 	svc, ok := obj.(*v1core.Service)
 	if !ok {
 		glog.Errorf("cache indexer returned obj that is not type *v1.Service")
@@ -1440,6 +1436,11 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
 	}
 
 	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
+	if !nrc.bgpServerStarted {
+		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
+		return
+	}
+
 	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
 	if err != nil {
 		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
@@ -1483,10 +1484,6 @@ func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
 }
 
 func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
-	if !nrc.bgpServerStarted {
-		return
-	}
-
 	ep, ok := obj.(*v1core.Endpoints)
 	if !ok {
 		glog.Errorf("cache indexer returned obj that is not type *v1.Endpoints")
@@ -1494,6 +1491,12 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 	}
 
 	if isEndpointsForLeaderElection(ep) {
+		return
+	}
+
+	glog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
+	if !nrc.bgpServerStarted {
+		glog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
 		return
 	}
 

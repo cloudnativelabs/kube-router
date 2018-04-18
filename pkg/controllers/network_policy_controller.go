@@ -49,6 +49,7 @@ type NetworkPolicyController struct {
 	syncPeriod      time.Duration
 	MetricsEnabled  bool
 	v1NetworkPolicy bool
+	readyForUpdates bool
 
 	// list of all active network policies expressed as networkPolicyInfo
 	networkPoliciesInfo *[]networkPolicyInfo
@@ -137,7 +138,7 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *ControllerHeartbeat, 
 		} else {
 			sendHeartBeat(healthChan, "NPC")
 		}
-
+		npc.readyForUpdates = true
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down network policies controller")
@@ -152,6 +153,11 @@ func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 	pod := obj.(*api.Pod)
 	glog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
 
+	if !npc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to pod: %s/%s, controller still performing bootup full-sync", pod.Namespace, pod.Name)
+		return
+	}
+
 	err := npc.Sync()
 	if err != nil {
 		glog.Errorf("Error syncing network policy for the update to pod: %s/%s Error: %s", pod.Namespace, pod.Name, err)
@@ -162,6 +168,12 @@ func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
 	netpol := obj.(*networking.NetworkPolicy)
 	glog.V(2).Infof("Received update for network policy: %s/%s", netpol.Namespace, netpol.Name)
+
+	if !npc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to network policy: %s/%s, controller still performing bootup full-sync", netpol.Namespace, netpol.Name)
+		return
+	}
+
 	err := npc.Sync()
 	if err != nil {
 		glog.Errorf("Error syncing network policy for the update to network policy: %s/%s Error: %s", netpol.Namespace, netpol.Name, err)
@@ -196,7 +208,7 @@ func (npc *NetworkPolicyController) Sync() error {
 		if npc.MetricsEnabled {
 			controllerIptablesSyncTime.WithLabelValues().Set(float64(endTime))
 		}
-		glog.V(2).Infof("sync iptables took %v", endTime)
+		glog.V(1).Infof("sync iptables took %v", endTime)
 	}()
 
 	glog.V(1).Info("Starting periodic sync of iptables")
@@ -1414,8 +1426,12 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			npc.OnPodUpdate(newObj)
-
+			newPoObj := newObj.(*api.Pod)
+			oldPoObj := oldObj.(*api.Pod)
+			if newPoObj.Status.Phase != oldPoObj.Status.Phase || newPoObj.Status.PodIP != oldPoObj.Status.PodIP {
+				// for the network policies, we are only interested in pod status phase change or IP change
+				npc.OnPodUpdate(newObj)
+			}
 		},
 		DeleteFunc: func(obj interface{}) {
 			npc.OnPodUpdate(obj)
