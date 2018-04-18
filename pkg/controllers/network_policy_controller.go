@@ -150,30 +150,31 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *ControllerHeartbeat, 
 // OnPodUpdate handles updates to pods from the Kubernetes api server
 func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 	pod := obj.(*api.Pod)
-	glog.V(2).Infof("Received pod update namespace:%s pod name:%s", pod.Namespace, pod.Name)
+	glog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
 
 	err := npc.Sync()
 	if err != nil {
-		glog.Errorf("Error syncing on pod update: %s", err)
+		glog.Errorf("Error syncing network policy for the update to pod: %s/%s Error: %s", pod.Namespace, pod.Name, err)
 	}
 }
 
 // OnNetworkPolicyUpdate handles updates to network policy from the kubernetes api server
 func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
+	netpol := obj.(*networking.NetworkPolicy)
+	glog.V(2).Infof("Received update for network policy: %s/%s", netpol.Namespace, netpol.Name)
 	err := npc.Sync()
 	if err != nil {
-		glog.Errorf("Error syncing on network policy update: %s", err)
+		glog.Errorf("Error syncing network policy for the update to network policy: %s/%s Error: %s", netpol.Namespace, netpol.Name, err)
 	}
 }
 
 // OnNamespaceUpdate handles updates to namespace from kubernetes api server
 func (npc *NetworkPolicyController) OnNamespaceUpdate(obj interface{}) {
+	namespace := obj.(*api.Namespace)
 	// namespace (and annotations on it) has no significance in GA ver of network policy
 	if npc.v1NetworkPolicy {
 		return
 	}
-
-	namespace := obj.(*api.Namespace)
 	glog.V(2).Infof("Received update for namespace: %s", namespace.Name)
 
 	err := npc.Sync()

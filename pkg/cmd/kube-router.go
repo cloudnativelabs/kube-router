@@ -106,7 +106,7 @@ func (kr *KubeRouter) Run() error {
 		kr.Config.MetricsEnabled = false
 	}
 
-	informerFactory := informers.NewSharedInformerFactory(kr.Client, kr.Config.ConfigSyncPeriod)
+	informerFactory := informers.NewSharedInformerFactory(kr.Client, 0)
 
 	svcInformer := informerFactory.Core().V1().Services().Informer()
 	epInformer := informerFactory.Core().V1().Endpoints().Informer()
@@ -115,7 +115,7 @@ func (kr *KubeRouter) Run() error {
 	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
 	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
 
-	go informerFactory.Start(stopCh)
+	informerFactory.Start(stopCh)
 	informerFactory.WaitForCacheSync(stopCh)
 
 	if kr.Config.RunFirewall {
