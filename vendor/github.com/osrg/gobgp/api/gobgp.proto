@@ -38,6 +38,7 @@ service GobgpApi {
   rpc EnableNeighbor(EnableNeighborRequest) returns (EnableNeighborResponse) {}
   rpc DisableNeighbor(DisableNeighborRequest) returns (DisableNeighborResponse) {}
   rpc GetRib(GetRibRequest) returns (GetRibResponse) {}
+  rpc GetPath(GetPathRequest) returns (stream Path) {}
   rpc ValidateRib(ValidateRibRequest) returns (ValidateRibResponse) {}
   rpc AddPath(AddPathRequest) returns (AddPathResponse) {}
   rpc DeletePath(DeletePathRequest) returns (DeletePathResponse) {}
@@ -79,6 +80,32 @@ service GobgpApi {
   rpc GetRibInfo(GetRibInfoRequest) returns (GetRibInfoResponse) {}
 }
 
+// Constants for address families
+enum Family {
+  _ = 0;
+  IPv4 = 65537;
+  IPv6 = 131073;
+  IPv4_MC = 65538;
+  IPv6_MC = 131074;
+  IPv4_MPLS = 65540;
+  IPv6_MPLS = 131076;
+  IPv4_VPN = 65664;
+  IPv6_VPN = 131200;
+  IPv4_VPN_MC = 65665;
+  IPv6_VPN_MC = 131201;
+  VPLS = 1638465;
+  EVPN = 1638470;
+  RTC = 65668;
+  IPv4_ENCAP = 65543;
+  IPv6_ENCAP = 131079;
+  FLOW_SPEC_IPv4 = 65669;
+  FLOW_SPEC_IPv6 = 131205;
+  FLOW_SPEC_IPv4_VPN = 65670;
+  FLOW_SPEC_IPv6_VPN = 131206;
+  FLOW_SPEC_L2_VPN = 1638534;
+  OPAQUE = 1074594033;
+}
+
 message GetNeighborRequest {
   bool enableAdvertised = 1;
   string address        = 2;
@@ -92,6 +119,7 @@ message Arguments {
   Resource resource = 1;
   uint32 family = 2;
   string name = 3;
+  bool current = 4;
 }
 
 message AddPathRequest {
@@ -204,6 +232,8 @@ message AddBmpRequest {
     PRE = 0;
     POST = 1;
     BOTH = 2;
+    LOCAL = 3;
+    ALL = 4;
   }
   MonitoringPolicy type = 3;
 }
@@ -564,6 +594,26 @@ message GetRibResponse {
   Table table = 1;
 }
 
+// API representation of table.LookupOption
+enum TableLookupOption {
+  LOOKUP_EXACT = 0;
+  LOOKUP_LONGER = 1;
+  LOOKUP_SHORTER = 2;
+}
+
+// API representation of table.LookupPrefix
+message TableLookupPrefix {
+  string prefix = 1;
+  TableLookupOption lookup_option = 2;
+}
+
+message GetPathRequest {
+  Resource type = 1;
+  string name = 2;
+  uint32 family = 3;
+  repeated TableLookupPrefix prefixes = 4;
+}
+
 message ValidateRibRequest {
   Resource type = 1;
   uint32 family = 2;
@@ -574,6 +624,9 @@ message ValidateRibResponse {
 }
 
 message Peer {
+  // Note: Regarding to the consistency with OpenConfig model, a list of
+  // address family should be removed from here, and should be configured with
+  // the list of AfiSafi instead.
   repeated uint32 families = 1;
   ApplyPolicy apply_policy = 2;
   PeerConf conf = 3;
@@ -585,6 +638,7 @@ message Peer {
   RouteServer route_server = 9;
   GracefulRestart graceful_restart = 10;
   repeated AfiSafi afi_safis = 11;
+  AddPaths add_paths = 12;
 }
 
 message ApplyPolicy {
@@ -618,7 +672,7 @@ message PeerConf {
   repeated bytes remote_cap = 11;
   repeated bytes local_cap = 12;
   string id = 13;
-  // Note: Regarding to the consistency with OpenConfig mode, list of
+  // Note: Regarding to the consistency with OpenConfig model, list of
   // PrefixLimit should be removed from here, and list of PrefixLimit in
   // AfiSafi should be used instead.
   repeated PrefixLimit prefix_limits = 14;
@@ -879,6 +933,22 @@ message AfiSafi {
   PrefixLimit prefix_limits = 6;
   RouteTargetMembership route_target_membership = 7;
   LongLivedGracefulRestart long_lived_graceful_restart = 8;
+  AddPaths add_paths = 9;
+}
+
+message AddPathsConfig {
+  bool receive = 1;
+  uint32 send_max = 2;
+}
+
+message AddPathsState {
+  bool receive = 1;
+  uint32 send_max = 2;
+}
+
+message AddPaths {
+  AddPathsConfig config = 1;
+  AddPathsState state = 2;
 }
 
 message Prefix {

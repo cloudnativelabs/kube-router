@@ -3769,6 +3769,10 @@ type AfiSafiState struct {
 	// original -> bgp-op:total-prefixes
 	// .
 	TotalPrefixes uint32 `mapstructure:"total-prefixes" json:"total-prefixes,omitempty"`
+	// original -> gobgp:family
+	// gobgp:family's original type is route-family.
+	// Address family value of AFI-SAFI pair translated from afi-safi-name.
+	Family bgp.RouteFamily `mapstructure:"family" json:"family,omitempty"`
 }
 
 // struct for container bgp-mp:config.
@@ -3929,6 +3933,9 @@ type AfiSafi struct {
 	RouteTargetMembership RouteTargetMembership `mapstructure:"route-target-membership" json:"route-target-membership,omitempty"`
 	// original -> gobgp:long-lived-graceful-restart
 	LongLivedGracefulRestart LongLivedGracefulRestart `mapstructure:"long-lived-graceful-restart" json:"long-lived-graceful-restart,omitempty"`
+	// original -> gobgp:add-paths
+	// add-paths configuration options related to a particular AFI-SAFI.
+	AddPaths AddPaths `mapstructure:"add-paths" json:"add-paths,omitempty"`
 }
 
 func (lhs *AfiSafi) Equal(rhs *AfiSafi) bool {
@@ -3987,6 +3994,9 @@ func (lhs *AfiSafi) Equal(rhs *AfiSafi) bool {
 		return false
 	}
 	if !lhs.LongLivedGracefulRestart.Equal(&(rhs.LongLivedGracefulRestart)) {
+		return false
+	}
+	if !lhs.AddPaths.Equal(&(rhs.AddPaths)) {
 		return false
 	}
 	return true
@@ -4507,6 +4517,10 @@ type RouteSelectionOptionsState struct {
 	// BGP best-path. The default is to select the route for
 	// which the metric to the next-hop is lowest.
 	IgnoreNextHopIgpMetric bool `mapstructure:"ignore-next-hop-igp-metric" json:"ignore-next-hop-igp-metric,omitempty"`
+	// original -> gobgp:disable-best-path-selection
+	// gobgp:disable-best-path-selection's original type is boolean.
+	// Disables best path selection process.
+	DisableBestPathSelection bool `mapstructure:"disable-best-path-selection" json:"disable-best-path-selection,omitempty"`
 }
 
 // struct for container bgp-mp:config.
@@ -4548,6 +4562,10 @@ type RouteSelectionOptionsConfig struct {
 	// BGP best-path. The default is to select the route for
 	// which the metric to the next-hop is lowest.
 	IgnoreNextHopIgpMetric bool `mapstructure:"ignore-next-hop-igp-metric" json:"ignore-next-hop-igp-metric,omitempty"`
+	// original -> gobgp:disable-best-path-selection
+	// gobgp:disable-best-path-selection's original type is boolean.
+	// Disables best path selection process.
+	DisableBestPathSelection bool `mapstructure:"disable-best-path-selection" json:"disable-best-path-selection,omitempty"`
 }
 
 func (lhs *RouteSelectionOptionsConfig) Equal(rhs *RouteSelectionOptionsConfig) bool {
@@ -4570,6 +4588,9 @@ func (lhs *RouteSelectionOptionsConfig) Equal(rhs *RouteSelectionOptionsConfig) 
 		return false
 	}
 	if lhs.IgnoreNextHopIgpMetric != rhs.IgnoreNextHopIgpMetric {
+		return false
+	}
+	if lhs.DisableBestPathSelection != rhs.DisableBestPathSelection {
 		return false
 	}
 	return true
@@ -5976,7 +5997,7 @@ type NeighborSet struct {
 	NeighborSetName string `mapstructure:"neighbor-set-name" json:"neighbor-set-name,omitempty"`
 	// original -> gobgp:neighbor-info
 	// original type is list of inet:ip-address
-	// neighbor ip address.
+	// neighbor ip address or prefix.
 	NeighborInfoList []string `mapstructure:"neighbor-info-list" json:"neighbor-info-list,omitempty"`
 }
 

@@ -57,7 +57,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 
 [[constraint]]
   name = "github.com/osrg/gobgp"
-  version = "1.22.0"
+  revision = "d31262de7d91c81ff979b39950d2d859666dfa3f"
 
 [[constraint]]
   name = "github.com/prometheus/client_golang"
@@ -67,7 +67,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
   branch = "master"
   name = "github.com/spf13/pflag"
 
-[[constraint]]
+[[override]]
   name = "github.com/vishvananda/netlink"
   version = "1.0.0"
 

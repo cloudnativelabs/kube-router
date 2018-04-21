@@ -21,93 +21,87 @@ import (
 	"net"
 	"time"
 
-	"github.com/osrg/gobgp/packet/bgp"
+	farm "github.com/dgryski/go-farm"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/osrg/gobgp/packet/bgp"
 )
 
 const (
 	GLOBAL_RIB_NAME = "global"
 )
 
-func nlri2Path(m *bgp.BGPMessage, p *PeerInfo, now time.Time) []*Path {
-	updateMsg := m.Body.(*bgp.BGPUpdate)
-	pathAttributes := updateMsg.PathAttributes
-	pathList := make([]*Path, 0)
-	for _, nlri := range updateMsg.NLRI {
-		path := NewPath(p, nlri, false, pathAttributes, now, false)
-		pathList = append(pathList, path)
-	}
-	return pathList
-}
-
-func withdraw2Path(m *bgp.BGPMessage, p *PeerInfo, now time.Time) []*Path {
-	updateMsg := m.Body.(*bgp.BGPUpdate)
-	pathAttributes := updateMsg.PathAttributes
-	pathList := make([]*Path, 0)
-	for _, nlri := range updateMsg.WithdrawnRoutes {
-		path := NewPath(p, nlri, true, pathAttributes, now, false)
-		pathList = append(pathList, path)
-	}
-	return pathList
-}
-
-func mpreachNlri2Path(m *bgp.BGPMessage, p *PeerInfo, now time.Time) []*Path {
-	updateMsg := m.Body.(*bgp.BGPUpdate)
-	pathAttributes := updateMsg.PathAttributes
-	attrList := []*bgp.PathAttributeMpReachNLRI{}
-
-	for _, attr := range pathAttributes {
-		a, ok := attr.(*bgp.PathAttributeMpReachNLRI)
-		if ok {
-			attrList = append(attrList, a)
-			break
-		}
-	}
-	pathList := make([]*Path, 0)
-
-	for _, mp := range attrList {
-		nlri_info := mp.Value
-		for _, nlri := range nlri_info {
-			path := NewPath(p, nlri, false, pathAttributes, now, false)
-			pathList = append(pathList, path)
-		}
-	}
-	return pathList
-}
-
-func mpunreachNlri2Path(m *bgp.BGPMessage, p *PeerInfo, now time.Time) []*Path {
-	updateMsg := m.Body.(*bgp.BGPUpdate)
-	pathAttributes := updateMsg.PathAttributes
-	attrList := []*bgp.PathAttributeMpUnreachNLRI{}
-
-	for _, attr := range pathAttributes {
-		a, ok := attr.(*bgp.PathAttributeMpUnreachNLRI)
-		if ok {
-			attrList = append(attrList, a)
-			break
-		}
-	}
-	pathList := make([]*Path, 0)
-
-	for _, mp := range attrList {
-		nlri_info := mp.Value
-
-		for _, nlri := range nlri_info {
-			path := NewPath(p, nlri, true, pathAttributes, now, false)
-			pathList = append(pathList, path)
-		}
-	}
-	return pathList
-}
-
 func ProcessMessage(m *bgp.BGPMessage, peerInfo *PeerInfo, timestamp time.Time) []*Path {
-	pathList := make([]*Path, 0)
-	pathList = append(pathList, nlri2Path(m, peerInfo, timestamp)...)
-	pathList = append(pathList, withdraw2Path(m, peerInfo, timestamp)...)
-	pathList = append(pathList, mpreachNlri2Path(m, peerInfo, timestamp)...)
-	pathList = append(pathList, mpunreachNlri2Path(m, peerInfo, timestamp)...)
-	if y, f := m.Body.(*bgp.BGPUpdate).IsEndOfRib(); y {
-		pathList = append(pathList, NewEOR(f))
+	update := m.Body.(*bgp.BGPUpdate)
+
+	if y, f := update.IsEndOfRib(); y {
+		// this message has no normal updates or withdrawals.
+		return []*Path{NewEOR(f)}
+	}
+
+	adds := make([]bgp.AddrPrefixInterface, 0, len(update.NLRI))
+	for _, nlri := range update.NLRI {
+		adds = append(adds, nlri)
+	}
+
+	dels := make([]bgp.AddrPrefixInterface, 0, len(update.WithdrawnRoutes))
+	for _, nlri := range update.WithdrawnRoutes {
+		dels = append(dels, nlri)
+	}
+
+	attrs := make([]bgp.PathAttributeInterface, 0, len(update.PathAttributes))
+	var reach *bgp.PathAttributeMpReachNLRI
+	for _, attr := range update.PathAttributes {
+		switch a := attr.(type) {
+		case *bgp.PathAttributeMpReachNLRI:
+			reach = a
+		case *bgp.PathAttributeMpUnreachNLRI:
+			l := make([]bgp.AddrPrefixInterface, 0, len(a.Value))
+			for _, nlri := range a.Value {
+				l = append(l, nlri)
+			}
+			dels = append(dels, l...)
+		default:
+			attrs = append(attrs, attr)
+		}
+	}
+
+	listLen := len(adds) + len(dels)
+	if reach != nil {
+		listLen += len(reach.Value)
+	}
+
+	var hash uint32
+	if len(adds) > 0 || reach != nil {
+		total := bytes.NewBuffer(make([]byte, 0))
+		for _, a := range attrs {
+			b, _ := a.Serialize()
+			total.Write(b)
+		}
+		hash = farm.Hash32(total.Bytes())
+	}
+
+	pathList := make([]*Path, 0, listLen)
+	for _, nlri := range adds {
+		p := NewPath(peerInfo, nlri, false, attrs, timestamp, false)
+		p.SetHash(hash)
+		pathList = append(pathList, p)
+	}
+	if reach != nil {
+		reachAttrs := make([]bgp.PathAttributeInterface, len(attrs)+1)
+		copy(reachAttrs, attrs)
+		// we sort attributes when creating a bgp message from paths
+		reachAttrs[len(reachAttrs)-1] = reach
+
+		for _, nlri := range reach.Value {
+			p := NewPath(peerInfo, nlri, false, reachAttrs, timestamp, false)
+			p.SetHash(hash)
+			pathList = append(pathList, p)
+		}
+	}
+	for _, nlri := range dels {
+		p := NewPath(peerInfo, nlri, true, []bgp.PathAttributeInterface{}, timestamp, false)
+		pathList = append(pathList, p)
 	}
 	return pathList
 }
@@ -265,7 +259,7 @@ func (manager *TableManager) handleMacMobility(path *Path) []*Destination {
 		if !path2.IsLocal() || path2.GetNlri().(*bgp.EVPNNLRI).RouteType != bgp.EVPN_ROUTE_TYPE_MAC_IP_ADVERTISEMENT {
 			continue
 		}
-		f := func(p *Path) (uint32, net.HardwareAddr, int) {
+		f := func(p *Path) (bgp.EthernetSegmentIdentifier, net.HardwareAddr, int) {
 			nlri := p.GetNlri().(*bgp.EVPNNLRI)
 			d := nlri.RouteTypeData.(*bgp.EVPNMacIPAdvertisementRoute)
 			ecs := p.GetExtCommunities()
@@ -276,13 +270,14 @@ func (manager *TableManager) handleMacMobility(path *Path) []*Destination {
 					break
 				}
 			}
-			return d.ETag, d.MacAddress, seq
+			return d.ESI, d.MacAddress, seq
 		}
 		e1, m1, s1 := f(path)
 		e2, m2, s2 := f(path2)
-		if e1 == e2 && bytes.Equal(m1, m2) && s1 > s2 {
+		if bytes.Equal(m1, m2) && !bytes.Equal(e1.Value, e2.Value) && s1 > s2 {
 			path2.IsWithdraw = true
 			dsts = append(dsts, manager.Tables[bgp.RF_EVPN].insert(path2))
+			break
 		}
 	}
 	return dsts
@@ -313,6 +308,10 @@ func (manager *TableManager) getDestinationCount(rfList []bgp.RouteFamily) int {
 }
 
 func (manager *TableManager) GetBestPathList(id string, rfList []bgp.RouteFamily) []*Path {
+	if SelectionOptions.DisableBestPathSelection {
+		// Note: If best path selection disabled, there is no best path.
+		return nil
+	}
 	paths := make([]*Path, 0, manager.getDestinationCount(rfList))
 	for _, t := range manager.tables(rfList...) {
 		paths = append(paths, t.Bests(id)...)
@@ -321,7 +320,9 @@ func (manager *TableManager) GetBestPathList(id string, rfList []bgp.RouteFamily
 }
 
 func (manager *TableManager) GetBestMultiPathList(id string, rfList []bgp.RouteFamily) [][]*Path {
-	if !UseMultiplePaths.Enabled {
+	if !UseMultiplePaths.Enabled || SelectionOptions.DisableBestPathSelection {
+		// Note: If multi path not enabled or best path selection disabled,
+		// there is no best multi path.
 		return nil
 	}
 	paths := make([][]*Path, 0, manager.getDestinationCount(rfList))

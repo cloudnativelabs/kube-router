@@ -46,7 +46,7 @@ func (t *Table) ToNativeTable(option ...ToNativeOption) (*table.Table, error) {
 }
 
 func getNLRI(family bgp.RouteFamily, buf []byte) (bgp.AddrPrefixInterface, error) {
-	afi, safi := bgp.RouteFamilyToAfiSafi(bgp.RouteFamily(family))
+	afi, safi := bgp.RouteFamilyToAfiSafi(family)
 	nlri, err := bgp.NewPrefixFromRouteFamily(afi, safi)
 	if err != nil {
 		return nil, err
@@ -83,6 +83,10 @@ func (d *Destination) ToNativeDestination(option ...ToNativeOption) (*table.Dest
 		paths = append(paths, path)
 	}
 	return table.NewDestination(nlri, 0, paths...), nil
+}
+
+func (p *Path) GetNativeNlri() (bgp.AddrPrefixInterface, error) {
+	return getNLRI(bgp.RouteFamily(p.Family), p.Nlri)
 }
 
 func (p *Path) ToNativePath(option ...ToNativeOption) (*table.Path, error) {
@@ -155,4 +159,23 @@ func NewROAListFromApiStructList(l []*Roa) []*table.ROA {
 		roas = append(roas, roa)
 	}
 	return roas
+}
+
+func extractFamilyFromConfigAfiSafi(c *config.AfiSafi) uint32 {
+	if c == nil {
+		return 0
+	}
+	// If address family value is already stored in AfiSafiState structure,
+	// we prefer to use this value.
+	if c.State.Family != 0 {
+		return uint32(c.State.Family)
+	}
+	// In case that Neighbor structure came from CLI or gRPC, address family
+	// value in AfiSafiState structure can be omitted.
+	// Here extracts value from AfiSafiName field in AfiSafiConfig structure.
+	if rf, err := bgp.GetRouteFamily(string(c.Config.AfiSafiName)); err == nil {
+		return uint32(rf)
+	}
+	// Ignores invalid address family name
+	return 0
 }
