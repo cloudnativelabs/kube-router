@@ -1,4 +1,4 @@
-package controllers
+package routing
 
 import (
 	"encoding/base64"
@@ -50,17 +50,21 @@ var (
 )
 
 const (
+	IFACE_NOT_FOUND = "Link not found"
+
 	customRouteTableID   = "77"
 	customRouteTableName = "kube-router"
 	podSubnetsIPSetName  = "kube-router-pod-subnets"
 	nodeAddrsIPSetName   = "kube-router-node-ips"
 
-	nodeASNAnnotation      = "kube-router.io/node.asn"
-	peerASNAnnotation      = "kube-router.io/peer.asns"
-	peerIPAnnotation       = "kube-router.io/peer.ips"
-	peerPasswordAnnotation = "kube-router.io/peer.passwords"
-	rrClientAnnotation     = "kube-router.io/rr.client"
-	rrServerAnnotation     = "kube-router.io/rr.server"
+	nodeASNAnnotation                 = "kube-router.io/node.asn"
+	peerASNAnnotation                 = "kube-router.io/peer.asns"
+	peerIPAnnotation                  = "kube-router.io/peer.ips"
+	peerPasswordAnnotation            = "kube-router.io/peer.passwords"
+	rrClientAnnotation                = "kube-router.io/rr.client"
+	rrServerAnnotation                = "kube-router.io/rr.server"
+	svcLocalAnnotation                = "kube-router.io/service.local"
+	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
 
 // NetworkRoutingController is struct to hold necessary information required by controller
@@ -534,6 +538,11 @@ func (nrc *NetworkRoutingController) withdrawVIPs(vips []string) {
 			glog.Errorf("error withdrawing IP: %q, error: %v", vip, err)
 		}
 	}
+}
+
+func isEndpointsForLeaderElection(ep *v1core.Endpoints) bool {
+	_, isLeaderElection := ep.Annotations[LeaderElectionRecordAnnotationKey]
+	return isLeaderElection
 }
 
 // nodeHasEndpointsForService will get the corresponding Endpoints resource for a given Service

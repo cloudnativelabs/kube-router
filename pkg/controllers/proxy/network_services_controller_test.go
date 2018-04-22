@@ -1,4 +1,4 @@
-package controllers
+package proxy
 
 import (
 	"fmt"
@@ -515,4 +515,8 @@ func startInformersForServiceProxy(nsc *NetworkServicesController, clientset kub
 	nsc.svcLister = svcInformer.GetIndexer()
 	nsc.epLister = epInformer.GetIndexer()
 	nsc.podLister = podInformer.GetIndexer()
+}
+
+func ptrToString(str string) *string {
+	return &str
 }

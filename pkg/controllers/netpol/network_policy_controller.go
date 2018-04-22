@@ -1,4 +1,4 @@
-package controllers
+package netpol
 
 import (
 	"crypto/sha256"

@@ -9,7 +9,9 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/cloudnativelabs/kube-router/pkg/controllers"
+	"github.com/cloudnativelabs/kube-router/pkg/controllers/netpol"
+	"github.com/cloudnativelabs/kube-router/pkg/controllers/proxy"
+	"github.com/cloudnativelabs/kube-router/pkg/controllers/routing"
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
@@ -60,13 +62,13 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 
 // CleanupConfigAndExit performs Cleanup on all three controllers
 func CleanupConfigAndExit() {
-	npc := controllers.NetworkPolicyController{}
+	npc := netpol.NetworkPolicyController{}
 	npc.Cleanup()
 
-	nsc := controllers.NetworkServicesController{}
+	nsc := proxy.NetworkServicesController{}
 	nsc.Cleanup()
 
-	nrc := controllers.NetworkRoutingController{}
+	nrc := routing.NetworkRoutingController{}
 	nrc.Cleanup()
 }
 
@@ -121,7 +123,7 @@ func (kr *KubeRouter) Run() error {
 	informerFactory.WaitForCacheSync(stopCh)
 
 	if kr.Config.RunFirewall {
-		npc, err := controllers.NewNetworkPolicyController(kr.Client,
+		npc, err := netpol.NewNetworkPolicyController(kr.Client,
 			kr.Config, podInformer, npInformer, nsInformer)
 		if err != nil {
 			return errors.New("Failed to create network policy controller: " + err.Error())
@@ -136,7 +138,7 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if kr.Config.RunRouter {
-		nrc, err := controllers.NewNetworkRoutingController(kr.Client, kr.Config, nodeInformer, svcInformer, epInformer)
+		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config, nodeInformer, svcInformer, epInformer)
 		if err != nil {
 			return errors.New("Failed to create network routing controller: " + err.Error())
 		}
@@ -150,7 +152,7 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if kr.Config.RunServiceProxy {
-		nsc, err := controllers.NewNetworkServicesController(kr.Client, kr.Config,
+		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
 			svcInformer, epInformer, podInformer)
 		if err != nil {
 			return errors.New("Failed to create network services controller: " + err.Error())
