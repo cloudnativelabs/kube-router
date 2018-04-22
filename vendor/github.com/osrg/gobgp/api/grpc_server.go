@@ -16,6 +16,7 @@
 package gobgpapi
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -26,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	farm "github.com/dgryski/go-farm"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -43,18 +45,19 @@ type Server struct {
 }
 
 func NewGrpcServer(b *server.BgpServer, hosts string) *Server {
-	return NewServer(b, grpc.NewServer(), hosts)
+	size := 256 << 20
+	return NewServer(b, grpc.NewServer(grpc.MaxRecvMsgSize(size), grpc.MaxSendMsgSize(size)), hosts)
 }
 
 func NewServer(b *server.BgpServer, g *grpc.Server, hosts string) *Server {
 	grpc.EnableTracing = false
-	server := &Server{
+	s := &Server{
 		bgpServer:  b,
 		grpcServer: g,
 		hosts:      hosts,
 	}
-	RegisterGobgpApiServer(g, server)
-	return server
+	RegisterGobgpApiServer(g, s)
+	return s
 }
 
 func (s *Server) Serve() error {
@@ -63,25 +66,24 @@ func (s *Server) Serve() error {
 	wg.Add(len(l))
 
 	serve := func(host string) {
-		for {
-			defer wg.Done()
-			lis, err := net.Listen("tcp", fmt.Sprintf(host))
-			if err != nil {
-				log.WithFields(log.Fields{
-					"Topic": "grpc",
-					"Key":   host,
-					"Error": err,
-				}).Warn("listen failed")
-				return
-			}
-			err = s.grpcServer.Serve(lis)
+		defer wg.Done()
+		lis, err := net.Listen("tcp", fmt.Sprintf(host))
+		if err != nil {
 			log.WithFields(log.Fields{
 				"Topic": "grpc",
 				"Key":   host,
 				"Error": err,
-			}).Warn("accept failed")
+			}).Warn("listen failed")
+			return
 		}
+		err = s.grpcServer.Serve(lis)
+		log.WithFields(log.Fields{
+			"Topic": "grpc",
+			"Key":   host,
+			"Error": err,
+		}).Warn("accept failed")
 	}
+
 	for _, host := range l {
 		go serve(host)
 	}
@@ -97,10 +99,10 @@ func NewMpGracefulRestartFromConfigStruct(c *config.MpGracefulRestart) *MpGracef
 	}
 }
 
-func NewAfiSafiConfigFromConfigStruct(c *config.AfiSafiConfig) *AfiSafiConfig {
+func NewAfiSafiConfigFromConfigStruct(c *config.AfiSafi) *AfiSafiConfig {
 	return &AfiSafiConfig{
-		Family:  uint32(bgp.AddressFamilyValueMap[string(c.AfiSafiName)]),
-		Enabled: c.Enabled,
+		Family:  extractFamilyFromConfigAfiSafi(c),
+		Enabled: c.Config.Enabled,
 	}
 }
 
@@ -166,13 +168,12 @@ func NewUseMultiplePathsFromConfigStruct(c *config.UseMultiplePaths) *UseMultipl
 }
 
 func NewPrefixLimitFromConfigStruct(c *config.AfiSafi) *PrefixLimit {
-	family, err := bgp.GetRouteFamily(string(c.Config.AfiSafiName))
-	if err != nil || c.PrefixLimit.Config.MaxPrefixes == 0 {
+	if c.PrefixLimit.Config.MaxPrefixes == 0 {
 		return nil
 	}
 
 	return &PrefixLimit{
-		Family:               uint32(family),
+		Family:               uint32(c.State.Family),
 		MaxPrefixes:          c.PrefixLimit.Config.MaxPrefixes,
 		ShutdownThresholdPct: uint32(c.PrefixLimit.Config.ShutdownThresholdPct),
 	}
@@ -195,16 +196,26 @@ func NewLongLivedGracefulRestartFromConfigStruct(c *config.LongLivedGracefulRest
 	}
 }
 
+func NewAddPathsFromConfigStruct(c *config.AddPaths) *AddPaths {
+	return &AddPaths{
+		Config: &AddPathsConfig{
+			Receive: c.Config.Receive,
+			SendMax: uint32(c.Config.SendMax),
+		},
+	}
+}
+
 func NewAfiSafiFromConfigStruct(c *config.AfiSafi) *AfiSafi {
 	return &AfiSafi{
 		MpGracefulRestart:        NewMpGracefulRestartFromConfigStruct(&c.MpGracefulRestart),
-		Config:                   NewAfiSafiConfigFromConfigStruct(&c.Config),
+		Config:                   NewAfiSafiConfigFromConfigStruct(c),
 		ApplyPolicy:              NewApplyPolicyFromConfigStruct(&c.ApplyPolicy),
 		RouteSelectionOptions:    NewRouteSelectionOptionsFromConfigStruct(&c.RouteSelectionOptions),
 		UseMultiplePaths:         NewUseMultiplePathsFromConfigStruct(&c.UseMultiplePaths),
 		PrefixLimits:             NewPrefixLimitFromConfigStruct(c),
 		RouteTargetMembership:    NewRouteTargetMembershipFromConfigStruct(&c.RouteTargetMembership),
 		LongLivedGracefulRestart: NewLongLivedGracefulRestartFromConfigStruct(&c.LongLivedGracefulRestart),
+		AddPaths:                 NewAddPathsFromConfigStruct(&c.AddPaths),
 	}
 }
 
@@ -213,9 +224,7 @@ func NewPeerFromConfigStruct(pconf *config.Neighbor) *Peer {
 	prefixLimits := make([]*PrefixLimit, 0, len(pconf.AfiSafis))
 	afiSafis := make([]*AfiSafi, 0, len(pconf.AfiSafis))
 	for _, f := range pconf.AfiSafis {
-		if family, ok := bgp.AddressFamilyValueMap[string(f.Config.AfiSafiName)]; ok {
-			families = append(families, uint32(family))
-		}
+		families = append(families, extractFamilyFromConfigAfiSafi(&f))
 		if prefixLimit := NewPrefixLimitFromConfigStruct(&f); prefixLimit != nil {
 			prefixLimits = append(prefixLimits, prefixLimit)
 		}
@@ -332,6 +341,7 @@ func NewPeerFromConfigStruct(pconf *config.Neighbor) *Peer {
 			LocalAddress: pconf.Transport.Config.LocalAddress,
 		},
 		AfiSafis: afiSafis,
+		AddPaths: NewAddPathsFromConfigStruct(&pconf.AddPaths),
 	}
 }
 
@@ -339,11 +349,12 @@ func (s *Server) GetNeighbor(ctx context.Context, arg *GetNeighborRequest) (*Get
 	if arg == nil {
 		return nil, fmt.Errorf("invalid request")
 	}
-	p := []*Peer{}
-	for _, e := range s.bgpServer.GetNeighbor(arg.Address, arg.EnableAdvertised) {
-		p = append(p, NewPeerFromConfigStruct(e))
+	neighbors := s.bgpServer.GetNeighbor(arg.Address, arg.EnableAdvertised)
+	peers := make([]*Peer, 0, len(neighbors))
+	for _, e := range neighbors {
+		peers = append(peers, NewPeerFromConfigStruct(e))
 	}
-	return &GetNeighborResponse{Peers: p}, nil
+	return &GetNeighborResponse{Peers: peers}, nil
 }
 
 func NewValidationFromTableStruct(v *table.Validation) *RPKIValidation {
@@ -440,8 +451,9 @@ func (s *Server) GetRib(ctx context.Context, arg *GetRibRequest) (*GetRibRespons
 		return nil, err
 	}
 
-	dsts := []*Destination{}
-	for _, dst := range tbl.GetDestinations() {
+	tblDsts := tbl.GetDestinations()
+	dsts := make([]*Destination, 0, len(tblDsts))
+	for _, dst := range tblDsts {
 		dsts = append(dsts, &Destination{
 			Prefix: dst.GetNlri().String(),
 			Paths: func(paths []*table.Path) []*Path {
@@ -450,7 +462,7 @@ func (s *Server) GetRib(ctx context.Context, arg *GetRibRequest) (*GetRibRespons
 					pp := ToPathApi(p)
 					switch arg.Table.Type {
 					case Resource_LOCAL, Resource_GLOBAL:
-						if i == 0 {
+						if i == 0 && !table.SelectionOptions.DisableBestPathSelection {
 							pp.Best = true
 						}
 					}
@@ -466,6 +478,58 @@ func (s *Server) GetRib(ctx context.Context, arg *GetRibRequest) (*GetRibRespons
 		Family:       uint32(tbl.GetRoutefamily()),
 		Destinations: dsts},
 	}, err
+}
+
+func (s *Server) GetPath(arg *GetPathRequest, stream GobgpApi_GetPathServer) error {
+	f := func() []*table.LookupPrefix {
+		l := make([]*table.LookupPrefix, 0, len(arg.Prefixes))
+		for _, p := range arg.Prefixes {
+			l = append(l, &table.LookupPrefix{
+				Prefix:       p.Prefix,
+				LookupOption: table.LookupOption(p.LookupOption),
+			})
+		}
+		return l
+	}
+
+	in := false
+	family := bgp.RouteFamily(arg.Family)
+	var tbl *table.Table
+	var err error
+	switch arg.Type {
+	case Resource_LOCAL, Resource_GLOBAL:
+		tbl, err = s.bgpServer.GetRib(arg.Name, family, f())
+	case Resource_ADJ_IN:
+		in = true
+		fallthrough
+	case Resource_ADJ_OUT:
+		tbl, err = s.bgpServer.GetAdjRib(arg.Name, family, in, f())
+	case Resource_VRF:
+		tbl, err = s.bgpServer.GetVrfRib(arg.Name, family, []*table.LookupPrefix{})
+	default:
+		return fmt.Errorf("unsupported resource type: %v", arg.Type)
+	}
+	if err != nil {
+		return err
+	}
+
+	return func() error {
+		for _, dst := range tbl.GetDestinations() {
+			for idx, path := range dst.GetAllKnownPathList() {
+				p := ToPathApi(path)
+				if idx == 0 && !table.SelectionOptions.DisableBestPathSelection {
+					switch arg.Type {
+					case Resource_LOCAL, Resource_GLOBAL:
+						p.Best = true
+					}
+				}
+				if err := stream.Send(p); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}()
 }
 
 func (s *Server) MonitorRib(arg *MonitorRibRequest, stream GobgpApi_MonitorRibServer) error {
@@ -548,7 +612,7 @@ func (s *Server) MonitorPeerState(arg *Arguments, stream GobgpApi_MonitorPeerSta
 		return fmt.Errorf("invalid request")
 	}
 	return func() error {
-		w := s.bgpServer.Watch(server.WatchPeerState(false))
+		w := s.bgpServer.Watch(server.WatchPeerState(arg.Current))
 		defer func() { w.Stop() }()
 
 		for {
@@ -668,7 +732,7 @@ func (s *Server) api2PathList(resource Resource, ApiPathList []*Path) ([]*table.
 			if _, ok := seen[p.GetType()]; !ok {
 				seen[p.GetType()] = true
 			} else {
-				return nil, fmt.Errorf("the path attribute apears twice. Type : " + strconv.Itoa(int(p.GetType())))
+				return nil, fmt.Errorf("the path attribute appears twice. Type : " + strconv.Itoa(int(p.GetType())))
 			}
 			switch p.GetType() {
 			case bgp.BGP_ATTR_TYPE_NEXT_HOP:
@@ -704,6 +768,17 @@ func (s *Server) api2PathList(resource Resource, ApiPathList []*Path) ([]*table.
 			pattr = append(pattr, bgp.NewPathAttributeExtendedCommunities(extcomms))
 		}
 		newPath := table.NewPath(pi, nlri, path.IsWithdraw, pattr, time.Now(), path.NoImplicitWithdraw)
+		if path.IsWithdraw == false {
+			total := bytes.NewBuffer(make([]byte, 0))
+			for _, a := range newPath.GetPathAttrs() {
+				if a.GetType() == bgp.BGP_ATTR_TYPE_MP_REACH_NLRI {
+					continue
+				}
+				b, _ := a.Serialize()
+				total.Write(b)
+			}
+			newPath.SetHash(farm.Hash32(total.Bytes()))
+		}
 		newPath.SetIsFromExternal(path.IsFromExternal)
 		pathList = append(pathList, newPath)
 	}
@@ -880,7 +955,7 @@ func (s *Server) GetRoa(ctx context.Context, arg *GetRoaRequest) (*GetRoaRespons
 }
 
 func (s *Server) EnableZebra(ctx context.Context, arg *EnableZebraRequest) (*EnableZebraResponse, error) {
-	l := []config.InstallProtocolType{}
+	l := make([]config.InstallProtocolType, 0, len(arg.RouteTypes))
 	for _, p := range arg.RouteTypes {
 		if err := config.InstallProtocolType(p).Validate(); err != nil {
 			return &EnableZebraResponse{}, err
@@ -971,7 +1046,16 @@ func ReadAfiSafiConfigFromAPIStruct(c *config.AfiSafiConfig, a *AfiSafiConfig) {
 	if c == nil || a == nil {
 		return
 	}
+	c.AfiSafiName = config.AfiSafiType(bgp.RouteFamily(a.Family).String())
 	c.Enabled = a.Enabled
+}
+
+func ReadAfiSafiStateFromAPIStruct(s *config.AfiSafiState, a *AfiSafiConfig) {
+	if s == nil || a == nil {
+		return
+	}
+	// Store only address family value for the convenience
+	s.Family = bgp.RouteFamily(a.Family)
 }
 
 func ReadPrefixLimitFromAPIStruct(c *config.PrefixLimit, a *PrefixLimit) {
@@ -1063,6 +1147,16 @@ func ReadLongLivedGracefulRestartFromAPIStruct(c *config.LongLivedGracefulRestar
 	}
 }
 
+func ReadAddPathsFromAPIStruct(c *config.AddPaths, a *AddPaths) {
+	if c == nil || a == nil {
+		return
+	}
+	if a.Config != nil {
+		c.Config.Receive = a.Config.Receive
+		c.Config.SendMax = uint8(a.Config.SendMax)
+	}
+}
+
 func NewNeighborFromAPIStruct(a *Peer) (*config.Neighbor, error) {
 	pconf := &config.Neighbor{}
 	if a.Conf != nil {
@@ -1110,31 +1204,53 @@ func NewNeighborFromAPIStruct(a *Peer) (*config.Neighbor, error) {
 
 		pconf.State.RemoteRouterId = a.Conf.Id
 
-		for _, family := range a.Families {
-			afiSafi := config.AfiSafi{
-				Config: config.AfiSafiConfig{
-					AfiSafiName: config.AfiSafiType(bgp.RouteFamily(family).String()),
-					Enabled:     true,
-				},
-			}
-			for _, pl := range a.Conf.PrefixLimits {
-				if family == pl.Family {
-					ReadPrefixLimitFromAPIStruct(&afiSafi.PrefixLimit, pl)
-				}
-			}
-			for _, a := range a.AfiSafis {
-				if a.Config != nil && family == a.Config.Family {
-					ReadMpGracefulRestartFromAPIStruct(&afiSafi.MpGracefulRestart, a.MpGracefulRestart)
-					ReadAfiSafiConfigFromAPIStruct(&afiSafi.Config, a.Config)
-					ReadApplyPolicyFromAPIStruct(&afiSafi.ApplyPolicy, a.ApplyPolicy)
-					ReadRouteSelectionOptionsFromAPIStruct(&afiSafi.RouteSelectionOptions, a.RouteSelectionOptions)
-					ReadUseMultiplePathsFromAPIStruct(&afiSafi.UseMultiplePaths, a.UseMultiplePaths)
-					ReadPrefixLimitFromAPIStruct(&afiSafi.PrefixLimit, a.PrefixLimits)
-					ReadRouteTargetMembershipFromAPIStruct(&afiSafi.RouteTargetMembership, a.RouteTargetMembership)
-					ReadLongLivedGracefulRestartFromAPIStruct(&afiSafi.LongLivedGracefulRestart, a.LongLivedGracefulRestart)
-				}
-			}
+		for _, af := range a.AfiSafis {
+			afiSafi := config.AfiSafi{}
+			ReadMpGracefulRestartFromAPIStruct(&afiSafi.MpGracefulRestart, af.MpGracefulRestart)
+			ReadAfiSafiConfigFromAPIStruct(&afiSafi.Config, af.Config)
+			ReadAfiSafiStateFromAPIStruct(&afiSafi.State, af.Config)
+			ReadApplyPolicyFromAPIStruct(&afiSafi.ApplyPolicy, af.ApplyPolicy)
+			ReadRouteSelectionOptionsFromAPIStruct(&afiSafi.RouteSelectionOptions, af.RouteSelectionOptions)
+			ReadUseMultiplePathsFromAPIStruct(&afiSafi.UseMultiplePaths, af.UseMultiplePaths)
+			ReadPrefixLimitFromAPIStruct(&afiSafi.PrefixLimit, af.PrefixLimits)
+			ReadRouteTargetMembershipFromAPIStruct(&afiSafi.RouteTargetMembership, af.RouteTargetMembership)
+			ReadLongLivedGracefulRestartFromAPIStruct(&afiSafi.LongLivedGracefulRestart, af.LongLivedGracefulRestart)
+			ReadAddPathsFromAPIStruct(&afiSafi.AddPaths, af.AddPaths)
 			pconf.AfiSafis = append(pconf.AfiSafis, afiSafi)
+		}
+		// For the backward compatibility, we override AfiSafi configurations
+		// with Peer.Families.
+		for _, family := range a.Families {
+			found := false
+			for _, afiSafi := range pconf.AfiSafis {
+				if uint32(afiSafi.State.Family) == family {
+					// If Peer.Families contains the same address family,
+					// we enable this address family.
+					afiSafi.Config.Enabled = true
+					found = true
+				}
+			}
+			if !found {
+				// If Peer.Families does not contain the same address family,
+				// we append AfiSafi structure with the default value.
+				pconf.AfiSafis = append(pconf.AfiSafis, config.AfiSafi{
+					Config: config.AfiSafiConfig{
+						AfiSafiName: config.AfiSafiType(bgp.RouteFamily(family).String()),
+						Enabled:     true,
+					},
+				})
+			}
+		}
+		// For the backward compatibility, we override AfiSafi configurations
+		// with Peer.Conf.PrefixLimits.
+		for _, prefixLimit := range a.Conf.PrefixLimits {
+			for _, afiSafi := range pconf.AfiSafis {
+				// If Peer.Conf.PrefixLimits contains the configuration for
+				// the same address family, we override AfiSafi.PrefixLimit.
+				if uint32(afiSafi.State.Family) == prefixLimit.Family {
+					ReadPrefixLimitFromAPIStruct(&afiSafi.PrefixLimit, prefixLimit)
+				}
+			}
 		}
 	}
 
@@ -1208,6 +1324,7 @@ func NewNeighborFromAPIStruct(a *Peer) (*config.Neighbor, error) {
 			}
 		}
 	}
+	ReadAddPathsFromAPIStruct(&pconf.AddPaths, a.AddPaths)
 	return pconf, nil
 }
 
@@ -1323,13 +1440,13 @@ func NewDefinedSetFromApiStruct(a *DefinedSet) (table.DefinedSet, error) {
 		}
 		return table.NewPrefixSetFromApiStruct(a.Name, prefixes)
 	case table.DEFINED_TYPE_NEIGHBOR:
-		list := make([]net.IP, 0, len(a.List))
+		list := make([]net.IPNet, 0, len(a.List))
 		for _, x := range a.List {
-			addr := net.ParseIP(x)
-			if addr == nil {
-				return nil, fmt.Errorf("invalid ip address format: %s", x)
+			_, addr, err := net.ParseCIDR(x)
+			if err != nil {
+				return nil, fmt.Errorf("invalid address or prefix: %s", x)
 			}
-			list = append(list, addr)
+			list = append(list, *addr)
 		}
 		return table.NewNeighborSetFromApiStruct(a.Name, list)
 	case table.DEFINED_TYPE_AS_PATH:
@@ -1372,8 +1489,8 @@ func (s *Server) GetDefinedSet(ctx context.Context, arg *GetDefinedSetRequest) (
 				for _, p := range cs.PrefixList {
 					exp := regexp.MustCompile("(\\d+)\\.\\.(\\d+)")
 					elems := exp.FindStringSubmatch(p.MasklengthRange)
-					min, _ := strconv.Atoi(elems[1])
-					max, _ := strconv.Atoi(elems[2])
+					min, _ := strconv.ParseUint(elems[1], 10, 32)
+					max, _ := strconv.ParseUint(elems[2], 10, 32)
 
 					l = append(l, &Prefix{IpPrefix: p.IpPrefix, MaskLengthMin: uint32(min), MaskLengthMax: uint32(max)})
 				}
@@ -1533,19 +1650,26 @@ func toStatementApi(s *config.Statement) *Statement {
 				Communities: s.Actions.BgpActions.SetCommunity.SetCommunityMethod.CommunitiesList}
 		}(),
 		Med: func() *MedAction {
-			if len(string(s.Actions.BgpActions.SetMed)) == 0 {
+			medStr := strings.TrimSpace(string(s.Actions.BgpActions.SetMed))
+			if len(medStr) == 0 {
 				return nil
 			}
-			exp := regexp.MustCompile("^(\\+|\\-)?(\\d+)$")
-			elems := exp.FindStringSubmatch(string(s.Actions.BgpActions.SetMed))
+			re := regexp.MustCompile("([+-]?)(\\d+)")
+			matches := re.FindStringSubmatch(medStr)
+			if len(matches) == 0 {
+				return nil
+			}
 			action := MedActionType_MED_REPLACE
-			switch elems[1] {
+			switch matches[1] {
 			case "+", "-":
 				action = MedActionType_MED_MOD
 			}
-			value, _ := strconv.Atoi(string(s.Actions.BgpActions.SetMed))
+			value, err := strconv.ParseInt(matches[1]+matches[2], 10, 64)
+			if err != nil {
+				return nil
+			}
 			return &MedAction{
-				Value: int64(value),
+				Value: value,
 				Type:  action,
 			}
 		}(),
@@ -1553,10 +1677,10 @@ func toStatementApi(s *config.Statement) *Statement {
 			if len(s.Actions.BgpActions.SetAsPathPrepend.As) == 0 {
 				return nil
 			}
-			asn := 0
+			var asn uint64
 			useleft := false
 			if s.Actions.BgpActions.SetAsPathPrepend.As != "last-as" {
-				asn, _ = strconv.Atoi(s.Actions.BgpActions.SetAsPathPrepend.As)
+				asn, _ = strconv.ParseUint(s.Actions.BgpActions.SetAsPathPrepend.As, 10, 32)
 			} else {
 				useleft = true
 			}

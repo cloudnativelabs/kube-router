@@ -82,6 +82,12 @@ const (
 	CMD_VALIDATION     = "validation"
 )
 
+const (
+	PARAM_FLAG = iota
+	PARAM_SINGLE
+	PARAM_LIST
+)
+
 var subOpts struct {
 	AddressFamily string `short:"a" long:"address-family" description:"specifying an address family"`
 }
@@ -109,9 +115,16 @@ var actionOpts struct {
 }
 
 var mrtOpts struct {
-	OutputDir  string
-	FileFormat string
-	Best       bool `long:"only-best" description:"only keep best path routes"`
+	OutputDir   string
+	FileFormat  string
+	Filename    string `long:"filename" description:"MRT file name"`
+	RecordCount int64  `long:"count" description:"Number of records to inject"`
+	RecordSkip  int64  `long:"skip" description:"Number of records to skip before injecting"`
+	QueueSize   int    `long:"batch-size" description:"Maximum number of updates to keep queued"`
+	Best        bool   `long:"only-best" description:"only keep best path routes"`
+	SkipV4      bool   `long:"no-ipv4" description:"Skip importing IPv4 routes"`
+	SkipV6      bool   `long:"no-ipv4" description:"Skip importing IPv6 routes"`
+	NextHop     net.IP `long:"nexthop" description:"Rewrite nexthop"`
 }
 
 func formatTimedelta(d int64) string {
@@ -147,11 +160,11 @@ func cidr2prefix(cidr string) string {
 	return buffer.String()[:ones]
 }
 
-func extractReserved(args, keys []string) map[string][]string {
+func extractReserved(args []string, keys map[string]int) (map[string][]string, error) {
 	m := make(map[string][]string, len(keys))
 	var k string
 	isReserved := func(s string) bool {
-		for _, r := range keys {
+		for r := range keys {
 			if s == r {
 				return true
 			}
@@ -166,7 +179,26 @@ func extractReserved(args, keys []string) map[string][]string {
 			m[k] = append(m[k], arg)
 		}
 	}
-	return m
+	for k, v := range m {
+		if k == "" {
+			continue
+		}
+		switch keys[k] {
+		case PARAM_FLAG:
+			if len(v) != 0 {
+				return nil, fmt.Errorf("%s should not have arguments", k)
+			}
+		case PARAM_SINGLE:
+			if len(v) != 1 {
+				return nil, fmt.Errorf("%s should have one argument", k)
+			}
+		case PARAM_LIST:
+			if len(v) == 0 {
+				return nil, fmt.Errorf("%s should have one or more arguments", k)
+			}
+		}
+	}
+	return m, nil
 }
 
 type neighbors []*config.Neighbor

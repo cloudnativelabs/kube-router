@@ -17,10 +17,10 @@ package table
 
 import (
 	"bytes"
+	"reflect"
+
 	"github.com/osrg/gobgp/packet/bgp"
 	log "github.com/sirupsen/logrus"
-	"hash/fnv"
-	"reflect"
 )
 
 func UpdatePathAttrs2ByteAs(msg *bgp.BGPUpdate) error {
@@ -45,9 +45,10 @@ func UpdatePathAttrs2ByteAs(msg *bgp.BGPUpdate) error {
 	as2Params := make([]bgp.AsPathParamInterface, 0, len(asAttr.Value))
 	mkAs4 := false
 	for _, param := range asAttr.Value {
-		as4Param := param.(*bgp.As4PathParam)
-		as2Path := make([]uint16, 0, len(as4Param.AS))
-		for _, as := range as4Param.AS {
+		segType := param.GetType()
+		asList := param.GetAS()
+		as2Path := make([]uint16, 0, len(asList))
+		for _, as := range asList {
 			if as > (1<<16)-1 {
 				mkAs4 = true
 				as2Path = append(as2Path, bgp.AS_TRANS)
@@ -55,15 +56,20 @@ func UpdatePathAttrs2ByteAs(msg *bgp.BGPUpdate) error {
 				as2Path = append(as2Path, uint16(as))
 			}
 		}
-		as2Params = append(as2Params, bgp.NewAsPathParam(as4Param.Type, as2Path))
+		as2Params = append(as2Params, bgp.NewAsPathParam(segType, as2Path))
 
 		// RFC 6793 4.2.2 Generating Updates
 		//
 		// Whenever the AS path information contains the AS_CONFED_SEQUENCE or
 		// AS_CONFED_SET path segment, the NEW BGP speaker MUST exclude such
 		// path segments from the AS4_PATH attribute being constructed.
-		if as4Param.Type != bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SEQ && as4Param.Type != bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SET {
-			as4Params = append(as4Params, as4Param)
+		switch segType {
+		case bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SEQ, bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SET:
+			// pass
+		default:
+			if as4param, ok := param.(*bgp.As4PathParam); ok {
+				as4Params = append(as4Params, as4param)
+			}
 		}
 	}
 	msg.PathAttributes[idx] = bgp.NewPathAttributeAsPath(as2Params)
@@ -111,21 +117,20 @@ func UpdatePathAttrs4ByteAs(msg *bgp.BGPUpdate) error {
 
 	asLen := 0
 	asConfedLen := 0
-	asParams := make([]*bgp.As4PathParam, 0, len(asAttr.Value))
+	asParams := make([]bgp.AsPathParamInterface, 0, len(asAttr.Value))
 	for _, param := range asAttr.Value {
 		asLen += param.ASLen()
-		p := param.(*bgp.As4PathParam)
-		switch p.Type {
+		switch param.GetType() {
 		case bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SET:
-			asConfedLen += 1
+			asConfedLen++
 		case bgp.BGP_ASPATH_ATTR_TYPE_CONFED_SEQ:
-			asConfedLen += len(p.AS)
+			asConfedLen += len(param.GetAS())
 		}
-		asParams = append(asParams, p)
+		asParams = append(asParams, param)
 	}
 
 	as4Len := 0
-	as4Params := make([]*bgp.As4PathParam, 0, len(as4Attr.Value))
+	as4Params := make([]bgp.AsPathParamInterface, 0, len(as4Attr.Value))
 	if as4Attr != nil {
 		for _, p := range as4Attr.Value {
 			// RFC 6793 6. Error Handling
@@ -162,15 +167,14 @@ func UpdatePathAttrs4ByteAs(msg *bgp.BGPUpdate) error {
 
 	keepNum := asLen + asConfedLen - as4Len
 
-	newParams := make([]*bgp.As4PathParam, 0, len(asAttr.Value))
+	newParams := make([]bgp.AsPathParamInterface, 0, len(asAttr.Value))
 	for _, param := range asParams {
 		if keepNum-param.ASLen() >= 0 {
 			newParams = append(newParams, param)
 			keepNum -= param.ASLen()
 		} else {
 			// only SEQ param reaches here
-			param.AS = param.AS[:keepNum]
-			newParams = append(newParams, param)
+			newParams = append(newParams, bgp.NewAs4PathParam(param.GetType(), param.GetAS()[:keepNum]))
 			keepNum = 0
 		}
 
@@ -181,13 +185,15 @@ func UpdatePathAttrs4ByteAs(msg *bgp.BGPUpdate) error {
 
 	for _, param := range as4Params {
 		lastParam := newParams[len(newParams)-1]
-		if param.Type == lastParam.Type && param.Type == bgp.BGP_ASPATH_ATTR_TYPE_SEQ {
-			if len(lastParam.AS)+len(param.AS) > 255 {
-				lastParam.AS = append(lastParam.AS, param.AS[:255-len(lastParam.AS)]...)
-				param.AS = param.AS[255-len(lastParam.AS):]
-				newParams = append(newParams, param)
+		lastParamAS := lastParam.GetAS()
+		paramType := param.GetType()
+		paramAS := param.GetAS()
+		if paramType == lastParam.GetType() && paramType == bgp.BGP_ASPATH_ATTR_TYPE_SEQ {
+			if len(lastParamAS)+len(paramAS) > 255 {
+				newParams[len(newParams)-1] = bgp.NewAs4PathParam(paramType, append(lastParamAS, paramAS[:255-len(lastParamAS)]...))
+				newParams = append(newParams, bgp.NewAs4PathParam(paramType, paramAS[255-len(lastParamAS):]))
 			} else {
-				lastParam.AS = append(lastParam.AS, param.AS...)
+				newParams[len(newParams)-1] = bgp.NewAs4PathParam(paramType, append(lastParamAS, paramAS...))
 			}
 		} else {
 			newParams = append(newParams, param)
@@ -256,181 +262,243 @@ func UpdatePathAggregator4ByteAs(msg *bgp.BGPUpdate) error {
 	return nil
 }
 
-func createUpdateMsgFromPath(path *Path, msg *bgp.BGPMessage) *bgp.BGPMessage {
-	family := path.GetRouteFamily()
-	v4 := true
-	if family != bgp.RF_IPv4_UC || !path.IsWithdraw && path.GetNexthop().To4() == nil {
-		v4 = false
+type cage struct {
+	attrsBytes []byte
+	paths      []*Path
+}
+
+func newCage(b []byte, path *Path) *cage {
+	return &cage{
+		attrsBytes: b,
+		paths:      []*Path{path},
+	}
+}
+
+type packerInterface interface {
+	add(*Path)
+	pack(options ...*bgp.MarshallingOption) []*bgp.BGPMessage
+}
+
+type packer struct {
+	eof    bool
+	family bgp.RouteFamily
+	total  uint32
+}
+
+type packerMP struct {
+	packer
+	paths       []*Path
+	withdrawals []*Path
+}
+
+func (p *packerMP) add(path *Path) {
+	p.packer.total++
+
+	if path.IsEOR() {
+		p.packer.eof = true
+		return
 	}
 
-	if v4 {
-		nlri := path.GetNlri().(*bgp.IPAddrPrefix)
-		if path.IsWithdraw {
-			if msg != nil {
-				u := msg.Body.(*bgp.BGPUpdate)
-				u.WithdrawnRoutes = append(u.WithdrawnRoutes, nlri)
-				return nil
-			} else {
-				return bgp.NewBGPUpdateMessage([]*bgp.IPAddrPrefix{nlri}, nil, nil)
-			}
+	if path.IsWithdraw {
+		p.withdrawals = append(p.withdrawals, path)
+		return
+	}
+
+	p.paths = append(p.paths, path)
+}
+
+func createMPReachMessage(path *Path) *bgp.BGPMessage {
+	oattrs := path.GetPathAttrs()
+	attrs := make([]bgp.PathAttributeInterface, 0, len(oattrs))
+	for _, a := range oattrs {
+		if a.GetType() == bgp.BGP_ATTR_TYPE_MP_REACH_NLRI {
+			attrs = append(attrs, bgp.NewPathAttributeMpReachNLRI(path.GetNexthop().String(), []bgp.AddrPrefixInterface{path.GetNlri()}))
 		} else {
-			if msg != nil {
-				u := msg.Body.(*bgp.BGPUpdate)
-				u.NLRI = append(u.NLRI, nlri)
-			} else {
-				pathAttrs := path.GetPathAttrs()
-				return bgp.NewBGPUpdateMessage(nil, pathAttrs, []*bgp.IPAddrPrefix{nlri})
+			attrs = append(attrs, a)
+		}
+	}
+	return bgp.NewBGPUpdateMessage(nil, attrs, nil)
+}
+
+func (p *packerMP) pack(options ...*bgp.MarshallingOption) []*bgp.BGPMessage {
+	msgs := make([]*bgp.BGPMessage, 0, p.packer.total)
+
+	for _, path := range p.withdrawals {
+		nlris := []bgp.AddrPrefixInterface{path.GetNlri()}
+		msgs = append(msgs, bgp.NewBGPUpdateMessage(nil, []bgp.PathAttributeInterface{bgp.NewPathAttributeMpUnreachNLRI(nlris)}, nil))
+	}
+
+	for _, path := range p.paths {
+		msgs = append(msgs, createMPReachMessage(path))
+	}
+
+	if p.eof {
+		msgs = append(msgs, bgp.NewEndOfRib(p.family))
+	}
+	return msgs
+}
+
+func newPackerMP(f bgp.RouteFamily) *packerMP {
+	return &packerMP{
+		packer: packer{
+			family: f,
+		},
+		withdrawals: make([]*Path, 0),
+		paths:       make([]*Path, 0),
+	}
+}
+
+type packerV4 struct {
+	packer
+	hashmap     map[uint32][]*cage
+	mpPaths     []*Path
+	withdrawals []*Path
+}
+
+func (p *packerV4) add(path *Path) {
+	p.packer.total++
+
+	if path.IsEOR() {
+		p.packer.eof = true
+		return
+	}
+
+	if path.IsWithdraw {
+		p.withdrawals = append(p.withdrawals, path)
+		return
+	}
+
+	if path.GetNexthop().To4() == nil {
+		// RFC 5549
+		p.mpPaths = append(p.mpPaths, path)
+		return
+	}
+
+	key := path.GetHash()
+	attrsB := bytes.NewBuffer(make([]byte, 0))
+	for _, v := range path.GetPathAttrs() {
+		b, _ := v.Serialize()
+		attrsB.Write(b)
+	}
+
+	if cages, y := p.hashmap[key]; y {
+		added := false
+		for _, c := range cages {
+			if bytes.Compare(c.attrsBytes, attrsB.Bytes()) == 0 {
+				c.paths = append(c.paths, path)
+				added = true
+				break
 			}
+		}
+		if !added {
+			p.hashmap[key] = append(p.hashmap[key], newCage(attrsB.Bytes(), path))
 		}
 	} else {
-		if path.IsWithdraw {
-			if msg != nil {
-				u := msg.Body.(*bgp.BGPUpdate)
-				for _, p := range u.PathAttributes {
-					if p.GetType() == bgp.BGP_ATTR_TYPE_MP_UNREACH_NLRI {
-						unreach := p.(*bgp.PathAttributeMpUnreachNLRI)
-						unreach.Value = append(unreach.Value, path.GetNlri())
-					}
-				}
-			} else {
-				var nlris []bgp.AddrPrefixInterface
-				attr := path.getPathAttr(bgp.BGP_ATTR_TYPE_MP_REACH_NLRI)
-				if attr == nil {
-					// for bmp post-policy
-					attr = path.getPathAttr(bgp.BGP_ATTR_TYPE_MP_UNREACH_NLRI)
-					nlris = attr.(*bgp.PathAttributeMpUnreachNLRI).Value
-				} else {
-					nlris = []bgp.AddrPrefixInterface{path.GetNlri()}
-				}
-				return bgp.NewBGPUpdateMessage(nil, []bgp.PathAttributeInterface{bgp.NewPathAttributeMpUnreachNLRI(nlris)}, nil)
-			}
-		} else {
-			if msg != nil {
-				u := msg.Body.(*bgp.BGPUpdate)
-				for _, p := range u.PathAttributes {
-					if p.GetType() == bgp.BGP_ATTR_TYPE_MP_REACH_NLRI {
-						reach := p.(*bgp.PathAttributeMpReachNLRI)
-						reach.Value = append(reach.Value, path.GetNlri())
-					}
-				}
-			} else {
-				attrs := make([]bgp.PathAttributeInterface, 0, 8)
+		p.hashmap[key] = []*cage{newCage(attrsB.Bytes(), path)}
+	}
+}
 
-				for _, p := range path.GetPathAttrs() {
-					if p.GetType() == bgp.BGP_ATTR_TYPE_MP_REACH_NLRI {
-						attrs = append(attrs, bgp.NewPathAttributeMpReachNLRI(path.GetNexthop().String(), []bgp.AddrPrefixInterface{path.GetNlri()}))
-					} else {
-						attrs = append(attrs, p)
-					}
-				}
+func (p *packerV4) pack(options ...*bgp.MarshallingOption) []*bgp.BGPMessage {
+	split := func(max int, paths []*Path) ([]*bgp.IPAddrPrefix, []*Path) {
+		nlris := make([]*bgp.IPAddrPrefix, 0, max)
+		i := 0
+		if max > len(paths) {
+			max = len(paths)
+		}
+		for ; i < max; i++ {
+			nlris = append(nlris, paths[i].GetNlri().(*bgp.IPAddrPrefix))
+		}
+		return nlris, paths[i:]
+	}
+	addpathNLRILen := 0
+	if bgp.IsAddPathEnabled(false, p.packer.family, options) {
+		addpathNLRILen = 4
+	}
+	// Header + Update (WithdrawnRoutesLen +
+	// TotalPathAttributeLen + attributes + maxlen of NLRI).
+	// the max size of NLRI is 5bytes (plus 4bytes with addpath enabled)
+	maxNLRIs := func(attrsLen int) int {
+		return (bgp.BGP_MAX_MESSAGE_LENGTH - (19 + 2 + 2 + attrsLen)) / (5 + addpathNLRILen)
+	}
 
-				// we don't need to clone here but we
-				// might merge path to this message in
-				// the future so let's clone anyway.
-				return bgp.NewBGPUpdateMessage(nil, attrs, nil)
+	loop := func(attrsLen int, paths []*Path, cb func([]*bgp.IPAddrPrefix)) {
+		max := maxNLRIs(attrsLen)
+		var nlris []*bgp.IPAddrPrefix
+		for {
+			nlris, paths = split(max, paths)
+			if len(nlris) == 0 {
+				break
 			}
+			cb(nlris)
 		}
 	}
-	return nil
+
+	msgs := make([]*bgp.BGPMessage, 0, p.packer.total)
+
+	loop(0, p.withdrawals, func(nlris []*bgp.IPAddrPrefix) {
+		msgs = append(msgs, bgp.NewBGPUpdateMessage(nlris, nil, nil))
+	})
+
+	for _, cages := range p.hashmap {
+		for _, c := range cages {
+			paths := c.paths
+
+			attrs := paths[0].GetPathAttrs()
+			attrsLen := 0
+			for _, a := range attrs {
+				attrsLen += a.Len()
+			}
+
+			loop(attrsLen, paths, func(nlris []*bgp.IPAddrPrefix) {
+				msgs = append(msgs, bgp.NewBGPUpdateMessage(nil, attrs, nlris))
+			})
+		}
+	}
+
+	for _, path := range p.mpPaths {
+		msgs = append(msgs, createMPReachMessage(path))
+	}
+
+	if p.eof {
+		msgs = append(msgs, bgp.NewEndOfRib(p.family))
+	}
+	return msgs
 }
 
-type bucket struct {
-	attrs []byte
-	paths []*Path
+func newPackerV4(f bgp.RouteFamily) *packerV4 {
+	return &packerV4{
+		packer: packer{
+			family: f,
+		},
+		hashmap:     make(map[uint32][]*cage),
+		withdrawals: make([]*Path, 0),
+		mpPaths:     make([]*Path, 0),
+	}
 }
 
-func CreateUpdateMsgFromPaths(pathList []*Path) []*bgp.BGPMessage {
-	var msgs []*bgp.BGPMessage
+func newPacker(f bgp.RouteFamily) packerInterface {
+	switch f {
+	case bgp.RF_IPv4_UC:
+		return newPackerV4(bgp.RF_IPv4_UC)
+	default:
+		return newPackerMP(f)
+	}
+}
 
-	pathByAttrs := make(map[uint32][]*bucket)
+func CreateUpdateMsgFromPaths(pathList []*Path, options ...*bgp.MarshallingOption) []*bgp.BGPMessage {
+	msgs := make([]*bgp.BGPMessage, 0, len(pathList))
+
+	m := make(map[bgp.RouteFamily]packerInterface)
 	for _, path := range pathList {
-		if path == nil {
-			continue
-		} else if path.IsEOR() {
-			msgs = append(msgs, bgp.NewEndOfRib(path.GetRouteFamily()))
-			continue
+		f := path.GetRouteFamily()
+		if _, y := m[f]; !y {
+			m[f] = newPacker(f)
 		}
-		y := func(p *Path) bool {
-			if p.GetRouteFamily() != bgp.RF_IPv4_UC {
-				return false
-			}
-			if p.IsWithdraw {
-				return false
-			}
-			return true
-		}(path)
-
-		if y {
-			key, attrs := func(p *Path) (uint32, []byte) {
-				h := fnv.New32()
-				total := bytes.NewBuffer(make([]byte, 0))
-				for _, v := range p.GetPathAttrs() {
-					b, _ := v.Serialize()
-					total.Write(b)
-				}
-				h.Write(total.Bytes())
-				return h.Sum32(), total.Bytes()
-			}(path)
-
-			if bl, y := pathByAttrs[key]; y {
-				found := false
-				for _, b := range bl {
-					if bytes.Compare(b.attrs, attrs) == 0 {
-						b.paths = append(b.paths, path)
-						found = true
-						break
-					}
-				}
-				if found == false {
-					nb := &bucket{
-						attrs: attrs,
-						paths: []*Path{path},
-					}
-					pathByAttrs[key] = append(pathByAttrs[key], nb)
-				}
-			} else {
-				nb := &bucket{
-					attrs: attrs,
-					paths: []*Path{path},
-				}
-				pathByAttrs[key] = []*bucket{nb}
-			}
-		} else {
-			msg := createUpdateMsgFromPath(path, nil)
-			msgs = append(msgs, msg)
-		}
+		m[f].add(path)
 	}
 
-	for _, bList := range pathByAttrs {
-		for _, b := range bList {
-			var msg *bgp.BGPMessage
-			for i, path := range b.paths {
-				if i == 0 {
-					msg = createUpdateMsgFromPath(path, nil)
-					msgs = append(msgs, msg)
-				} else {
-					msgLen := func(u *bgp.BGPUpdate) int {
-						attrsLen := 0
-						for _, a := range u.PathAttributes {
-							attrsLen += a.Len()
-						}
-						// Header + Update (WithdrawnRoutesLen +
-						// TotalPathAttributeLen + attributes + maxlen of
-						// NLRI). Note that we try to add one NLRI.
-						return 19 + 2 + 2 + attrsLen + (len(u.NLRI)+1)*5
-					}(msg.Body.(*bgp.BGPUpdate))
-
-					if msgLen+32 > bgp.BGP_MAX_MESSAGE_LENGTH {
-						// don't marge
-						msg = createUpdateMsgFromPath(path, nil)
-						msgs = append(msgs, msg)
-					} else {
-						createUpdateMsgFromPath(path, msg)
-					}
-				}
-			}
-		}
+	for _, p := range m {
+		msgs = append(msgs, p.pack(options...)...)
 	}
-
 	return msgs
 }

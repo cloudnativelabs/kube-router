@@ -1336,7 +1336,7 @@ func Test_addExportPolicies(t *testing.T) {
 				NeighborSets: []config.NeighborSet{
 					{
 						NeighborSetName:  "externalpeerset",
-						NeighborInfoList: []string{"10.10.0.1", "10.10.0.2"},
+						NeighborInfoList: []string{"10.10.0.1/32", "10.10.0.2/32"},
 					},
 				},
 				TagSets:        []config.TagSet{},

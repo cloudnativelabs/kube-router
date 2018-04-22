@@ -337,8 +337,8 @@ func NewPrefix(c config.Prefix) (*Prefix, error) {
 			return nil, fmt.Errorf("mask length range format is invalid")
 		}
 		// we've already checked the range is sane by regexp
-		min, _ := strconv.Atoi(elems[1])
-		max, _ := strconv.Atoi(elems[2])
+		min, _ := strconv.ParseUint(elems[1], 10, 8)
+		max, _ := strconv.ParseUint(elems[2], 10, 8)
 		p.MasklengthRangeMin = uint8(min)
 		p.MasklengthRangeMax = uint8(max)
 	}
@@ -536,7 +536,7 @@ func NewPrefixSet(c config.PrefixSet) (*PrefixSet, error) {
 
 type NeighborSet struct {
 	name string
-	list []net.IP
+	list []net.IPNet
 }
 
 func (s *NeighborSet) Name() string {
@@ -561,11 +561,11 @@ func (lhs *NeighborSet) Remove(arg DefinedSet) error {
 	if !ok {
 		return fmt.Errorf("type cast failed")
 	}
-	ps := make([]net.IP, 0, len(lhs.list))
+	ps := make([]net.IPNet, 0, len(lhs.list))
 	for _, x := range lhs.list {
 		found := false
 		for _, y := range rhs.list {
-			if x.Equal(y) {
+			if x.String() == y.String() {
 				found = true
 				break
 			}
@@ -610,7 +610,7 @@ func (s *NeighborSet) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.ToConfig())
 }
 
-func NewNeighborSetFromApiStruct(name string, list []net.IP) (*NeighborSet, error) {
+func NewNeighborSetFromApiStruct(name string, list []net.IPNet) (*NeighborSet, error) {
 	return &NeighborSet{
 		name: name,
 		list: list,
@@ -625,13 +625,24 @@ func NewNeighborSet(c config.NeighborSet) (*NeighborSet, error) {
 		}
 		return nil, fmt.Errorf("empty neighbor set name")
 	}
-	list := make([]net.IP, 0, len(c.NeighborInfoList))
+	list := make([]net.IPNet, 0, len(c.NeighborInfoList))
 	for _, x := range c.NeighborInfoList {
-		addr := net.ParseIP(x)
-		if addr == nil {
-			return nil, fmt.Errorf("invalid address: %s", x)
+		_, cidr, err := net.ParseCIDR(x)
+		if err != nil {
+			addr := net.ParseIP(x)
+			if addr == nil {
+				return nil, fmt.Errorf("invalid address or prefix: %s", x)
+			}
+			mask := net.CIDRMask(32, 32)
+			if addr.To4() == nil {
+				mask = net.CIDRMask(128, 128)
+			}
+			cidr = &net.IPNet{
+				IP:   addr,
+				Mask: mask,
+			}
 		}
-		list = append(list, addr)
+		list = append(list, *cidr)
 	}
 	return &NeighborSet{
 		name: name,
@@ -705,25 +716,25 @@ func NewSingleAsPathMatch(arg string) *singleAsPathMatch {
 	onlyRe := regexp.MustCompile("^\\^([0-9]+)\\$$")
 	switch {
 	case leftMostRe.MatchString(arg):
-		asn, _ := strconv.Atoi(leftMostRe.FindStringSubmatch(arg)[1])
+		asn, _ := strconv.ParseUint(leftMostRe.FindStringSubmatch(arg)[1], 10, 32)
 		return &singleAsPathMatch{
 			asn:  uint32(asn),
 			mode: LEFT_MOST,
 		}
 	case originRe.MatchString(arg):
-		asn, _ := strconv.Atoi(originRe.FindStringSubmatch(arg)[1])
+		asn, _ := strconv.ParseUint(originRe.FindStringSubmatch(arg)[1], 10, 32)
 		return &singleAsPathMatch{
 			asn:  uint32(asn),
 			mode: ORIGIN,
 		}
 	case includeRe.MatchString(arg):
-		asn, _ := strconv.Atoi(includeRe.FindStringSubmatch(arg)[1])
+		asn, _ := strconv.ParseUint(includeRe.FindStringSubmatch(arg)[1], 10, 32)
 		return &singleAsPathMatch{
 			asn:  uint32(asn),
 			mode: INCLUDE,
 		}
 	case onlyRe.MatchString(arg):
-		asn, _ := strconv.Atoi(onlyRe.FindStringSubmatch(arg)[1])
+		asn, _ := strconv.ParseUint(onlyRe.FindStringSubmatch(arg)[1], 10, 32)
 		return &singleAsPathMatch{
 			asn:  uint32(asn),
 			mode: ONLY,
@@ -974,8 +985,8 @@ func ParseCommunity(arg string) (uint32, error) {
 	exp := regexp.MustCompile("(\\d+):(\\d+)")
 	elems := exp.FindStringSubmatch(arg)
 	if len(elems) == 3 {
-		fst, _ := strconv.Atoi(elems[1])
-		snd, _ := strconv.Atoi(elems[2])
+		fst, _ := strconv.ParseUint(elems[1], 10, 16)
+		snd, _ := strconv.ParseUint(elems[2], 10, 16)
 		return uint32(fst<<16 | snd), nil
 	}
 	for i, v := range bgp.WellKnownCommunityNameMap {
@@ -1330,7 +1341,6 @@ func (c *NeighborCondition) Option() MatchOption {
 // and, subsequent comparisons are skipped if that matches the conditions.
 // If NeighborList's length is zero, return true.
 func (c *NeighborCondition) Evaluate(path *Path, options *PolicyOptions) bool {
-
 	if len(c.set.list) == 0 {
 		log.WithFields(log.Fields{
 			"Topic": "Policy",
@@ -1348,7 +1358,7 @@ func (c *NeighborCondition) Evaluate(path *Path, options *PolicyOptions) bool {
 	}
 	result := false
 	for _, n := range c.set.list {
-		if neighbor.Equal(n) {
+		if n.Contains(neighbor) {
 			result = true
 			break
 		}
@@ -2260,7 +2270,7 @@ func (a *AsPathPrependAction) Type() ActionType {
 	return ACTION_AS_PATH_PREPEND
 }
 
-func (a *AsPathPrependAction) Apply(path *Path, _ *PolicyOptions) *Path {
+func (a *AsPathPrependAction) Apply(path *Path, option *PolicyOptions) *Path {
 	var asn uint32
 	if a.useLeftMost {
 		aspath := path.GetAsSeqList()
@@ -2283,7 +2293,8 @@ func (a *AsPathPrependAction) Apply(path *Path, _ *PolicyOptions) *Path {
 		asn = a.asn
 	}
 
-	path.PrependAsn(asn, a.repeat)
+	confed := option != nil && option.Info.Confederation
+	path.PrependAsn(asn, a.repeat, confed)
 
 	return path
 }
@@ -3044,7 +3055,7 @@ func (r *RoutingPolicy) inUse(d DefinedSet) bool {
 	for _, p := range r.policyMap {
 		for _, s := range p.Statements {
 			for _, c := range s.Conditions {
-				if c.Set().Name() == name {
+				if c.Set() != nil && c.Set().Name() == name {
 					return true
 				}
 			}
@@ -3484,9 +3495,10 @@ func (r *RoutingPolicy) ReplacePolicy(x *Policy, refer, preserve bool) (err erro
 		}
 	}
 
+	ys := y.Statements
 	err = y.Replace(x)
 	if err == nil && !preserve {
-		for _, st := range y.Statements {
+		for _, st := range ys {
 			if !r.statementInUse(st) {
 				log.WithFields(log.Fields{
 					"Topic": "Policy",

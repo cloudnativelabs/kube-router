@@ -96,6 +96,12 @@
   version = "v1.1.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/dgryski/go-farm"
+  packages = ["."]
+  revision = "2de33835d10275975374b37b2dcfd22c9020a1f5"
+
+[[projects]]
   name = "github.com/docker/distribution"
   packages = [
     "digestset",
@@ -233,6 +239,7 @@
   revision = "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
 
 [[projects]]
+  branch = "master"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
@@ -241,8 +248,7 @@
     "ptypes/duration",
     "ptypes/timestamp"
   ]
-  revision = "925541529c1fa6821df4e44ce2723319eb2be768"
-  version = "v1.0.0"
+  revision = "e09c5db296004fbe3f74490e84dcd62c3c5ddb1b"
 
 [[projects]]
   branch = "master"
@@ -461,8 +467,7 @@
     "table",
     "zebra"
   ]
-  revision = "bbd1d99396fef6503e308d1851ecf91c31006635"
-  version = "v1.22"
+  revision = "d31262de7d91c81ff979b39950d2d859666dfa3f"
 
 [[projects]]
   name = "github.com/pelletier/go-toml"
@@ -525,10 +530,10 @@
   revision = "8b1c2da0d56deffdbb9e48d4414b4e674bd8083e"
 
 [[projects]]
+  branch = "master"
   name = "github.com/satori/go.uuid"
   packages = ["."]
-  revision = "f58768cc1a7a7e77a3bd49e98cdd21419399b6a3"
-  version = "v1.2.0"
+  revision = "36e9d2ebbde5e3f13ab2e25625fd453271d6522e"
 
 [[projects]]
   name = "github.com/sirupsen/logrus"
@@ -552,10 +557,10 @@
   version = "v1.2.0"
 
 [[projects]]
+  branch = "master"
   name = "github.com/spf13/cobra"
   packages = ["."]
-  revision = "a1f051bc3eba734da4772d60e2d677f47cf93ef4"
-  version = "v0.0.2"
+  revision = "615425954c3b0d9485a7027d4d451fdcdfdee84e"
 
 [[projects]]
   branch = "master"
@@ -570,10 +575,10 @@
   version = "v1.0.1"
 
 [[projects]]
+  branch = "master"
   name = "github.com/spf13/viper"
   packages = ["."]
-  revision = "b5e8006cbee93ec955a89ab31e0e3ce3204f3736"
-  version = "v1.0.2"
+  revision = "8dc2790b029dc41e2b8ff772c63c26adbb1db70d"
 
 [[projects]]
   name = "github.com/vishvananda/netlink"
@@ -933,6 +938,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8a4f3749150643c2859542029817de5a535282c2c2946fe3fe38cc0444b2b64f"
+  inputs-digest = "084480bb06f84e536badc385a76b5e179e27caacc83b769fc984bad231429698"
   solver-name = "gps-cdcl"
   solver-version = 1
