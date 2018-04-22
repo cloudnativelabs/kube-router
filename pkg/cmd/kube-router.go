@@ -10,6 +10,8 @@ import (
 	"syscall"
 
 	"github.com/cloudnativelabs/kube-router/pkg/controllers"
+	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/golang/glog"
 
@@ -73,7 +75,7 @@ func (kr *KubeRouter) Run() error {
 	var err error
 	var wg sync.WaitGroup
 
-	healthChan := make(chan *controllers.ControllerHeartbeat, 10)
+	healthChan := make(chan *healthcheck.ControllerHeartbeat, 10)
 	defer close(healthChan)
 
 	stopCh := make(chan struct{})
@@ -83,7 +85,7 @@ func (kr *KubeRouter) Run() error {
 		os.Exit(0)
 	}
 
-	hc, err := controllers.NewHealthController(kr.Config)
+	hc, err := healthcheck.NewHealthController(kr.Config)
 	if err != nil {
 		return errors.New("Failed to create health controller: " + err.Error())
 	}
@@ -92,7 +94,7 @@ func (kr *KubeRouter) Run() error {
 
 	if (kr.Config.MetricsPort > 0) && (kr.Config.MetricsPort <= 65535) {
 		kr.Config.MetricsEnabled = true
-		mc, err := controllers.NewMetricsController(kr.Client, kr.Config)
+		mc, err := metrics.NewMetricsController(kr.Client, kr.Config)
 		if err != nil {
 			return errors.New("Failed to create metrics controller: " + err.Error())
 		}

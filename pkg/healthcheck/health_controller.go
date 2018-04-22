@@ -1,4 +1,4 @@
-package controllers
+package healthcheck
 
 import (
 	"net/http"
@@ -35,8 +35,8 @@ type HealthStats struct {
 	NetworkServicesControllerAlive time.Time
 }
 
-//sendHeartBeat sends a heartbeat on the passed channel
-func sendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
+//SendHeartBeat sends a heartbeat on the passed channel
+func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 	heartbeat := ControllerHeartbeat{
 		Component:     controller,
 		LastHeartBeat: time.Now(),
