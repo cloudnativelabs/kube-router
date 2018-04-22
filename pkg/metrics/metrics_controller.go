@@ -1,4 +1,4 @@
-package controllers
+package metrics
 
 import (
 	"net"
@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
@@ -15,93 +16,97 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const (
+	namespace = "kube_router"
+)
+
 var (
-	serviceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServiceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_total_connections",
 		Help:      "Total incoming connections made",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	servicePacketsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServicePacketsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_packets_in",
 		Help:      "Total incoming packets",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	servicePacketsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServicePacketsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_packets_out",
 		Help:      "Total outgoing packets",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceBytesIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServiceBytesIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bytes_in",
 		Help:      "Total incoming bytes",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceBytesOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServiceBytesOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bytes_out",
 		Help:      "Total outgoing bytes",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	servicePpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServicePpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_pps_in",
 		Help:      "Incoming packets per second",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	servicePpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServicePpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_pps_out",
 		Help:      "Outgoing packets per second",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceCPS = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServiceCPS = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_cps",
 		Help:      "Service connections per second",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceBpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServiceBpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bps_in",
 		Help:      "Incoming bytes per second",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	serviceBpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ServiceBpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "service_bps_out",
 		Help:      "Outgoing bytes per second",
 	}, []string{"namespace", "service_name", "service_vip", "protocol", "port"})
-	controllerIpvsServices = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerIpvsServices = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_ipvs_services",
 		Help:      "Number of ipvs services in the instance",
 	}, []string{})
-	controllerIptablesSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerIptablesSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_iptables_sync_time",
 		Help:      "Time it took for controller to sync iptables",
 	}, []string{})
-	controllerPublishMetricsTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerPublishMetricsTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_publish_metrics_time",
 		Help:      "Time it took to publish metrics",
 	}, []string{})
-	controllerIpvsServicesSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerIpvsServicesSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_ipvs_services_sync_time",
 		Help:      "Time it took for controller to sync ipvs services",
 	}, []string{})
-	controllerBPGpeers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerBPGpeers = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_bgp_peers",
 		Help:      "BGP peers in the runtime configuration",
 	}, []string{})
-	controllerBGPInternalPeersSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerBGPInternalPeersSyncTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_bgp_internal_peers_sync_time",
 		Help:      "Time it took to sync internal bgp peers",
 	}, []string{})
-	controllerBGPadvertisementsReceived = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerBGPadvertisementsReceived = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_bgp_advertisements_received",
 		Help:      "Time it took to sync internal bgp peers",
 	}, []string{})
-	controllerIpvsMetricsExportTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerIpvsMetricsExportTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_ipvs_metrics_export_time",
 		Help:      "Time it took to export metrics",
@@ -110,22 +115,20 @@ var (
 
 // MetricsController Holds settings for the metrics controller
 type MetricsController struct {
-	endpointsMap endpointsInfoMap
-	MetricsPath  string
-	MetricsPort  uint16
-	mu           sync.Mutex
-	nodeIP       net.IP
-	serviceMap   serviceInfoMap
+	MetricsPath string
+	MetricsPort uint16
+	mu          sync.Mutex
+	nodeIP      net.IP
 }
 
 // Run prometheus metrics controller
-func (mc *MetricsController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (mc *MetricsController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 	t := time.NewTicker(3 * time.Second)
 	defer wg.Done()
 	glog.Info("Starting metrics controller")
 
 	// register metrics for this controller
-	prometheus.MustRegister(controllerIpvsMetricsExportTime)
+	prometheus.MustRegister(ControllerIpvsMetricsExportTime)
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(mc.MetricsPort)), Handler: http.DefaultServeMux}
 
@@ -139,7 +142,7 @@ func (mc *MetricsController) Run(healthChan chan<- *ControllerHeartbeat, stopCh 
 		}
 	}()
 	for {
-		sendHeartBeat(healthChan, "MC")
+		healthcheck.SendHeartBeat(healthChan, "MC")
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down metrics controller")

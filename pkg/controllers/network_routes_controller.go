@@ -19,6 +19,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
@@ -107,7 +109,7 @@ type NetworkRoutingController struct {
 }
 
 // Run runs forever until we are notified on stop channel
-func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	cidr, err := utils.GetPodCidrFromCniSpec(nrc.cniConfFile)
 	if err != nil {
 		glog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err.Error())
@@ -280,7 +282,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *ControllerHeartbeat,
 			nrc.syncInternalPeers()
 		}
 
-		sendHeartBeat(healthChan, "NRC")
+		healthcheck.SendHeartBeat(healthChan, "NRC")
 
 		select {
 		case <-stopCh:
@@ -367,7 +369,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 			case *gobgp.WatchEventBestPath:
 				glog.V(3).Info("Processing bgp route advertisement from peer")
 				if nrc.MetricsEnabled {
-					controllerBGPadvertisementsReceived.WithLabelValues().Add(float64(1))
+					metrics.ControllerBGPadvertisementsReceived.WithLabelValues().Add(float64(1))
 				}
 				for _, path := range msg.PathList {
 					if path.IsLocal() {
@@ -1141,7 +1143,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		controllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime))
+		metrics.ControllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime))
 		glog.V(2).Infof("Syncing BGP peers for the node took %v", endTime)
 	}()
 
@@ -1152,7 +1154,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		return
 	}
 
-	controllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
+	metrics.ControllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, node := range nodes.Items {
@@ -1782,9 +1784,9 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc := NetworkRoutingController{}
 	if kubeRouterConfig.MetricsEnabled {
 		//Register the metrics for this controller
-		prometheus.MustRegister(controllerBGPadvertisementsReceived)
-		prometheus.MustRegister(controllerBGPInternalPeersSyncTime)
-		prometheus.MustRegister(controllerBPGpeers)
+		prometheus.MustRegister(metrics.ControllerBGPadvertisementsReceived)
+		prometheus.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
+		prometheus.MustRegister(metrics.ControllerBPGpeers)
 		nrc.MetricsEnabled = true
 	}
 

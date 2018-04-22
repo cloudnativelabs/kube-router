@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
@@ -42,7 +44,6 @@ const (
 	IFACE_HAS_ADDR     = "file exists"
 	IFACE_HAS_NO_ADDR  = "cannot assign requested address"
 	IPVS_SERVER_EXISTS = "file exists"
-	namespace          = "kube_router"
 
 	svcDSRAnnotation       = "kube-router.io/service.dsr"
 	svcSchedulerAnnotation = "kube-router.io/service.scheduler"
@@ -211,7 +212,7 @@ type endpointsInfo struct {
 type endpointsInfoMap map[string][]endpointsInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
-func (nsc *NetworkServicesController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
@@ -245,7 +246,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *ControllerHeartbeat
 		if err != nil {
 			glog.Errorf("Error during periodic ipvs sync: " + err.Error())
 		} else {
-			sendHeartBeat(healthChan, "NSC")
+			healthcheck.SendHeartBeat(healthChan, "NSC")
 		}
 		nsc.readyForUpdates = true
 		select {
@@ -286,7 +287,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	defer func() {
 		endTime := time.Since(start)
 		glog.V(2).Infof("Publishing IPVS metrics took %v", endTime)
-		controllerIpvsMetricsExportTime.WithLabelValues().Set(float64(endTime))
+		metrics.ControllerIpvsMetricsExportTime.WithLabelValues().Set(float64(endTime))
 	}()
 
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
@@ -332,17 +333,17 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 
 			if pushMetric {
 				glog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)", svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
-				serviceBpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSIn))
-				serviceBpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSOut))
-				serviceBytesIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesIn))
-				serviceBytesOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesOut))
-				serviceCPS.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.CPS))
-				servicePacketsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsIn))
-				servicePacketsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsOut))
-				servicePpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSIn))
-				servicePpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSOut))
-				serviceTotalConn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.Connections))
-				controllerIpvsServices.WithLabelValues().Set(float64(len(ipvsSvcs)))
+				metrics.ServiceBpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSIn))
+				metrics.ServiceBpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BPSOut))
+				metrics.ServiceBytesIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesIn))
+				metrics.ServiceBytesOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.BytesOut))
+				metrics.ServiceCPS.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.CPS))
+				metrics.ServicePacketsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsIn))
+				metrics.ServicePacketsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PacketsOut))
+				metrics.ServicePpsIn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSIn))
+				metrics.ServicePpsOut.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.PPSOut))
+				metrics.ServiceTotalConn.WithLabelValues(svc.namespace, svc.name, svcVip, svc.protocol, strconv.Itoa(svc.port)).Set(float64(ipvsSvc.Stats.Connections))
+				metrics.ControllerIpvsServices.WithLabelValues().Set(float64(len(ipvsSvcs)))
 			}
 		}
 	}
@@ -432,7 +433,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	defer func() {
 		endTime := time.Since(start)
 		if nsc.MetricsEnabled {
-			controllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime))
+			metrics.ControllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime))
 		}
 		glog.V(1).Infof("sync ipvs services took %v", endTime)
 	}()
@@ -1798,18 +1799,18 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
-		prometheus.MustRegister(controllerIpvsServices)
-		prometheus.MustRegister(controllerIpvsServicesSyncTime)
-		prometheus.MustRegister(serviceBpsIn)
-		prometheus.MustRegister(serviceBpsOut)
-		prometheus.MustRegister(serviceBytesIn)
-		prometheus.MustRegister(serviceBytesOut)
-		prometheus.MustRegister(serviceCPS)
-		prometheus.MustRegister(servicePacketsIn)
-		prometheus.MustRegister(servicePacketsOut)
-		prometheus.MustRegister(servicePpsIn)
-		prometheus.MustRegister(servicePpsOut)
-		prometheus.MustRegister(serviceTotalConn)
+		prometheus.MustRegister(metrics.ControllerIpvsServices)
+		prometheus.MustRegister(metrics.ControllerIpvsServicesSyncTime)
+		prometheus.MustRegister(metrics.ServiceBpsIn)
+		prometheus.MustRegister(metrics.ServiceBpsOut)
+		prometheus.MustRegister(metrics.ServiceBytesIn)
+		prometheus.MustRegister(metrics.ServiceBytesOut)
+		prometheus.MustRegister(metrics.ServiceCPS)
+		prometheus.MustRegister(metrics.ServicePacketsIn)
+		prometheus.MustRegister(metrics.ServicePacketsOut)
+		prometheus.MustRegister(metrics.ServicePpsIn)
+		prometheus.MustRegister(metrics.ServicePpsOut)
+		prometheus.MustRegister(metrics.ServiceTotalConn)
 		nsc.MetricsEnabled = true
 	}
 

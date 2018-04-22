@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
@@ -115,7 +117,7 @@ type protocolAndPort struct {
 }
 
 // Run runs forver till we receive notification on stopCh
-func (npc *NetworkPolicyController) Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
@@ -136,7 +138,7 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *ControllerHeartbeat, 
 		if err != nil {
 			glog.Errorf("Error during periodic sync: " + err.Error())
 		} else {
-			sendHeartBeat(healthChan, "NPC")
+			healthcheck.SendHeartBeat(healthChan, "NPC")
 		}
 		npc.readyForUpdates = true
 		select {
@@ -206,7 +208,7 @@ func (npc *NetworkPolicyController) Sync() error {
 	defer func() {
 		endTime := time.Since(start)
 		if npc.MetricsEnabled {
-			controllerIptablesSyncTime.WithLabelValues().Set(float64(endTime))
+			metrics.ControllerIptablesSyncTime.WithLabelValues().Set(float64(endTime))
 		}
 		glog.V(1).Infof("sync iptables took %v", endTime)
 	}()
@@ -1480,7 +1482,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
-		prometheus.MustRegister(controllerIptablesSyncTime)
+		prometheus.MustRegister(metrics.ControllerIptablesSyncTime)
 		npc.MetricsEnabled = true
 	}
 
