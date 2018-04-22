@@ -1,12 +1,10 @@
 package routing
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -14,11 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
@@ -33,20 +26,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 
-	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
-)
-
-var (
-	podEgressArgs = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
-		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
-		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
-		"-j", "MASQUERADE"}
-	podEgressArgsBad = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
-		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
-		"-j", "MASQUERADE"}}
 )
 
 const (
@@ -81,9 +63,9 @@ type NetworkRoutingController struct {
 	clusterCIDR             string
 	enablePodEgress         bool
 	hostnameOverride        string
-	advertiseClusterIp      bool
-	advertiseExternalIp     bool
-	advertiseLoadBalancerIp bool
+	advertiseClusterIP      bool
+	advertiseExternalIP     bool
+	advertiseLoadBalancerIP bool
 	defaultNodeAsnNumber    uint32
 	nodeAsnNumber           uint32
 	globalPeerRouters       []*config.NeighborConfig
@@ -93,12 +75,12 @@ type NetworkRoutingController struct {
 	bgpGracefulRestart      bool
 	ipSetHandler            *utils.IPSet
 	enableOverlays          bool
-	peerMultihopTtl         uint8
+	peerMultihopTTL         uint8
 	MetricsEnabled          bool
 	bgpServerStarted        bool
 	bgpRRClient             bool
 	bgpRRServer             bool
-	bgpClusterId            uint32
+	bgpClusterID            uint32
 	cniConfFile             string
 	initSrcDstCheckDone     bool
 	ec2IamAuthorized        bool
@@ -297,73 +279,6 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 }
 
-func createPodEgressRule() error {
-	iptablesCmdHandler, err := iptables.New()
-	if err != nil {
-		return errors.New("Failed create iptables handler:" + err.Error())
-	}
-
-	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", podEgressArgs...)
-	if err != nil {
-		return errors.New("Failed to add iptable rule to masqurade outbound traffic from pods: " +
-			err.Error() + "External connectivity will not work.")
-
-	}
-
-	glog.V(1).Infof("Added iptables rule to masqurade outbound traffic from pods.")
-	return nil
-}
-
-func deletePodEgressRule() error {
-	iptablesCmdHandler, err := iptables.New()
-	if err != nil {
-		return errors.New("Failed create iptables handler:" + err.Error())
-	}
-
-	exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", podEgressArgs...)
-	if err != nil {
-		return errors.New("Failed to lookup iptable rule to masqurade outbound traffic from pods: " + err.Error())
-	}
-
-	if exists {
-		err = iptablesCmdHandler.Delete("nat", "POSTROUTING", podEgressArgs...)
-		if err != nil {
-			return errors.New("Failed to delete iptable rule to masqurade outbound traffic from pods: " +
-				err.Error() + ". Pod egress might still work...")
-		}
-		glog.Infof("Deleted iptables rule to masqurade outbound traffic from pods.")
-	}
-
-	return nil
-}
-
-func deleteBadPodEgressRules() error {
-	iptablesCmdHandler, err := iptables.New()
-	if err != nil {
-		return errors.New("Failed create iptables handler:" + err.Error())
-	}
-
-	for _, args := range podEgressArgsBad {
-		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
-		if err != nil {
-			return fmt.Errorf("Failed to lookup iptables rule: %s", err.Error())
-		}
-
-		if exists {
-			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
-			if err != nil {
-				return fmt.Errorf("Failed to delete old/bad iptable rule to "+
-					"masqurade outbound traffic from pods: %s.\n"+
-					"Pod egress might still work, or bugs may persist after upgrade...",
-					err)
-			}
-			glog.Infof("Deleted old/bad iptables rule to masqurade outbound traffic from pods.")
-		}
-	}
-
-	return nil
-}
-
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
 	watcher := nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 	for {
@@ -408,523 +323,6 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrLen),
 		subnet), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
-	}
-
-	return nil
-}
-
-func (nrc *NetworkRoutingController) getClusterIp(svc *v1core.Service) string {
-	clusterIp := ""
-	if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
-
-		// skip headless services
-		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
-			clusterIp = svc.Spec.ClusterIP
-		}
-	}
-	return clusterIp
-}
-
-func (nrc *NetworkRoutingController) getExternalIps(svc *v1core.Service) []string {
-	externalIpList := make([]string, 0)
-	if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
-
-		// skip headless services
-		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
-			externalIpList = append(externalIpList, svc.Spec.ExternalIPs...)
-		}
-	}
-	return externalIpList
-}
-
-func (nrc *NetworkRoutingController) getLoadBalancerIps(svc *v1core.Service) []string {
-	loadBalancerIpList := make([]string, 0)
-	if svc.Spec.Type == "LoadBalancer" {
-		// skip headless services
-		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
-			_, skiplbips := svc.ObjectMeta.Annotations["kube-router.io/service.skiplbips"]
-			if !skiplbips {
-				for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
-					if len(lbIngress.IP) > 0 {
-						loadBalancerIpList = append(loadBalancerIpList, lbIngress.IP)
-					}
-				}
-			}
-		}
-	}
-	return loadBalancerIpList
-}
-
-func (nrc *NetworkRoutingController) getAllVIPs() ([]string, []string, error) {
-	return nrc.getVIPs(false)
-}
-
-func (nrc *NetworkRoutingController) getActiveVIPs() ([]string, []string, error) {
-	return nrc.getVIPs(true)
-}
-
-func (nrc *NetworkRoutingController) getVIPs(onlyActiveEndpoints bool) ([]string, []string, error) {
-	toAdvertiseList := make([]string, 0)
-	toWithdrawList := make([]string, 0)
-
-	for _, obj := range nrc.svcLister.List() {
-		svc := obj.(*v1core.Service)
-
-		toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, onlyActiveEndpoints)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if len(toAdvertise) > 0 {
-			toAdvertiseList = append(toAdvertiseList, toAdvertise...)
-		}
-
-		if len(toWithdraw) > 0 {
-			toWithdrawList = append(toWithdrawList, toWithdraw...)
-		}
-	}
-
-	return toAdvertiseList, toWithdrawList, nil
-}
-
-func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, onlyActiveEndpoints bool) ([]string, []string, error) {
-	ipList := make([]string, 0)
-	var err error
-
-	nodeHasEndpoints := true
-	if onlyActiveEndpoints {
-		_, isLocal := svc.Annotations[svcLocalAnnotation]
-		if isLocal || svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
-			nodeHasEndpoints, err = nrc.nodeHasEndpointsForService(svc)
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-	}
-
-	if nrc.advertiseClusterIp {
-		clusterIp := nrc.getClusterIp(svc)
-		if clusterIp != "" {
-			ipList = append(ipList, clusterIp)
-		}
-	}
-	if nrc.advertiseExternalIp {
-		ipList = append(ipList, nrc.getExternalIps(svc)...)
-	}
-	if nrc.advertiseLoadBalancerIp {
-		ipList = append(ipList, nrc.getLoadBalancerIps(svc)...)
-	}
-
-	if !nodeHasEndpoints {
-		return nil, ipList, nil
-	}
-
-	return ipList, nil, nil
-}
-
-func (nrc *NetworkRoutingController) advertiseVIPs(vips []string) {
-	for _, vip := range vips {
-		err := nrc.bgpAdvertiseVIP(vip)
-		if err != nil {
-			glog.Errorf("error advertising IP: %q, error: %v", vip, err)
-		}
-	}
-}
-
-func (nrc *NetworkRoutingController) withdrawVIPs(vips []string) {
-	for _, vip := range vips {
-		err := nrc.bgpWithdrawVIP(vip)
-		if err != nil {
-			glog.Errorf("error withdrawing IP: %q, error: %v", vip, err)
-		}
-	}
-}
-
-func isEndpointsForLeaderElection(ep *v1core.Endpoints) bool {
-	_, isLeaderElection := ep.Annotations[LeaderElectionRecordAnnotationKey]
-	return isLeaderElection
-}
-
-// nodeHasEndpointsForService will get the corresponding Endpoints resource for a given Service
-// return true if any endpoint addresses has NodeName matching the node name of the route controller
-func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Service) (bool, error) {
-	// listers for endpoints and services should use the same keys since
-	// endpoint and service resources share the same object name and namespace
-	key, err := cache.MetaNamespaceKeyFunc(svc)
-	if err != nil {
-		return false, err
-	}
-	item, exists, err := nrc.epLister.GetByKey(key)
-	if err != nil {
-		return false, err
-	}
-
-	if !exists {
-		return false, fmt.Errorf("endpoint resource doesn't exist for service: %q", svc.Name)
-	}
-
-	ep, ok := item.(*v1core.Endpoints)
-	if !ok {
-		return false, errors.New("failed to convert cache item to Endpoints type")
-	}
-
-	for _, subset := range ep.Subsets {
-		for _, address := range subset.Addresses {
-			if *address.NodeName == nrc.nodeName {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
-
-func (nrc *NetworkRoutingController) serviceForEndpoints(ep *v1core.Endpoints) (*v1core.Service, error) {
-	key, err := cache.MetaNamespaceKeyFunc(ep)
-	if err != nil {
-		return nil, err
-	}
-
-	item, exists, err := nrc.svcLister.GetByKey(key)
-	if err != nil {
-		return nil, err
-	}
-
-	if !exists {
-		return nil, fmt.Errorf("service resource doesn't exist for endpoints: %q", ep.Name)
-	}
-
-	svc, ok := item.(*v1core.Service)
-	if !ok {
-		return nil, errors.New("type assertion failed for object in service indexer")
-	}
-
-	return svc, nil
-}
-
-// Used for processing Annotations that may contain multiple items
-// Pass this the string and the delimiter
-func stringToSlice(s, d string) []string {
-	ss := make([]string, 0)
-	if strings.Contains(s, d) {
-		ss = strings.Split(s, d)
-	} else {
-		ss = append(ss, s)
-	}
-	return ss
-}
-
-func stringSliceToIPs(s []string) ([]net.IP, error) {
-	ips := make([]net.IP, 0)
-	for _, ipString := range s {
-		ip := net.ParseIP(ipString)
-		if ip == nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as an IP", ipString)
-		}
-		ips = append(ips, ip)
-	}
-	return ips, nil
-}
-
-func stringSliceToUInt32(s []string) ([]uint32, error) {
-	ints := make([]uint32, 0)
-	for _, intString := range s {
-		newInt, err := strconv.ParseUint(intString, 0, 32)
-		if err != nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as an integer", intString)
-		}
-		ints = append(ints, uint32(newInt))
-	}
-	return ints, nil
-}
-
-func stringSliceB64Decode(s []string) ([]string, error) {
-	ss := make([]string, 0)
-	for _, b64String := range s {
-		decoded, err := base64.StdEncoding.DecodeString(b64String)
-		if err != nil {
-			return nil, fmt.Errorf("Could not parse \"%s\" as a base64 encoded string",
-				b64String)
-		}
-		ss = append(ss, string(decoded))
-	}
-	return ss, nil
-}
-
-// Does validation and returns neighbor configs
-func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
-	[]*config.NeighborConfig, error) {
-	peers := make([]*config.NeighborConfig, 0)
-
-	// Validations
-	if len(ips) != len(asns) {
-		return nil, errors.New("Invalid peer router config. " +
-			"The number of IPs and ASN numbers must be equal.")
-	}
-
-	if len(ips) != len(passwords) && len(passwords) != 0 {
-		return nil, errors.New("Invalid peer router config. " +
-			"The number of passwords should either be zero, or one per peer router." +
-			" Use blank items if a router doesn't expect a password.\n" +
-			"Example: \"pass,,pass\" OR [\"pass\",\"\",\"pass\"].")
-	}
-
-	for i := 0; i < len(ips); i++ {
-		if !((asns[i] >= 64512 && asns[i] <= 65535) ||
-			(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
-			return nil, fmt.Errorf("Invalid ASN number \"%d\" for global BGP peer",
-				asns[i])
-		}
-
-		peer := &config.NeighborConfig{
-			NeighborAddress: ips[i].String(),
-			PeerAs:          asns[i],
-		}
-
-		if len(passwords) != 0 {
-			peer.AuthPassword = passwords[i]
-		}
-
-		peers = append(peers, peer)
-	}
-
-	return peers, nil
-}
-
-func connectToExternalBGPPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfig, bgpGracefulRestart bool, peerMultihopTtl uint8) error {
-	for _, peerConfig := range peerConfigs {
-		n := &config.Neighbor{
-			Config: *peerConfig,
-		}
-
-		if bgpGracefulRestart {
-			n.GracefulRestart = config.GracefulRestart{
-				Config: config.GracefulRestartConfig{
-					Enabled: true,
-				},
-				State: config.GracefulRestartState{
-					LocalRestarting: true,
-				},
-			}
-
-			n.AfiSafis = []config.AfiSafi{
-				{
-					Config: config.AfiSafiConfig{
-						AfiSafiName: config.AFI_SAFI_TYPE_IPV4_UNICAST,
-						Enabled:     true,
-					},
-					MpGracefulRestart: config.MpGracefulRestart{
-						Config: config.MpGracefulRestartConfig{
-							Enabled: true,
-						},
-					},
-				},
-			}
-		}
-		if peerMultihopTtl > 1 {
-			n.EbgpMultihop = config.EbgpMultihop{
-				Config: config.EbgpMultihopConfig{
-					Enabled:     true,
-					MultihopTtl: peerMultihopTtl,
-				},
-				State: config.EbgpMultihopState{
-					Enabled:     true,
-					MultihopTtl: peerMultihopTtl,
-				},
-			}
-		}
-		err := server.AddNeighbor(n)
-		if err != nil {
-			return fmt.Errorf("Error peering with peer router "+
-				"\"%s\" due to: %s", peerConfig.NeighborAddress, err)
-		}
-		glog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
-			peerConfig.NeighborAddress, peerConfig.PeerAs)
-	}
-	return nil
-}
-
-// AdvertiseClusterIp  advertises the service cluster ip the configured peers
-func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
-
-	attrs := []bgp.PathAttributeInterface{
-		bgp.NewPathAttributeOrigin(0),
-		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
-	}
-
-	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
-
-	_, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		vip), false, attrs, time.Now(), false)})
-
-	return err
-}
-
-// UnadvertiseClusterIP  unadvertises the service cluster ip
-func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
-	glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
-
-	pathList := []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		vip), true, nil, time.Now(), false)}
-
-	err := nrc.bgpServer.DeletePath([]byte(nil), 0, "", pathList)
-
-	return err
-}
-
-// Each node advertises its pod CIDR to the nodes with same ASN (iBGP peers) and to the global BGP peer
-// or per node BGP peer. Each node ends up advertising not only pod CIDR assigned to the self but other
-// learned routes to the node pod CIDR's as well to global BGP peer or per node BGP peers. external BGP
-// peer will randomly (since all path have equal selection attributes) select the routes from multiple
-// routes to a pod CIDR which will result in extra hop. To prevent this behaviour this methods add
-// defult export policy to reject everything and an explicit policy is added so that each node only
-// advertised the pod CIDR assigned to it. Additionally export policy is added so that each node
-// advertises cluster IP's ONLY to the external BGP peers (and not to iBGP peers).
-func (nrc *NetworkRoutingController) addExportPolicies() error {
-
-	// we are rr server do not add export policies
-	if nrc.bgpRRServer {
-		return nil
-	}
-
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		return err
-	}
-
-	// creates prefix set to represent the assigned node's pod CIDR
-	podCidrPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
-		PrefixSetName: "podcidrprefixset",
-		PrefixList: []config.Prefix{
-			{
-				IpPrefix: cidr,
-			},
-		},
-	})
-	err = nrc.bgpServer.ReplaceDefinedSet(podCidrPrefixSet)
-	if err != nil {
-		nrc.bgpServer.AddDefinedSet(podCidrPrefixSet)
-	}
-
-	// creates prefix set to represent all the advertisable IP associated with the services
-	advIpPrefixList := make([]config.Prefix, 0)
-	advIps, _, _ := nrc.getAllVIPs()
-	for _, ip := range advIps {
-		advIpPrefixList = append(advIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
-	}
-	clusterIpPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
-		PrefixSetName: "clusteripprefixset",
-		PrefixList:    advIpPrefixList,
-	})
-	err = nrc.bgpServer.ReplaceDefinedSet(clusterIpPrefixSet)
-	if err != nil {
-		nrc.bgpServer.AddDefinedSet(clusterIpPrefixSet)
-	}
-
-	statements := make([]config.Statement, 0)
-
-	// statement to represent the export policy to permit advertising node's pod CIDR
-	statements = append(statements,
-		config.Statement{
-			Conditions: config.Conditions{
-				MatchPrefixSet: config.MatchPrefixSet{
-					PrefixSet: "podcidrprefixset",
-				},
-			},
-			Actions: config.Actions{
-				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
-			},
-		})
-
-	externalBgpPeers := make([]string, 0)
-	if len(nrc.globalPeerRouters) != 0 {
-		for _, peer := range nrc.globalPeerRouters {
-			externalBgpPeers = append(externalBgpPeers, peer.NeighborAddress)
-		}
-	}
-	if len(nrc.nodePeerRouters) != 0 {
-		for _, peer := range nrc.nodePeerRouters {
-			externalBgpPeers = append(externalBgpPeers, peer)
-		}
-	}
-	if len(externalBgpPeers) > 0 {
-		ns, _ := table.NewNeighborSet(config.NeighborSet{
-			NeighborSetName:  "externalpeerset",
-			NeighborInfoList: externalBgpPeers,
-		})
-		err = nrc.bgpServer.ReplaceDefinedSet(ns)
-		if err != nil {
-			nrc.bgpServer.AddDefinedSet(ns)
-		}
-		// statement to represent the export policy to permit advertising cluster IP's
-		// only to the global BGP peer or node specific BGP peer
-		statements = append(statements, config.Statement{
-			Conditions: config.Conditions{
-				MatchPrefixSet: config.MatchPrefixSet{
-					PrefixSet: "clusteripprefixset",
-				},
-				MatchNeighborSet: config.MatchNeighborSet{
-					NeighborSet: "externalpeerset",
-				},
-			},
-			Actions: config.Actions{
-				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
-			},
-		})
-	}
-
-	definition := config.PolicyDefinition{
-		Name:       "kube_router",
-		Statements: statements,
-	}
-
-	policy, err := table.NewPolicy(definition)
-	if err != nil {
-		return errors.New("Failed to create new policy: " + err.Error())
-	}
-
-	policyAlreadyExists := false
-	policyList := nrc.bgpServer.GetPolicy()
-	for _, existingPolicy := range policyList {
-		if existingPolicy.Name == "kube_router" {
-			policyAlreadyExists = true
-		}
-	}
-
-	if !policyAlreadyExists {
-		err = nrc.bgpServer.AddPolicy(policy, false)
-		if err != nil {
-			return errors.New("Failed to add policy: " + err.Error())
-		}
-	}
-
-	policyAssignmentExists := false
-	_, existingPolicyAssignments, err := nrc.bgpServer.GetPolicyAssignment("", table.POLICY_DIRECTION_EXPORT)
-	if err == nil {
-		for _, existingPolicyAssignment := range existingPolicyAssignments {
-			if existingPolicyAssignment.Name == "kube_router" {
-				policyAssignmentExists = true
-			}
-		}
-	}
-
-	if !policyAssignmentExists {
-		err = nrc.bgpServer.AddPolicyAssignment("",
-			table.POLICY_DIRECTION_EXPORT,
-			[]*config.PolicyDefinition{&definition},
-			table.ROUTE_TYPE_REJECT)
-		if err != nil {
-			return errors.New("Failed to add policy assignment: " + err.Error())
-		}
-	} else {
-		// configure default BGP export policy to reject
-		err = nrc.bgpServer.ReplacePolicyAssignment("",
-			table.POLICY_DIRECTION_EXPORT,
-			[]*config.PolicyDefinition{&definition},
-			table.ROUTE_TYPE_REJECT)
-		if err != nil {
-			return errors.New("Failed to replace policy assignment: " + err.Error())
-		}
 	}
 
 	return nil
@@ -1039,56 +437,6 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	}
 }
 
-func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
-	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
-		return
-	}
-
-	for _, node := range nodes.Items {
-		if node.Spec.ProviderID == "" || !strings.HasPrefix(node.Spec.ProviderID, "aws") {
-			return
-		}
-		providerID := strings.Replace(node.Spec.ProviderID, "///", "//", 1)
-		URL, err := url.Parse(providerID)
-		instanceID := URL.Path
-		instanceID = strings.Trim(instanceID, "/")
-
-		sess, _ := session.NewSession(aws.NewConfig().WithMaxRetries(5))
-		metadataClient := ec2metadata.New(sess)
-		region, err := metadataClient.Region()
-		if err != nil {
-			glog.Errorf("Failed to disable source destination check due to: " + err.Error())
-			return
-		}
-		sess.Config.Region = aws.String(region)
-		ec2Client := ec2.New(sess)
-		_, err = ec2Client.ModifyInstanceAttribute(
-			&ec2.ModifyInstanceAttributeInput{
-				InstanceId: aws.String(instanceID),
-				SourceDestCheck: &ec2.AttributeBooleanValue{
-					Value: aws.Bool(false),
-				},
-			},
-		)
-		if err != nil {
-			awserr := err.(awserr.Error)
-			if awserr.Code() == "UnauthorizedOperation" {
-				nrc.ec2IamAuthorized = false
-				glog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
-				return
-			}
-			glog.Errorf("Failed to disable source destination check due to: %v", err.Error())
-		} else {
-			glog.Infof("Disabled source destination check for the instance: " + instanceID)
-		}
-
-		// to prevent EC2 rejecting API call due to API throttling give a delay between the calls
-		time.Sleep(1000 * time.Millisecond)
-	}
-}
-
 func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	// Get the current list of the nodes from API server
 	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
@@ -1141,160 +489,6 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	return nil
 }
 
-// Refresh the peer relationship rest of the nodes in the cluster (iBGP peers). Node add/remove
-// events should ensure peer relationship with only currently active nodes. In case
-// we miss any events from API server this method which is called periodically
-// ensure peer relationship with removed nodes is deleted. Also update Pod subnet ipset.
-func (nrc *NetworkRoutingController) syncInternalPeers() {
-	nrc.mu.Lock()
-	defer nrc.mu.Unlock()
-
-	start := time.Now()
-	defer func() {
-		endTime := time.Since(start)
-		metrics.ControllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime))
-		glog.V(2).Infof("Syncing BGP peers for the node took %v", endTime)
-	}()
-
-	// get the current list of the nodes from API server
-	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
-		return
-	}
-
-	metrics.ControllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
-	// establish peer and add Pod CIDRs with current set of nodes
-	currentNodes := make([]string, 0)
-	for _, node := range nodes.Items {
-		nodeIP, _ := utils.GetNodeIP(&node)
-
-		// skip self
-		if nodeIP.String() == nrc.nodeIP.String() {
-			continue
-		}
-
-		// we are rr-client peer only with rr-server
-		if nrc.bgpRRClient {
-			if _, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; !ok {
-				continue
-			}
-		}
-
-		// if node full mesh is not requested then just peer with nodes with same ASN
-		// (run iBGP among same ASN peers)
-		if !nrc.bgpFullMeshMode {
-			nodeasn, ok := node.ObjectMeta.Annotations[nodeASNAnnotation]
-			if !ok {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is unknown.",
-					nodeIP.String())
-				continue
-			}
-
-			asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
-			if err != nil {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is invalid.",
-					nodeIP.String())
-				continue
-			}
-
-			// if the nodes ASN number is different from ASN number of current node skip peering
-			if nrc.nodeAsnNumber != uint32(asnNo) {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is different.",
-					nodeIP.String())
-				continue
-			}
-		}
-
-		currentNodes = append(currentNodes, nodeIP.String())
-		nrc.activeNodes[nodeIP.String()] = true
-		n := &config.Neighbor{
-			Config: config.NeighborConfig{
-				NeighborAddress: nodeIP.String(),
-				PeerAs:          nrc.nodeAsnNumber,
-			},
-		}
-
-		if nrc.bgpGracefulRestart {
-			n.GracefulRestart = config.GracefulRestart{
-				Config: config.GracefulRestartConfig{
-					Enabled: true,
-				},
-				State: config.GracefulRestartState{
-					LocalRestarting: true,
-				},
-			}
-
-			n.AfiSafis = []config.AfiSafi{
-				{
-					Config: config.AfiSafiConfig{
-						AfiSafiName: config.AFI_SAFI_TYPE_IPV4_UNICAST,
-						Enabled:     true,
-					},
-					MpGracefulRestart: config.MpGracefulRestart{
-						Config: config.MpGracefulRestartConfig{
-							Enabled: true,
-						},
-					},
-				},
-			}
-		}
-
-		// we are rr-server peer with other rr-client with reflection enabled
-		if nrc.bgpRRServer {
-			if _, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
-				//add rr options with clusterId
-				n.RouteReflector = config.RouteReflector{
-					Config: config.RouteReflectorConfig{
-						RouteReflectorClient:    true,
-						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterId),
-					},
-					State: config.RouteReflectorState{
-						RouteReflectorClient:    true,
-						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterId),
-					},
-				}
-			}
-		}
-
-		// TODO: check if a node is alredy added as nieighbour in a better way than add and catch error
-		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
-			if !strings.Contains(err.Error(), "Can't overwrite the existing peer") {
-				glog.Errorf("Failed to add node %s as peer due to %s", nodeIP.String(), err)
-			}
-		}
-	}
-
-	// find the list of the node removed, from the last known list of active nodes
-	removedNodes := make([]string, 0)
-	for ip := range nrc.activeNodes {
-		stillActive := false
-		for _, node := range currentNodes {
-			if ip == node {
-				stillActive = true
-				break
-			}
-		}
-		if !stillActive {
-			removedNodes = append(removedNodes, ip)
-		}
-	}
-
-	// delete the neighbor for the nodes that are removed
-	for _, ip := range removedNodes {
-		n := &config.Neighbor{
-			Config: config.NeighborConfig{
-				NeighborAddress: ip,
-				PeerAs:          nrc.defaultNodeAsnNumber,
-			},
-		}
-		if err := nrc.bgpServer.DeleteNeighbor(n); err != nil {
-			glog.Errorf("Failed to remove node %s as peer due to %s", ip, err)
-		}
-		delete(nrc.activeNodes, ip)
-	}
-}
-
 // ensure there is rule in filter table and FORWARD chain to permit in/out traffic from pods
 // this rules will be appended so that any iptable rules for network policies will take
 // precedence
@@ -1344,194 +538,6 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 	return nil
 }
 
-// setup a custom routing table that will be used for policy based routing to ensure traffic originating
-// on tunnel interface only leaves through tunnel interface irrespective rp_filter enabled/disabled
-func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
-	err := rtTablesAdd(customRouteTableID, customRouteTableName)
-	if err != nil {
-		return fmt.Errorf("Failed to update rt_tables file: %s", err)
-	}
-
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		return fmt.Errorf("Failed to get the pod CIDR allocated for the node: %s", err.Error())
-	}
-
-	out, err := exec.Command("ip", "rule", "list").Output()
-	if err != nil {
-		return fmt.Errorf("Failed to verify if `ip rule` exists: %s", err.Error())
-	}
-
-	if !strings.Contains(string(out), cidr) {
-		err = exec.Command("ip", "rule", "add", "from", cidr, "lookup", customRouteTableID).Run()
-		if err != nil {
-			return fmt.Errorf("Failed to add ip rule due to: %s", err.Error())
-		}
-	}
-
-	return nil
-}
-
-func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
-	err := rtTablesAdd(customRouteTableID, customRouteTableName)
-	if err != nil {
-		return fmt.Errorf("Failed to update rt_tables file: %s", err)
-	}
-
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		return fmt.Errorf("Failed to get the pod CIDR allocated for the node: %s",
-			err.Error())
-	}
-
-	out, err := exec.Command("ip", "rule", "list").Output()
-	if err != nil {
-		return fmt.Errorf("Failed to verify if `ip rule` exists: %s",
-			err.Error())
-	}
-
-	if strings.Contains(string(out), cidr) {
-		err = exec.Command("ip", "rule", "del", "from", cidr, "table", customRouteTableID).Run()
-		if err != nil {
-			return fmt.Errorf("Failed to delete ip rule: %s", err.Error())
-		}
-	}
-
-	return nil
-}
-
-func rtTablesAdd(tableNumber, tableName string) error {
-	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
-	if err != nil {
-		return fmt.Errorf("Failed to read: %s", err.Error())
-	}
-
-	if !strings.Contains(string(b), tableName) {
-		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			return fmt.Errorf("Failed to open: %s", err.Error())
-		}
-		defer f.Close()
-		if _, err = f.WriteString(tableNumber + " " + tableName + "\n"); err != nil {
-			return fmt.Errorf("Failed to write: %s", err.Error())
-		}
-	}
-
-	return nil
-}
-
-// OnNodeUpdate Handle updates from Node watcher. Node watcher calls this method whenever there is
-// new node is added or old node is deleted. So peer up with new node and drop peering
-// from old node
-func (nrc *NetworkRoutingController) OnNodeUpdate(obj interface{}) {
-	if !nrc.bgpServerStarted {
-		return
-	}
-
-	if nrc.bgpEnableInternal {
-		nrc.syncInternalPeers()
-	}
-
-	// skip if first round of disableSourceDestinationCheck() is not done yet, this is to prevent
-	// all the nodes for all the node add update trying to perfrom disableSourceDestinationCheck
-	if nrc.initSrcDstCheckDone && nrc.ec2IamAuthorized {
-		nrc.disableSourceDestinationCheck()
-	}
-}
-
-func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
-	svc, ok := obj.(*v1core.Service)
-	if !ok {
-		glog.Errorf("cache indexer returned obj that is not type *v1.Service")
-		return
-	}
-
-	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
-	if !nrc.bgpServerStarted {
-		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
-		return
-	}
-
-	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
-	if err != nil {
-		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
-		return
-	}
-
-	if len(toAdvertise) > 0 {
-		nrc.advertiseVIPs(toAdvertise)
-	}
-
-	if len(toWithdraw) > 0 {
-		nrc.withdrawVIPs(toWithdraw)
-	}
-}
-
-func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
-	if !nrc.bgpServerStarted {
-		return
-	}
-
-	svc, ok := obj.(*v1core.Service)
-	if !ok {
-		glog.Errorf("cache indexer returned obj that is not type *v1.Service")
-		return
-	}
-
-	glog.V(1).Infof("Received event to delete service: %s/%s from watch API", svc.Namespace, svc.Name)
-	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
-	if err != nil {
-		glog.Errorf("failed to get clean up routes for deleted service: %s/%s", svc.Namespace, svc.Name)
-		return
-	}
-
-	if len(toAdvertise) > 0 {
-		nrc.withdrawVIPs(toWithdraw)
-	}
-
-	if len(toWithdraw) > 0 {
-		nrc.withdrawVIPs(toWithdraw)
-	}
-}
-
-func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
-	ep, ok := obj.(*v1core.Endpoints)
-	if !ok {
-		glog.Errorf("cache indexer returned obj that is not type *v1.Endpoints")
-		return
-	}
-
-	if isEndpointsForLeaderElection(ep) {
-		return
-	}
-
-	glog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
-	if !nrc.bgpServerStarted {
-		glog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
-		return
-	}
-
-	svc, err := nrc.serviceForEndpoints(ep)
-	if err != nil {
-		glog.Errorf("failed to convert endpoints resource to service: %s", err)
-		return
-	}
-
-	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
-	if err != nil {
-		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
-		return
-	}
-
-	if len(toAdvertise) > 0 {
-		nrc.advertiseVIPs(toAdvertise)
-	}
-
-	if len(toWithdraw) > 0 {
-		nrc.withdrawVIPs(toWithdraw)
-	}
-}
-
 func (nrc *NetworkRoutingController) startBgpServer() error {
 	var nodeAsnNumber uint32
 	node, err := utils.GetNodeObject(nrc.clientset, nrc.hostnameOverride)
@@ -1558,19 +564,19 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 
 	if clusterid, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; ok {
 		glog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
-		clusterId, err := strconv.ParseUint(clusterid, 0, 32)
+		clusterID, err := strconv.ParseUint(clusterid, 0, 32)
 		if err != nil {
 			return errors.New("Failed to parse rr.server clusterId number specified for the the node")
 		}
-		nrc.bgpClusterId = uint32(clusterId)
+		nrc.bgpClusterID = uint32(clusterID)
 		nrc.bgpRRServer = true
 	} else if clusterid, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
 		glog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
-		clusterId, err := strconv.ParseUint(clusterid, 0, 32)
+		clusterID, err := strconv.ParseUint(clusterid, 0, 32)
 		if err != nil {
 			return errors.New("Failed to parse rr.client clusterId number specified for the the node")
 		}
-		nrc.bgpClusterId = uint32(clusterId)
+		nrc.bgpClusterID = uint32(clusterID)
 		nrc.bgpRRClient = true
 	}
 
@@ -1659,7 +665,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	if len(nrc.globalPeerRouters) != 0 {
-		err := connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart, nrc.peerMultihopTtl)
+		err := connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart, nrc.peerMultihopTTL)
 		if err != nil {
 			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
@@ -1670,114 +676,6 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	return nil
-}
-
-func ipv4IsEnabled() bool {
-	l, err := net.Listen("tcp4", "")
-	if err != nil {
-		return false
-	}
-	l.Close()
-
-	return true
-}
-
-func ipv6IsEnabled() bool {
-	l, err := net.Listen("tcp6", "")
-	if err != nil {
-		return false
-	}
-	l.Close()
-
-	return true
-}
-
-func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
-	links, err := netlink.LinkList()
-	if err != nil {
-		return net.IPNet{}, "", errors.New("Failed to get list of links")
-	}
-	for _, link := range links {
-		addresses, err := netlink.AddrList(link, netlink.FAMILY_V4)
-		if err != nil {
-			return net.IPNet{}, "", errors.New("Failed to get list of addr")
-		}
-		for _, addr := range addresses {
-			if addr.IPNet.IP.Equal(nodeIp) {
-				return *addr.IPNet, link.Attrs().Name, nil
-			}
-		}
-	}
-	return net.IPNet{}, "", errors.New("Failed to find interface with specified node ip")
-}
-
-// generateTunnelName will generate a name for a tunnel interface given a node IP
-// for example, if the node IP is 10.0.0.1 the tunnel interface will be named tun-10001
-// Since linux restricts interface names to 15 characters, if length of a node IP
-// is greater than 12 (after removing "."), then the interface name is tunXYZ
-// as opposed to tun-XYZ
-func generateTunnelName(nodeIP string) string {
-	hash := strings.Replace(nodeIP, ".", "", -1)
-
-	if len(hash) < 12 {
-		return "tun-" + hash
-	}
-
-	return "tun" + hash
-}
-
-func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHandler {
-	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			node := obj.(*v1core.Node)
-			nodeIP, _ := utils.GetNodeIP(node)
-
-			glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
-			nrc.OnNodeUpdate(obj)
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			// we are interested only node add/delete, so skip update
-			return
-
-		},
-		DeleteFunc: func(obj interface{}) {
-			node := obj.(*v1core.Node)
-			nodeIP, _ := utils.GetNodeIP(node)
-
-			glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
-			nrc.OnNodeUpdate(obj)
-		},
-	}
-}
-
-func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEventHandler {
-	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			nrc.OnServiceUpdate(obj)
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			nrc.OnServiceUpdate(newObj)
-		},
-		DeleteFunc: func(obj interface{}) {
-			nrc.OnServiceDelete(obj)
-		},
-	}
-}
-
-func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEventHandler {
-	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			nrc.OnEndpointsUpdate(obj)
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			nrc.OnEndpointsUpdate(newObj)
-		},
-		DeleteFunc: func(obj interface{}) {
-			// don't do anything if an endpoints resource is deleted since
-			// the service delete event handles route withdrawls
-			return
-		},
-	}
 }
 
 // func (nrc *NetworkRoutingController) getExternalNodeIPs(
@@ -1802,7 +700,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
 	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
-	nrc.peerMultihopTtl = kubeRouterConfig.PeerMultihopTtl
+	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTtl
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.clientset = clientset
@@ -1852,9 +750,9 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		nrc.defaultNodeAsnNumber = 64512 // this magic number is first of the private ASN range, use it as default
 	}
 
-	nrc.advertiseClusterIp = kubeRouterConfig.AdvertiseClusterIp
-	nrc.advertiseExternalIp = kubeRouterConfig.AdvertiseExternalIp
-	nrc.advertiseLoadBalancerIp = kubeRouterConfig.AdvertiseLoadBalancerIp
+	nrc.advertiseClusterIP = kubeRouterConfig.AdvertiseClusterIp
+	nrc.advertiseExternalIP = kubeRouterConfig.AdvertiseExternalIp
+	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIp
 
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 
