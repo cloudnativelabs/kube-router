@@ -144,7 +144,7 @@ gofmt-fix: ## Fixes files that need to be gofmt'd.
 
 # List of all file_moq.go files which would need to be regenerated
 # from file.go if changed
-gomoqs: ./pkg/controllers/network_services_controller_moq.go
+gomoqs: ./pkg/controllers/proxy/network_services_controller_moq.go
 
 # file_moq.go file is generated from file.go "//go:generate moq ..." in-file
 # annotation, as it needs to know which interfaces to create mock stubs for
