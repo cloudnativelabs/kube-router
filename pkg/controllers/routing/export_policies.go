@@ -2,10 +2,12 @@ package routing
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/table"
+	v1core "k8s.io/api/core/v1"
 )
 
 // Each node advertises its pod CIDR to the nodes with same ASN (iBGP peers) and to the global BGP peer
@@ -59,12 +61,34 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	statements := make([]config.Statement, 0)
 
+	// Get the current list of the nodes from the local cache
+	nodes := nrc.nodeLister.List()
+	iBgpPeers := make([]string, 0)
+	for _, node := range nodes {
+		nodeObj := node.(*v1core.Node)
+		nodeIP, err := utils.GetNodeIP(nodeObj)
+		if err != nil {
+			return fmt.Errorf("Failed to find a node IP: %s", err)
+		}
+		iBgpPeers = append(iBgpPeers, nodeIP.String())
+	}
+	iBgpPeerNS, _ := table.NewNeighborSet(config.NeighborSet{
+		NeighborSetName:  "ipbgppeerset",
+		NeighborInfoList: iBgpPeers,
+	})
+	err = nrc.bgpServer.ReplaceDefinedSet(iBgpPeerNS)
+	if err != nil {
+		nrc.bgpServer.AddDefinedSet(iBgpPeerNS)
+	}
 	// statement to represent the export policy to permit advertising node's pod CIDR
 	statements = append(statements,
 		config.Statement{
 			Conditions: config.Conditions{
 				MatchPrefixSet: config.MatchPrefixSet{
 					PrefixSet: "podcidrprefixset",
+				},
+				MatchNeighborSet: config.MatchNeighborSet{
+					NeighborSet: "ipbgppeerset",
 				},
 			},
 			Actions: config.Actions{
@@ -107,6 +131,21 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
 			},
 		})
+		if nrc.advertiseNodePodCidr {
+			statements = append(statements, config.Statement{
+				Conditions: config.Conditions{
+					MatchPrefixSet: config.MatchPrefixSet{
+						PrefixSet: "podcidrprefixset",
+					},
+					MatchNeighborSet: config.MatchNeighborSet{
+						NeighborSet: "externalpeerset",
+					},
+				},
+				Actions: config.Actions{
+					RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+				},
+			})
+		}
 	}
 
 	definition := config.PolicyDefinition{
