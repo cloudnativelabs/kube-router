@@ -14,13 +14,6 @@ if [ "${TRAVIS_EVENT_TYPE}" = "pull_request" ]; then
     exit 0
 fi
 
-# Release image tag format: v0.0.0 and latest
-if [ -n "$TRAVIS_TAG" ]; then
-    echo "Running Release build on Travis"
-    make release RELEASE_TAG="$TRAVIS_TAG"
-    exit 0
-fi
-
 # Push image tag format: COMMIT
 echo "Running push build on Travis"
 make push
