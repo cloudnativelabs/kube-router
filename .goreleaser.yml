@@ -1,7 +1,8 @@
 release:
   draft: true
 builds:
-- goos:
+- main: ./cmd/kube-router
+  goos:
   - linux
   goarch:
   - amd64

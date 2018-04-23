@@ -122,7 +122,7 @@ push-release: push
 	$(DOCKER) push "$(REGISTRY)"
 	@echo Finished kube-router release container image push.
 
-github-release: kube-router
+github-release:
 	@echo Starting kube-router GitHub release creation.
 	@[ -n "$(value GITHUB_TOKEN)" ] && \
 	  GITHUB_TOKEN=$(value GITHUB_TOKEN); \
