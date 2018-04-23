@@ -218,7 +218,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerConfigs []*config.Ne
 		err := server.AddNeighbor(n)
 		if err != nil {
 			return fmt.Errorf("Error peering with peer router "+
-				"\"%s\" due to: %s", peerConfig.NeighborAddress, err)
+				"%q due to: %s", peerConfig.NeighborAddress, err)
 		}
 		glog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
 			peerConfig.NeighborAddress, peerConfig.PeerAs)
