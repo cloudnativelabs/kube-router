@@ -184,9 +184,9 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
 			// ClusterIPs
-			testcase.nrc.advertiseClusterIp = true
-			testcase.nrc.advertiseExternalIp = false
-			testcase.nrc.advertiseLoadBalancerIp = false
+			testcase.nrc.advertiseClusterIP = true
+			testcase.nrc.advertiseExternalIP = false
+			testcase.nrc.advertiseLoadBalancerIP = false
 
 			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
 			testcase.nrc.advertiseVIPs(toAdvertise)
@@ -498,9 +498,9 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
 			// ExternalIPs
-			testcase.nrc.advertiseClusterIp = false
-			testcase.nrc.advertiseExternalIp = true
-			testcase.nrc.advertiseLoadBalancerIp = true
+			testcase.nrc.advertiseClusterIP = false
+			testcase.nrc.advertiseExternalIP = true
+			testcase.nrc.advertiseLoadBalancerIP = true
 
 			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
 			testcase.nrc.advertiseVIPs(toAdvertise)
@@ -1404,9 +1404,9 @@ func Test_addExportPolicies(t *testing.T) {
 			// ClusterIPs and ExternalIPs
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
-			testcase.nrc.advertiseClusterIp = true
-			testcase.nrc.advertiseExternalIp = true
-			testcase.nrc.advertiseLoadBalancerIp = false
+			testcase.nrc.advertiseClusterIP = true
+			testcase.nrc.advertiseExternalIP = true
+			testcase.nrc.advertiseLoadBalancerIP = false
 
 			err = testcase.nrc.addExportPolicies()
 			if !reflect.DeepEqual(err, testcase.err) {
