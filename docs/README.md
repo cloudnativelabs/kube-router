@@ -103,6 +103,7 @@ Usage of kube-router:
       --advertise-cluster-ip             Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.
       --advertise-external-ip            Add External IP of service to the RIB so that it gets advertised to the BGP peers.
       --advertise-loadbalancer-ip        Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
+      --advertise-pod-cidr               Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
       --bgp-graceful-restart             Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
       --cleanup-config                   Cleanup iptables rules, ipvs, ipset configuration and exit.
       --cluster-asn uint                 ASN number under which cluster nodes will run iBGP.

@@ -66,6 +66,7 @@ type NetworkRoutingController struct {
 	advertiseClusterIP      bool
 	advertiseExternalIP     bool
 	advertiseLoadBalancerIP bool
+	advertisePodCidr        bool
 	defaultNodeAsnNumber    uint32
 	nodeAsnNumber           uint32
 	globalPeerRouters       []*config.NeighborConfig
@@ -753,6 +754,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.advertiseClusterIP = kubeRouterConfig.AdvertiseClusterIp
 	nrc.advertiseExternalIP = kubeRouterConfig.AdvertiseExternalIp
 	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIp
+	nrc.advertisePodCidr = kubeRouterConfig.AdvertiseNodePodCidr
 
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 

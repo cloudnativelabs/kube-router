@@ -1236,6 +1236,10 @@ func Test_addExportPolicies(t *testing.T) {
 							PrefixSet:       "podcidrprefixset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "iBGPpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
 					},
 					Actions: config.Actions{
 						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
@@ -1350,6 +1354,10 @@ func Test_addExportPolicies(t *testing.T) {
 							PrefixSet:       "podcidrprefixset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "iBGPpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
 					},
 					Actions: config.Actions{
 						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
@@ -1408,6 +1416,9 @@ func Test_addExportPolicies(t *testing.T) {
 			testcase.nrc.advertiseExternalIP = true
 			testcase.nrc.advertiseLoadBalancerIP = false
 
+			informerFactory := informers.NewSharedInformerFactory(testcase.nrc.clientset, 0)
+			nodeInformer := informerFactory.Core().V1().Nodes().Informer()
+			testcase.nrc.nodeLister = nodeInformer.GetIndexer()
 			err = testcase.nrc.addExportPolicies()
 			if !reflect.DeepEqual(err, testcase.err) {
 				t.Logf("expected err %v", testcase.err)
