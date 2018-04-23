@@ -10,14 +10,19 @@ import (
 	v1core "k8s.io/api/core/v1"
 )
 
-// Each node advertises its pod CIDR to the nodes with same ASN (iBGP peers) and to the global BGP peer
-// or per node BGP peer. Each node ends up advertising not only pod CIDR assigned to the self but other
-// learned routes to the node pod CIDR's as well to global BGP peer or per node BGP peers. external BGP
-// peer will randomly (since all path have equal selection attributes) select the routes from multiple
-// routes to a pod CIDR which will result in extra hop. To prevent this behaviour this methods add
-// defult export policy to reject everything and an explicit policy is added so that each node only
-// advertised the pod CIDR assigned to it. Additionally export policy is added so that each node
-// advertises cluster IP's ONLY to the external BGP peers (and not to iBGP peers).
+// BGP export policies are added so that following conditions are met
+//
+// - by default export of all routes from the RIB to the neighbour's is denied, and explicity statements are added i
+//   to permit the desired routes to be exported
+// - each node is allowed to advertise its assigned pod CIDR's to all of its iBGP peer neighbours with same ASN
+// - each node is allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
+//   only if --advertise-pod-cidr flag is set to true
+// - each node is NOT allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
+//   only if --advertise-pod-cidr flag is set to false
+// - each node is allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) ONLY to external
+//   BGP peers
+// - each node is NOT allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) to
+//   iBGP peers
 func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	// we are rr server do not add export policies
@@ -63,22 +68,22 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	// Get the current list of the nodes from the local cache
 	nodes := nrc.nodeLister.List()
-	iBgpPeers := make([]string, 0)
+	iBGPPeers := make([]string, 0)
 	for _, node := range nodes {
 		nodeObj := node.(*v1core.Node)
 		nodeIP, err := utils.GetNodeIP(nodeObj)
 		if err != nil {
 			return fmt.Errorf("Failed to find a node IP: %s", err)
 		}
-		iBgpPeers = append(iBgpPeers, nodeIP.String())
+		iBGPPeers = append(iBGPPeers, nodeIP.String())
 	}
-	iBgpPeerNS, _ := table.NewNeighborSet(config.NeighborSet{
-		NeighborSetName:  "ipbgppeerset",
-		NeighborInfoList: iBgpPeers,
+	iBGPPeerNS, _ := table.NewNeighborSet(config.NeighborSet{
+		NeighborSetName:  "iBGPpeerset",
+		NeighborInfoList: iBGPPeers,
 	})
-	err = nrc.bgpServer.ReplaceDefinedSet(iBgpPeerNS)
+	err = nrc.bgpServer.ReplaceDefinedSet(iBGPPeerNS)
 	if err != nil {
-		nrc.bgpServer.AddDefinedSet(iBgpPeerNS)
+		nrc.bgpServer.AddDefinedSet(iBGPPeerNS)
 	}
 	// statement to represent the export policy to permit advertising node's pod CIDR
 	statements = append(statements,
@@ -88,7 +93,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 					PrefixSet: "podcidrprefixset",
 				},
 				MatchNeighborSet: config.MatchNeighborSet{
-					NeighborSet: "ipbgppeerset",
+					NeighborSet: "iBGPpeerset",
 				},
 			},
 			Actions: config.Actions{
@@ -131,7 +136,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
 			},
 		})
-		if nrc.advertiseNodePodCidr {
+		if nrc.advertisePodCidr {
 			statements = append(statements, config.Statement{
 				Conditions: config.Conditions{
 					MatchPrefixSet: config.MatchPrefixSet{

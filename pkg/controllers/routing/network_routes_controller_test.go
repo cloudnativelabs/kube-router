@@ -1237,7 +1237,7 @@ func Test_addExportPolicies(t *testing.T) {
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 						MatchNeighborSet: config.MatchNeighborSet{
-							NeighborSet:     "ipbgppeerset",
+							NeighborSet:     "iBGPpeerset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 					},
@@ -1355,7 +1355,7 @@ func Test_addExportPolicies(t *testing.T) {
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 						MatchNeighborSet: config.MatchNeighborSet{
-							NeighborSet:     "ipbgppeerset",
+							NeighborSet:     "iBGPpeerset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 					},

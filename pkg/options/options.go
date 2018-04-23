@@ -91,7 +91,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Add External IP of service to the RIB so that it gets advertised to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseLoadBalancerIp, "advertise-loadbalancer-ip", false,
 		"Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.")
-	fs.BoolVar(&s.AdvertiseNodePodCidr, "advertise-node-pod-cidr", true,
+	fs.BoolVar(&s.AdvertiseNodePodCidr, "advertise-pod-cidr", true,
 		"Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers.")
 	fs.IPSliceVar(&s.PeerRouters, "peer-router-ips", s.PeerRouters,
 		"The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's.")
