@@ -1,7 +1,7 @@
 # Project information
 site_name: Kube-router
-site_description: Kube-router: a turnkey Kubernetes networking solution
-site_author: Kube-router Project
+site_description: "Kube-router: a turnkey Kubernetes networking solution"
+site_author: "Kube-router Project"
 site_url: https://github.com/cloudnativelabs/kube-router
 
 
