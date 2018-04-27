@@ -1,0 +1,29 @@
+# Project information
+site_name: Kube-router
+site_description: "Kube-router: a turnkey Kubernetes networking solution"
+site_author: "Kube-router Project"
+site_url: https://github.com/cloudnativelabs/kube-router
+
+
+# Repository
+repo_name: kube-router
+repo_url: https://github.com/cloudnativelabs/kube-router
+edit_uri: ""
+docs_dir: "."
+pages:
+    - 'Introduction': 'README.md'
+
+# Theme and overrides, i.e. language partial
+theme:
+  name: material
+  palette:
+    primary: cyan
+    accent: indigo
+  # Don't include MkDocs' JavaScript
+  include_search_page: false
+  search_index_only: true
+
+  # Default values, taken from mkdocs_theme.yml
+  language: en
+  feature:
+    tabs: false
