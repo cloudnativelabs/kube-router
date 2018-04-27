@@ -13,7 +13,9 @@ edit_uri: ""
 # Theme and overrides, i.e. language partial
 theme:
   name: material
-
+  palette:
+    primary: cyan
+    accent: indigo
   # Don't include MkDocs' JavaScript
   include_search_page: false
   search_index_only: true
@@ -22,6 +24,3 @@ theme:
   language: en
   feature:
     tabs: false
-  palette:
-    primary: blue
-    accent: indigo
