@@ -123,3 +123,12 @@ Kube-router build upon following libraries:
 - Netlink: https://github.com/vishvananda/netlink
 - Ipset: https://github.com/janeczku/go-ipset
 - IPVS: https://github.com/docker/libnetwork/
+
+## Sponsorships
+
+E2E Tests sponsored by DigitalOcean
+
+
+<p align="left">
+  <img src="docs/img/do_logo_blue.png"> </image>
+</p>
