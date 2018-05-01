@@ -689,6 +689,35 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 	}
 
+	// cleanup stale IPs on dummy interface
+	glog.V(1).Info("Cleaning up if any, old service IPs on dummy interface")
+	addrActive := make(map[string]bool)
+	for k, endpoints := range activeServiceEndpointMap {
+		// verify active and its a generateIpPortId() type service
+		if len(endpoints) > 0 && strings.Contains(k, "-") {
+			parts := strings.SplitN(k, "-", 3)
+			addrActive[parts[0]] = true
+		}
+	}
+
+	var addrs []netlink.Addr
+	addrs, err = netlink.AddrList(dummyVipInterface, netlink.FAMILY_V4)
+	if err != nil {
+		return errors.New("Failed to list dummy interface IPs: " + err.Error())
+	}
+	for _, addr := range addrs {
+		isActive := addrActive[addr.IP.String()]
+		if !isActive {
+			glog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
+			err := nsc.ln.ipAddrDel(dummyVipInterface, addr.IP.String())
+			if err != nil {
+				glog.Errorf("Failed to delete stale IP %s due to: %s",
+					addr.IP.String(), err.Error())
+				continue
+			}
+		}
+	}
+
 	// cleanup stale ipvs service and servers
 	glog.V(1).Info("Cleaning up if any, old ipvs service and servers which are no longer needed")
 	ipvsSvcs, err = nsc.ln.ipvsGetServices()
