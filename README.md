@@ -95,9 +95,9 @@ that has been thouroughly tested and optimized.
 ## Getting Started
 
 - [How it Works](./docs/how-it-works.md)
-- [Architecture](./docs/README.md#architecture)
-- [See Kube-router in action](./docs/README.md#see-kube-router-in-action)
-- [User Guide](./docs/README.md#user-guide)
+- [Architecture](./docs/architecture.md)
+- [See Kube-router in action](./docs/see-it-in-action.md)
+- [User Guide](./docs/user-guide.md)
 - [Developer Guide](./docs/developing.md)
 
 ## Project status
