@@ -3,8 +3,8 @@
 The documentation is divided into the following sections:
 
 - [Introduction](/docs/introduction.md)
-    - [What is Kube-router?](/docs/introduction.md)
-    - [Why Kube-router?](/docs/introduction.md)
+    - [What is Kube-router?](/docs/introduction.md#what-is-kube-router)
+    - [Why Kube-router?](/docs/introduction.md#why-kube-router)
 - [Concepts](#concepts)
     - See it in action
     - How it works?
