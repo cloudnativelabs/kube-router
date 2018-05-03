@@ -123,12 +123,20 @@ rules:
     resources:
       - namespaces
       - pods
-      - services
       - nodes
       - endpoints
     verbs:
       - list
       - get
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - list
+      - get
+      - update
       - watch
   - apiGroups:
     - "networking.k8s.io"

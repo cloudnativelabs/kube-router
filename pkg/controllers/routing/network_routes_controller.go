@@ -39,6 +39,8 @@ const (
 	podSubnetsIPSetName  = "kube-router-pod-subnets"
 	nodeAddrsIPSetName   = "kube-router-node-ips"
 
+	bgpMaxPathsAnnotation             = "kube-router.io/bgp.max.paths"
+	bgpMaxPathsStateAnnotation        = "kube-router.io/bgp.state.max.paths"
 	nodeASNAnnotation                 = "kube-router.io/node.asn"
 	peerASNAnnotation                 = "kube-router.io/peer.asns"
 	peerIPAnnotation                  = "kube-router.io/peer.ips"

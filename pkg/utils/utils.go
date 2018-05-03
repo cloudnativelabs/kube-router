@@ -41,3 +41,12 @@ func (b *Broadcaster) Notify(instance interface{}) {
 		go listener.OnUpdate(instance)
 	}
 }
+
+func ArrayHasString(a []string, search string) bool {
+	for _, item := range a {
+		if item == search {
+			return true
+		}
+	}
+	return false
+}

@@ -1,16 +1,20 @@
 package routing
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/golang/glog"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/table"
 	v1core "k8s.io/api/core/v1"
+	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 )
 
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
@@ -300,11 +304,116 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 
 	nodeHasEndpoints := true
 	if onlyActiveEndpoints {
-		_, isLocal := svc.Annotations[svcLocalAnnotation]
-		if isLocal || svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
-			nodeHasEndpoints, err = nrc.nodeHasEndpointsForService(svc)
+		var maxPaths int = 0
+		if len(svc.Annotations[bgpMaxPathsAnnotation]) > 0 {
+			maxPaths, err = strconv.Atoi(svc.Annotations[bgpMaxPathsAnnotation])
+			if err != nil {
+				glog.Errorf("Unable to parse %s on service %s", bgpMaxPathsAnnotation, svc.Name)
+				maxPaths = 0
+			}
+		}
+		if maxPaths > 0 {
+			pathsStateString := svc.Annotations[bgpMaxPathsStateAnnotation]
+			var pathsState []string
+			if len(pathsStateString) > 0 {
+				err = json.Unmarshal([]byte(pathsStateString), &pathsState)
+				if err != nil {
+					glog.Errorf("unable to parse service %s annotation %s as json array of strings: %s", svc.Name, bgpMaxPathsStateAnnotation, err)
+				}
+			}
+
+			var node *v1core.Node
+			node, err = utils.GetNodeObject(nrc.clientset, nrc.hostnameOverride)
 			if err != nil {
 				return nil, nil, err
+			}
+
+			nodeHasEndpoints = utils.ArrayHasString(pathsState, node.Name)
+
+			// attempt to allocate our node as a path as there are available
+			// paths left and this node isn't among the assigned paths yet
+			//
+			// if there are more paths than maxPaths, attempt to drop a path
+			// off the end
+			if (!nodeHasEndpoints && maxPaths > len(pathsState)) || maxPaths < len(pathsState) {
+				retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					var result *v1core.Service
+					result, err = nrc.clientset.CoreV1().Services(svc.Namespace).Get(svc.Name, v1meta.GetOptions{})
+					if err != nil {
+						return err
+					}
+					svc = result
+
+					if len(svc.Annotations[bgpMaxPathsAnnotation]) > 0 {
+						maxPaths, err = strconv.Atoi(svc.Annotations[bgpMaxPathsAnnotation])
+						if err != nil {
+							glog.Errorf("Unable to parse %s on service %s", bgpMaxPathsAnnotation, svc.Name)
+							maxPaths = 0
+						}
+					} else {
+						maxPaths = 0
+					}
+
+					// if service changed paths to zero while we were trying
+					// to claim a path, exit now
+					pathsState = []string{}
+					if maxPaths == 0 {
+						return nil
+					}
+
+					pathsStateString = svc.Annotations[bgpMaxPathsStateAnnotation]
+					if len(pathsStateString) > 0 {
+						err = json.Unmarshal([]byte(pathsStateString), &pathsState)
+						if err != nil {
+							glog.Errorf("unable to parse service %s annotation %s as json array of strings: %s", svc.Name, bgpMaxPathsAnnotation, err)
+						}
+					}
+
+					// verify space still available, then update
+					nodeHasEndpoints = utils.ArrayHasString(pathsState, node.Name)
+					var pathStateBytes []byte
+					var modified bool = false
+					if !nodeHasEndpoints && maxPaths > len(pathsState) {
+						pathsState = append(pathsState, node.Name)
+
+						pathStateBytes, _ = json.Marshal(pathsState)
+						svc.Annotations[bgpMaxPathsStateAnnotation] = string(pathStateBytes)
+						modified = true
+						glog.V(1).Infof("Attempting to add node %s to paths on service %s", node.Name, svc.Name)
+
+					} else if maxPaths < len(pathsState) {
+						pathsState = pathsState[:len(pathsState)-1]
+
+						pathStateBytes, _ = json.Marshal(pathsState)
+						svc.Annotations[bgpMaxPathsStateAnnotation] = string(pathStateBytes)
+						modified = true
+						glog.V(1).Infof("Attempting to remove last path on service %s", node.Name, svc.Name)
+					}
+
+					if modified {
+						result, err = nrc.clientset.CoreV1().Services(svc.Namespace).Update(svc)
+						if err != nil {
+							return err
+						}
+						svc = result
+					}
+
+					return nil
+				})
+
+				if retryErr != nil {
+					glog.Errorf("unable to update paths for service %s: %s", svc.Name, retryErr)
+				}
+			}
+
+			glog.V(1).Infof("Max paths advertise route to service %s: %v", svc.Name, nodeHasEndpoints)
+		} else {
+			_, isLocal := svc.Annotations[svcLocalAnnotation]
+			if isLocal || svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
+				nodeHasEndpoints, err = nrc.nodeHasEndpointsForService(svc)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -45,11 +46,13 @@ const (
 	IFACE_HAS_NO_ADDR  = "cannot assign requested address"
 	IPVS_SERVER_EXISTS = "file exists"
 
-	svcDSRAnnotation       = "kube-router.io/service.dsr"
-	svcSchedulerAnnotation = "kube-router.io/service.scheduler"
-	svcHairpinAnnotation   = "kube-router.io/service.hairpin"
-	svcLocalAnnotation     = "kube-router.io/service.local"
-	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
+	bgpMaxPathsAnnotation      = "kube-router.io/bgp.max.paths"
+	bgpMaxPathsStateAnnotation = "kube-router.io/bgp.state.max.paths"
+	svcDSRAnnotation           = "kube-router.io/service.dsr"
+	svcSchedulerAnnotation     = "kube-router.io/service.scheduler"
+	svcHairpinAnnotation       = "kube-router.io/service.hairpin"
+	svcLocalAnnotation         = "kube-router.io/service.local"
+	svcSkipLbIpsAnnotation     = "kube-router.io/service.skiplbips"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
@@ -206,6 +209,8 @@ type serviceInfo struct {
 	externalIPs              []string
 	loadBalancerIPs          []string
 	local                    bool
+	maxPaths                 int
+	pathsState               []string
 }
 
 // map of all services, with unique service id(namespace name, service name, port) as key
@@ -428,7 +433,13 @@ type externalIPService struct {
 	externalIp string
 }
 
-func hasActiveEndpoints(svc *serviceInfo, endpoints []endpointsInfo, nodePodCidrStr string) bool {
+func hasActiveEndpoints(svc *serviceInfo, endpoints []endpointsInfo, nodeHostName, nodePodCidrStr string) bool {
+	if len(svc.pathsState) > 0 && utils.ArrayHasString(svc.pathsState, nodeHostName) {
+		// return early if we're a selected node to host the advertised route
+		// using the bgp.max.paths feature
+		return true
+	}
+
 	if svc.local {
 		_, nodePodCidr, err := net.ParseCIDR(nodePodCidrStr)
 		if err != nil {
@@ -451,6 +462,22 @@ func hasActiveEndpoints(svc *serviceInfo, endpoints []endpointsInfo, nodePodCidr
 	}
 
 	return len(endpoints) > 0
+}
+
+func isActiveLocally(svc *serviceInfo, endpoint_ip, podCidr, nodeHostName string) bool {
+	if svc.maxPaths > 0 {
+		return utils.ArrayHasString(svc.pathsState, nodeHostName)
+	} else {
+		isLocal, _ := isLocalEndpoint(endpoint_ip, podCidr)
+		return !svc.local || (svc.local && isLocal)
+	}
+}
+
+func isLimitedToLocal(svc *serviceInfo) bool {
+	if len(svc.pathsState) > 0 {
+		return false
+	}
+	return svc.local
 }
 
 // sync the ipvs service and server details configured to reflect the desired state of services and endpoint
@@ -520,7 +547,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 		endpoints := endpointsInfoMap[k]
 
-		if !hasActiveEndpoints(svc, endpoints, nsc.podCidr) {
+		if !hasActiveEndpoints(svc, endpoints, nsc.nodeHostName, nsc.podCidr) {
 			glog.V(1).Infof("Skipping service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
 			continue
 		}
@@ -648,8 +675,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 			activeServiceEndpointMap[externalIpServiceId] = make([]string, 0)
 			for _, endpoint := range endpoints {
-				isLocal, _ := isLocalEndpoint(endpoint.ip, nsc.podCidr)
-				if !svc.local || (svc.local && isLocal) {
+				if isActiveLocally(svc, endpoint.ip, nsc.podCidr, nsc.nodeHostName) {
 					activeServiceEndpointMap[externalIpServiceId] = append(activeServiceEndpointMap[externalIpServiceId], endpoint.ip)
 				}
 			}
@@ -664,24 +690,23 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				Weight:        1,
 			}
 
-			err := nsc.ln.ipvsAddServer(ipvsClusterVipSvc, &dst, svc.local, nsc.podCidr)
+			err := nsc.ln.ipvsAddServer(ipvsClusterVipSvc, &dst, isLimitedToLocal(svc), nsc.podCidr)
 			if err != nil {
 				glog.Errorf(err.Error())
 			}
 
-			isLocal, err := isLocalEndpoint(endpoint.ip, nsc.podCidr)
-			if !svc.local || (svc.local && isLocal) {
+			if isActiveLocally(svc, endpoint.ip, nsc.podCidr, nsc.nodeHostName) {
 				activeServiceEndpointMap[clusterServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 			}
 
 			if svc.nodePort != 0 {
 				for i := 0; i < len(ipvsNodeportSvcs); i++ {
-					err := nsc.ln.ipvsAddServer(ipvsNodeportSvcs[i], &dst, svc.local, nsc.podCidr)
+					err := nsc.ln.ipvsAddServer(ipvsNodeportSvcs[i], &dst, isLimitedToLocal(svc), nsc.podCidr)
 					if err != nil {
 						glog.Errorf(err.Error())
 					}
 
-					if !svc.local || (svc.local && isLocal) {
+					if isActiveLocally(svc, endpoint.ip, nsc.podCidr, nsc.nodeHostName) {
 						activeServiceEndpointMap[nodeServiceIds[i]] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 					}
 				}
@@ -694,7 +719,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 
 				// add server to IPVS service
-				err := nsc.ln.ipvsAddServer(externalIpService.ipvsSvc, &dst, svc.local, nsc.podCidr)
+				err := nsc.ln.ipvsAddServer(externalIpService.ipvsSvc, &dst, isLimitedToLocal(svc), nsc.podCidr)
 				if err != nil {
 					glog.Errorf(err.Error())
 				}
@@ -1071,6 +1096,21 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			_, svcInfo.skipLbIps = svc.ObjectMeta.Annotations[svcSkipLbIpsAnnotation]
 			if svc.Spec.ExternalTrafficPolicy == api.ServiceExternalTrafficPolicyTypeLocal {
 				svcInfo.local = true
+			}
+
+			bgpMaxPaths, err := strconv.Atoi(svc.ObjectMeta.Annotations[bgpMaxPathsAnnotation])
+			if err != nil {
+				glog.Errorf("unable to parse service %s annotation %s as json array of strings: %s", svc.Name, bgpMaxPathsAnnotation, err)
+				svcInfo.maxPaths = 0
+			} else {
+				svcInfo.maxPaths = bgpMaxPaths
+			}
+			pathsStateString := svc.ObjectMeta.Annotations[bgpMaxPathsStateAnnotation]
+			if len(pathsStateString) > 0 {
+				err := json.Unmarshal([]byte(pathsStateString), &svcInfo.pathsState)
+				if err != nil {
+					glog.Errorf("unable to parse service %s annotation %s as json array of strings: %s", svc.Name, bgpMaxPathsStateAnnotation, err)
+				}
 			}
 
 			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
