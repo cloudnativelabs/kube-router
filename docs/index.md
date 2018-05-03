@@ -6,14 +6,14 @@ The documentation is divided into the following sections:
 - [Concepts](#Concepts)
 - [User Guide](#User-Guide)
 - [Operations guide](#Operation-Guide)
-- [Developer and Contributor Guide](#Developer-and-Contributor-Guide])
+- [Developer and Contributor Guide](#Contributor-Guide)
 
 ## Introduction
 
 ## Concepts
 
-## User Guide
+## User-Guide
 
-## Operation Guide
+## Operation-Guide
 
-## Developer and Contributor Guide
+## Contributor-Guide
