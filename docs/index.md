@@ -2,13 +2,14 @@
 
 The documentation is divided into the following sections:
 
-- [Introduction](#introduction)
+- [Introduction](/docs/introduction.md)
   - What is Kube-router?
   - Why Kube-router?
   - Functional Overview
 - [Concepts](#concepts)
-  - Architecture
   - See it in action
+  - How it works?
+  - Architecture
 - [User Guide](#user-guide)
   - installations
   - requirements
@@ -16,6 +17,7 @@ The documentation is divided into the following sections:
   - Health
   - Metrics
   - Troubleshooting
-  - Upgrade
+  - Pod toolbox
+  - Upgrades
 - [Developer and Contributor Guide](#contributor-guide)
   - Contributor Guideline
