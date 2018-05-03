@@ -9,7 +9,7 @@ The documentation is divided into the following sections:
     - [See it in action](see-it-in-action.md)
     - [How it works?](how-it-works.md)
     - [Architecture](architecture.md)
-- [User Guide](ser-guide.md)
+- [User Guide](user-guide.md)
     - [installation](user-guide.md#try-kube-router-with-cluster-installers)
     - [requirements](user-guide.md#requirements)
 - Operations guide
