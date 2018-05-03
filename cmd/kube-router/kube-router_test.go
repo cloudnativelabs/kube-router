@@ -32,9 +32,9 @@ func TestMainHelp(t *testing.T) {
 	stderrW.Close()
 	wg.Wait()
 
-	docF, err := os.Open("../../docs/README.md")
+	docF, err := os.Open("../../docs/user-guide.md")
 	if err != nil {
-		t.Fatalf("could not open docs/README.md: %s\n", err)
+		t.Fatalf("could not open docs/user-guide.md: %s\n", err)
 	}
 	docBuf := bytes.NewBuffer(nil)
 	docBuf.ReadFrom(docF)
