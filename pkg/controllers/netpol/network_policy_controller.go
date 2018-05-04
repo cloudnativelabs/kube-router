@@ -1233,7 +1233,7 @@ func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace strin
 }
 
 func (npc *NetworkPolicyController) ListNamespaceByLabels(set labels.Set) ([]*api.Namespace, error) {
-	namespaceLister := listers.NewNamespaceLister(npc.npLister)
+	namespaceLister := listers.NewNamespaceLister(npc.nsLister)
 	matchedNamespaces, err := namespaceLister.List(set.AsSelector())
 	if err != nil {
 		return nil, err
