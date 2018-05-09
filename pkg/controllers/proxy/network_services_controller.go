@@ -742,7 +742,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		endpoints, ok := activeServiceEndpointMap[key]
-		if !ok {
+		if !ok || len(endpoints) == 0 {
 			glog.V(1).Infof("Found a IPVS service %s which is no longer needed so cleaning up",
 				ipvsServiceString(ipvsSvc))
 			err := nsc.ln.ipvsDelService(ipvsSvc)
