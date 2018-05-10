@@ -36,7 +36,7 @@ func (lnm *LinuxNetworkingMockImpl) getKubeDummyInterface() (netlink.Link, error
 func (lnm *LinuxNetworkingMockImpl) setupPolicyRoutingForDSR() error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) setupRoutesForExternalIPForDSR(s serviceInfoMap) error {
+func (lnm *LinuxNetworkingMockImpl) setupRoutesForExternalIPForDSR(s serviceInfoMap, e endpointsInfoMap, podCidr, nodeHostName string) error {
 	return nil
 }
 func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {

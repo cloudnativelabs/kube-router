@@ -150,7 +150,7 @@ type LinuxNetworkingMock struct {
 	setupPolicyRoutingForDSRFunc func() error
 
 	// setupRoutesForExternalIPForDSRFunc mocks the setupRoutesForExternalIPForDSR method.
-	setupRoutesForExternalIPForDSRFunc func(in1 serviceInfoMap) error
+	setupRoutesForExternalIPForDSRFunc func(in1 serviceInfoMap, in2 endpointsInfoMap, podCidr, nodeHostName string) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -281,6 +281,9 @@ type LinuxNetworkingMock struct {
 		setupRoutesForExternalIPForDSR []struct {
 			// In1 is the in1 argument value.
 			In1 serviceInfoMap
+			In2 endpointsInfoMap
+			In3 string
+			In4 string
 		}
 	}
 }
@@ -886,19 +889,25 @@ func (mock *LinuxNetworkingMock) setupPolicyRoutingForDSRCalls() []struct {
 }
 
 // setupRoutesForExternalIPForDSR calls setupRoutesForExternalIPForDSRFunc.
-func (mock *LinuxNetworkingMock) setupRoutesForExternalIPForDSR(in1 serviceInfoMap) error {
+func (mock *LinuxNetworkingMock) setupRoutesForExternalIPForDSR(in1 serviceInfoMap, in2 endpointsInfoMap, in3, in4 string) error {
 	if mock.setupRoutesForExternalIPForDSRFunc == nil {
 		panic("moq: LinuxNetworkingMock.setupRoutesForExternalIPForDSRFunc is nil but LinuxNetworking.setupRoutesForExternalIPForDSR was just called")
 	}
 	callInfo := struct {
 		In1 serviceInfoMap
+		In2 endpointsInfoMap
+		In3 string
+		In4 string
 	}{
 		In1: in1,
+		In2: in2,
+		In3: in3,
+		In4: in4,
 	}
 	lockLinuxNetworkingMocksetupRoutesForExternalIPForDSR.Lock()
 	mock.calls.setupRoutesForExternalIPForDSR = append(mock.calls.setupRoutesForExternalIPForDSR, callInfo)
 	lockLinuxNetworkingMocksetupRoutesForExternalIPForDSR.Unlock()
-	return mock.setupRoutesForExternalIPForDSRFunc(in1)
+	return mock.setupRoutesForExternalIPForDSRFunc(in1, in2, in3, in4)
 }
 
 // setupRoutesForExternalIPForDSRCalls gets all the calls that were made to setupRoutesForExternalIPForDSR.
@@ -906,9 +915,15 @@ func (mock *LinuxNetworkingMock) setupRoutesForExternalIPForDSR(in1 serviceInfoM
 //     len(mockedLinuxNetworking.setupRoutesForExternalIPForDSRCalls())
 func (mock *LinuxNetworkingMock) setupRoutesForExternalIPForDSRCalls() []struct {
 	In1 serviceInfoMap
+	In2 endpointsInfoMap
+	In3 string
+	In4 string
 } {
 	var calls []struct {
 		In1 serviceInfoMap
+		In2 endpointsInfoMap
+		In3 string
+		In4 string
 	}
 	lockLinuxNetworkingMocksetupRoutesForExternalIPForDSR.RLock()
 	calls = mock.calls.setupRoutesForExternalIPForDSR

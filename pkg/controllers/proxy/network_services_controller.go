@@ -77,7 +77,7 @@ type netlinkCalls interface {
 	ipAddrDel(iface netlink.Link, ip string) error
 	prepareEndpointForDsr(containerId string, endpointIP string, vip string) error
 	getKubeDummyInterface() (netlink.Link, error)
-	setupRoutesForExternalIPForDSR(serviceInfoMap) error
+	setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap, podCidr, nodeHostName string) error
 	setupPolicyRoutingForDSR() error
 	cleanupMangleTableRule(ip string, protocol string, port string, fwmark string) error
 }
@@ -450,14 +450,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	}
 	glog.V(1).Infof("Custom routing table " + customDSRRouteTableName + " required for Direct Server Return is setup as expected.")
 
-	glog.V(1).Infof("Setting up custom route table required to add routes for external IP's.")
-	err = nsc.ln.setupRoutesForExternalIPForDSR(serviceInfoMap)
-	if err != nil {
-		glog.Errorf("Failed setup custom routing table required to add routes for external IP's due to: " + err.Error())
-		return errors.New("Failed setup custom routing table required to add routes for external IP's due to: " + err.Error())
-	}
-	glog.V(1).Infof("Custom routing table " + externalIPRouteTableName + " required for Direct Server Return is setup as expected.")
-
 	// map of active services and service endpoints
 	activeServiceEndpointMap := make(map[string][]string)
 
@@ -687,6 +679,14 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 			}
 		}
+	}
+
+	glog.V(1).Infof("Setting up custom route table required to add routes for external IP's.")
+	err = nsc.ln.setupRoutesForExternalIPForDSR(serviceInfoMap, endpointsInfoMap, nsc.podCidr, nsc.nodeHostName)
+	if err != nil {
+		glog.Errorf("Failed setup custom routing table required to add routes for external IP's due to: " + err.Error())
+	} else {
+		glog.V(1).Infof("Custom routing table " + externalIPRouteTableName + " required for Direct Server Return is setup as expected.")
 	}
 
 	// cleanup stale IPs on dummy interface
@@ -1621,7 +1621,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
 // To prevent martian packets add route to exteranl IP through the `kube-bridge` interface
 // setupRoutesForExternalIPForDSR: setups routing so that kernel does not think return packets as martians
 
-func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap) error {
+func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap, podCidr, nodeHostName string) error {
 	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
 	if err != nil {
 		return errors.New("Failed to setup external ip routing table required for DSR due to " + err.Error())
@@ -1662,16 +1662,24 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		return errors.New("Failed to get routes in external_ip table due to: " + err.Error())
 	}
 	outStr := string(out)
-	activeExternalIPs := make(map[string]bool)
-	for _, svc := range serviceInfoMap {
-		for _, externalIP := range svc.externalIPs {
-			activeExternalIPs[externalIP] = true
+	activeExternalIPs := make(map[string][]endpointsInfo)
+	for k, svc := range serviceInfoMap {
+		endpoints := endpointsInfoMap[k]
 
-			if !strings.Contains(outStr, externalIP) {
-				if err = exec.Command("ip", "route", "add", externalIP, "dev", "kube-bridge", "table",
-					externalIPRouteTableId).Run(); err != nil {
-					glog.Error("Failed to add route for " + externalIP + " in custom route table for external IP's due to: " + err.Error())
-					continue
+		for _, externalIP := range svc.externalIPs {
+			for _, endpoint := range endpoints {
+				if isActiveLocally(svc, endpoint.ip, podCidr, nodeHostName) {
+					activeExternalIPs[externalIP] = append(activeExternalIPs[externalIP], endpoint)
+				}
+			}
+
+			if ipEndpoints, ok := activeExternalIPs[externalIP]; ok && len(ipEndpoints) > 0 {
+				if !strings.Contains(outStr, externalIP) {
+					if err = exec.Command("ip", "route", "add", externalIP, "dev", "kube-bridge", "table",
+						externalIPRouteTableId).Run(); err != nil {
+						glog.Error("Failed to add route for " + externalIP + " in custom route table for external IP's due to: " + err.Error())
+						continue
+					}
 				}
 			}
 		}
@@ -1682,7 +1690,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		route := strings.Split(strings.Trim(line, " "), " ")
 		ip := route[0]
 
-		if !activeExternalIPs[ip] {
+		if endpoints, ok := activeExternalIPs[ip]; !ok || len(endpoints) == 0 {
 			args := []string{"route", "del", "table", externalIPRouteTableId}
 			args = append(args, route...)
 			if err = exec.Command("ip", args...).Run(); err != nil {
