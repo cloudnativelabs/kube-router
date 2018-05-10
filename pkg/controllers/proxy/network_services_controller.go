@@ -1661,18 +1661,36 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 	if err != nil {
 		return errors.New("Failed to get routes in external_ip table due to: " + err.Error())
 	}
+	outStr := string(out)
+	activeExternalIPs := make(map[string]bool)
 	for _, svc := range serviceInfoMap {
 		for _, externalIP := range svc.externalIPs {
-			if !strings.Contains(string(out), externalIP) {
+			activeExternalIPs[externalIP] = true
+
+			if !strings.Contains(outStr, externalIP) {
 				if err = exec.Command("ip", "route", "add", externalIP, "dev", "kube-bridge", "table",
 					externalIPRouteTableId).Run(); err != nil {
-					return errors.New("Failed to add route for " + externalIP + " in custom route table for external IP's due to: " + err.Error())
+					glog.Error("Failed to add route for " + externalIP + " in custom route table for external IP's due to: " + err.Error())
+					continue
 				}
 			}
 		}
 	}
 
-	// TODO: cleanup routes for non-active exteranl IP's
+	// clean up stale external IPs
+	for _, line := range strings.Split(strings.Trim(outStr, "\n"), "\n") {
+		route := strings.Split(strings.Trim(line, " "), " ")
+		ip := route[0]
+
+		if !activeExternalIPs[ip] {
+			args := []string{"route", "del", "table", externalIPRouteTableId}
+			args = append(args, route...)
+			if err = exec.Command("ip", args...).Run(); err != nil {
+				glog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s", ip, err)
+				continue
+			}
+		}
+	}
 
 	return nil
 }
