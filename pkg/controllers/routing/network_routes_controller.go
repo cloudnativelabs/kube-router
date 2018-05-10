@@ -400,6 +400,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 
 		route = &netlink.Route{
 			LinkIndex: link.Attrs().Index,
+			Src:       nrc.nodeIP,
 			Dst:       dst,
 			Protocol:  0x11,
 		}
