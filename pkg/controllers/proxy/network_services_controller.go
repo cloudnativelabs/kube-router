@@ -1686,17 +1686,19 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 	}
 
-	// clean up stale external IPs
-	for _, line := range strings.Split(strings.Trim(outStr, "\n"), "\n") {
-		route := strings.Split(strings.Trim(line, " "), " ")
-		ip := route[0]
-
-		if !activeExternalIPs[ip] {
-			args := []string{"route", "del", "table", externalIPRouteTableId}
-			args = append(args, route...)
-			if err = exec.Command("ip", args...).Run(); err != nil {
-				glog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s", ip, err)
-				continue
+	// check if there are any pbr in externalIPRouteTableId for external IP's
+	if len(outStr) > 0 {
+		// clean up stale external IPs
+		for _, line := range strings.Split(strings.Trim(outStr, "\n"), "\n") {
+			route := strings.Split(strings.Trim(line, " "), " ")
+			ip := route[0]
+			if !activeExternalIPs[ip] {
+				args := []string{"route", "del", "table", externalIPRouteTableId}
+				args = append(args, route...)
+				if err = exec.Command("ip", args...).Run(); err != nil {
+					glog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s", ip, err)
+					continue
+				}
 			}
 		}
 	}
