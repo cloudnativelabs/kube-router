@@ -93,6 +93,7 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
 		return
 	}
 
+	// update export policies so that new VIP's gets addedd to clusteripprefixsit and vip gets advertised to peers
 	err = nrc.addExportPolicies()
 	if err != nil {
 		glog.Errorf("Error adding BGP export policies: %s", err.Error())
@@ -126,8 +127,14 @@ func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
 		return
 	}
 
+	// update export policies so that deleted VIP's gets removed from clusteripprefixsit
+	err = nrc.addExportPolicies()
+	if err != nil {
+		glog.Errorf("Error adding BGP export policies: %s", err.Error())
+	}
+
 	if len(toAdvertise) > 0 {
-		nrc.withdrawVIPs(toWithdraw)
+		nrc.withdrawVIPs(toAdvertise)
 	}
 
 	if len(toWithdraw) > 0 {
