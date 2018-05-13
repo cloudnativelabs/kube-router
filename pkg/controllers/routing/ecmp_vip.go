@@ -93,6 +93,11 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
 		return
 	}
 
+	err = nrc.addExportPolicies()
+	if err != nil {
+		glog.Errorf("Error adding BGP export policies: %s", err.Error())
+	}
+
 	if len(toAdvertise) > 0 {
 		nrc.advertiseVIPs(toAdvertise)
 	}
