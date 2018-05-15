@@ -419,6 +419,31 @@ type externalIPService struct {
 	externalIp string
 }
 
+func hasActiveEndpoints(svc *serviceInfo, endpoints []endpointsInfo, nodePodCidrStr string) bool {
+	if svc.local {
+		_, nodePodCidr, err := net.ParseCIDR(nodePodCidrStr)
+		if err != nil {
+			glog.Errorf("Failed to ParseCIDR %s for hasActiveEndpoints on service %s/%s",
+				nodePodCidrStr, svc.namespace, svc.name)
+			return false
+		}
+		for _, endpoint := range endpoints {
+			ip := net.ParseIP(endpoint.ip)
+			if ip == nil {
+				glog.Errorf("Failed to ParseCIDR %s for endpoint in hasActiveEndpoints on service %s/%s",
+					endpoint.ip, svc.namespace, svc.name)
+				continue
+			}
+			if nodePodCidr.Contains(ip) {
+				return true
+			}
+		}
+		return false
+	}
+
+	return len(endpoints) > 0
+}
+
 // sync the ipvs service and server details configured to reflect the desired state of services and endpoint
 // as learned from services and endpoints information from the api server
 func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap) error {
@@ -484,6 +509,13 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			continue
 		}
 
+		endpoints := endpointsInfoMap[k]
+
+		if !hasActiveEndpoints(svc, endpoints, nsc.podCidr) {
+			glog.V(1).Infof("Skipping service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
+			continue
+		}
+
 		// create IPVS service for the service to be exposed through the cluster ip
 		ipvsClusterVipSvc, err := nsc.ln.ipvsAddService(ipvsSvcs, svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
 		if err != nil {
@@ -539,8 +571,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				activeServiceEndpointMap[nodeServiceIds[0]] = make([]string, 0)
 			}
 		}
-
-		endpoints := endpointsInfoMap[k]
 
 		externalIpServices := make([]externalIPService, 0)
 		// create IPVS service for the service to be exposed through the external IP's
