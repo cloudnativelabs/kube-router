@@ -115,10 +115,10 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string) error {
 
 	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
 	// route is not replaced. For now do it with command.
-	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", "kube-dummy-if", "table", "local", "proto", "kernel", "scope", "host", "src",
+	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
 		NodeIP.String(), "table", "local").CombinedOutput()
 	if err != nil {
-		glog.Errorf("Failed to replace route to service VIP %s configured on kube-dummy-if. Error: %v, Output: %v", ip, err, out)
+		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
 	}
 	return nil
 }
