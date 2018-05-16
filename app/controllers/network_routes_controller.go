@@ -896,7 +896,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 			return fmt.Errorf("Failed to verify if route already exists in %s table: %s",
 				customRouteTableName, err.Error())
 		}
-		if !strings.Contains(string(out), tunnelName) {
+		if !strings.Contains(string(out), "dev "+tunnelName+" scope") {
 			if out, err = exec.Command("ip", "route", "add", nexthop.String(), "dev", tunnelName, "table",
 				customRouteTableID).CombinedOutput(); err != nil {
 				return fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
