@@ -298,6 +298,12 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(obj interface{}) {
 		return
 	}
 
+	// update export policies so that NeighborSet gets updated with new set of nodes
+	err := nrc.addExportPolicies()
+	if err != nil {
+		glog.Errorf("Error adding BGP export policies: %s", err.Error())
+	}
+
 	if nrc.bgpEnableInternal {
 		nrc.syncInternalPeers()
 	}
