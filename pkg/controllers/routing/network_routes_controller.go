@@ -72,6 +72,7 @@ type NetworkRoutingController struct {
 	nodeAsnNumber           uint32
 	globalPeerRouters       []*config.NeighborConfig
 	nodePeerRouters         []string
+	enableCNI               bool
 	bgpFullMeshMode         bool
 	bgpEnableInternal       bool
 	bgpGracefulRestart      bool
@@ -98,26 +99,9 @@ type NetworkRoutingController struct {
 
 // Run runs forever until we are notified on stop channel
 func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
-	cidr, err := utils.GetPodCidrFromCniSpec(nrc.cniConfFile)
-	if err != nil {
-		glog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err.Error())
-	}
-	if reflect.DeepEqual(cidr, net.IPNet{}) {
-		glog.Infof("`subnet` in CNI conf file is empty so populating `subnet` in CNI conf file with pod CIDR assigned to the node obtained from node spec.")
-	}
-	cidrlen, _ := cidr.Mask.Size()
-	oldCidr := cidr.IP.String() + "/" + strconv.Itoa(cidrlen)
-
-	currentCidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		glog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to allocate pod CIDR for the node. Error: %v", err.Error())
-	}
-
-	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
-		err = utils.InsertPodCidrInCniSpec(nrc.cniConfFile, currentCidr)
-		if err != nil {
-			glog.Fatalf("Failed to insert `subnet`(pod CIDR) into CNI conf file: %s", err.Error())
-		}
+	var err error
+	if nrc.enableCNI {
+		nrc.updateCNIConfig()
 	}
 
 	glog.V(1).Info("Populating ipsets.")
@@ -280,6 +264,31 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			glog.Infof("Shutting down network routes controller")
 			return
 		case <-t.C:
+		}
+	}
+}
+
+func (nrc *NetworkRoutingController) updateCNIConfig() {
+	cidr, err := utils.GetPodCidrFromCniSpec(nrc.cniConfFile)
+	if err != nil {
+		glog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err)
+	}
+
+	if reflect.DeepEqual(cidr, net.IPNet{}) {
+		glog.Infof("`subnet` in CNI conf file is empty so populating `subnet` in CNI conf file with pod CIDR assigned to the node obtained from node spec.")
+	}
+	cidrlen, _ := cidr.Mask.Size()
+	oldCidr := cidr.IP.String() + "/" + strconv.Itoa(cidrlen)
+
+	currentCidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
+	if err != nil {
+		glog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to allocate pod CIDR for the node or an annotation `kube-router.io/pod-cidr`. Error: %v", err)
+	}
+
+	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
+		err = utils.InsertPodCidrInCniSpec(nrc.cniConfFile, currentCidr)
+		if err != nil {
+			glog.Fatalf("Failed to insert `subnet`(pod CIDR) into CNI conf file: %s", err.Error())
 		}
 	}
 }
@@ -704,6 +713,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
+	nrc.enableCNI = kubeRouterConfig.EnableCNI
 	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
 	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTtl
@@ -719,12 +729,14 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	// lets start with assumption we hace necessary IAM creds to access EC2 api
 	nrc.ec2IamAuthorized = true
 
-	nrc.cniConfFile = os.Getenv("KUBE_ROUTER_CNI_CONF_FILE")
-	if nrc.cniConfFile == "" {
-		nrc.cniConfFile = "/etc/cni/net.d/10-kuberouter.conf"
-	}
-	if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
-		return nil, errors.New("CNI conf file " + nrc.cniConfFile + " does not exist.")
+	if nrc.enableCNI {
+		nrc.cniConfFile = os.Getenv("KUBE_ROUTER_CNI_CONF_FILE")
+		if nrc.cniConfFile == "" {
+			nrc.cniConfFile = "/etc/cni/net.d/10-kuberouter.conf"
+		}
+		if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
+			return nil, errors.New("CNI conf file " + nrc.cniConfFile + " does not exist.")
+		}
 	}
 
 	nrc.ipSetHandler, err = utils.NewIPSet()

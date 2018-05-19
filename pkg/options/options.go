@@ -16,6 +16,7 @@ type KubeRouterConfig struct {
 	CleanupConfig           bool
 	ClusterAsn              uint
 	ClusterCIDR             string
+	EnableCNI               bool
 	EnableiBGP              bool
 	EnableOverlay           bool
 	EnablePodEgress         bool
@@ -105,6 +106,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
+	fs.BoolVar(&s.EnableCNI, "enable-cni", true,
+		"Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin.")
 	fs.BoolVar(&s.EnableiBGP, "enable-ibgp", true,
 		"Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers")
 	fs.StringVar(&s.HostnameOverride, "hostname-override", s.HostnameOverride,
