@@ -1677,13 +1677,13 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 	}
 
-	out, err := exec.Command("ip", "route", "list", "table", externalIPRouteTableId).Output()
+	_, err = exec.Command("ip", "route", "list", "table", externalIPRouteTableId).Output()
 	if err != nil {
 		return errors.New("Failed to verify required routing table for external IP's exists. " +
 			"Failed to setup policy routing required for DSR due to " + err.Error())
 	}
 
-	out, err = exec.Command("ip", "rule", "list").Output()
+	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
 		return errors.New("Failed to verify if `ip rule add prio 32765 from all lookup external_ip` exists due to: " + err.Error())
 	}
