@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -101,18 +102,21 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	if err != nil {
 		glog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err.Error())
 	}
+	if reflect.DeepEqual(cidr, net.IPNet{}) {
+		glog.Infof("`subnet` in CNI conf file is empty so populating `subnet` in CNI conf file with pod CIDR assigned to the node obtained from node spec.")
+	}
 	cidrlen, _ := cidr.Mask.Size()
 	oldCidr := cidr.IP.String() + "/" + strconv.Itoa(cidrlen)
 
 	currentCidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
-		glog.Errorf("Failed to get pod CIDR from node spec: %s", err.Error())
+		glog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to allocate pod CIDR for the node. Error: %v", err.Error())
 	}
 
 	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
 		err = utils.InsertPodCidrInCniSpec(nrc.cniConfFile, currentCidr)
 		if err != nil {
-			glog.Errorf("Failed to insert pod CIDR into CNI conf file: %s", err.Error())
+			glog.Fatalf("Failed to insert `subnet`(pod CIDR) into CNI conf file: %s", err.Error())
 		}
 	}
 

@@ -36,7 +36,7 @@ func Test_GetPodCidrFromCniSpec(t *testing.T) {
 			"CNI config file missing subnet",
 			`{"bridge":"kube-bridge","ipam":{"type":"host-local"},"isDefaultGateway":true,"name":"kubernetes","type":"bridge"}`,
 			net.IPNet{},
-			errors.New("subnet missing from CNI IPAM"),
+			nil,
 			"10-kuberouter.conf",
 		},
 	}

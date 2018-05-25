@@ -2,11 +2,9 @@ package utils
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
-	"reflect"
 	"strings"
 
 	"github.com/containernetworking/cni/libcni"
@@ -50,9 +48,6 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 		}
 	}
 	podCidr = net.IPNet(ipamConfig.Subnet)
-	if reflect.DeepEqual(podCidr, net.IPNet{}) {
-		return net.IPNet{}, errors.New("subnet missing from CNI IPAM")
-	}
 	return podCidr, nil
 }
 
