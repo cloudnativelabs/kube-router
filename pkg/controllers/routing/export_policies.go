@@ -14,7 +14,7 @@ import (
 //
 // - by default export of all routes from the RIB to the neighbour's is denied, and explicity statements are added i
 //   to permit the desired routes to be exported
-// - each node is allowed to advertise its assigned pod CIDR's to all of its iBGP peer neighbours with same ASN
+// - each node is allowed to advertise its assigned pod CIDR's to all of its iBGP peer neighbours with same ASN if --enable-ibgp=true
 // - each node is allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
 //   only if --advertise-pod-cidr flag is set to true
 // - each node is NOT allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
@@ -66,40 +66,42 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	statements := make([]config.Statement, 0)
 
-	// Get the current list of the nodes from the local cache
-	nodes := nrc.nodeLister.List()
-	iBGPPeers := make([]string, 0)
-	for _, node := range nodes {
-		nodeObj := node.(*v1core.Node)
-		nodeIP, err := utils.GetNodeIP(nodeObj)
-		if err != nil {
-			return fmt.Errorf("Failed to find a node IP: %s", err)
+	if nrc.bgpEnableInternal {
+		// Get the current list of the nodes from the local cache
+		nodes := nrc.nodeLister.List()
+		iBGPPeers := make([]string, 0)
+		for _, node := range nodes {
+			nodeObj := node.(*v1core.Node)
+			nodeIP, err := utils.GetNodeIP(nodeObj)
+			if err != nil {
+				return fmt.Errorf("Failed to find a node IP: %s", err)
+			}
+			iBGPPeers = append(iBGPPeers, nodeIP.String())
 		}
-		iBGPPeers = append(iBGPPeers, nodeIP.String())
-	}
-	iBGPPeerNS, _ := table.NewNeighborSet(config.NeighborSet{
-		NeighborSetName:  "iBGPpeerset",
-		NeighborInfoList: iBGPPeers,
-	})
-	err = nrc.bgpServer.ReplaceDefinedSet(iBGPPeerNS)
-	if err != nil {
-		nrc.bgpServer.AddDefinedSet(iBGPPeerNS)
-	}
-	// statement to represent the export policy to permit advertising node's pod CIDR
-	statements = append(statements,
-		config.Statement{
-			Conditions: config.Conditions{
-				MatchPrefixSet: config.MatchPrefixSet{
-					PrefixSet: "podcidrprefixset",
-				},
-				MatchNeighborSet: config.MatchNeighborSet{
-					NeighborSet: "iBGPpeerset",
-				},
-			},
-			Actions: config.Actions{
-				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
-			},
+		iBGPPeerNS, _ := table.NewNeighborSet(config.NeighborSet{
+			NeighborSetName:  "iBGPpeerset",
+			NeighborInfoList: iBGPPeers,
 		})
+		err = nrc.bgpServer.ReplaceDefinedSet(iBGPPeerNS)
+		if err != nil {
+			nrc.bgpServer.AddDefinedSet(iBGPPeerNS)
+		}
+		// statement to represent the export policy to permit advertising node's pod CIDR
+		statements = append(statements,
+			config.Statement{
+				Conditions: config.Conditions{
+					MatchPrefixSet: config.MatchPrefixSet{
+						PrefixSet: "podcidrprefixset",
+					},
+					MatchNeighborSet: config.MatchNeighborSet{
+						NeighborSet: "iBGPpeerset",
+					},
+				},
+				Actions: config.Actions{
+					RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+				},
+			})
+	}
 
 	externalBgpPeers := make([]string, 0)
 	if len(nrc.globalPeerRouters) != 0 {
