@@ -1414,7 +1414,15 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	// delete all ipsets
-	err = npc.ipSetHandler.DestroyAllWithin()
+	ipset, err := utils.NewIPSet()
+	if err != nil {
+		glog.Errorf("Failed to clean up ipsets: " + err.Error())
+	}
+	err = ipset.Save()
+	if err != nil {
+		glog.Errorf("Failed to clean up ipsets: " + err.Error())
+	}
+	err = ipset.DestroyAllWithin()
 	if err != nil {
 		glog.Errorf("Failed to clean up ipsets: " + err.Error())
 	}

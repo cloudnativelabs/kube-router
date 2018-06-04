@@ -446,7 +446,16 @@ func (nrc *NetworkRoutingController) Cleanup() {
 		glog.Warningf("Error deleting Pod egress iptable rule: %s", err.Error())
 	}
 
-	err = nrc.ipSetHandler.DestroyAllWithin()
+	// delete all ipsets created by kube-router
+	ipset, err := utils.NewIPSet()
+	if err != nil {
+		glog.Errorf("Failed to clean up ipsets: " + err.Error())
+	}
+	err = ipset.Save()
+	if err != nil {
+		glog.Errorf("Failed to clean up ipsets: " + err.Error())
+	}
+	err = ipset.DestroyAllWithin()
 	if err != nil {
 		glog.Warningf("Error deleting ipset: %s", err.Error())
 	}
