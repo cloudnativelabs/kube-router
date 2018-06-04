@@ -241,6 +241,18 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New("Failed to do sysctl net.ipv4.vs.conntrack=1 due to: %s" + err.Error())
 	}
 
+	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
+	err = ensureIpvsExpireNodestConn()
+	if err != nil {
+		return errors.New("Failed to do sysctl net.ipv4.vs.expire_nodest_conn=1 due to: %s" + err.Error())
+	}
+
+	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
+	err = ensureIpvsQuiescentTemplate()
+	if err != nil {
+		return errors.New("Failed to do sysctl net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
+	}
+
 	// loop forever unitl notified to stop on stopCh
 	for {
 		select {
@@ -1333,6 +1345,14 @@ func deleteHairpinIptablesRules() error {
 
 func ensureIpvsConntrack() error {
 	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/conntrack", []byte(strconv.Itoa(1)), 0640)
+}
+
+func ensureIpvsExpireNodestConn() error {
+	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/expire_nodest_conn", []byte(strconv.Itoa(1)), 0640)
+}
+
+func ensureIpvsQuiescentTemplate() error {
+	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/expire_quiescent_template", []byte(strconv.Itoa(1)), 0640)
 }
 
 func deleteMasqueradeIptablesRule() error {
