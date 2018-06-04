@@ -95,9 +95,10 @@ kube-router --master=http://192.168.1.99:8080/ --run-firewall=true --run-service
 
 ## cleanup configuration
 
-You can clean up all the configurations done (to ipvs, iptables, ip routes) by kube-router on the node by running
+Please delete kube-router daemonset and then clean up all the configurations done (to ipvs, iptables, ipset, ip routes etc) by kube-router on the node by running below command.
+
 ```
- kube-router --cleanup-config
+docker run --privileged --net=host cloudnativelabs/kube-router --cleanup-config
 ```
 
 ## trying kube-router as alternative to kube-proxy
