@@ -136,7 +136,8 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 		glog.V(1).Info("Performing periodic sync of iptables to reflect network policies")
 		err := npc.Sync()
 		if err != nil {
-			glog.Errorf("Error during periodic sync: " + err.Error())
+			glog.Errorf("Error during periodic sync of network policies in network policy controller. Error: " + err.Error())
+			glog.Errorf("Skipping sending heartbeat from network policy controller as periodic sync failed.")
 		} else {
 			healthcheck.SendHeartBeat(healthChan, "NPC")
 		}
