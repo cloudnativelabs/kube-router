@@ -74,7 +74,7 @@ type ipvsCalls interface {
 }
 
 type netlinkCalls interface {
-	ipAddrAdd(iface netlink.Link, ip string) error
+	ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error
 	ipAddrDel(iface netlink.Link, ip string) error
 	prepareEndpointForDsr(containerId string, endpointIP string, vip string) error
 	getKubeDummyInterface() (netlink.Link, error)
@@ -104,13 +104,25 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 	return err
 }
 
-func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string) error {
+// utility method to assign an IP to an interface. Mainly used to assign service VIP's
+// to kube-dummy-if. Also when DSR is used, used to assign VIP to dummy interface
+// inside the container.
+func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error {
 	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrAdd(iface, naddr)
 	if err != nil && err.Error() != IFACE_HAS_ADDR {
 		glog.Errorf("Failed to assign cluster ip %s to dummy interface: %s",
 			naddr.IPNet.IP.String(), err.Error())
 		return err
+	}
+
+	// When a service VIP is assigned to a dummy interface and accessed from host, in some of the
+	// case Linux source IP selection logix selects VIP itself as source leading to problems
+	// to avoid this an explicit entry is added to use node IP as source IP when accessing
+	// VIP from the host. Please see https://github.com/cloudnativelabs/kube-router/issues/376
+
+	if !addRoute {
+		return nil
 	}
 
 	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
@@ -122,27 +134,35 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string) error {
 	}
 	return nil
 }
+
 func (ln *linuxNetworking) ipvsGetServices() ([]*ipvs.Service, error) {
 	return ln.ipvsHandle.GetServices()
 }
+
 func (ln *linuxNetworking) ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
 	return ln.ipvsHandle.GetDestinations(ipvsSvc)
 }
+
 func (ln *linuxNetworking) ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 	return ln.ipvsHandle.DelDestination(ipvsSvc, ipvsDst)
 }
+
 func (ln *linuxNetworking) ipvsNewDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 	return ln.ipvsHandle.NewDestination(ipvsSvc, ipvsDst)
 }
+
 func (ln *linuxNetworking) ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 	return ln.ipvsHandle.UpdateDestination(ipvsSvc, ipvsDst)
 }
+
 func (ln *linuxNetworking) ipvsDelService(ipvsSvc *ipvs.Service) error {
 	return ln.ipvsHandle.DelService(ipvsSvc)
 }
+
 func (ln *linuxNetworking) ipvsUpdateService(ipvsSvc *ipvs.Service) error {
 	return ln.ipvsHandle.UpdateService(ipvsSvc)
 }
+
 func (ln *linuxNetworking) ipvsNewService(ipvsSvc *ipvs.Service) error {
 	return ln.ipvsHandle.NewService(ipvsSvc)
 }
@@ -526,7 +546,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
-		err := nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String())
+		err := nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
 		if err != nil {
 			continue
 		}
@@ -636,7 +656,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 			} else {
 				// ensure director with vip assigned
-				err := nsc.ln.ipAddrAdd(dummyVipInterface, externalIP)
+				err := nsc.ln.ipAddrAdd(dummyVipInterface, externalIP, true)
 				if err != nil && err.Error() != IFACE_HAS_ADDR {
 					glog.Errorf("Failed to assign external ip %s to dummy interface %s due to %s", externalIP, KUBE_DUMMY_IF, err.Error())
 				}
@@ -981,7 +1001,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	}
 
 	// assign VIP to the KUBE_TUNNEL_IF interface
-	err = ln.ipAddrAdd(tunIf, vip)
+	err = ln.ipAddrAdd(tunIf, vip, false)
 	if err != nil && err.Error() != IFACE_HAS_ADDR {
 		netns.Set(hostNetworkNamespaceHandle)
 		activeNetworkNamespaceHandle, err = netns.Get()
