@@ -216,6 +216,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 
 	// loop forever till notified to stop on stopCh
 	for {
+		var err error
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down network routes controller")
@@ -226,7 +227,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		// Update ipset entries
 		if nrc.enablePodEgress || nrc.enableOverlays {
 			glog.V(1).Info("Syncing ipsets")
-			err := nrc.syncNodeIPSets()
+			err = nrc.syncNodeIPSets()
 			if err != nil {
 				glog.Errorf("Error synchronizing ipsets: %s", err.Error())
 			}
@@ -257,7 +258,12 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			nrc.syncInternalPeers()
 		}
 
-		healthcheck.SendHeartBeat(healthChan, "NRC")
+		if err == nil {
+			healthcheck.SendHeartBeat(healthChan, "NRC")
+		} else {
+			glog.Errorf("Error during periodic sync in network routing controller. Error: " + err.Error())
+			glog.Errorf("Skipping sending heartbeat from network routing controller as periodic sync failed.")
+		}
 
 		select {
 		case <-stopCh:
