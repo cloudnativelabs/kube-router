@@ -209,7 +209,7 @@ func (npc *NetworkPolicyController) Sync() error {
 	defer func() {
 		endTime := time.Since(start)
 		if npc.MetricsEnabled {
-			metrics.ControllerIptablesSyncTime.WithLabelValues().Set(float64(endTime))
+			metrics.ControllerIptablesSyncTime.WithLabelValues().Set(float64(endTime.Seconds()))
 		}
 		glog.V(1).Infof("sync iptables took %v", endTime)
 	}()

@@ -29,7 +29,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		metrics.ControllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime))
+		metrics.ControllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime.Seconds()))
 		glog.V(2).Infof("Syncing BGP peers for the node took %v", endTime)
 	}()
 
