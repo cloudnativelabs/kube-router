@@ -329,7 +329,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	defer func() {
 		endTime := time.Since(start)
 		glog.V(2).Infof("Publishing IPVS metrics took %v", endTime)
-		metrics.ControllerIpvsMetricsExportTime.WithLabelValues().Set(float64(endTime))
+		metrics.ControllerIpvsMetricsExportTime.WithLabelValues().Set(float64(endTime.Seconds()))
 	}()
 
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
@@ -500,7 +500,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	defer func() {
 		endTime := time.Since(start)
 		if nsc.MetricsEnabled {
-			metrics.ControllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime))
+			metrics.ControllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime.Seconds()))
 		}
 		glog.V(1).Infof("sync ipvs services took %v", endTime)
 	}()
