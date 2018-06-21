@@ -1,5 +1,5 @@
 NAME?=kube-router
-GOARCH?=amd64
+GOARCH?=$(shell go env GOARCH)
 DEV_SUFFIX?=-git
 OSX=$(filter Darwin,$(shell uname))
 BUILD_DATE?=$(shell date +%Y-%m-%dT%H:%M:%S%z)
@@ -19,15 +19,13 @@ UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=false
 DOCKER_BUILD_IMAGE?=golang:1.8.7-alpine
 ifeq ($(GOARCH), arm)
-QEMU_ARCH=arm
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
-DOCKERFILE_SED_EXPR?=s,FROM alpine:,FROM multiarch/alpine:armhf-v,
+DOCKERFILE_SED_EXPR?=
 else ifeq ($(GOARCH), arm64)
-QEMU_ARCH=aarch64
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM aarch64
-DOCKERFILE_SED_EXPR?=s,FROM alpine:,FROM multiarch/alpine:aarch64-v,
+DOCKERFILE_SED_EXPR?=
 else
 DOCKERFILE_SED_EXPR?=
 FILE_ARCH=x86-64
@@ -83,7 +81,7 @@ vagrant-image-update: all ## Rebuild kube-router, update image in local VMs, and
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
-container: multiarch-check Dockerfile.$(GOARCH).run kube-router gobgp multiarch-binverify ## Builds a Docker container image.
+container: Dockerfile.$(GOARCH).run kube-router gobgp multiarch-binverify ## Builds a Docker container image.
 	@echo Starting kube-router container image build.
 	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" -f Dockerfile.$(GOARCH).run .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
@@ -192,19 +190,9 @@ gobgp:
 	cd vendor/github.com/osrg/gobgp/gobgp && \
 	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go build -o $(MAKEFILE_DIR)/gobgp
 
-multiarch-check:
-	@[ -z "$(QEMU_ARCH)" ] && exit 0; \
-	  QEMU_RUNTIME=$$(sed -n '/interpreter/s/.* //p' /proc/sys/fs/binfmt_misc/qemu-$(QEMU_ARCH)); \
-	  trap 'rc=$$?; [ $$rc -ne 0 ] && echo "To fix below, try running: make multiarch-setup\n"; exit $$rc' 0 ;\
-	  echo "Checking for QEMU_RUNTIME=$${QEMU_RUNTIME} ..." ;\
-	  test -x "$${QEMU_RUNTIME}"
-
 multiarch-binverify:
 	@echo 'Verifying kube-router gobgp for ARCH=$(FILE_ARCH) ...'
 	@[ `file kube-router gobgp| cut -d, -f2 |grep -cw "$(FILE_ARCH)"` -eq 2 ]
-
-multiarch-setup:
-	$(DOCKER) run --rm --privileged multiarch/qemu-user-static:register
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
@@ -230,6 +218,6 @@ endif
 .PHONY: update-glide test docker-login push-release github-release help
 .PHONY: gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
-.PHONY: multiarch-setup multiarch-check multiarch-binverify
+.PHONY: multiarch-binverify
 
 .DEFAULT: all
