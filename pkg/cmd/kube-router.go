@@ -82,6 +82,13 @@ func (kr *KubeRouter) Run() error {
 
 	stopCh := make(chan struct{})
 
+	hc, err := healthcheck.NewHealthController(kr.Config)
+	if err != nil {
+		return errors.New("Failed to create health controller: " + err.Error())
+	}
+	wg.Add(1)
+	go hc.Run(healthChan, stopCh, &wg)
+
 	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
 		glog.Info("Router, Firewall or Service proxy functionality must be specified. Exiting!")
 		os.Exit(0)
@@ -157,13 +164,6 @@ func (kr *KubeRouter) Run() error {
 		wg.Add(1)
 		go nsc.Run(healthChan, stopCh, &wg)
 	}
-
-	hc, err := healthcheck.NewHealthController(kr.Config)
-	if err != nil {
-		return errors.New("Failed to create health controller: " + err.Error())
-	}
-	wg.Add(1)
-	go hc.Run(healthChan, stopCh, &wg)
 
 	// Handle SIGINT and SIGTERM
 	ch := make(chan os.Signal)
