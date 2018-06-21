@@ -972,10 +972,16 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 		// TODO: this is ugly, but ran into issue multiple times where interface did not come up quickly.
 		// need to find the root cause
 		for retry := 0; retry < 60; retry++ {
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			tunIf, err = netlink.LinkByName(KUBE_TUNNEL_IF)
+			if err == nil {
+				break
+			}
 			if err != nil && err.Error() == IFACE_NOT_FOUND {
 				continue
+				glog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KUBE_TUNNEL_IF)
+			} else {
+				break
 			}
 		}
 
