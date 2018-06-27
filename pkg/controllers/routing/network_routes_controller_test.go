@@ -1503,6 +1503,287 @@ func Test_addExportPolicies(t *testing.T) {
 			},
 			nil,
 		},
+		{
+			"prepends AS with external peers",
+			&NetworkRoutingController{
+				clientset:         fake.NewSimpleClientset(),
+				hostnameOverride:  "node-1",
+				bgpEnableInternal: true,
+				bgpFullMeshMode:   false,
+				pathPrepend:       true,
+				pathPrependCount:  5,
+				pathPrependAS:     "65100",
+				bgpServer:         gobgp.NewBgpServer(),
+				activeNodes:       make(map[string]bool),
+				globalPeerRouters: []*config.NeighborConfig{
+					{
+						NeighborAddress: "10.10.0.1",
+					},
+					{
+						NeighborAddress: "10.10.0.2",
+					},
+				},
+				nodeAsnNumber: 100,
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+						Annotations: map[string]string{
+							"kube-router.io/node.asn": "100",
+						},
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+					Spec: v1core.NodeSpec{
+						PodCIDR: "172.20.0.0/24",
+					},
+				},
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:        "ClusterIP",
+						ClusterIP:   "10.0.0.1",
+						ExternalIPs: []string{"1.1.1.1"},
+					},
+				},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "podcidrprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "172.20.0.0/24",
+								MasklengthRange: "24..24",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "clusteripprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "1.1.1.1/32",
+								MasklengthRange: "32..32",
+							},
+							{
+								IpPrefix:        "10.0.0.1/32",
+								MasklengthRange: "32..32",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "externalpeerset",
+						NeighborInfoList: []string{"10.10.0.1/32", "10.10.0.2/32"},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			[]*config.Statement{
+				{
+					Name: "kube_router_stmt0",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "podcidrprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "iBGPpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+				{
+					Name: "kube_router_stmt1",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "externalpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+						BgpActions: config.BgpActions{
+							SetAsPathPrepend: config.SetAsPathPrepend{
+								As:      "65100",
+								RepeatN: 5,
+							},
+						},
+					},
+				},
+			},
+			nil,
+		},
+		{
+			"only prepends AS when both node annotations are present",
+			&NetworkRoutingController{
+				clientset:         fake.NewSimpleClientset(),
+				hostnameOverride:  "node-1",
+				bgpEnableInternal: true,
+				bgpFullMeshMode:   false,
+				pathPrepend:       false,
+				pathPrependAS:     "65100",
+				bgpServer:         gobgp.NewBgpServer(),
+				activeNodes:       make(map[string]bool),
+				globalPeerRouters: []*config.NeighborConfig{
+					{
+						NeighborAddress: "10.10.0.1",
+					},
+					{
+						NeighborAddress: "10.10.0.2",
+					},
+				},
+				nodeAsnNumber: 100,
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+						Annotations: map[string]string{
+							"kube-router.io/node.asn": "100",
+						},
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+					Spec: v1core.NodeSpec{
+						PodCIDR: "172.20.0.0/24",
+					},
+				},
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:        "ClusterIP",
+						ClusterIP:   "10.0.0.1",
+						ExternalIPs: []string{"1.1.1.1"},
+					},
+				},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "podcidrprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "172.20.0.0/24",
+								MasklengthRange: "24..24",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "clusteripprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "1.1.1.1/32",
+								MasklengthRange: "32..32",
+							},
+							{
+								IpPrefix:        "10.0.0.1/32",
+								MasklengthRange: "32..32",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "externalpeerset",
+						NeighborInfoList: []string{"10.10.0.1/32", "10.10.0.2/32"},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			[]*config.Statement{
+				{
+					Name: "kube_router_stmt0",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "podcidrprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "iBGPpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+				{
+					Name: "kube_router_stmt1",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "externalpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+			},
+			nil,
+		},
 	}
 
 	for _, testcase := range testcases {
@@ -1615,7 +1896,7 @@ func Test_addExportPolicies(t *testing.T) {
 			for _, expectedStatement := range testcase.policyStatements {
 				found := false
 				for _, statement := range statements {
-					if statement.Equal(expectedStatement) {
+					if reflect.DeepEqual(statement, expectedStatement) {
 						found = true
 					}
 				}

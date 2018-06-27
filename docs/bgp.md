@@ -37,10 +37,10 @@ get peered.
 
 ### Route-Reflector setup  Without Full Mesh
 
-This model support the common scheme of using Route Reflector Server node to concentrate 
+This model support the common scheme of using Route Reflector Server node to concentrate
 peering from Client Peer. This has the big advantage of not needing full mesh, and
-scale better. In this mode kube-router expects each node is configured either in 
-Route Reflector server mode or in Route Reflector client mode. This is done 
+scale better. In this mode kube-router expects each node is configured either in
+Route Reflector server mode or in Route Reflector client mode. This is done
 with node `kube-router.io/rr.server=ClusterID`, `kube-router.io/rr.client=ClusterId`
 respectively. In this mode each Route Reflector Client will only peer with Route
 Reflector Servers. Each Route Route Reflector Server will peer other Route Reflector
@@ -52,7 +52,7 @@ Users can annotate node objects with the following command:
 kubectl annotate node <kube-node> "kube-router.io/rr.server=42"
 ```
 
-for Route Reflector server mode, and 
+for Route Reflector server mode, and
 
 ```
 kubectl annotate node <kube-node> "kube-router.io/rr.client=42"
@@ -90,6 +90,20 @@ For e.g users can annotate node object with below commands
 ```
 kubectl annotate node <kube-node> "kube-router.io/peer.ips=192.168.1.99,192.168.1.100"
 kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
+```
+
+### AS Path Prepending
+
+For traffic shaping purposes, you may want to prepend the AS path announced to peers.
+This can be accomplished on a per-node basis with annotations:
+- `kube-router.io/path-prepend.as`
+- `kube-router.io/path-prepend.repeat-n`
+
+If you wanted to prepend all routes from a particular node with the AS 65000 five times,
+you would run the following commands:
+```
+kubectl annotate node <kube-node> "kube-router.io/path-prepend.as=65000"
+kubectl annotate node <kube-node> "kube-router.io/path-prepend.repeat-n=5"
 ```
 
 ### BGP Peer Password Authentication

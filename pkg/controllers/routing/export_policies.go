@@ -66,6 +66,16 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	statements := make([]config.Statement, 0)
 
+	var bgpActions config.BgpActions
+	if nrc.pathPrepend {
+		bgpActions = config.BgpActions{
+			SetAsPathPrepend: config.SetAsPathPrepend{
+				As:      nrc.pathPrependAS,
+				RepeatN: nrc.pathPrependCount,
+			},
+		}
+	}
+
 	if nrc.bgpEnableInternal {
 		// Get the current list of the nodes from the local cache
 		nodes := nrc.nodeLister.List()
@@ -136,6 +146,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			},
 			Actions: config.Actions{
 				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+				BgpActions:       bgpActions,
 			},
 		})
 		if nrc.advertisePodCidr {

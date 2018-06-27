@@ -41,6 +41,8 @@ const (
 	nodeAddrsIPSetName   = "kube-router-node-ips"
 
 	nodeASNAnnotation                 = "kube-router.io/node.asn"
+	pathPrependASNAnnotation          = "kube-router.io/path-prepend.as"
+	pathPrependRepeatNAnnotation      = "kube-router.io/path-prepend.repeat-n"
 	peerASNAnnotation                 = "kube-router.io/peer.asns"
 	peerIPAnnotation                  = "kube-router.io/peer.ips"
 	peerPasswordAnnotation            = "kube-router.io/peer.passwords"
@@ -87,6 +89,9 @@ type NetworkRoutingController struct {
 	cniConfFile             string
 	initSrcDstCheckDone     bool
 	ec2IamAuthorized        bool
+	pathPrependAS           string
+	pathPrependCount        uint8
+	pathPrepend             bool
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -610,6 +615,28 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		nrc.bgpRRClient = true
 	}
 
+	if prependASN, okASN := node.ObjectMeta.Annotations[pathPrependASNAnnotation]; okASN {
+		prependRepeatN, okRepeatN := node.ObjectMeta.Annotations[pathPrependRepeatNAnnotation]
+
+		if !okRepeatN {
+			return fmt.Errorf("Both %s and %s must be set", pathPrependASNAnnotation, pathPrependRepeatNAnnotation)
+		}
+
+		_, err := strconv.ParseUint(prependASN, 0, 32)
+		if err != nil {
+			return errors.New("Failed to parse ASN number specified to prepend")
+		}
+
+		repeatN, err := strconv.ParseUint(prependRepeatN, 0, 8)
+		if err != nil {
+			return errors.New("Failed to parse number of times ASN should be repeated")
+		}
+
+		nrc.pathPrepend = true
+		nrc.pathPrependAS = prependASN
+		nrc.pathPrependCount = uint8(repeatN)
+	}
+
 	nrc.bgpServer = gobgp.NewBgpServer()
 	go nrc.bgpServer.Serve()
 
@@ -787,7 +814,6 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.advertiseExternalIP = kubeRouterConfig.AdvertiseExternalIp
 	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIp
 	nrc.advertisePodCidr = kubeRouterConfig.AdvertiseNodePodCidr
-
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 
 	// Convert ints to uint32s
