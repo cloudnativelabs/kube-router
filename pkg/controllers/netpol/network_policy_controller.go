@@ -206,7 +206,7 @@ func (npc *NetworkPolicyController) Sync() error {
 	defer npc.mu.Unlock()
 
 	start := time.Now()
-	syncVersion := string(start.UnixNano())
+	syncVersion := strconv.FormatInt(start.UnixNano(), 10)
 	defer func() {
 		endTime := time.Since(start)
 		if npc.MetricsEnabled {
@@ -215,8 +215,7 @@ func (npc *NetworkPolicyController) Sync() error {
 		glog.V(1).Infof("sync iptables took %v", endTime)
 	}()
 
-	glog.V(1).Info("Starting sync of iptables")
-
+	glog.V(1).Infof("Starting sync of iptables with version: %s", syncVersion)
 	if npc.v1NetworkPolicy {
 		npc.networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 		if err != nil {
@@ -625,6 +624,25 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		}
 		activePodFwChains[podFwChainName] = true
 
+		// add entries in pod firewall to run through required network policies
+		for _, policy := range *npc.networkPoliciesInfo {
+			if _, ok := policy.targetPods[pod.ip]; ok {
+				comment := "run through nw policy " + policy.name
+				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
+				args := []string{"-m", "comment", "--comment", comment, "-j", policyChainName}
+				exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+				if err != nil {
+					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+				}
+				if !exists {
+					err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+					if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+					}
+				}
+			}
+		}
+
 		comment := "rule to permit the traffic traffic to pods when source is the pod's local node"
 		args := []string{"-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT"}
 		exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
@@ -694,25 +712,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
-		// add entries in pod firewall to run through required network policies
-		for _, policy := range *npc.networkPoliciesInfo {
-			if _, ok := policy.targetPods[pod.ip]; ok {
-				comment := "run through nw policy " + policy.name
-				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
-				args := []string{"-m", "comment", "--comment", comment, "-j", policyChainName}
-				exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
-				if err != nil {
-					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-				}
-				if !exists {
-					err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-					if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-					}
-				}
-			}
-		}
-
 		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
 		comment = "rule for stateful firewall for pod"
 		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
@@ -748,6 +747,25 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		activePodFwChains[podFwChainName] = true
+
+		// add entries in pod firewall to run through required network policies
+		for _, policy := range *npc.networkPoliciesInfo {
+			if _, ok := policy.targetPods[pod.ip]; ok {
+				comment := "run through nw policy " + policy.name
+				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
+				args := []string{"-m", "comment", "--comment", comment, "-j", policyChainName}
+				exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+				if err != nil {
+					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+				}
+				if !exists {
+					err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+					if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+					}
+				}
+			}
+		}
 
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting routed (coming for other node pods)
@@ -790,25 +808,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-
-		// add entries in pod firewall to run through required network policies
-		for _, policy := range *npc.networkPoliciesInfo {
-			if _, ok := policy.targetPods[pod.ip]; ok {
-				comment := "run through nw policy " + policy.name
-				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
-				args := []string{"-m", "comment", "--comment", comment, "-j", policyChainName}
-				exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
-				if err != nil {
-					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-				}
-				if !exists {
-					err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-					if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-					}
-				}
-			}
 		}
 
 		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
@@ -908,7 +907,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 
 	// cleanup pod firewall chain
 	for _, chain := range cleanupPodFwChains {
-		glog.Errorf("Found pod fw chain to cleanup: %s", chain)
+		glog.V(2).Infof("Found pod fw chain to cleanup: %s", chain)
 		err = iptablesCmdHandler.ClearChain("filter", chain)
 		if err != nil {
 			return fmt.Errorf("Failed to flush the rules in chain %s due to %s", chain, err.Error())
@@ -922,7 +921,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 
 	// cleanup network policy chains
 	for _, policyChain := range cleanupPolicyChains {
-		glog.Infof("Found policy chain to cleanup %s", policyChain)
+		glog.V(2).Infof("Found policy chain to cleanup %s", policyChain)
 
 		// first clean up any references from pod firewall chain
 		for podFwChain := range activePodFwChains {
