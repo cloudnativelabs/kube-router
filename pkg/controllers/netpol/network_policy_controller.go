@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"regexp"
 )
 
 const (
@@ -1493,6 +1494,8 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	npc.v1NetworkPolicy = true
 	v, _ := clientset.Discovery().ServerVersion()
+	valid := regexp.MustCompile("[0-9]")
+	v.Minor = strings.Join(valid.FindAllString(v.Minor, -1), "")
 	minorVer, _ := strconv.Atoi(v.Minor)
 	if v.Major == "1" && minorVer < 7 {
 		npc.v1NetworkPolicy = false
