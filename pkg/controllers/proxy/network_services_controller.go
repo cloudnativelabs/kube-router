@@ -442,7 +442,11 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
 		glog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
-		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		err := nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		if err != nil {
+			glog.Errorf("Error syncing IPVS services: %s", err.Error())
+			return
+		}
 	} else {
 		glog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", ep.Namespace, ep.Name)
 	}
@@ -472,7 +476,11 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
 		glog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
-		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		err := nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		if err != nil {
+			glog.Errorf("Error syncing IPVS services: %s", err.Error())
+			return
+		}
 	} else {
 		glog.V(1).Infof("Skipping syncing IPVS services for update to service: %s/%s as nothing changed", svc.Namespace, svc.Name)
 	}
