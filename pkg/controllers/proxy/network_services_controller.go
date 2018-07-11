@@ -76,7 +76,7 @@ type ipvsCalls interface {
 type netlinkCalls interface {
 	ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error
 	ipAddrDel(iface netlink.Link, ip string) error
-	ipAddrExists(iface netlink.Link, ip string) (bool, error)
+	ipAddrList(iface netlink.Link, family int) ([]netlink.Addr, error)
 	prepareEndpointForDsr(containerId string, endpointIP string, vip string) error
 	getKubeDummyInterface() (netlink.Link, error)
 	setupRoutesForExternalIPForDSR(serviceInfoMap) error
@@ -95,7 +95,8 @@ type linuxNetworking struct {
 	ipvsHandle *ipvs.Handle
 }
 
-func contains(list []netlink.Addr, addr *net.IPNet) bool {
+func contains(list []netlink.Addr, ip string) bool {
+	addr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 	for _, ip := range list {
 		if addr.IP.Equal(ip.IPNet.IP) {
 			return true
@@ -104,19 +105,14 @@ func contains(list []netlink.Addr, addr *net.IPNet) bool {
 	return false
 }
 
-func (ln *linuxNetworking) ipAddrExists(iface netlink.Link, ip string) (bool, error) {
-	naddr := &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}
-	var addrs []netlink.Addr
-	addrs, err := netlink.AddrList(iface, netlink.FAMILY_V4)
+//Returns a list of ipv4 ip's of the requested interface
+func (ln *linuxNetworking) ipAddrList(iface netlink.Link, family int) ([]netlink.Addr, error) {
+	var empty []netlink.Addr
+	addrs, err := netlink.AddrList(iface, family)
 	if err != nil {
-		glog.Errorf("Failed to get ip list for interface %s Error: %s",
-			KUBE_DUMMY_IF, err.Error())
-		return false, err
+		return empty, err
 	}
-	if contains(addrs, naddr) {
-		return true, nil
-	}
-	return false, nil
+	return addrs, nil
 }
 
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
@@ -558,6 +554,12 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		return errors.New("Failed get list of IPVS services due to: " + err.Error())
 	}
 
+	dummyVipifAddrs, err := nsc.ln.ipAddrList(dummyVipInterface, netlink.FAMILY_V4)
+	if err != nil {
+		glog.Errorf("Failed to get ip list for interface %s Error: %s", KUBE_DUMMY_IF, err.Error())
+		return err
+	}
+
 	for k, svc := range serviceInfoMap {
 		var protocol uint16
 
@@ -571,13 +573,10 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// assign cluster IP of the service to the dummy interface if not already assigned so that its routable from the pod's on the node
-		exists, err := nsc.ln.ipAddrExists(dummyVipInterface, svc.clusterIP.String())
-		if err != nil {
-			return err
-		}
-		if !exists {
+		if !contains(dummyVipifAddrs, svc.clusterIP.String()) {
 			err = nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
 			if err != nil {
+				glog.Errorf("Could not add ip %s to interface %s due to %s", svc.clusterIP.String(), KUBE_DUMMY_IF, err)
 				continue
 			}
 		}
