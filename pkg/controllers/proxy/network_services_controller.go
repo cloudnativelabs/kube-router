@@ -110,7 +110,8 @@ func (ln *linuxNetworking) ipAddrList(iface netlink.Link, family int) ([]netlink
 	var empty []netlink.Addr
 	addrs, err := netlink.AddrList(iface, family)
 	if err != nil {
-		return empty, err
+		attrs := iface.Attrs()
+		return empty, fmt.Errorf("Failed to list IP's on interface %s: %s", attrs.Name, err.Error())
 	}
 	return addrs, nil
 }
@@ -556,7 +557,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	dummyVipifAddrs, err := nsc.ln.ipAddrList(dummyVipInterface, netlink.FAMILY_V4)
 	if err != nil {
-		glog.Errorf("Failed to get ip list for interface %s Error: %s", KUBE_DUMMY_IF, err.Error())
 		return err
 	}
 
@@ -802,12 +802,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 	}
 
-	var addrs []netlink.Addr
-	addrs, err = netlink.AddrList(dummyVipInterface, netlink.FAMILY_V4)
+	dummyVipifAddrs, err := nsc.ln.ipAddrList(dummyVipInterface, netlink.FAMILY_V4)
 	if err != nil {
-		return errors.New("Failed to list dummy interface IPs: " + err.Error())
+		return err
 	}
-	for _, addr := range addrs {
+	for _, addr := range dummyVipifAddrs {
 		isActive := addrActive[addr.IP.String()]
 		if !isActive {
 			glog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
