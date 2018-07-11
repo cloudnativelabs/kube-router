@@ -802,7 +802,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 	}
 
-	dummyVipifAddrs, err := nsc.ln.ipAddrList(dummyVipInterface, netlink.FAMILY_V4)
+	dummyVipifAddrs, err = nsc.ln.ipAddrList(dummyVipInterface, netlink.FAMILY_V4)
 	if err != nil {
 		return err
 	}
