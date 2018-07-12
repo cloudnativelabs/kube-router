@@ -303,11 +303,11 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	err = nsc.sync()
 	if err != nil {
 		glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
+		nsc.readyForUpdates = false
 	} else {
 		healthcheck.SendHeartBeat(healthChan, "NSC")
+		nsc.readyForUpdates = true
 	}
-
-	nsc.toggleReady()
 
 	// loop forever unitl notified to stop on stopCh
 	for {
@@ -320,17 +320,22 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			if nsc.checkPendingIPVSupdate() {
 				err = nsc.sync()
 				if err != nil {
+					nsc.readyForUpdates = false
 					glog.Errorf("Error during requested ipvs sync in network service controller. Error: " + err.Error())
+				} else {
+					nsc.readyForUpdates = true
 				}
 			}
 		case <-syncPeriod.C:
 			glog.V(1).Info("Performing periodic sync of ipvs services")
 			err = nsc.sync()
 			if err != nil {
+				nsc.readyForUpdates = false
 				glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
 				glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
 			} else {
 				healthcheck.SendHeartBeat(healthChan, "NSC")
+				nsc.readyForUpdates = true
 			}
 		}
 	}
@@ -349,12 +354,6 @@ func (nsc *NetworkServicesController) requestIPVSupdate() {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 	nsc.pendingIPVSupdate = true
-}
-
-func (nsc *NetworkServicesController) toggleReady() {
-	nsc.mu.Lock()
-	defer nsc.mu.Unlock()
-	nsc.readyForUpdates = true
 }
 
 func (nsc *NetworkServicesController) sync() error {
