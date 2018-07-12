@@ -317,7 +317,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			return nil
 
 		case <-pulseTime.C:
-			if nsc.pendingIPVSupdate {
+			if nsc.checkPendingIPVSupdate() {
 				err = nsc.sync()
 				if err != nil {
 					glog.Errorf("Error during requested ipvs sync in network service controller. Error: " + err.Error())
@@ -334,6 +334,15 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			}
 		}
 	}
+}
+func (nsc *NetworkServicesController) checkPendingIPVSupdate() bool {
+	nsc.mu.Lock()
+	defer nsc.mu.Unlock()
+	if nsc.pendingIPVSupdate {
+		nsc.pendingIPVSupdate = false
+		return true
+	}
+	return false
 }
 
 func (nsc *NetworkServicesController) requestIPVSupdate() {
