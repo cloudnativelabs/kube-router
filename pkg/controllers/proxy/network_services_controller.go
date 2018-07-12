@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -222,6 +221,7 @@ type NetworkServicesController struct {
 	MetricsEnabled      bool
 	ln                  LinuxNetworking
 	readyForUpdates     bool
+	pendingIPVSupdate   bool
 
 	svcLister cache.Indexer
 	epLister  cache.Indexer
@@ -265,8 +265,12 @@ type endpointsInfoMap map[string][]endpointsInfo
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 
-	t := time.NewTicker(nsc.syncPeriod)
-	defer t.Stop()
+	syncPeriod := time.NewTicker(nsc.syncPeriod)
+	pulseTime := time.NewTicker(time.Duration(100 * time.Millisecond))
+
+	defer syncPeriod.Stop()
+	defer pulseTime.Stop()
+
 	defer wg.Done()
 
 	glog.Infof("Starting network services controller")
@@ -295,31 +299,53 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New("Failed to do sysctl net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
 	}
 
+	glog.V(1).Info("Performing initial sync of ipvs services")
+	err = nsc.sync()
+	if err != nil {
+		glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
+	} else {
+		healthcheck.SendHeartBeat(healthChan, "NSC")
+	}
+
+	nsc.toggleReady()
+
 	// loop forever unitl notified to stop on stopCh
 	for {
 		select {
 		case <-stopCh:
 			glog.Info("Shutting down network services controller")
 			return nil
-		default:
-		}
 
-		glog.V(1).Info("Performing periodic sync of ipvs services")
-		err := nsc.sync()
-		if err != nil {
-			glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
-			glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
-		} else {
-			healthcheck.SendHeartBeat(healthChan, "NSC")
-		}
-		nsc.readyForUpdates = true
-		select {
-		case <-stopCh:
-			glog.Info("Shutting down network services controller")
-			return nil
-		case <-t.C:
+		case <-pulseTime.C:
+			if nsc.pendingIPVSupdate {
+				err = nsc.sync()
+				if err != nil {
+					glog.Errorf("Error during requested ipvs sync in network service controller. Error: " + err.Error())
+				}
+			}
+		case <-syncPeriod.C:
+			glog.V(1).Info("Performing periodic sync of ipvs services")
+			err = nsc.sync()
+			if err != nil {
+				glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
+				glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
+			} else {
+				healthcheck.SendHeartBeat(healthChan, "NSC")
+			}
 		}
 	}
+}
+
+func (nsc *NetworkServicesController) requestIPVSupdate() {
+	nsc.mu.Lock()
+	defer nsc.mu.Unlock()
+	nsc.pendingIPVSupdate = true
+}
+
+func (nsc *NetworkServicesController) toggleReady() {
+	nsc.mu.Lock()
+	defer nsc.mu.Unlock()
+	nsc.readyForUpdates = true
 }
 
 func (nsc *NetworkServicesController) sync() error {
@@ -431,25 +457,9 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 		glog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
 		return
 	}
-	nsc.mu.Lock()
-	defer nsc.mu.Unlock()
 
-	// build new service and endpoints map to reflect the change
-	newServiceMap := nsc.buildServicesInfo()
-	newEndpointsMap := nsc.buildEndpointsInfo()
-
-	if len(newEndpointsMap) != len(nsc.endpointsMap) || !reflect.DeepEqual(newEndpointsMap, nsc.endpointsMap) {
-		nsc.endpointsMap = newEndpointsMap
-		nsc.serviceMap = newServiceMap
-		glog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
-		err := nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
-		if err != nil {
-			glog.Errorf("Error syncing IPVS services: %s", err.Error())
-			return
-		}
-	} else {
-		glog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", ep.Namespace, ep.Name)
-	}
+	//Run sync() on the next tick
+	nsc.requestIPVSupdate()
 }
 
 // OnServiceUpdate handle change in service update from the API server
@@ -465,25 +475,9 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
 		return
 	}
-	nsc.mu.Lock()
-	defer nsc.mu.Unlock()
 
-	// build new service and endpoints map to reflect the change
-	newServiceMap := nsc.buildServicesInfo()
-	newEndpointsMap := nsc.buildEndpointsInfo()
-
-	if len(newServiceMap) != len(nsc.serviceMap) || !reflect.DeepEqual(newServiceMap, nsc.serviceMap) {
-		nsc.endpointsMap = newEndpointsMap
-		nsc.serviceMap = newServiceMap
-		glog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
-		err := nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
-		if err != nil {
-			glog.Errorf("Error syncing IPVS services: %s", err.Error())
-			return
-		}
-	} else {
-		glog.V(1).Infof("Skipping syncing IPVS services for update to service: %s/%s as nothing changed", svc.Namespace, svc.Name)
-	}
+	//Run sync() on the next tick
+	nsc.requestIPVSupdate()
 }
 
 type externalIPService struct {
@@ -2023,6 +2017,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.epLister = epInformer.GetIndexer()
 	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
+
+	nsc.pendingIPVSupdate = false
 
 	rand.Seed(time.Now().UnixNano())
 
