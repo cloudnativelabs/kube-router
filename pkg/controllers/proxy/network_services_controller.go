@@ -76,6 +76,9 @@ type netlinkCalls interface {
 	ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error
 	ipAddrDel(iface netlink.Link, ip string) error
 	ipAddrList(iface netlink.Link, family int) ([]netlink.Addr, error)
+	routeAdd(route netlink.Route) error
+	routeDel(route netlink.Route) error
+	routeReplace(route netlink.Route) error
 	prepareEndpointForDsr(containerId string, endpointIP string, vip string) error
 	getKubeDummyInterface() (netlink.Link, error)
 	setupRoutesForExternalIPForDSR(serviceInfoMap) error
@@ -102,6 +105,21 @@ func contains(list []netlink.Addr, ip string) bool {
 		}
 	}
 	return false
+}
+
+func (ln *linuxNetworking) routeDel(route netlink.Route) error {
+	err := netlink.RouteDel(&route)
+	return err
+}
+
+func (ln *linuxNetworking) routeAdd(route netlink.Route) error {
+	err := netlink.RouteAdd(&route)
+	return err
+}
+
+func (ln *linuxNetworking) routeReplace(route netlink.Route) error {
+	err := netlink.RouteReplace(&route)
+	return err
 }
 
 //Returns a list of ipv4 ip's of the requested interface
@@ -148,10 +166,18 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 
 	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
 	// route is not replaced. For now do it with command.
-	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
-		NodeIP.String(), "table", "local").CombinedOutput()
+	route := netlink.Route{
+		LinkIndex: iface.Attrs().Index,
+		Scope:     netlink.SCOPE_HOST,
+		Dst:       naddr.IPNet,
+		Type:      syscall.IFA_LOCAL,
+		Table:     255,
+		Protocol:  syscall.RTPROT_KERNEL,
+		Src:       NodeIP,
+	}
+	err = ln.routeReplace(route)
 	if err != nil {
-		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
+		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v", ip, KUBE_DUMMY_IF, err)
 	}
 	return nil
 }
