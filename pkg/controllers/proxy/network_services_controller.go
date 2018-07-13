@@ -160,24 +160,21 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 	// to avoid this an explicit entry is added to use node IP as source IP when accessing
 	// VIP from the host. Please see https://github.com/cloudnativelabs/kube-router/issues/376
 
-	if !addRoute {
-		return nil
-	}
-
-	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
-	// route is not replaced. For now do it with command.
-	route := netlink.Route{
-		LinkIndex: iface.Attrs().Index,
-		Scope:     netlink.SCOPE_HOST,
-		Dst:       naddr.IPNet,
-		Type:      syscall.IFA_LOCAL,
-		Table:     255,
-		Protocol:  syscall.RTPROT_KERNEL,
-		Src:       NodeIP,
-	}
-	err = ln.routeReplace(route)
-	if err != nil {
-		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v", ip, KUBE_DUMMY_IF, err)
+	if addRoute {
+		route := netlink.Route{
+			LinkIndex: iface.Attrs().Index,
+			Scope:     netlink.SCOPE_HOST,
+			Dst:       naddr.IPNet,
+			Type:      syscall.IFA_LOCAL,
+			Table:     255,
+			Protocol:  syscall.RTPROT_KERNEL,
+			Src:       NodeIP,
+		}
+		err = ln.routeReplace(route)
+		if err != nil {
+			glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v", ip, KUBE_DUMMY_IF, err)
+			return err
+		}
 	}
 	return nil
 }
