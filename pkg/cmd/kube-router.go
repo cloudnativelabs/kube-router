@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"time"
 )
 
 // These get set at build time via -ldflags magic
@@ -76,23 +77,39 @@ func CleanupConfigAndExit() {
 func (kr *KubeRouter) Run() error {
 	var err error
 	var wg sync.WaitGroup
-
 	healthChan := make(chan *healthcheck.ControllerHeartbeat, 10)
 	defer close(healthChan)
-
 	stopCh := make(chan struct{})
+
+	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
+		glog.Info("Router, Firewall or Service proxy functionality must be specified. Exiting!")
+		os.Exit(0)
+	}
 
 	hc, err := healthcheck.NewHealthController(kr.Config)
 	if err != nil {
 		return errors.New("Failed to create health controller: " + err.Error())
 	}
 	wg.Add(1)
-	go hc.Run(healthChan, stopCh, &wg)
+	go hc.RunServer(stopCh, &wg)
 
-	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
-		glog.Info("Router, Firewall or Service proxy functionality must be specified. Exiting!")
-		os.Exit(0)
+	informerFactory := informers.NewSharedInformerFactory(kr.Client, 0)
+	svcInformer := informerFactory.Core().V1().Services().Informer()
+	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+	podInformer := informerFactory.Core().V1().Pods().Informer()
+	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
+	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
+	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
+	informerFactory.Start(stopCh)
+
+	err = kr.CacheSync(informerFactory, stopCh)
+	if err != nil {
+		return errors.New("Failed to synchronize cache: " + err.Error())
 	}
+
+	hc.SetAlive()
+	wg.Add(1)
+	go hc.RunCheck(healthChan, stopCh, &wg)
 
 	if (kr.Config.MetricsPort > 0) && (kr.Config.MetricsPort <= 65535) {
 		kr.Config.MetricsEnabled = true
@@ -109,18 +126,6 @@ func (kr *KubeRouter) Run() error {
 	} else {
 		kr.Config.MetricsEnabled = false
 	}
-
-	informerFactory := informers.NewSharedInformerFactory(kr.Client, 0)
-
-	svcInformer := informerFactory.Core().V1().Services().Informer()
-	epInformer := informerFactory.Core().V1().Endpoints().Informer()
-	podInformer := informerFactory.Core().V1().Pods().Informer()
-	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
-	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
-	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
-
-	informerFactory.Start(stopCh)
-	informerFactory.WaitForCacheSync(stopCh)
 
 	if kr.Config.RunFirewall {
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
@@ -175,6 +180,23 @@ func (kr *KubeRouter) Run() error {
 
 	wg.Wait()
 	return nil
+}
+
+// CacheSync performs cache synchronization under timeout limit
+func (kr *KubeRouter) CacheSync(informerFactory informers.SharedInformerFactory, stopCh <-chan struct{}) error {
+	syncOverCh := make(chan struct{})
+	go func() {
+		informerFactory.WaitForCacheSync(stopCh)
+		time.Sleep(time.Second * 10)
+		close(syncOverCh)
+	}()
+
+	select {
+	case <-time.After(kr.Config.CacheSyncTimeout):
+		return errors.New("timeout")
+	case <-syncOverCh:
+		return nil
+	}
 }
 
 func PrintVersion(logOutput bool) {

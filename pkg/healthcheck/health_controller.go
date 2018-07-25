@@ -107,6 +107,10 @@ func (hc *HealthController) CheckHealth() bool {
 	graceTime := time.Duration(1500 * time.Millisecond)
 
 	if hc.Config.RunFirewall {
+		glog.Infof("--------time.Since(hc.Status.NetworkPolicyControllerAlive):%v\n", time.Since(hc.Status.NetworkPolicyControllerAlive))
+		glog.Infof("--------hc.Config.IPTablesSyncPeriod:%v\n", hc.Config.IPTablesSyncPeriod)
+		glog.Infof("--------hc.Status.NetworkPolicyControllerAliveTTL:%v\n", hc.Status.NetworkPolicyControllerAliveTTL)
+		glog.Infof("--------graceTime:%v\n", graceTime)
 
 		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
 			glog.Error("Network Policy Controller heartbeat missed")
@@ -182,17 +186,79 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 
 }
 
+//RunServer starts the HealthController's server
+func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+	defer wg.Done()
+	srv := &http.Server{Addr: ":" + strconv.Itoa(int(hc.HealthPort)), Handler: http.DefaultServeMux}
+	http.HandleFunc("/healthz", hc.Handler)
+	if (hc.Config.HealthPort > 0) && (hc.Config.HealthPort <= 65535) {
+		hc.HTTPEnabled = true
+		go func() {
+			if err := srv.ListenAndServe(); err != nil {
+				// cannot panic, because this probably is an intentional close
+				glog.Errorf("Health controller error: %s", err)
+			}
+		}()
+	} else if hc.Config.MetricsPort > 65535 {
+		glog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", hc.Config.MetricsPort)
+	} else {
+		hc.HTTPEnabled = false
+	}
+
+	select {
+	case <-stopCh:
+		glog.Infof("Shutting down health controller")
+		if hc.HTTPEnabled {
+			if err := srv.Shutdown(context.Background()); err != nil {
+				glog.Errorf("could not shutdown: %v", err)
+			}
+		}
+		return nil
+	}
+}
+
+//RunCheck starts the HealthController's check
+func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+	t := time.NewTicker(5000 * time.Millisecond)
+	defer wg.Done()
+	for {
+		select {
+		case <-stopCh:
+			glog.Infof("Shutting down HealthController RunCheck")
+			return nil
+		case heartbeat := <-healthChan:
+			glog.Infof("-------<-healthChan\n")
+			hc.HandleHeartbeat(heartbeat)
+		case <-t.C:
+			glog.Infof("-------<-t.C\n")
+			glog.V(4).Info("Health controller tick")
+		}
+		hc.Status.Healthy = hc.CheckHealth()
+	}
+}
+
+func (hc *HealthController) SetAlive() {
+
+	now := time.Now()
+
+	glog.Infof("-------SetAlive time:%v\n", now)
+	hc.Status.MetricsControllerAlive = now
+	hc.Status.NetworkPolicyControllerAlive = now
+	hc.Status.NetworkRoutingControllerAlive = now
+	hc.Status.NetworkServicesControllerAlive = now
+}
+
 //NewHealthController creates a new health controller and returns a reference to it
 func NewHealthController(config *options.KubeRouterConfig) (*HealthController, error) {
 	hc := HealthController{
 		Config:     config,
 		HealthPort: config.HealthPort,
 		Status: HealthStats{
-			Healthy:                        true,
-			MetricsControllerAlive:         time.Now(),
-			NetworkPolicyControllerAlive:   time.Now(),
-			NetworkRoutingControllerAlive:  time.Now(),
-			NetworkServicesControllerAlive: time.Now(),
+			Healthy: true,
+			//MetricsControllerAlive:         time.Now(),
+			//NetworkPolicyControllerAlive:   time.Now(),
+			//NetworkRoutingControllerAlive:  time.Now(),
+			//NetworkServicesControllerAlive: time.Now(),
 		},
 	}
 	return &hc, nil
