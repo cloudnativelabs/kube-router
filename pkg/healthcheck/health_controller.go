@@ -245,10 +245,6 @@ func NewHealthController(config *options.KubeRouterConfig) (*HealthController, e
 		HealthPort: config.HealthPort,
 		Status: HealthStats{
 			Healthy: true,
-			//MetricsControllerAlive:         time.Now(),
-			//NetworkPolicyControllerAlive:   time.Now(),
-			//NetworkRoutingControllerAlive:  time.Now(),
-			//NetworkServicesControllerAlive: time.Now(),
 		},
 	}
 	return &hc, nil
