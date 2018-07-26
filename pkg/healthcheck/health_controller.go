@@ -107,11 +107,6 @@ func (hc *HealthController) CheckHealth() bool {
 	graceTime := time.Duration(1500 * time.Millisecond)
 
 	if hc.Config.RunFirewall {
-		glog.Infof("--------time.Since(hc.Status.NetworkPolicyControllerAlive):%v\n", time.Since(hc.Status.NetworkPolicyControllerAlive))
-		glog.Infof("--------hc.Config.IPTablesSyncPeriod:%v\n", hc.Config.IPTablesSyncPeriod)
-		glog.Infof("--------hc.Status.NetworkPolicyControllerAliveTTL:%v\n", hc.Status.NetworkPolicyControllerAliveTTL)
-		glog.Infof("--------graceTime:%v\n", graceTime)
-
 		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
 			glog.Error("Network Policy Controller heartbeat missed")
 			health = false
@@ -227,10 +222,8 @@ func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, sto
 			glog.Infof("Shutting down HealthController RunCheck")
 			return nil
 		case heartbeat := <-healthChan:
-			glog.Infof("-------<-healthChan\n")
 			hc.HandleHeartbeat(heartbeat)
 		case <-t.C:
-			glog.Infof("-------<-t.C\n")
 			glog.V(4).Info("Health controller tick")
 		}
 		hc.Status.Healthy = hc.CheckHealth()
@@ -238,10 +231,7 @@ func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, sto
 }
 
 func (hc *HealthController) SetAlive() {
-
 	now := time.Now()
-
-	glog.Infof("-------SetAlive time:%v\n", now)
 	hc.Status.MetricsControllerAlive = now
 	hc.Status.NetworkPolicyControllerAlive = now
 	hc.Status.NetworkRoutingControllerAlive = now
