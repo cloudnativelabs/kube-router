@@ -13,6 +13,7 @@ type KubeRouterConfig struct {
 	AdvertiseNodePodCidr    bool
 	AdvertiseLoadBalancerIp bool
 	BGPGracefulRestart      bool
+	CacheSyncTimeout        time.Duration
 	CleanupConfig           bool
 	ClusterAsn              uint
 	ClusterCIDR             string
@@ -50,6 +51,7 @@ type KubeRouterConfig struct {
 
 func NewKubeRouterConfig() *KubeRouterConfig {
 	return &KubeRouterConfig{
+		CacheSyncTimeout:   5 * time.Minute,
 		IpvsSyncPeriod:     5 * time.Minute,
 		IPTablesSyncPeriod: 5 * time.Minute,
 		RoutesSyncPeriod:   5 * time.Minute,
@@ -62,6 +64,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Print usage information.")
 	fs.BoolVarP(&s.Version, "version", "V", false,
 		"Print version information.")
+	fs.DurationVar(&s.CacheSyncTimeout, "cache-sync-timeout", s.CacheSyncTimeout,
+		"The timeout for cache synchronization (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.BoolVar(&s.RunServiceProxy, "run-service-proxy", true,
 		"Enables Service Proxy -- sets up IPVS for Kubernetes Services.")
 	fs.BoolVar(&s.RunFirewall, "run-firewall", true,
