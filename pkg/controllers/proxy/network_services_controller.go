@@ -545,16 +545,16 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			protocol = syscall.IPPROTO_NONE
 		}
 
-		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
-		err := nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
-		if err != nil {
-			continue
-		}
-
 		endpoints := endpointsInfoMap[k]
 
 		if !hasActiveEndpoints(svc, endpoints, nsc.podCidr) {
 			glog.V(1).Infof("Skipping service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
+			continue
+		}
+
+		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
+		err := nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
+		if err != nil {
 			continue
 		}
 
@@ -1752,6 +1752,11 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 	for _, svc := range serviceInfoMap {
 		for _, externalIP := range svc.externalIPs {
 			activeExternalIPs[externalIP] = true
+			// Verify the DSR annotation exists
+			if !svc.directServerReturn {
+				glog.V(1).Infof("Skipping service %s/%s as it does not have DSR annotation\n", svc.namespace, svc.name)
+				continue
+			}
 
 			if !strings.Contains(outStr, externalIP) {
 				if err = exec.Command("ip", "route", "add", externalIP, "dev", "kube-bridge", "table",
