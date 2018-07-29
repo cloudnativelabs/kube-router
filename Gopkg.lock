@@ -569,10 +569,10 @@
   revision = "7c0cea34c8ece3fbeb2b27ab9b59511d360fb394"
 
 [[projects]]
+  branch = "master"
   name = "github.com/spf13/pflag"
   packages = ["."]
-  revision = "583c0c0531f06d5278b7d917446061adc344b5cd"
-  version = "v1.0.1"
+  revision = "3ebe029320b2676d667ae88da602a5f854788a8a"
 
 [[projects]]
   branch = "master"
@@ -581,13 +581,13 @@
   revision = "8dc2790b029dc41e2b8ff772c63c26adbb1db70d"
 
 [[projects]]
+  branch = "master"
   name = "github.com/vishvananda/netlink"
   packages = [
     ".",
     "nl"
   ]
-  revision = "a2ad57a690f3caf3015351d2d6e1c0b95c349752"
-  version = "v1.0.0"
+  revision = "d77c86a2e27e1f8a2b1e7bdfa97ba2281a430277"
 
 [[projects]]
   branch = "master"
@@ -938,6 +938,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "084480bb06f84e536badc385a76b5e179e27caacc83b769fc984bad231429698"
+  inputs-digest = "83bc4531bf27f48fb399c79dc465187b7716e7dc3d245a3ae358d488348672e9"
   solver-name = "gps-cdcl"
   solver-version = 1

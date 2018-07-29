@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"reflect"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -76,6 +75,10 @@ type ipvsCalls interface {
 type netlinkCalls interface {
 	ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error
 	ipAddrDel(iface netlink.Link, ip string) error
+	ipAddrList(iface netlink.Link, family int) ([]netlink.Addr, error)
+	routeAdd(route netlink.Route) error
+	routeDel(route netlink.Route) error
+	routeReplace(route netlink.Route) error
 	prepareEndpointForDsr(containerId string, endpointIP string, vip string) error
 	getKubeDummyInterface() (netlink.Link, error)
 	setupRoutesForExternalIPForDSR(serviceInfoMap) error
@@ -92,6 +95,42 @@ type LinuxNetworking interface {
 
 type linuxNetworking struct {
 	ipvsHandle *ipvs.Handle
+}
+
+func contains(list []netlink.Addr, ip string) bool {
+	addr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
+	for _, ip := range list {
+		if addr.IP.Equal(ip.IPNet.IP) {
+			return true
+		}
+	}
+	return false
+}
+
+func (ln *linuxNetworking) routeDel(route netlink.Route) error {
+	err := netlink.RouteDel(&route)
+	return err
+}
+
+func (ln *linuxNetworking) routeAdd(route netlink.Route) error {
+	err := netlink.RouteAdd(&route)
+	return err
+}
+
+func (ln *linuxNetworking) routeReplace(route netlink.Route) error {
+	err := netlink.RouteReplace(&route)
+	return err
+}
+
+//Returns a list of ipv4 ip's of the requested interface
+func (ln *linuxNetworking) ipAddrList(iface netlink.Link, family int) ([]netlink.Addr, error) {
+	var empty []netlink.Addr
+	addrs, err := netlink.AddrList(iface, family)
+	if err != nil {
+		attrs := iface.Attrs()
+		return empty, fmt.Errorf("Failed to list IP's on interface %s: %s", attrs.Name, err.Error())
+	}
+	return addrs, nil
 }
 
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
@@ -121,16 +160,21 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 	// to avoid this an explicit entry is added to use node IP as source IP when accessing
 	// VIP from the host. Please see https://github.com/cloudnativelabs/kube-router/issues/376
 
-	if !addRoute {
-		return nil
-	}
-
-	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
-	// route is not replaced. For now do it with command.
-	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
-		NodeIP.String(), "table", "local").CombinedOutput()
-	if err != nil {
-		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
+	if addRoute {
+		route := netlink.Route{
+			LinkIndex: iface.Attrs().Index,
+			Scope:     netlink.SCOPE_HOST,
+			Dst:       naddr.IPNet,
+			Type:      syscall.IFA_LOCAL,
+			Table:     255,
+			Protocol:  syscall.RTPROT_KERNEL,
+			Src:       NodeIP,
+		}
+		err = ln.routeReplace(route)
+		if err != nil {
+			glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v", ip, KUBE_DUMMY_IF, err)
+			return err
+		}
 	}
 	return nil
 }
@@ -200,6 +244,7 @@ type NetworkServicesController struct {
 	MetricsEnabled      bool
 	ln                  LinuxNetworking
 	readyForUpdates     bool
+	pendingIPVSupdate   bool
 
 	svcLister cache.Indexer
 	epLister  cache.Indexer
@@ -243,8 +288,12 @@ type endpointsInfoMap map[string][]endpointsInfo
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 
-	t := time.NewTicker(nsc.syncPeriod)
-	defer t.Stop()
+	syncPeriod := time.NewTicker(nsc.syncPeriod)
+	pulseTime := time.NewTicker(time.Duration(100 * time.Millisecond))
+
+	defer syncPeriod.Stop()
+	defer pulseTime.Stop()
+
 	defer wg.Done()
 
 	glog.Infof("Starting network services controller")
@@ -273,31 +322,61 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New("Failed to do sysctl net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
 	}
 
+	glog.V(1).Info("Performing initial sync of ipvs services")
+	err = nsc.sync()
+	if err != nil {
+		glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
+		nsc.readyForUpdates = false
+	} else {
+		healthcheck.SendHeartBeat(healthChan, "NSC")
+		nsc.readyForUpdates = true
+	}
+
 	// loop forever unitl notified to stop on stopCh
 	for {
 		select {
 		case <-stopCh:
 			glog.Info("Shutting down network services controller")
 			return nil
-		default:
-		}
 
-		glog.V(1).Info("Performing periodic sync of ipvs services")
-		err := nsc.sync()
-		if err != nil {
-			glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
-			glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
-		} else {
-			healthcheck.SendHeartBeat(healthChan, "NSC")
-		}
-		nsc.readyForUpdates = true
-		select {
-		case <-stopCh:
-			glog.Info("Shutting down network services controller")
-			return nil
-		case <-t.C:
+		case <-pulseTime.C:
+			if nsc.checkPendingIPVSupdate() {
+				err = nsc.sync()
+				if err != nil {
+					nsc.readyForUpdates = false
+					glog.Errorf("Error during requested ipvs sync in network service controller. Error: " + err.Error())
+				} else {
+					nsc.readyForUpdates = true
+				}
+			}
+		case <-syncPeriod.C:
+			glog.V(1).Info("Performing periodic sync of ipvs services")
+			err = nsc.sync()
+			if err != nil {
+				nsc.readyForUpdates = false
+				glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
+				glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
+			} else {
+				healthcheck.SendHeartBeat(healthChan, "NSC")
+				nsc.readyForUpdates = true
+			}
 		}
 	}
+}
+func (nsc *NetworkServicesController) checkPendingIPVSupdate() bool {
+	nsc.mu.Lock()
+	defer nsc.mu.Unlock()
+	if nsc.pendingIPVSupdate {
+		nsc.pendingIPVSupdate = false
+		return true
+	}
+	return false
+}
+
+func (nsc *NetworkServicesController) requestIPVSupdate() {
+	nsc.mu.Lock()
+	defer nsc.mu.Unlock()
+	nsc.pendingIPVSupdate = true
 }
 
 func (nsc *NetworkServicesController) sync() error {
@@ -409,21 +488,9 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 		glog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
 		return
 	}
-	nsc.mu.Lock()
-	defer nsc.mu.Unlock()
 
-	// build new service and endpoints map to reflect the change
-	newServiceMap := nsc.buildServicesInfo()
-	newEndpointsMap := nsc.buildEndpointsInfo()
-
-	if len(newEndpointsMap) != len(nsc.endpointsMap) || !reflect.DeepEqual(newEndpointsMap, nsc.endpointsMap) {
-		nsc.endpointsMap = newEndpointsMap
-		nsc.serviceMap = newServiceMap
-		glog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
-		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
-	} else {
-		glog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", ep.Namespace, ep.Name)
-	}
+	//Run sync() on the next tick
+	nsc.requestIPVSupdate()
 }
 
 // OnServiceUpdate handle change in service update from the API server
@@ -439,21 +506,9 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
 		return
 	}
-	nsc.mu.Lock()
-	defer nsc.mu.Unlock()
 
-	// build new service and endpoints map to reflect the change
-	newServiceMap := nsc.buildServicesInfo()
-	newEndpointsMap := nsc.buildEndpointsInfo()
-
-	if len(newServiceMap) != len(nsc.serviceMap) || !reflect.DeepEqual(newServiceMap, nsc.serviceMap) {
-		nsc.endpointsMap = newEndpointsMap
-		nsc.serviceMap = newServiceMap
-		glog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
-		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
-	} else {
-		glog.V(1).Infof("Skipping syncing IPVS services for update to service: %s/%s as nothing changed", svc.Namespace, svc.Name)
-	}
+	//Run sync() on the next tick
+	nsc.requestIPVSupdate()
 }
 
 type externalIPService struct {
@@ -533,6 +588,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		return errors.New("Failed get list of IPVS services due to: " + err.Error())
 	}
 
+	dummyVipifAddrs, err := nsc.ln.ipAddrList(dummyVipInterface, netlink.FAMILY_V4)
+	if err != nil {
+		return err
+	}
+
 	for k, svc := range serviceInfoMap {
 		var protocol uint16
 
@@ -545,10 +605,13 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			protocol = syscall.IPPROTO_NONE
 		}
 
-		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
-		err := nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
-		if err != nil {
-			continue
+		// assign cluster IP of the service to the dummy interface if not already assigned so that its routable from the pod's on the node
+		if !contains(dummyVipifAddrs, svc.clusterIP.String()) {
+			err = nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
+			if err != nil {
+				glog.Errorf("Could not add ip %s to interface %s due to %s", svc.clusterIP.String(), KUBE_DUMMY_IF, err)
+				continue
+			}
 		}
 
 		endpoints := endpointsInfoMap[k]
@@ -772,12 +835,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 	}
 
-	var addrs []netlink.Addr
-	addrs, err = netlink.AddrList(dummyVipInterface, netlink.FAMILY_V4)
+	dummyVipifAddrs, err = nsc.ln.ipAddrList(dummyVipInterface, netlink.FAMILY_V4)
 	if err != nil {
-		return errors.New("Failed to list dummy interface IPs: " + err.Error())
+		return err
 	}
-	for _, addr := range addrs {
+	for _, addr := range dummyVipifAddrs {
 		isActive := addrActive[addr.IP.String()]
 		if !isActive {
 			glog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
@@ -1992,6 +2054,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.epLister = epInformer.GetIndexer()
 	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
+
+	nsc.pendingIPVSupdate = false
 
 	rand.Seed(time.Now().UnixNano())
 
