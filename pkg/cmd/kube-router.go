@@ -187,7 +187,6 @@ func (kr *KubeRouter) CacheSync(informerFactory informers.SharedInformerFactory,
 	syncOverCh := make(chan struct{})
 	go func() {
 		informerFactory.WaitForCacheSync(stopCh)
-		time.Sleep(time.Second * 10)
 		close(syncOverCh)
 	}()
 
