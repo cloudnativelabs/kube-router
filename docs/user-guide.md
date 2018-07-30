@@ -31,6 +31,7 @@ Usage of kube-router:
       --advertise-loadbalancer-ip        Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr               Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
       --bgp-graceful-restart             Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
+      --cache-sync-timeout duration      The timeout for cache synchronization (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
       --cleanup-config                   Cleanup iptables rules, ipvs, ipset configuration and exit.
       --cluster-asn uint                 ASN number under which cluster nodes will run iBGP.
       --cluster-cidr string              CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.
