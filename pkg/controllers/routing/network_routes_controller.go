@@ -866,6 +866,12 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	} else {
 		glog.Infof("Found annotaion `kube-router.io/bgp-local-addresses` on node object so BGP will listen on local IP's: %s", bgpLocalAddressListAnnotation)
 		localAddresses := stringToSlice(bgpLocalAddressListAnnotation, ",")
+		for _, addr := range localAddresses {
+			ip := net.ParseIP(addr)
+			if ip == nil {
+				glog.Fatalf("Invalid IP address %s specified in `kube-router.io/bgp-local-addresses`.", addr)
+			}
+		}
 		nrc.localAddressList = append(nrc.localAddressList, localAddresses...)
 	}
 	nrc.svcLister = svcInformer.GetIndexer()

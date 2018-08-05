@@ -142,3 +142,13 @@ kubectl annotate node <kube-node> "kube-router.io/peer.ips=192.168.1.99,192.168.
 kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
 kubectl annotate node <kube-node> "kube-router.io/peer.passwords=U2VjdXJlUGFzc3dvcmQK,"
 ```
+
+## BGP listen address list 
+
+By default GoBGP server binds on the node IP address. However in case of nodes with multiple IP address it is desirable to bind GoBGP to multiple local adresses. Local IP address on which GoGBP should listen on an node can be configured with annotation `kube-router.io/bgp-local-addresses`.
+
+Here is sample example to make GoBGP server to listen on multiple IP address
+```
+kubectl annotate node ip-172-20-46-87.us-west-2.compute.internal "kube-router.io/bgp-local-addresses=172.20.56.25,192.168.1.99"
+```
+
