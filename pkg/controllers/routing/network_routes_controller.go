@@ -49,6 +49,7 @@ const (
 	rrClientAnnotation                = "kube-router.io/rr.client"
 	rrServerAnnotation                = "kube-router.io/rr.server"
 	svcLocalAnnotation                = "kube-router.io/service.local"
+	bgpLocalAddressAnnotation         = "kube-router.io/bgp-local-addresses"
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
 
@@ -92,6 +93,7 @@ type NetworkRoutingController struct {
 	pathPrependAS           string
 	pathPrependCount        uint8
 	pathPrepend             bool
+	localAddressList        []string
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -646,7 +648,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	var localAddressList []string
 
 	if ipv4IsEnabled() {
-		localAddressList = append(localAddressList, nrc.nodeIP.String())
+		localAddressList = append(localAddressList, nrc.localAddressList...)
 	}
 
 	if ipv6IsEnabled() {
@@ -857,6 +859,15 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 			"which its configured: " + err.Error())
 	}
 
+	bgpLocalAddressListAnnotation, ok := node.ObjectMeta.Annotations[bgpLocalAddressAnnotation]
+	if !ok {
+		glog.Infof("Could not find annotaion `kube-router.io/bgp-local-addresses` on node object so BGP will listen on node IP: %s address.", nrc.nodeIP.String())
+		nrc.localAddressList = append(nrc.localAddressList, nrc.nodeIP.String())
+	} else {
+		glog.Infof("Found annotaion `kube-router.io/bgp-local-addresses` on node object so BGP will listen on local IP's: %s", bgpLocalAddressListAnnotation)
+		localAddresses := stringToSlice(bgpLocalAddressListAnnotation, ",")
+		nrc.localAddressList = append(nrc.localAddressList, localAddresses...)
+	}
 	nrc.svcLister = svcInformer.GetIndexer()
 	nrc.ServiceEventHandler = nrc.newServiceEventHandler()
 
