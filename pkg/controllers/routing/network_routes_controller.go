@@ -49,7 +49,7 @@ const (
 	rrClientAnnotation                = "kube-router.io/rr.client"
 	rrServerAnnotation                = "kube-router.io/rr.server"
 	svcLocalAnnotation                = "kube-router.io/service.local"
-	staticCidrsAnnotation             = "kube-router.io/static-cidrs"
+	staticCIDRAnnotation              = "kube-router.io/static-cidrs"
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
 
@@ -93,7 +93,7 @@ type NetworkRoutingController struct {
 	pathPrependAS           string
 	pathPrependCount        uint8
 	pathPrepend             bool
-	staticCidrs             []string
+	staticCIDRs             []string
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -256,9 +256,9 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			glog.Errorf("Error advertising route: %s", err.Error())
 		}
 
-		if len(nrc.staticCidrs) > 0 {
+		if len(nrc.staticCIDRs) > 0 {
 			glog.V(1).Info("Performing periodic sync of static CIDR routes")
-			err = nrc.advertiseStaticCidrRoutes()
+			err = nrc.advertiseStaticCIDRRoutes()
 			if err != nil {
 				glog.Errorf("Error advertising route: %s", err.Error())
 			}
@@ -363,9 +363,12 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	return nil
 }
 
-func (nrc *NetworkRoutingController) advertiseStaticCidrRoutes() error {
-	for _, cidr := range nrc.staticCidrs {
+func (nrc *NetworkRoutingController) advertiseStaticCIDRRoutes() error {
+	for _, cidr := range nrc.staticCIDRs {
 		cidrStr := strings.Split(cidr, "/")
+		if len(cidrStr) != 2 {
+			return fmt.Errorf("Failed advertising route because the specified static CIDR was invalid: %s", cidr)
+		}
 		subnet := cidrStr[0]
 		cidrLen, _ := strconv.Atoi(cidrStr[1])
 		attrs := []bgp.PathAttributeInterface{
@@ -611,9 +614,9 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		return errors.New("Failed to get node object from api server: " + err.Error())
 	}
 
-	if staticCidrs, ok := node.ObjectMeta.Annotations[staticCidrsAnnotation]; ok {
-		glog.V(1).Infof("Found static CIDRs for node: %s", staticCidrs)
-		nrc.staticCidrs = stringToSlice(staticCidrs, ",")
+	if staticCIDRs, ok := node.ObjectMeta.Annotations[staticCIDRAnnotation]; ok {
+		glog.V(1).Infof("Found static CIDRs for node: %s", staticCIDRs)
+		nrc.staticCIDRs = stringToSlice(staticCIDRs, ",")
 	}
 
 	if nrc.bgpFullMeshMode {
@@ -797,7 +800,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTtl
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
-	nrc.staticCidrs = kubeRouterConfig.StaticCidrs
+	nrc.staticCIDRs = kubeRouterConfig.StaticCIDRs
 	nrc.clientset = clientset
 	nrc.activeNodes = make(map[string]bool)
 	nrc.bgpRRClient = false

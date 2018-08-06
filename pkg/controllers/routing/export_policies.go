@@ -65,18 +65,18 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	}
 
 	// creates prefix set to represent all the static cidrs
-	if len(nrc.staticCidrs) > 0 {
-		staticCidrPrefixList := make([]config.Prefix, 0)
-		for _, cidr := range nrc.staticCidrs {
-			staticCidrPrefixList = append(staticCidrPrefixList, config.Prefix{IpPrefix: cidr})
+	if len(nrc.staticCIDRs) > 0 {
+		staticCIDRPrefixList := make([]config.Prefix, 0)
+		for _, cidr := range nrc.staticCIDRs {
+			staticCIDRPrefixList = append(staticCIDRPrefixList, config.Prefix{IpPrefix: cidr})
 		}
-		staticCidrPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
+		staticCIDRPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
 			PrefixSetName: "staticcidrprefixset",
-			PrefixList:    staticCidrPrefixList,
+			PrefixList:    staticCIDRPrefixList,
 		})
-		err = nrc.bgpServer.ReplaceDefinedSet(staticCidrPrefixSet)
+		err = nrc.bgpServer.ReplaceDefinedSet(staticCIDRPrefixSet)
 		if err != nil {
-			nrc.bgpServer.AddDefinedSet(staticCidrPrefixSet)
+			nrc.bgpServer.AddDefinedSet(staticCIDRPrefixSet)
 		}
 	}
 
@@ -165,7 +165,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 				BgpActions:       bgpActions,
 			},
 		})
-		if len(nrc.staticCidrs) > 0 {
+		if len(nrc.staticCIDRs) > 0 {
 			statements = append(statements, config.Statement{
 				Conditions: config.Conditions{
 					MatchPrefixSet: config.MatchPrefixSet{
