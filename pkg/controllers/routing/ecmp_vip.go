@@ -145,7 +145,7 @@ func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
 func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			nrc.OnEndpointsUpdate(obj)
+			nrc.OnEndpointsAdd(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			nrc.OnEndpointsUpdate(newObj)
@@ -156,6 +156,25 @@ func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEv
 			return
 		},
 	}
+}
+
+// OnEndpointsAdd handles endpoint add events from apiserver
+// This method calls OnEndpointsUpdate with the addition of updating BGP export policies
+// Calling addExportPolicies here covers the edge case where addExportPolicies fails in
+// OnServiceUpdate because the corresponding Endpoint resource for the
+// Service was not created yet.
+func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
+	if !nrc.bgpServerStarted {
+		glog.V(3).Info("Skipping OnAdd event to endpoint, controller still performing bootup full-sync")
+		return
+	}
+
+	err := nrc.addExportPolicies()
+	if err != nil {
+		glog.Errorf("error adding BGP export policies: %s", err)
+	}
+
+	nrc.OnEndpointsUpdate(obj)
 }
 
 // OnEndpointsUpdate handles the endpoint updates from the kubernetes API server
