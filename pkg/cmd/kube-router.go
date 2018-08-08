@@ -102,7 +102,7 @@ func (kr *KubeRouter) Run() error {
 	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
 	informerFactory.Start(stopCh)
 
-	err = kr.CacheSync(informerFactory, stopCh)
+	err = kr.CacheSyncOrTimeout(informerFactory, stopCh)
 	if err != nil {
 		return errors.New("Failed to synchronize cache: " + err.Error())
 	}
@@ -183,7 +183,7 @@ func (kr *KubeRouter) Run() error {
 }
 
 // CacheSync performs cache synchronization under timeout limit
-func (kr *KubeRouter) CacheSync(informerFactory informers.SharedInformerFactory, stopCh <-chan struct{}) error {
+func (kr *KubeRouter) CacheSyncOrTimeout(informerFactory informers.SharedInformerFactory, stopCh <-chan struct{}) error {
 	syncOverCh := make(chan struct{})
 	go func() {
 		informerFactory.WaitForCacheSync(stopCh)
@@ -192,7 +192,7 @@ func (kr *KubeRouter) CacheSync(informerFactory informers.SharedInformerFactory,
 
 	select {
 	case <-time.After(kr.Config.CacheSyncTimeout):
-		return errors.New("timeout")
+		return errors.New(kr.Config.CacheSyncTimeout.String() + " timeout")
 	case <-syncOverCh:
 		return nil
 	}
