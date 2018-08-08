@@ -137,50 +137,6 @@ func (hc *HealthController) CheckHealth() bool {
 	return health
 }
 
-//Run starts the HealthController
-func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-	t := time.NewTicker(5000 * time.Millisecond)
-	defer wg.Done()
-	glog.Info("Starting health controller")
-
-	srv := &http.Server{Addr: ":" + strconv.Itoa(int(hc.HealthPort)), Handler: http.DefaultServeMux}
-
-	http.HandleFunc("/healthz", hc.Handler)
-
-	if (hc.Config.HealthPort > 0) && (hc.Config.HealthPort <= 65535) {
-		hc.HTTPEnabled = true
-		go func() {
-			if err := srv.ListenAndServe(); err != nil {
-				// cannot panic, because this probably is an intentional close
-				glog.Errorf("Health controller error: %s", err)
-			}
-		}()
-	} else if hc.Config.MetricsPort > 65535 {
-		glog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", hc.Config.MetricsPort)
-	} else {
-		hc.HTTPEnabled = false
-	}
-
-	for {
-		select {
-		case <-stopCh:
-			glog.Infof("Shutting down health controller")
-			if hc.HTTPEnabled {
-				if err := srv.Shutdown(context.Background()); err != nil {
-					glog.Errorf("could not shutdown: %v", err)
-				}
-			}
-			return nil
-		case heartbeat := <-healthChan:
-			hc.HandleHeartbeat(heartbeat)
-		case <-t.C:
-			glog.V(4).Info("Health controller tick")
-		}
-		hc.Status.Healthy = hc.CheckHealth()
-	}
-
-}
-
 //RunServer starts the HealthController's server
 func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 	defer wg.Done()
