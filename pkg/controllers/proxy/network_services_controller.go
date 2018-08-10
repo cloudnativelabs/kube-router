@@ -101,6 +101,14 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 		glog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
 			naddr.IPNet.IP.String(), KUBE_DUMMY_IF, err.Error())
 	}
+	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
+	if err == nil {
+		out, err := exec.Command("ip", "route", "delete", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
+			NodeIP.String(), "table", "local").CombinedOutput()
+		if err != nil && !strings.Contains(string(out), "No such process") {
+			glog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
+		}
+	}
 	return err
 }
 
