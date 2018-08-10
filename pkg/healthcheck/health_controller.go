@@ -107,7 +107,6 @@ func (hc *HealthController) CheckHealth() bool {
 	graceTime := time.Duration(1500 * time.Millisecond)
 
 	if hc.Config.RunFirewall {
-
 		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
 			glog.Error("Network Policy Controller heartbeat missed")
 			health = false
@@ -138,16 +137,11 @@ func (hc *HealthController) CheckHealth() bool {
 	return health
 }
 
-//Run starts the HealthController
-func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-	t := time.NewTicker(5000 * time.Millisecond)
+//RunServer starts the HealthController's server
+func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 	defer wg.Done()
-	glog.Info("Starting health controller")
-
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(hc.HealthPort)), Handler: http.DefaultServeMux}
-
 	http.HandleFunc("/healthz", hc.Handler)
-
 	if (hc.Config.HealthPort > 0) && (hc.Config.HealthPort <= 65535) {
 		hc.HTTPEnabled = true
 		go func() {
@@ -162,15 +156,26 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 		hc.HTTPEnabled = false
 	}
 
+	select {
+	case <-stopCh:
+		glog.Infof("Shutting down health controller")
+		if hc.HTTPEnabled {
+			if err := srv.Shutdown(context.Background()); err != nil {
+				glog.Errorf("could not shutdown: %v", err)
+			}
+		}
+		return nil
+	}
+}
+
+//RunCheck starts the HealthController's check
+func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+	t := time.NewTicker(5000 * time.Millisecond)
+	defer wg.Done()
 	for {
 		select {
 		case <-stopCh:
-			glog.Infof("Shutting down health controller")
-			if hc.HTTPEnabled {
-				if err := srv.Shutdown(context.Background()); err != nil {
-					glog.Errorf("could not shutdown: %v", err)
-				}
-			}
+			glog.Infof("Shutting down HealthController RunCheck")
 			return nil
 		case heartbeat := <-healthChan:
 			hc.HandleHeartbeat(heartbeat)
@@ -179,7 +184,16 @@ func (hc *HealthController) Run(healthChan <-chan *ControllerHeartbeat, stopCh <
 		}
 		hc.Status.Healthy = hc.CheckHealth()
 	}
+}
 
+func (hc *HealthController) SetAlive() {
+
+	now := time.Now()
+
+	hc.Status.MetricsControllerAlive = now
+	hc.Status.NetworkPolicyControllerAlive = now
+	hc.Status.NetworkRoutingControllerAlive = now
+	hc.Status.NetworkServicesControllerAlive = now
 }
 
 //NewHealthController creates a new health controller and returns a reference to it
@@ -188,11 +202,7 @@ func NewHealthController(config *options.KubeRouterConfig) (*HealthController, e
 		Config:     config,
 		HealthPort: config.HealthPort,
 		Status: HealthStats{
-			Healthy:                        true,
-			MetricsControllerAlive:         time.Now(),
-			NetworkPolicyControllerAlive:   time.Now(),
-			NetworkRoutingControllerAlive:  time.Now(),
-			NetworkServicesControllerAlive: time.Now(),
+			Healthy: true,
 		},
 	}
 	return &hc, nil
