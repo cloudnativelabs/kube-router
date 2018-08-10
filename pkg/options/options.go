@@ -51,7 +51,7 @@ type KubeRouterConfig struct {
 
 func NewKubeRouterConfig() *KubeRouterConfig {
 	return &KubeRouterConfig{
-		CacheSyncTimeout:   5 * time.Minute,
+		CacheSyncTimeout:   1 * time.Minute,
 		IpvsSyncPeriod:     5 * time.Minute,
 		IPTablesSyncPeriod: 5 * time.Minute,
 		RoutesSyncPeriod:   5 * time.Minute,
