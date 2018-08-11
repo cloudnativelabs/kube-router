@@ -142,3 +142,17 @@ kubectl annotate node <kube-node> "kube-router.io/peer.ips=192.168.1.99,192.168.
 kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
 kubectl annotate node <kube-node> "kube-router.io/peer.passwords=U2VjdXJlUGFzc3dvcmQK,"
 ```
+
+## Additional BGP features
+
+### Advertising additional static CIDRs to routers
+
+If kube-router should announce additional routes and CIDRs, that a local bird instance might take care of in other use-cases. It is possible to specify these either by using the command line flag:
+```
+--static-cidrs=192.168.1.100/32,10.255.255.0/24
+```
+
+And alternative use node annotations to add static CIDRs to advertise on a per node basis:
+```
+kubectl annotate node <kube-node> "kube-router.io/static-cidrs=192.168.1.100/32,10.255.255.0/24"
+```

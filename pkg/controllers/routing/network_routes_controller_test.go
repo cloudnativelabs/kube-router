@@ -206,6 +206,111 @@ func Test_advertiseClusterIPs(t *testing.T) {
 	}
 }
 
+func Test_advertiseStaticCIDRs(t *testing.T) {
+	testcases := []struct {
+		name             string
+		nrc              *NetworkRoutingController
+		existingServices []*v1core.Service
+		// the key is the subnet from the watch event
+		watchEvents map[string]bool
+	}{
+		{
+			"add bgp path for static CIDR",
+			&NetworkRoutingController{
+				bgpServer:   gobgp.NewBgpServer(),
+				staticCIDRs: []string{"10.255.255.1/32"},
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "ClusterIP",
+						ClusterIP: "10.0.0.1",
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.0.1/32":     true,
+				"10.255.255.1/32": true,
+			},
+		},
+		{
+			"add bgp path for multiple static CIDRs",
+			&NetworkRoutingController{
+				bgpServer:   gobgp.NewBgpServer(),
+				staticCIDRs: []string{"10.255.255.1/32", "10.255.255.2/32"},
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:      "ClusterIP",
+						ClusterIP: "10.0.0.1",
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.0.1/32":     true,
+				"10.255.255.1/32": true,
+				"10.255.255.2/32": true,
+			},
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			go testcase.nrc.bgpServer.Serve()
+			err := testcase.nrc.bgpServer.Start(&config.Global{
+				Config: config.GlobalConfig{
+					As:       1,
+					RouterId: "10.0.0.0",
+					Port:     10000,
+				},
+			})
+			if err != nil {
+				t.Fatalf("failed to start BGP server: %v", err)
+			}
+			defer testcase.nrc.bgpServer.Stop()
+			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
+
+			clientset := fake.NewSimpleClientset()
+			startInformersForRoutes(testcase.nrc, clientset)
+
+			err = createServices(clientset, testcase.existingServices)
+			if err != nil {
+				t.Fatalf("failed to create existing services: %v", err)
+			}
+
+			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
+
+			// ClusterIPs
+			testcase.nrc.advertiseClusterIP = true
+			testcase.nrc.advertiseExternalIP = false
+			testcase.nrc.advertiseLoadBalancerIP = false
+
+			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
+			testcase.nrc.advertiseVIPs(toAdvertise)
+			testcase.nrc.withdrawVIPs(toWithdraw)
+			testcase.nrc.advertiseStaticCIDRRoutes()
+
+			watchEvents := waitForBGPWatchEventWithTimeout(time.Second*10, len(testcase.watchEvents), w, t)
+			for _, watchEvent := range watchEvents {
+				for _, path := range watchEvent.PathList {
+					if _, ok := testcase.watchEvents[path.GetNlri().String()]; ok {
+						continue
+					} else {
+						t.Errorf("got unexpected path: %v", path.GetNlri().String())
+					}
+				}
+			}
+		})
+	}
+}
+
 func Test_advertiseExternalIPs(t *testing.T) {
 	testcases := []struct {
 		name             string
@@ -1861,6 +1966,324 @@ func Test_addExportPolicies(t *testing.T) {
 				t.Error("unexpected external peer defined set")
 			}
 
+			policies := testcase.nrc.bgpServer.GetPolicy()
+			policyExists := false
+			for _, policy := range policies {
+				if policy.Name == "kube_router" {
+					policyExists = true
+					break
+				}
+			}
+			if !policyExists {
+				t.Errorf("policy 'kube_router' was not added")
+			}
+
+			routeType, policyAssignments, err := testcase.nrc.bgpServer.GetPolicyAssignment("", table.POLICY_DIRECTION_EXPORT)
+			if routeType != table.ROUTE_TYPE_REJECT {
+				t.Errorf("expected route type 'reject' for export policy assignment, but got %v", routeType)
+			}
+			if err != nil {
+				t.Fatalf("failed to get policy assignments: %v", err)
+			}
+
+			policyAssignmentExists := false
+			for _, policyAssignment := range policyAssignments {
+				if policyAssignment.Name == "kube_router" {
+					policyAssignmentExists = true
+				}
+			}
+
+			if !policyAssignmentExists {
+				t.Error("export policy assignment 'kube_router' was not added")
+			}
+
+			statements := testcase.nrc.bgpServer.GetStatement()
+			for _, expectedStatement := range testcase.policyStatements {
+				found := false
+				for _, statement := range statements {
+					if reflect.DeepEqual(statement, expectedStatement) {
+						found = true
+					}
+				}
+
+				if !found {
+					t.Errorf("statement %v not found", expectedStatement)
+				}
+			}
+		})
+	}
+}
+
+func Test_staticCIDRsPolicies(t *testing.T) {
+	testcases := []struct {
+		name                   string
+		nrc                    *NetworkRoutingController
+		existingNodes          []*v1core.Node
+		existingServices       []*v1core.Service
+		podDefinedSet          *config.DefinedSets
+		clusterIPDefinedSet    *config.DefinedSets
+		externalPeerDefinedSet *config.DefinedSets
+		staticCIDRsDefinedSet  *config.DefinedSets
+		policyStatements       []*config.Statement
+		err                    error
+	}{
+		{
+			"Check if prefix set and policies are setup for static cidrs",
+			&NetworkRoutingController{
+				clientset:         fake.NewSimpleClientset(),
+				hostnameOverride:  "node-1",
+				bgpEnableInternal: true,
+				bgpFullMeshMode:   false,
+				pathPrepend:       false,
+				pathPrependAS:     "65100",
+				bgpServer:         gobgp.NewBgpServer(),
+				activeNodes:       make(map[string]bool),
+				staticCIDRs:       []string{"10.255.255.1/32"},
+				globalPeerRouters: []*config.NeighborConfig{
+					{
+						NeighborAddress: "10.10.0.1",
+					},
+					{
+						NeighborAddress: "10.10.0.2",
+					},
+				},
+				nodeAsnNumber: 100,
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+						Annotations: map[string]string{
+							"kube-router.io/node.asn": "100",
+						},
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+					Spec: v1core.NodeSpec{
+						PodCIDR: "172.20.0.0/24",
+					},
+				},
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:        "ClusterIP",
+						ClusterIP:   "10.0.0.1",
+						ExternalIPs: []string{"1.1.1.1"},
+					},
+				},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "podcidrprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "172.20.0.0/24",
+								MasklengthRange: "24..24",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "clusteripprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "1.1.1.1/32",
+								MasklengthRange: "32..32",
+							},
+							{
+								IpPrefix:        "10.0.0.1/32",
+								MasklengthRange: "32..32",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "externalpeerset",
+						NeighborInfoList: []string{"10.10.0.1/32", "10.10.0.2/32"},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{
+					{
+						PrefixSetName: "staticcidrprefixset",
+						PrefixList: []config.Prefix{
+							{
+								IpPrefix:        "10.255.255.1/32",
+								MasklengthRange: "32..32",
+							},
+						},
+					},
+				},
+				NeighborSets:   []config.NeighborSet{},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
+			[]*config.Statement{
+				{
+					Name: "kube_router_stmt0",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "podcidrprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "iBGPpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+				{
+					Name: "kube_router_stmt1",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "externalpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+				{
+					Name: "kube_router_stmt2",
+					Conditions: config.Conditions{
+						MatchPrefixSet: config.MatchPrefixSet{
+							PrefixSet:       "staticcidrprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "externalpeerset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+					},
+					Actions: config.Actions{
+						RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					},
+				},
+			},
+			nil,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			go testcase.nrc.bgpServer.Serve()
+			err := testcase.nrc.bgpServer.Start(&config.Global{
+				Config: config.GlobalConfig{
+					As:       1,
+					RouterId: "10.0.0.0",
+					Port:     10000,
+				},
+			})
+			if err != nil {
+				t.Fatalf("failed to start BGP server: %v", err)
+			}
+			defer testcase.nrc.bgpServer.Stop()
+
+			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
+
+			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
+				t.Errorf("failed to create existing nodes: %v", err)
+			}
+
+			if err = createServices(testcase.nrc.clientset, testcase.existingServices); err != nil {
+				t.Errorf("failed to create existing services: %v", err)
+			}
+
+			// ClusterIPs and ExternalIPs
+			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
+
+			testcase.nrc.advertiseClusterIP = true
+			testcase.nrc.advertiseExternalIP = true
+			testcase.nrc.advertiseLoadBalancerIP = false
+
+			informerFactory := informers.NewSharedInformerFactory(testcase.nrc.clientset, 0)
+			nodeInformer := informerFactory.Core().V1().Nodes().Informer()
+			testcase.nrc.nodeLister = nodeInformer.GetIndexer()
+			err = testcase.nrc.addExportPolicies()
+			if !reflect.DeepEqual(err, testcase.err) {
+				t.Logf("expected err %v", testcase.err)
+				t.Logf("actual err %v", err)
+				t.Error("unexpected error")
+			}
+
+			podDefinedSet, err := testcase.nrc.bgpServer.GetDefinedSet(table.DEFINED_TYPE_PREFIX, "podcidrprefixset")
+			if err != nil {
+				t.Fatalf("error validating defined sets: %v", err)
+			}
+
+			if !podDefinedSet.Equal(testcase.podDefinedSet) {
+				t.Logf("expected pod defined set: %+v", testcase.podDefinedSet.PrefixSets)
+				t.Logf("actual pod defined set: %+v", podDefinedSet.PrefixSets)
+				t.Error("unexpected pod defined set")
+			}
+
+			clusterIPDefinedSet, err := testcase.nrc.bgpServer.GetDefinedSet(table.DEFINED_TYPE_PREFIX, "clusteripprefixset")
+			if err != nil {
+				t.Fatalf("error validating defined sets: %v", err)
+			}
+
+			if !clusterIPDefinedSet.Equal(testcase.clusterIPDefinedSet) {
+				t.Logf("expected cluster ip defined set: %+v", testcase.clusterIPDefinedSet.PrefixSets)
+				t.Logf("actual cluster ip defined set: %+v", clusterIPDefinedSet.PrefixSets)
+				t.Error("unexpected cluster ip defined set")
+			}
+
+			staticCIDRsDefinedSet, err := testcase.nrc.bgpServer.GetDefinedSet(table.DEFINED_TYPE_PREFIX, "staticcidrprefixset")
+			if err != nil {
+				t.Fatalf("error validating defined sets: %v", err)
+			}
+
+			if !staticCIDRsDefinedSet.Equal(testcase.staticCIDRsDefinedSet) {
+				t.Logf("expected cluster ip defined set: %+v", testcase.staticCIDRsDefinedSet.PrefixSets)
+				t.Logf("actual cluster ip defined set: %+v", staticCIDRsDefinedSet.PrefixSets)
+				t.Error("unexpected cluster ip defined set")
+			}
+
+			externalPeerDefinedSet, err := testcase.nrc.bgpServer.GetDefinedSet(table.DEFINED_TYPE_NEIGHBOR, "externalpeerset")
+			if err != nil {
+				t.Fatalf("error validating defined sets: %v", err)
+			}
+
+			if !externalPeerDefinedSet.Equal(testcase.externalPeerDefinedSet) {
+				t.Logf("expected external peer defined set: %+v", testcase.externalPeerDefinedSet.NeighborSets)
+				t.Logf("actual external peer defined set: %+v", externalPeerDefinedSet.NeighborSets)
+				t.Error("unexpected external peer defined set")
+			}
 			policies := testcase.nrc.bgpServer.GetPolicy()
 			policyExists := false
 			for _, policy := range policies {

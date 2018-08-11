@@ -64,6 +64,22 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		nrc.bgpServer.AddDefinedSet(clusterIpPrefixSet)
 	}
 
+	// creates prefix set to represent all the static cidrs
+	if len(nrc.staticCIDRs) > 0 {
+		staticCIDRPrefixList := make([]config.Prefix, 0)
+		for _, cidr := range nrc.staticCIDRs {
+			staticCIDRPrefixList = append(staticCIDRPrefixList, config.Prefix{IpPrefix: cidr})
+		}
+		staticCIDRPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
+			PrefixSetName: "staticcidrprefixset",
+			PrefixList:    staticCIDRPrefixList,
+		})
+		err = nrc.bgpServer.ReplaceDefinedSet(staticCIDRPrefixSet)
+		if err != nil {
+			nrc.bgpServer.AddDefinedSet(staticCIDRPrefixSet)
+		}
+	}
+
 	statements := make([]config.Statement, 0)
 
 	var bgpActions config.BgpActions
@@ -149,6 +165,22 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 				BgpActions:       bgpActions,
 			},
 		})
+		if len(nrc.staticCIDRs) > 0 {
+			statements = append(statements, config.Statement{
+				Conditions: config.Conditions{
+					MatchPrefixSet: config.MatchPrefixSet{
+						PrefixSet: "staticcidrprefixset",
+					},
+					MatchNeighborSet: config.MatchNeighborSet{
+						NeighborSet: "externalpeerset",
+					},
+				},
+				Actions: config.Actions{
+					RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+					BgpActions:       bgpActions,
+				},
+			})
+		}
 		if nrc.advertisePodCidr {
 			statements = append(statements, config.Statement{
 				Conditions: config.Conditions{

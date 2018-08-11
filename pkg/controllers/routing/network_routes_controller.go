@@ -49,6 +49,7 @@ const (
 	rrClientAnnotation                = "kube-router.io/rr.client"
 	rrServerAnnotation                = "kube-router.io/rr.server"
 	svcLocalAnnotation                = "kube-router.io/service.local"
+	staticCIDRAnnotation              = "kube-router.io/static-cidrs"
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
 
@@ -92,6 +93,7 @@ type NetworkRoutingController struct {
 	pathPrependAS           string
 	pathPrependCount        uint8
 	pathPrepend             bool
+	staticCIDRs             []string
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -254,6 +256,14 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			glog.Errorf("Error advertising route: %s", err.Error())
 		}
 
+		if len(nrc.staticCIDRs) > 0 {
+			glog.V(1).Info("Performing periodic sync of static CIDR routes")
+			err = nrc.advertiseStaticCIDRRoutes()
+			if err != nil {
+				glog.Errorf("Error advertising route: %s", err.Error())
+			}
+		}
+
 		err = nrc.addExportPolicies()
 		if err != nil {
 			glog.Errorf("Error adding BGP export policies: %s", err.Error())
@@ -348,6 +358,30 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrLen),
 		subnet), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
+	}
+
+	return nil
+}
+
+func (nrc *NetworkRoutingController) advertiseStaticCIDRRoutes() error {
+	for _, cidr := range nrc.staticCIDRs {
+		cidrStr := strings.Split(cidr, "/")
+		if len(cidrStr) != 2 {
+			return fmt.Errorf("Failed advertising route because the specified static CIDR was invalid: %s", cidr)
+		}
+		subnet := cidrStr[0]
+		cidrLen, _ := strconv.Atoi(cidrStr[1])
+		attrs := []bgp.PathAttributeInterface{
+			bgp.NewPathAttributeOrigin(0),
+			bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
+		}
+
+		glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
+
+		if _, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(cidrLen),
+			subnet), false, attrs, time.Now(), false)}); err != nil {
+			return fmt.Errorf(err.Error())
+		}
 	}
 
 	return nil
@@ -580,6 +614,11 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		return errors.New("Failed to get node object from api server: " + err.Error())
 	}
 
+	if staticCIDRs, ok := node.ObjectMeta.Annotations[staticCIDRAnnotation]; ok {
+		glog.V(1).Infof("Found static CIDRs for node: %s", staticCIDRs)
+		nrc.staticCIDRs = stringToSlice(staticCIDRs, ",")
+	}
+
 	if nrc.bgpFullMeshMode {
 		nodeAsnNumber = nrc.defaultNodeAsnNumber
 	} else {
@@ -761,6 +800,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTtl
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
+	nrc.staticCIDRs = kubeRouterConfig.StaticCIDRs
 	nrc.clientset = clientset
 	nrc.activeNodes = make(map[string]bool)
 	nrc.bgpRRClient = false

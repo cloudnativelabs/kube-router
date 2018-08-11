@@ -61,6 +61,7 @@ Usage of kube-router:
       --run-firewall                     Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-router                       Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
       --run-service-proxy                Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
+      --static-cidrs strings             Optionally specifies a list of static CIDRs that will be advertised.
   -v, --v string                         log level for V logs (default "0")
   -V, --version                          Print version information.
 ```
