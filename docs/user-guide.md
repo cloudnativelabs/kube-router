@@ -53,6 +53,7 @@ Usage of kube-router:
       --metrics-port uint16              Prometheus metrics port, (Default 0, Disabled)
       --nodeport-bindon-all-ip           For service of NodePort type create IPVS service that listens on all IP's of the node.
       --nodes-full-mesh                  Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
+      --override-nexthop                 Override the next-hop in bgp routes sent to peers with the local ip.
       --peer-router-asns uints           ASN numbers of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr. (default [])
       --peer-router-ips ipSlice          The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's. (default [])
       --peer-router-multihop-ttl uint8   Enable eBGP multihop supports -- sets multihop-ttl. (Relevant only if ttl >= 2)

@@ -23,6 +23,7 @@ import (
 //   BGP peers
 // - each node is NOT allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) to
 //   iBGP peers
+// - an option to allow overriding the next-hop-address with the outgoing ip for external bgp peers
 func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	// we are rr server do not add export policies
@@ -96,6 +97,12 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		if err != nil {
 			nrc.bgpServer.AddDefinedSet(iBGPPeerNS)
 		}
+		actions := config.Actions{
+			RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+		}
+		if nrc.overrideNextHop {
+			actions.BgpActions.SetNextHop = "self"
+		}
 		// statement to represent the export policy to permit advertising node's pod CIDR
 		statements = append(statements,
 			config.Statement{
@@ -107,9 +114,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 						NeighborSet: "iBGPpeerset",
 					},
 				},
-				Actions: config.Actions{
-					RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
-				},
+				Actions: actions,
 			})
 	}
 
@@ -133,6 +138,9 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		if err != nil {
 			nrc.bgpServer.AddDefinedSet(ns)
 		}
+		if nrc.overrideNextHop {
+			bgpActions.SetNextHop = "self"
+		}
 		// statement to represent the export policy to permit advertising cluster IP's
 		// only to the global BGP peer or node specific BGP peer
 		statements = append(statements, config.Statement{
@@ -150,6 +158,12 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			},
 		})
 		if nrc.advertisePodCidr {
+			actions := config.Actions{
+				RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
+			}
+			if nrc.overrideNextHop {
+				actions.BgpActions.SetNextHop = "self"
+			}
 			statements = append(statements, config.Statement{
 				Conditions: config.Conditions{
 					MatchPrefixSet: config.MatchPrefixSet{
@@ -159,9 +173,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 						NeighborSet: "externalpeerset",
 					},
 				},
-				Actions: config.Actions{
-					RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
-				},
+				Actions: actions,
 			})
 		}
 	}

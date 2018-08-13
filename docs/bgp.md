@@ -152,3 +152,7 @@ Here is sample example to make GoBGP server to listen on multiple IP address
 kubectl annotate node ip-172-20-46-87.us-west-2.compute.internal "kube-router.io/bgp-local-addresses=172.20.56.25,192.168.1.99"
 ```
 
+## Overriding the next hop
+
+By default kube-router populates GoBGP RIB with node IP as next hop for the advertised pod CIDR's and service VIP. While this works for most cases, overriding the next hop for the advertised rotues is necessary when node has multiple interfaces over which external peers are reached. Next hop need to be as per the interface local IP over which external peer can be reached. `--override-nexthop` let you override the next hop for the advertised route. Setting `--override-nexthop` to true leverages BGP next-hop-self functionality implemented in GoBGP. Next hop will automatically selected appropriately when advertising routes irrespective of the next hop in the RIB. 
+

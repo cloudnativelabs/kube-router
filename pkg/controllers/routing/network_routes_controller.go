@@ -94,6 +94,7 @@ type NetworkRoutingController struct {
 	pathPrependCount        uint8
 	pathPrepend             bool
 	localAddressList        []string
+	overrideNextHop         bool
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -763,6 +764,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTtl
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
+	nrc.overrideNextHop = kubeRouterConfig.OverrideNextHop
 	nrc.clientset = clientset
 	nrc.activeNodes = make(map[string]bool)
 	nrc.bgpRRClient = false

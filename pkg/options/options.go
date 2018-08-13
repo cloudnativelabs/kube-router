@@ -36,6 +36,7 @@ type KubeRouterConfig struct {
 	MetricsPath             string
 	MetricsPort             uint16
 	NodePortBindOnAllIp     bool
+	OverrideNextHop         bool
 	PeerASNs                []uint
 	PeerMultihopTtl         uint8
 	PeerPasswords           []string
@@ -133,4 +134,5 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	// 	"Password that cluster-node BGP servers will use to authenticate one another when \"--nodes-full-mesh\" is set.")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
 	fs.Uint16Var(&s.HealthPort, "health-port", 20244, "Health check port, 0 = Disabled")
+	fs.BoolVar(&s.OverrideNextHop, "override-nexthop", false, "Override the next-hop in bgp routes sent to peers with the local ip.")
 }
