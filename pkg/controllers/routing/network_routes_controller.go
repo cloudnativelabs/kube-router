@@ -362,8 +362,9 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	dst, _ := netlink.ParseIPNet(nlri.String())
 	var route *netlink.Route
 
-	// check if the neighbour is in same subnet
-	if !nrc.nodeSubnet.Contains(nexthop) {
+	// check if the neighbour is in same subnet. If node is not in same subnet and --override-nexthop=false
+	// only then create IPIP tunnels
+	if !nrc.nodeSubnet.Contains(nexthop) && !nrc.overrideNextHop {
 		tunnelName := generateTunnelName(nexthop.String())
 		glog.Infof("Found node: " + nexthop.String() + " to be in different subnet.")
 
