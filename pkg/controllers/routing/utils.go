@@ -35,6 +35,18 @@ func stringSliceToIPs(s []string) ([]net.IP, error) {
 	return ips, nil
 }
 
+func stringSliceToUInt16(s []string) ([]uint16, error) {
+	ints := make([]uint16, 0)
+	for _, intString := range s {
+		newInt, err := strconv.ParseUint(intString, 0, 16)
+		if err != nil {
+			return nil, fmt.Errorf("Could not parse \"%s\" as an integer", intString)
+		}
+		ints = append(ints, uint16(newInt))
+	}
+	return ints, nil
+}
+
 func stringSliceToUInt32(s []string) ([]uint32, error) {
 	ints := make([]uint32, 0)
 	for _, intString := range s {

@@ -5,7 +5,10 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
+	"strconv"
 )
+
+const DEFAULT_BGP_PORT = 179
 
 type KubeRouterConfig struct {
 	AdvertiseClusterIp      bool
@@ -13,6 +16,7 @@ type KubeRouterConfig struct {
 	AdvertiseNodePodCidr    bool
 	AdvertiseLoadBalancerIp bool
 	BGPGracefulRestart      bool
+	BGPPort                 uint16
 	CacheSyncTimeout        time.Duration
 	CleanupConfig           bool
 	ClusterAsn              uint
@@ -40,6 +44,7 @@ type KubeRouterConfig struct {
 	PeerASNs                []uint
 	PeerMultihopTtl         uint8
 	PeerPasswords           []string
+	PeerPorts               []uint
 	PeerRouters             []net.IP
 	RoutesSyncPeriod        time.Duration
 	RunFirewall             bool
@@ -101,6 +106,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers.")
 	fs.IPSliceVar(&s.PeerRouters, "peer-router-ips", s.PeerRouters,
 		"The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's.")
+	fs.UintSliceVar(&s.PeerPorts, "peer-router-ports", s.PeerPorts,
+		"The remote port of the external BGP to which all nodes will peer. If not set, default BGP port ("+strconv.Itoa(DEFAULT_BGP_PORT)+") will be used.")
 	fs.UintVar(&s.ClusterAsn, "cluster-asn", s.ClusterAsn,
 		"ASN number under which cluster nodes will run iBGP.")
 	fs.UintSliceVar(&s.PeerASNs, "peer-router-asns", s.PeerASNs,
@@ -111,6 +118,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
+	fs.Uint16Var(&s.BGPPort, "bgp-port", DEFAULT_BGP_PORT,
+		"The port open for incoming BGP connections and to use for connecting with other BGP peers.")
 	fs.BoolVar(&s.EnableCNI, "enable-cni", true,
 		"Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin.")
 	fs.BoolVar(&s.EnableiBGP, "enable-ibgp", true,

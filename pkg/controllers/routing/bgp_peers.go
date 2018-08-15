@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
+	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/golang/glog"
 	"github.com/osrg/gobgp/config"
@@ -89,6 +90,11 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			Config: config.NeighborConfig{
 				NeighborAddress: nodeIP.String(),
 				PeerAs:          nrc.nodeAsnNumber,
+			},
+			Transport: config.Transport{
+				Config: config.TransportConfig{
+					RemotePort: nrc.bgpPort,
+				},
 			},
 		}
 
@@ -173,11 +179,8 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 }
 
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
-func connectToExternalBGPPeers(server *gobgp.BgpServer, peerConfigs []*config.NeighborConfig, bgpGracefulRestart bool, peerMultihopTtl uint8) error {
-	for _, peerConfig := range peerConfigs {
-		n := &config.Neighbor{
-			Config: *peerConfig,
-		}
+func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.Neighbor, bgpGracefulRestart bool, peerMultihopTtl uint8) error {
+	for _, n := range peerNeighbors {
 
 		if bgpGracefulRestart {
 			n.GracefulRestart = config.GracefulRestart{
@@ -216,6 +219,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerConfigs []*config.Ne
 			}
 		}
 		err := server.AddNeighbor(n)
+		peerConfig := n.Config
 		if err != nil {
 			return fmt.Errorf("Error peering with peer router "+
 				"%q due to: %s", peerConfig.NeighborAddress, err)
@@ -227,9 +231,9 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerConfigs []*config.Ne
 }
 
 // Does validation and returns neighbor configs
-func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
-	[]*config.NeighborConfig, error) {
-	peers := make([]*config.NeighborConfig, 0)
+func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []string) (
+	[]*config.Neighbor, error) {
+	peers := make([]*config.Neighbor, 0)
 
 	// Validations
 	if len(ips) != len(asns) {
@@ -244,6 +248,14 @@ func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
 			"Example: \"pass,,pass\" OR [\"pass\",\"\",\"pass\"].")
 	}
 
+	if len(ips) != len(ports) && len(ports) != 0 {
+		return nil, errors.New("Invalid peer router config. " +
+			"The number of ports should either be zero, or one per peer router." +
+			" If blank items are used, it will default to standard BGP port, " +
+			strconv.Itoa(options.DEFAULT_BGP_PORT) + "\n" +
+			"Example: \"port,,port\" OR [\"port\",\"\",\"port\"].")
+	}
+
 	for i := 0; i < len(ips); i++ {
 		if !((asns[i] >= 64512 && asns[i] <= 65535) ||
 			(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
@@ -251,13 +263,24 @@ func newGlobalPeers(ips []net.IP, asns []uint32, passwords []string) (
 				asns[i])
 		}
 
-		peer := &config.NeighborConfig{
-			NeighborAddress: ips[i].String(),
-			PeerAs:          asns[i],
+		peer := &config.Neighbor{
+			Config: config.NeighborConfig{
+				NeighborAddress: ips[i].String(),
+				PeerAs:          asns[i],
+			},
+			Transport: config.Transport{
+				Config: config.TransportConfig{
+					RemotePort: options.DEFAULT_BGP_PORT,
+				},
+			},
+		}
+
+		if len(ports) != 0 {
+			peer.Transport.Config.RemotePort = ports[i]
 		}
 
 		if len(passwords) != 0 {
-			peer.AuthPassword = passwords[i]
+			peer.Config.AuthPassword = passwords[i]
 		}
 
 		peers = append(peers, peer)

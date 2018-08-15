@@ -1258,12 +1258,12 @@ func Test_addExportPolicies(t *testing.T) {
 				bgpEnableInternal: true,
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
-				globalPeerRouters: []*config.NeighborConfig{
+				globalPeerRouters: []*config.Neighbor{
 					{
-						NeighborAddress: "10.10.0.1",
+						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
 					},
 					{
-						NeighborAddress: "10.10.0.2",
+						Config: config.NeighborConfig{NeighborAddress: "10.10.0.2"},
 					},
 				},
 				nodeAsnNumber: 100,
@@ -1393,12 +1393,12 @@ func Test_addExportPolicies(t *testing.T) {
 				bgpEnableInternal: false,
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
-				globalPeerRouters: []*config.NeighborConfig{
+				globalPeerRouters: []*config.Neighbor{
 					{
-						NeighborAddress: "10.10.0.1",
+						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
 					},
 					{
-						NeighborAddress: "10.10.0.2",
+						Config: config.NeighborConfig{NeighborAddress: "10.10.0.2"},
 					},
 				},
 				nodeAsnNumber: 100,
@@ -1515,12 +1515,12 @@ func Test_addExportPolicies(t *testing.T) {
 				pathPrependAS:     "65100",
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
-				globalPeerRouters: []*config.NeighborConfig{
+				globalPeerRouters: []*config.Neighbor{
 					{
-						NeighborAddress: "10.10.0.1",
+						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
 					},
 					{
-						NeighborAddress: "10.10.0.2",
+						Config: config.NeighborConfig{NeighborAddress: "10.10.0.2"},
 					},
 				},
 				nodeAsnNumber: 100,
@@ -1658,12 +1658,12 @@ func Test_addExportPolicies(t *testing.T) {
 				pathPrependAS:     "65100",
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
-				globalPeerRouters: []*config.NeighborConfig{
+				globalPeerRouters: []*config.Neighbor{
 					{
-						NeighborAddress: "10.10.0.1",
+						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
 					},
 					{
-						NeighborAddress: "10.10.0.2",
+						Config: config.NeighborConfig{NeighborAddress: "10.10.0.2"},
 					},
 				},
 				nodeAsnNumber: 100,

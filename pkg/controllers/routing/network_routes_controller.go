@@ -46,6 +46,7 @@ const (
 	peerASNAnnotation                 = "kube-router.io/peer.asns"
 	peerIPAnnotation                  = "kube-router.io/peer.ips"
 	peerPasswordAnnotation            = "kube-router.io/peer.passwords"
+	peerPortAnnotation                = "kube-router.io/peer.ports"
 	rrClientAnnotation                = "kube-router.io/rr.client"
 	rrServerAnnotation                = "kube-router.io/rr.server"
 	svcLocalAnnotation                = "kube-router.io/service.local"
@@ -73,7 +74,7 @@ type NetworkRoutingController struct {
 	advertisePodCidr        bool
 	defaultNodeAsnNumber    uint32
 	nodeAsnNumber           uint32
-	globalPeerRouters       []*config.NeighborConfig
+	globalPeerRouters       []*config.Neighbor
 	nodePeerRouters         []string
 	enableCNI               bool
 	bgpFullMeshMode         bool
@@ -84,6 +85,7 @@ type NetworkRoutingController struct {
 	peerMultihopTTL         uint8
 	MetricsEnabled          bool
 	bgpServerStarted        bool
+	bgpPort                 uint16
 	bgpRRClient             bool
 	bgpRRServer             bool
 	bgpClusterID            uint32
@@ -661,6 +663,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			As:               nodeAsnNumber,
 			RouterId:         nrc.nodeIP.String(),
 			LocalAddressList: localAddressList,
+			Port:             int32(nrc.bgpPort),
 		},
 	}
 
@@ -700,6 +703,19 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			return fmt.Errorf("Failed to parse node's Peer Addresses Annotation: %s", err)
 		}
 
+		// Get Global Peer Router ASN configs
+		nodeBgpPeerPortsAnnotation, ok := node.ObjectMeta.Annotations[peerPortAnnotation]
+		// Default to default BGP port if port annotation is not found
+		var peerPorts = make([]uint16, 0)
+		if ok {
+			portStrings := stringToSlice(nodeBgpPeerPortsAnnotation, ",")
+			peerPorts, err = stringSliceToUInt16(portStrings)
+			if err != nil {
+				nrc.bgpServer.Stop()
+				return fmt.Errorf("Failed to parse node's Peer Port Numbers Annotation: %s", err)
+			}
+		}
+
 		// Get Global Peer Router Password configs
 		var peerPasswords []string
 		nodeBGPPasswordsAnnotation, ok := node.ObjectMeta.Annotations[peerPasswordAnnotation]
@@ -715,7 +731,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 
 		// Create and set Global Peer Router complete configs
-		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerASNs, peerPasswords)
+		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerPorts, peerASNs, peerPasswords)
 		if err != nil {
 			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to process Global Peer Router configs: %s", err)
@@ -820,10 +836,18 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.advertisePodCidr = kubeRouterConfig.AdvertiseNodePodCidr
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 
+	nrc.bgpPort = kubeRouterConfig.BGPPort
+
 	// Convert ints to uint32s
 	peerASNs := make([]uint32, 0)
 	for _, i := range kubeRouterConfig.PeerASNs {
 		peerASNs = append(peerASNs, uint32(i))
+	}
+
+	// Convert uints to uint16s
+	peerPorts := make([]uint16, 0)
+	for _, i := range kubeRouterConfig.PeerPorts {
+		peerPorts = append(peerPorts, uint16(i))
 	}
 
 	// Decode base64 passwords
@@ -835,7 +859,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	}
 
-	nrc.globalPeerRouters, err = newGlobalPeers(kubeRouterConfig.PeerRouters,
+	nrc.globalPeerRouters, err = newGlobalPeers(kubeRouterConfig.PeerRouters, peerPorts,
 		peerASNs, peerPasswords)
 	if err != nil {
 		return nil, fmt.Errorf("Error processing Global Peer Router configs: %s", err)
