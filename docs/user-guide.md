@@ -31,6 +31,7 @@ Usage of kube-router:
       --advertise-loadbalancer-ip        Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr               Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
       --bgp-graceful-restart             Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
+      --bgp-port uint16                  The port open for incoming BGP connections and to use for connecting with other BGP peers. (default 179)
       --cache-sync-timeout duration      The timeout for cache synchronization (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
       --cleanup-config                   Cleanup iptables rules, ipvs, ipset configuration and exit.
       --cluster-asn uint                 ASN number under which cluster nodes will run iBGP.
@@ -58,6 +59,7 @@ Usage of kube-router:
       --peer-router-ips ipSlice          The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's. (default [])
       --peer-router-multihop-ttl uint8   Enable eBGP multihop supports -- sets multihop-ttl. (Relevant only if ttl >= 2)
       --peer-router-passwords strings    Password for authenticating against the BGP peer defined with "--peer-router-ips".
+      --peer-router-ports uints          The remote port of the external BGP to which all nodes will peer. If not set, default BGP port (179) will be used. (default [])
       --routes-sync-period duration      The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --run-firewall                     Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-router                       Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)

@@ -121,7 +121,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	externalBgpPeers := make([]string, 0)
 	if len(nrc.globalPeerRouters) != 0 {
 		for _, peer := range nrc.globalPeerRouters {
-			externalBgpPeers = append(externalBgpPeers, peer.NeighborAddress)
+			externalBgpPeers = append(externalBgpPeers, peer.Config.NeighborAddress)
 		}
 	}
 	if len(nrc.nodePeerRouters) != 0 {
