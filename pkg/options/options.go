@@ -4,8 +4,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/spf13/pflag"
 	"strconv"
+
+	"github.com/spf13/pflag"
 )
 
 const DEFAULT_BGP_PORT = 179
@@ -33,7 +34,9 @@ type KubeRouterConfig struct {
 	HelpRequested           bool
 	HostnameOverride        string
 	IPTablesSyncPeriod      time.Duration
+	IPTablesSyncTimeout     time.Duration
 	IpvsSyncPeriod          time.Duration
+	IpvsSyncTimeout         time.Duration
 	Kubeconfig              string
 	MasqueradeAll           bool
 	Master                  string
@@ -49,6 +52,7 @@ type KubeRouterConfig struct {
 	PeerRouters             []net.IP
 	RouterId                string
 	RoutesSyncPeriod        time.Duration
+	RoutesSyncTimeout       time.Duration
 	RunFirewall             bool
 	RunRouter               bool
 	RunServiceProxy         bool
@@ -59,11 +63,14 @@ type KubeRouterConfig struct {
 
 func NewKubeRouterConfig() *KubeRouterConfig {
 	return &KubeRouterConfig{
-		CacheSyncTimeout:   1 * time.Minute,
-		IpvsSyncPeriod:     5 * time.Minute,
-		IPTablesSyncPeriod: 5 * time.Minute,
-		RoutesSyncPeriod:   5 * time.Minute,
-		EnableOverlay:      true,
+		CacheSyncTimeout:    1 * time.Minute,
+		IpvsSyncPeriod:      5 * time.Minute,
+		IpvsSyncTimeout:     30 * time.Second,
+		IPTablesSyncPeriod:  5 * time.Minute,
+		IPTablesSyncTimeout: 30 * time.Second,
+		RoutesSyncPeriod:    5 * time.Minute,
+		RoutesSyncTimeout:   30 * time.Second,
+		EnableOverlay:       true,
 	}
 }
 
@@ -94,10 +101,16 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"SNAT traffic from Pods to destinations outside the cluster.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
 		"The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
+	fs.DurationVar(&s.IPTablesSyncTimeout, "iptables-sync-timeout", s.IPTablesSyncTimeout,
+		"The timeout for iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod,
 		"The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
+	fs.DurationVar(&s.IpvsSyncTimeout, "ipvs-sync-timeout", s.IpvsSyncTimeout,
+		"The timeout for ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
+	fs.DurationVar(&s.RoutesSyncTimeout, "routes-sync-timeout", s.RoutesSyncTimeout,
+		"The timeout for route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
 		"Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseExternalIp, "advertise-external-ip", false,

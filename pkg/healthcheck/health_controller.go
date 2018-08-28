@@ -28,23 +28,19 @@ type HealthController struct {
 //HealthStats is holds the latest heartbeats
 type HealthStats struct {
 	sync.Mutex
-	Healthy                           bool
-	MetricsControllerAlive            time.Time
-	NetworkPolicyControllerAlive      time.Time
-	NetworkPolicyControllerAliveTTL   time.Duration
-	NetworkRoutingControllerAlive     time.Time
-	NetworkRoutingControllerAliveTTL  time.Duration
-	NetworkServicesControllerAlive    time.Time
-	NetworkServicesControllerAliveTTL time.Duration
+	Healthy                        bool
+	MetricsControllerAlive         time.Time
+	NetworkPolicyControllerAlive   time.Time
+	NetworkRoutingControllerAlive  time.Time
+	NetworkServicesControllerAlive time.Time
 }
 
 //SendHeartBeat sends a heartbeat on the passed channel
 func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
-	heartbeat := ControllerHeartbeat{
-		Component:     controller,
-		LastHeartBeat: time.Now(),
+	heartbeat := &ControllerHeartbeat{
+		Component: controller,
 	}
-	channel <- &heartbeat
+	channel <- heartbeat
 }
 
 //Handler writes HTTP responses to the health path
@@ -72,56 +68,44 @@ func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 //HandleHeartbeat handles received heartbeats on the health channel
 func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 	glog.V(3).Infof("Received heartbeat from %s", beat.Component)
-
+	now := time.Now()
 	hc.Status.Lock()
 	defer hc.Status.Unlock()
 
 	switch {
-	// The first heartbeat will set the initial gracetime the controller has to report in, A static time is added as well when checking to allow for load variation in sync time
 	case beat.Component == "NSC":
-		if hc.Status.NetworkServicesControllerAliveTTL == 0 {
-			hc.Status.NetworkServicesControllerAliveTTL = time.Since(hc.Status.NetworkServicesControllerAlive)
-		}
-		hc.Status.NetworkServicesControllerAlive = beat.LastHeartBeat
+		hc.Status.NetworkServicesControllerAlive = now
 
 	case beat.Component == "NRC":
-		if hc.Status.NetworkRoutingControllerAliveTTL == 0 {
-			hc.Status.NetworkRoutingControllerAliveTTL = time.Since(hc.Status.NetworkRoutingControllerAlive)
-		}
-		hc.Status.NetworkRoutingControllerAlive = beat.LastHeartBeat
+		hc.Status.NetworkRoutingControllerAlive = now
 
 	case beat.Component == "NPC":
-		if hc.Status.NetworkPolicyControllerAliveTTL == 0 {
-			hc.Status.NetworkPolicyControllerAliveTTL = time.Since(hc.Status.NetworkPolicyControllerAlive)
-		}
-		hc.Status.NetworkPolicyControllerAlive = beat.LastHeartBeat
+		hc.Status.NetworkPolicyControllerAlive = now
 
 	case beat.Component == "MC":
-		hc.Status.MetricsControllerAlive = beat.LastHeartBeat
+		hc.Status.MetricsControllerAlive = now
 	}
 }
 
 // CheckHealth evaluates the time since last heartbeat to decide if the controller is running or not
 func (hc *HealthController) CheckHealth() bool {
 	health := true
-	graceTime := time.Duration(1500 * time.Millisecond)
-
 	if hc.Config.RunFirewall {
-		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
+		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Config.IPTablesSyncTimeout {
 			glog.Error("Network Policy Controller heartbeat missed")
 			health = false
 		}
 	}
 
 	if hc.Config.RunRouter {
-		if time.Since(hc.Status.NetworkRoutingControllerAlive) > hc.Config.RoutesSyncPeriod+hc.Status.NetworkRoutingControllerAliveTTL+graceTime {
+		if time.Since(hc.Status.NetworkRoutingControllerAlive) > hc.Config.RoutesSyncPeriod+hc.Config.RoutesSyncTimeout {
 			glog.Error("Network Routing Controller heartbeat missed")
 			health = false
 		}
 	}
 
 	if hc.Config.RunServiceProxy {
-		if time.Since(hc.Status.NetworkServicesControllerAlive) > hc.Config.IpvsSyncPeriod+hc.Status.NetworkServicesControllerAliveTTL+graceTime {
+		if time.Since(hc.Status.NetworkServicesControllerAlive) > hc.Config.IpvsSyncPeriod+hc.Config.IpvsSyncTimeout {
 			glog.Error("NetworkService Controller heartbeat missed")
 			health = false
 		}
@@ -170,7 +154,7 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 
 //RunCheck starts the HealthController's check
 func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-	t := time.NewTicker(5000 * time.Millisecond)
+	t := time.NewTicker(1000 * time.Millisecond)
 	defer wg.Done()
 	for {
 		select {
@@ -186,10 +170,9 @@ func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, sto
 	}
 }
 
+//SetAlive sets the starting point for the controllers
 func (hc *HealthController) SetAlive() {
-
 	now := time.Now()
-
 	hc.Status.MetricsControllerAlive = now
 	hc.Status.NetworkPolicyControllerAlive = now
 	hc.Status.NetworkRoutingControllerAlive = now
