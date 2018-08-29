@@ -101,16 +101,21 @@ var (
 		Name:      "controller_bgp_internal_peers_sync_time",
 		Help:      "Time it took to sync internal bgp peers",
 	}, []string{})
-	ControllerBGPadvertisementsReceived = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+	ControllerBGPadvertisements = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
-		Name:      "controller_bgp_advertisements_received",
-		Help:      "Time it took to sync internal bgp peers",
-	}, []string{})
+		Name:      "controller_bgp_advertisements",
+		Help:      "Number of BGP advertisements received and sent",
+	}, []string{"type"})
 	ControllerIpvsMetricsExportTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Name:      "controller_ipvs_metrics_export_time",
 		Help:      "Time it took to export metrics",
 	}, []string{})
+	ControllerErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "controller_errors",
+		Help:      "Number of controller errors",
+	}, []string{"controller"})
 )
 
 // MetricsController Holds settings for the metrics controller
@@ -119,16 +124,18 @@ type MetricsController struct {
 	MetricsPort uint16
 	mu          sync.Mutex
 	nodeIP      net.IP
+	healthChan  chan<- *healthcheck.ControllerHeartbeat
 }
 
 // Run prometheus metrics controller
-func (mc *MetricsController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 	t := time.NewTicker(3 * time.Second)
 	defer wg.Done()
 	glog.Info("Starting metrics controller")
 
 	// register metrics for this controller
 	prometheus.MustRegister(ControllerIpvsMetricsExportTime)
+	prometheus.MustRegister(ControllerErrors)
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(mc.MetricsPort)), Handler: http.DefaultServeMux}
 
@@ -142,7 +149,7 @@ func (mc *MetricsController) Run(healthChan chan<- *healthcheck.ControllerHeartb
 		}
 	}()
 	for {
-		healthcheck.SendHeartBeat(healthChan, "MC")
+		healthcheck.SendHeartBeat(mc.healthChan, "MC")
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down metrics controller")
@@ -157,7 +164,7 @@ func (mc *MetricsController) Run(healthChan chan<- *healthcheck.ControllerHeartb
 }
 
 // NewMetricsController returns new MetricController object
-func NewMetricsController(clientset kubernetes.Interface, config *options.KubeRouterConfig) (*MetricsController, error) {
+func NewMetricsController(clientset kubernetes.Interface, config *options.KubeRouterConfig, healthChan chan<- *healthcheck.ControllerHeartbeat) (*MetricsController, error) {
 	mc := MetricsController{}
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort

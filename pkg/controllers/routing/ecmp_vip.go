@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/golang/glog"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/table"
@@ -25,7 +26,7 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
 	_, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
 		vip), false, attrs, time.Now(), false)})
-
+	metrics.ControllerBGPadvertisements.WithLabelValues("sent").Inc()
 	return err
 }
 
@@ -47,6 +48,7 @@ func (nrc *NetworkRoutingController) advertiseVIPs(vips []string) {
 		if err != nil {
 			glog.Errorf("error advertising IP: %q, error: %v", vip, err)
 		}
+		metrics.ControllerBGPadvertisements.WithLabelValues("sent").Inc()
 	}
 }
 
