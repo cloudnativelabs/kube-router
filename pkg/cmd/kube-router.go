@@ -17,11 +17,12 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/golang/glog"
 
+	"time"
+
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"time"
 )
 
 // These get set at build time via -ldflags magic
@@ -113,12 +114,12 @@ func (kr *KubeRouter) Run() error {
 
 	if (kr.Config.MetricsPort > 0) && (kr.Config.MetricsPort <= 65535) {
 		kr.Config.MetricsEnabled = true
-		mc, err := metrics.NewMetricsController(kr.Client, kr.Config)
+		mc, err := metrics.NewMetricsController(kr.Client, kr.Config, healthChan)
 		if err != nil {
 			return errors.New("Failed to create metrics controller: " + err.Error())
 		}
 		wg.Add(1)
-		go mc.Run(healthChan, stopCh, &wg)
+		go mc.Run(stopCh, &wg)
 
 	} else if kr.Config.MetricsPort > 65535 {
 		glog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", kr.Config.MetricsPort)
@@ -129,7 +130,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunFirewall {
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
-			kr.Config, podInformer, npInformer, nsInformer)
+			kr.Config, healthChan, podInformer, npInformer, nsInformer)
 		if err != nil {
 			return errors.New("Failed to create network policy controller: " + err.Error())
 		}
@@ -139,11 +140,11 @@ func (kr *KubeRouter) Run() error {
 		npInformer.AddEventHandler(npc.NetworkPolicyEventHandler)
 
 		wg.Add(1)
-		go npc.Run(healthChan, stopCh, &wg)
+		go npc.Run(stopCh, &wg)
 	}
 
 	if kr.Config.RunRouter {
-		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config, nodeInformer, svcInformer, epInformer)
+		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config, healthChan, nodeInformer, svcInformer, epInformer)
 		if err != nil {
 			return errors.New("Failed to create network routing controller: " + err.Error())
 		}
@@ -153,12 +154,12 @@ func (kr *KubeRouter) Run() error {
 		epInformer.AddEventHandler(nrc.EndpointsEventHandler)
 
 		wg.Add(1)
-		go nrc.Run(healthChan, stopCh, &wg)
+		go nrc.Run(stopCh, &wg)
 	}
 
 	if kr.Config.RunServiceProxy {
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
-			svcInformer, epInformer, podInformer)
+			healthChan, svcInformer, epInformer, podInformer)
 		if err != nil {
 			return errors.New("Failed to create network services controller: " + err.Error())
 		}
@@ -167,7 +168,7 @@ func (kr *KubeRouter) Run() error {
 		epInformer.AddEventHandler(nsc.EndpointsEventHandler)
 
 		wg.Add(1)
-		go nsc.Run(healthChan, stopCh, &wg)
+		go nsc.Run(stopCh, &wg)
 	}
 
 	// Handle SIGINT and SIGTERM
