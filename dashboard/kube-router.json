@@ -1066,11 +1066,11 @@
           "refId": "A"
         },
         {
-          "expr": "-sum(increase(kube_router_controller_bgp_advertisements{type=\"sent\",instance=~\"[[selnode]]\"}[$interval])) by (instance)",
+          "expr": "-sum(increase(kube_router_controller_bgp_advertisements{type=\"advertised\",instance=~\"[[selnode]]\"}[$interval])) by (instance)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{instance}} sent",
+          "legendFormat": "{{instance}} advertised",
           "refId": "B"
         }
       ],

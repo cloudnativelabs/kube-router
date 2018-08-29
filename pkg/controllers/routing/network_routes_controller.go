@@ -380,7 +380,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 		subnet), false, attrs, time.Now(), false)}); err != nil {
 		return fmt.Errorf(err.Error())
 	}
-	metrics.ControllerBGPadvertisements.WithLabelValues("sent").Inc()
+	metrics.ControllerBGPadvertisements.WithLabelValues("advertised").Inc()
 	return nil
 }
 
