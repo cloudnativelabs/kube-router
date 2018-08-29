@@ -166,6 +166,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 // NewMetricsController returns new MetricController object
 func NewMetricsController(clientset kubernetes.Interface, config *options.KubeRouterConfig, healthChan chan<- *healthcheck.ControllerHeartbeat) (*MetricsController, error) {
 	mc := MetricsController{}
+	mc.healthChan = healthChan
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort
 	return &mc, nil

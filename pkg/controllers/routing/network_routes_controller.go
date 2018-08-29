@@ -848,6 +848,8 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		nrc.MetricsEnabled = true
 	}
 
+	nrc.healthChan = healthChan
+
 	nrc.bgpFullMeshMode = kubeRouterConfig.FullMeshMode
 	nrc.enableCNI = kubeRouterConfig.EnableCNI
 	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP

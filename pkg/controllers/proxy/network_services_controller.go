@@ -2163,6 +2163,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		nsc.MetricsEnabled = true
 	}
 
+	nsc.healthChan = healthChan
+
 	nsc.syncPeriod = config.IpvsSyncPeriod
 	nsc.globalHairpin = config.GlobalHairpinMode
 

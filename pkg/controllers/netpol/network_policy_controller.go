@@ -1614,6 +1614,8 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) (*NetworkPolicyController, error) {
 	npc := NetworkPolicyController{}
 
+	npc.healthChan = healthChan
+
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
 		prometheus.MustRegister(metrics.ControllerIptablesSyncTime)
