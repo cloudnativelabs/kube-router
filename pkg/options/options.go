@@ -102,15 +102,15 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
 		"The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.DurationVar(&s.IPTablesSyncTimeout, "iptables-sync-timeout", s.IPTablesSyncTimeout,
-		"The timeout for iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
+		"The timeout for iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. Will cause unhealthy kube-router health endpoint if missed.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod,
 		"The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.DurationVar(&s.IpvsSyncTimeout, "ipvs-sync-timeout", s.IpvsSyncTimeout,
-		"The timeout for ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
+		"The timeout for ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. Will cause unhealthy kube-router health endpoint if missed.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.DurationVar(&s.RoutesSyncTimeout, "routes-sync-timeout", s.RoutesSyncTimeout,
-		"The timeout for route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
+		"The timeout for route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. Will cause unhealthy kube-router health endpoint if missed.")
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
 		"Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseExternalIp, "advertise-external-ip", false,

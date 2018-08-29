@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,8 +19,6 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
-
-	"regexp"
 
 	api "k8s.io/api/core/v1"
 	apiextensions "k8s.io/api/extensions/v1beta1"
@@ -231,33 +230,28 @@ func (npc *NetworkPolicyController) Sync() error {
 	if npc.v1NetworkPolicy {
 		npc.networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return errors.New("Aborting sync. Failed to build network policies: " + err.Error())
 		}
 	} else {
 		// TODO remove the Beta support
 		npc.networkPoliciesInfo, err = npc.buildBetaNetworkPoliciesInfo()
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return errors.New("Aborting sync. Failed to build network policies: " + err.Error())
 		}
 	}
 
 	activePolicyChains, activePolicyIpSets, err := npc.syncNetworkPolicyChains(syncVersion)
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return errors.New("Aborting sync. Failed to sync network policy chains: " + err.Error())
 	}
 
 	activePodFwChains, err := npc.syncPodFirewallChains(syncVersion)
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return errors.New("Aborting sync. Failed to sync pod firewalls: " + err.Error())
 	}
 
 	err = cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIpSets)
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return errors.New("Aborting sync. Failed to cleanup stale iptable rules: " + err.Error())
 	}
 
@@ -277,7 +271,6 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		glog.Fatalf("Failed to initialize iptables executor due to: %s", err.Error())
 	}
 
@@ -288,7 +281,6 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 		policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
 		err := iptablesCmdHandler.NewChain("filter", policyChainName)
 		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
@@ -298,7 +290,6 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 		targetDestPodIpSetName := policyDestinationPodIpSetName(policy.namespace, policy.name)
 		targetDestPodIpSet, err := npc.ipSetHandler.Create(targetDestPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 		}
 
@@ -306,7 +297,6 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 		targetSourcePodIpSetName := policySourcePodIpSetName(policy.namespace, policy.name)
 		targetSourcePodIpSet, err := npc.ipSetHandler.Create(targetSourcePodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 		}
 
@@ -331,13 +321,11 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 
 		err = npc.processIngressRules(policy, targetDestPodIpSetName, activePolicyIpSets, version)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, nil, err
 		}
 
 		err = npc.processEgressRules(policy, targetSourcePodIpSetName, activePolicyIpSets, version)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, nil, err
 		}
 	}
@@ -358,7 +346,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return fmt.Errorf("Failed to initialize iptables executor due to: %s", err.Error())
 	}
 
@@ -372,7 +359,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			srcPodIpSetName := policyIndexedSourcePodIpSetName(policy.namespace, policy.name, i)
 			srcPodIpSet, err := npc.ipSetHandler.Create(srcPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
 			}
 
@@ -384,7 +370,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			}
 			err = srcPodIpSet.Refresh(ingressRuleSrcPodIps, utils.OptionTimeout, "0")
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				glog.Errorf("failed to refresh srcPodIpSet: " + err.Error())
 			}
 
@@ -402,7 +387,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 						"-j", "ACCEPT"}
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 					}
 				}
@@ -417,7 +401,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
-					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 				}
 			}
@@ -436,7 +419,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
-					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 				}
 			}
@@ -452,7 +434,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				"-j", "ACCEPT"}
 			err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -480,7 +461,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 						"-j", "ACCEPT"}
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 					}
 				}
@@ -494,7 +474,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
-					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 				}
 			}
@@ -515,7 +494,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return fmt.Errorf("Failed to initialize iptables executor due to: %s", err.Error())
 	}
 
@@ -529,7 +507,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			dstPodIpSetName := policyIndexedDestinationPodIpSetName(policy.namespace, policy.name, i)
 			dstPodIpSet, err := npc.ipSetHandler.Create(dstPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
 			}
 
@@ -555,7 +532,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 						"-j", "ACCEPT"}
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 					}
 				}
@@ -570,7 +546,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
-					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 				}
 			}
@@ -589,7 +564,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
-					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 				}
 			}
@@ -605,7 +579,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 				"-j", "ACCEPT"}
 			err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -632,7 +605,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 						"-j", "ACCEPT"}
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 					}
 				}
@@ -646,7 +618,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
-					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 				}
 			}
@@ -661,14 +632,12 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		glog.Fatalf("Failed to initialize iptables executor: %s", err.Error())
 	}
 
 	// loop through the pods running on the node which to which ingress network policies to be applied
 	ingressNetworkPolicyEnabledPods, err := npc.getIngressNetworkPolicyEnabledPods(npc.nodeIP.String())
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	for _, pod := range *ingressNetworkPolicyEnabledPods {
@@ -683,7 +652,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		podFwChainName := podFirewallChainName(pod.namespace, pod.name, version)
 		err = iptablesCmdHandler.NewChain("filter", podFwChainName)
 		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		activePodFwChains[podFwChainName] = true
@@ -701,7 +669,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 				if !exists {
 					err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
 					if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 					}
 				}
@@ -712,13 +679,11 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		args := []string{"-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT"}
 		exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
 			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -730,13 +695,11 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		args = []string{"-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName}
 		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
 			err := iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -745,13 +708,11 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		// this rule applies to the traffic from a pod getting routed back to another pod on same node by service proxy
 		exists, err = iptablesCmdHandler.Exists("filter", "OUTPUT", args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
 			err := iptablesCmdHandler.Insert("filter", "OUTPUT", 1, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -766,13 +727,11 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			"-j", podFwChainName}
 		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
 			err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -782,7 +741,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		args = []string{"-m", "comment", "--comment", comment, "-j", "REJECT"}
 		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
@@ -791,13 +749,11 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
 		exists, err = iptablesCmdHandler.Exists("filter", podFwChainName, args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
 			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -806,7 +762,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 	// loop through the pods running on the node which egress network policies to be applied
 	egressNetworkPolicyEnabledPods, err := npc.getEgressNetworkPolicyEnabledPods(npc.nodeIP.String())
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	for _, pod := range *egressNetworkPolicyEnabledPods {
@@ -821,7 +776,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		podFwChainName := podFirewallChainName(pod.namespace, pod.name, version)
 		err = iptablesCmdHandler.NewChain("filter", podFwChainName)
 		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		activePodFwChains[podFwChainName] = true
@@ -839,7 +793,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 				if !exists {
 					err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
 					if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 					}
 				}
@@ -853,13 +806,11 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		args := []string{"-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName}
 		exists, err := iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
 			err := iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -874,13 +825,11 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			"-j", podFwChainName}
 		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
 			err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -890,7 +839,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		args = []string{"-m", "comment", "--comment", comment, "-j", "REJECT"}
 		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
@@ -899,13 +847,11 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
 		exists, err = iptablesCmdHandler.Exists("filter", podFwChainName, args...)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
 			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
@@ -964,12 +910,10 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 
 		forwardChainRules, err := iptablesCmdHandler.List("filter", "FORWARD")
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return fmt.Errorf("failed to list rules in filter table, FORWARD chain due to %s", err.Error())
 		}
 		outputChainRules, err := iptablesCmdHandler.List("filter", "OUTPUT")
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return fmt.Errorf("failed to list rules in filter table, OUTPUT chain due to %s", err.Error())
 		}
 
@@ -989,7 +933,6 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 			if strings.Contains(rule, chain) {
 				err = iptablesCmdHandler.Delete("filter", "OUTPUT", strconv.Itoa(i-realRuleNo))
 				if err != nil {
-					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					return fmt.Errorf("failed to delete rule: %s from the OUTPUT chain of filter table due to %s", rule, err.Error())
 				}
 				realRuleNo++
@@ -1002,12 +945,10 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		glog.V(2).Infof("Found pod fw chain to cleanup: %s", chain)
 		err = iptablesCmdHandler.ClearChain("filter", chain)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return fmt.Errorf("Failed to flush the rules in chain %s due to %s", chain, err.Error())
 		}
 		err = iptablesCmdHandler.DeleteChain("filter", chain)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return fmt.Errorf("Failed to delete the chain %s due to %s", chain, err.Error())
 		}
 		glog.V(2).Infof("Deleted pod specific firewall chain: %s from the filter table", chain)
@@ -1021,14 +962,12 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		for podFwChain := range activePodFwChains {
 			podFwChainRules, err := iptablesCmdHandler.List("filter", podFwChain)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				glog.Errorf("Failed to list iptable filters")
 			}
 			for i, rule := range podFwChainRules {
 				if strings.Contains(rule, policyChain) {
 					err = iptablesCmdHandler.Delete("filter", podFwChain, strconv.Itoa(i))
 					if err != nil {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 						return fmt.Errorf("Failed to delete rule %s from the chain %s", rule, podFwChain)
 					}
 					break
@@ -1038,12 +977,10 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 
 		err = iptablesCmdHandler.ClearChain("filter", policyChain)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return fmt.Errorf("Failed to flush the rules in chain %s due to  %s", policyChain, err)
 		}
 		err = iptablesCmdHandler.DeleteChain("filter", policyChain)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return fmt.Errorf("Failed to flush the rules in chain %s due to %s", policyChain, err)
 		}
 		glog.V(2).Infof("Deleted network policy chain: %s from the filter table", policyChain)
@@ -1053,7 +990,6 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 	for _, set := range cleanupPolicyIPSets {
 		err = set.Destroy()
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return fmt.Errorf("Failed to delete ipset %s due to %s", set.Name, err)
 		}
 	}
@@ -1124,7 +1060,6 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 
 		policy, ok := policyObj.(*networking.NetworkPolicy)
 		if !ok {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to convert")
 		}
 		newPolicy := networkPolicyInfo{
@@ -1174,8 +1109,6 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 					namespace: matchingPod.ObjectMeta.Namespace,
 					labels:    matchingPod.ObjectMeta.Labels}
 			}
-		} else {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		}
 
 		if policy.Spec.Ingress == nil {
@@ -1230,8 +1163,6 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 									namespace: matchingPod.ObjectMeta.Namespace,
 									labels:    matchingPod.ObjectMeta.Labels})
 						}
-					} else {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					}
 				}
 			}
@@ -1276,8 +1207,6 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 									namespace: matchingPod.ObjectMeta.Namespace,
 									labels:    matchingPod.ObjectMeta.Labels})
 						}
-					} else {
-						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					}
 				}
 			}
@@ -1299,7 +1228,6 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 	if peer.NamespaceSelector != nil {
 		namespaces, err := npc.ListNamespaceByLabels(peer.NamespaceSelector.MatchLabels)
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, errors.New("Failed to build network policies info due to " + err.Error())
 		}
 
@@ -1310,7 +1238,6 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 		for _, namespace := range namespaces {
 			namespacePods, err := npc.ListPodsByNamespaceAndLabels(namespace.Name, podSelectorLabels)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				return nil, errors.New("Failed to build network policies info due to " + err.Error())
 			}
 			matchingPods = append(matchingPods, namespacePods...)
@@ -1326,7 +1253,6 @@ func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace strin
 	podLister := listers.NewPodLister(npc.podLister)
 	allMatchedNameSpacePods, err := podLister.Pods(namespace).List(labelsToMatch.AsSelector())
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	return allMatchedNameSpacePods, nil
@@ -1336,7 +1262,6 @@ func (npc *NetworkPolicyController) ListNamespaceByLabels(set labels.Set) ([]*ap
 	namespaceLister := listers.NewNamespaceLister(npc.nsLister)
 	matchedNamespaces, err := namespaceLister.List(set.AsSelector())
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	return matchedNamespaces, nil
@@ -1386,8 +1311,6 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 					namespace: matchingPod.ObjectMeta.Namespace,
 					labels:    matchingPod.ObjectMeta.Labels}
 			}
-		} else {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		}
 
 		for _, specIngressRule := range policy.Spec.Ingress {
@@ -1413,8 +1336,6 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 								namespace: matchingPod.ObjectMeta.Namespace,
 								labels:    matchingPod.ObjectMeta.Labels})
 					}
-				} else {
-					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				}
 			}
 			newPolicy.ingressRules = append(newPolicy.ingressRules, ingressRule)
@@ -1650,7 +1571,6 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 
@@ -1658,19 +1578,16 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	npc.nodeIP = nodeIP
 
 	ipset, err := utils.NewIPSet(false)
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	err = ipset.Save()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	npc.ipSetHandler = ipset

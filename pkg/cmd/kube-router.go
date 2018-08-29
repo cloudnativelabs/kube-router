@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/controllers/netpol"
 	"github.com/cloudnativelabs/kube-router/pkg/controllers/proxy"
@@ -16,8 +17,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/golang/glog"
-
-	"time"
 
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
