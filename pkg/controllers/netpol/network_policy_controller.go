@@ -151,6 +151,7 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 			glog.V(1).Info("Performing periodic sync of iptables to reflect network policies")
 			err := npc.Sync()
 			if err != nil {
+				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				glog.Errorf("Error during periodic sync of network policies in network policy controller. Error: " + err.Error())
 			} else {
 				npc.readyForUpdates = true
@@ -287,6 +288,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 		policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
 		err := iptablesCmdHandler.NewChain("filter", policyChainName)
 		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
@@ -296,6 +298,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 		targetDestPodIpSetName := policyDestinationPodIpSetName(policy.namespace, policy.name)
 		targetDestPodIpSet, err := npc.ipSetHandler.Create(targetDestPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
+			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 		}
 
@@ -303,6 +306,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 		targetSourcePodIpSetName := policySourcePodIpSetName(policy.namespace, policy.name)
 		targetSourcePodIpSet, err := npc.ipSetHandler.Create(targetSourcePodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
+			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 		}
 
@@ -1120,6 +1124,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 
 		policy, ok := policyObj.(*networking.NetworkPolicy)
 		if !ok {
+			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 			return nil, fmt.Errorf("Failed to convert")
 		}
 		newPolicy := networkPolicyInfo{
@@ -1169,6 +1174,8 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 					namespace: matchingPod.ObjectMeta.Namespace,
 					labels:    matchingPod.ObjectMeta.Labels}
 			}
+		} else {
+			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		}
 
 		if policy.Spec.Ingress == nil {
@@ -1223,6 +1230,8 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 									namespace: matchingPod.ObjectMeta.Namespace,
 									labels:    matchingPod.ObjectMeta.Labels})
 						}
+					} else {
+						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					}
 				}
 			}
@@ -1267,6 +1276,8 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 									namespace: matchingPod.ObjectMeta.Namespace,
 									labels:    matchingPod.ObjectMeta.Labels})
 						}
+					} else {
+						metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 					}
 				}
 			}
@@ -1375,6 +1386,8 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 					namespace: matchingPod.ObjectMeta.Namespace,
 					labels:    matchingPod.ObjectMeta.Labels}
 			}
+		} else {
+			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		}
 
 		for _, specIngressRule := range policy.Spec.Ingress {
@@ -1400,6 +1413,8 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 								namespace: matchingPod.ObjectMeta.Namespace,
 								labels:    matchingPod.ObjectMeta.Labels})
 					}
+				} else {
+					metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 				}
 			}
 			newPolicy.ingressRules = append(newPolicy.ingressRules, ingressRule)
@@ -1635,6 +1650,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {
+		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 
@@ -1642,16 +1658,19 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {
+		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	npc.nodeIP = nodeIP
 
 	ipset, err := utils.NewIPSet(false)
 	if err != nil {
+		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	err = ipset.Save()
 	if err != nil {
+		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
 		return nil, err
 	}
 	npc.ipSetHandler = ipset
