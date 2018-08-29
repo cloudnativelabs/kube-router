@@ -86,7 +86,6 @@ type NetworkRoutingController struct {
 	ipSetHandler            *utils.IPSet
 	enableOverlays          bool
 	peerMultihopTTL         uint8
-	MetricsEnabled          bool
 	bgpServerStarted        bool
 	bgpPort                 uint16
 	bgpRRClient             bool
@@ -344,10 +343,8 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 		case ev := <-watcher.Event():
 			switch msg := ev.(type) {
 			case *gobgp.WatchEventBestPath:
+				metrics.ControllerBGPadvertisements.WithLabelValues("received").Inc()
 				glog.V(3).Info("Processing bgp route advertisement from peer")
-				if nrc.MetricsEnabled {
-					metrics.ControllerBGPadvertisements.WithLabelValues("received").Inc()
-				}
 				for _, path := range msg.PathList {
 					if path.IsLocal() {
 						continue
@@ -815,7 +812,6 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		prometheus.MustRegister(metrics.ControllerBGPadvertisements)
 		prometheus.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
 		prometheus.MustRegister(metrics.ControllerBPGpeers)
-		nrc.MetricsEnabled = true
 	}
 
 	nrc.healthChan = healthChan

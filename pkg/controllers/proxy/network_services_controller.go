@@ -512,9 +512,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	defer func() {
 		endTime := time.Since(start)
-		if nsc.MetricsEnabled {
-			metrics.ControllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime.Seconds()))
-		}
+		metrics.ControllerIpvsServicesSyncTime.WithLabelValues().Set(float64(endTime.Seconds()))
 		glog.V(1).Infof("sync ipvs services took %v", endTime)
 	}()
 
