@@ -45,7 +45,7 @@ func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 
 //Handler writes HTTP responses to the health path
 func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
-	if hc.Status.Healthy {
+	if hc.CheckHealth() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK\n"))
 	} else {
@@ -89,6 +89,9 @@ func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 // CheckHealth evaluates the time since last heartbeat to decide if the controller is running or not
 func (hc *HealthController) CheckHealth() bool {
 	health := true
+	hc.Status.Lock()
+	defer hc.Status.Unlock()
+
 	if hc.Config.RunFirewall {
 		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Config.IPTablesSyncTimeout {
 			glog.Error("Network Policy Controller heartbeat missed")
@@ -153,7 +156,6 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 
 //RunCheck starts the HealthController's check
 func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-	t := time.NewTicker(1000 * time.Millisecond)
 	defer wg.Done()
 	for {
 		select {
@@ -162,10 +164,7 @@ func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, sto
 			return nil
 		case heartbeat := <-healthChan:
 			hc.HandleHeartbeat(heartbeat)
-		case <-t.C:
-			glog.V(4).Info("Health controller tick")
 		}
-		hc.Status.Healthy = hc.CheckHealth()
 	}
 }
 

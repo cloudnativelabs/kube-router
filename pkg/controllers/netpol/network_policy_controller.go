@@ -19,7 +19,6 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
-
 	api "k8s.io/api/core/v1"
 	apiextensions "k8s.io/api/extensions/v1beta1"
 	networking "k8s.io/api/networking/v1"
@@ -31,10 +30,7 @@ import (
 
 const (
 	networkPolicyAnnotation      = "net.beta.kubernetes.io/network-policy"
-	kubePodFirewallChainPrefix   = "KUBE-POD-FW-"
-	kubeNetworkPolicyChainPrefix = "KUBE-NWPLCY-"
-	kubeSourceIpSetPrefix        = "KUBE-SRC-"
-	kubeDestinationIpSetPrefix   = "KUBE-DST-"
+	networkPolicyControllerLabel = "NPC"
 )
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
@@ -133,7 +129,7 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 
 	err := npc.Sync()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Errorf("Error during initial sync of network policies in network policy controller. Error: " + err.Error())
 		npc.readyForUpdates = false
 	} else {
@@ -150,7 +146,7 @@ func (npc *NetworkPolicyController) Run(stopCh <-chan struct{}, wg *sync.WaitGro
 			glog.V(1).Info("Performing periodic sync of iptables to reflect network policies")
 			err := npc.Sync()
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+				metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 				glog.Errorf("Error during periodic sync of network policies in network policy controller. Error: " + err.Error())
 			} else {
 				npc.readyForUpdates = true
@@ -171,7 +167,7 @@ func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 
 	err := npc.Sync()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Errorf("Error syncing network policy for the update to pod: %s/%s Error: %s", pod.Namespace, pod.Name, err)
 	}
 }
@@ -188,7 +184,7 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
 
 	err := npc.Sync()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Errorf("Error syncing network policy for the update to network policy: %s/%s Error: %s", netpol.Namespace, netpol.Name, err)
 	}
 }
@@ -204,7 +200,7 @@ func (npc *NetworkPolicyController) OnNamespaceUpdate(obj interface{}) {
 
 	err := npc.Sync()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Errorf("Error syncing on namespace update: %s", err)
 	}
 }
@@ -255,7 +251,7 @@ func (npc *NetworkPolicyController) Sync() error {
 		return errors.New("Aborting sync. Failed to cleanup stale iptable rules: " + err.Error())
 	}
 
-	healthcheck.SendHeartBeat(npc.healthChan, "NPC")
+	healthcheck.SendHeartBeat(npc.healthChan, networkPolicyControllerLabel)
 	return nil
 }
 
@@ -310,12 +306,12 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 
 		err = targetSourcePodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+			metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 			glog.Errorf("failed to refresh targetSourcePodIpSet: " + err.Error())
 		}
 		err = targetDestPodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
 		if err != nil {
-			metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+			metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 			glog.Errorf("failed to refresh targetDestPodIpSet: " + err.Error())
 		}
 
@@ -868,17 +864,17 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Fatalf("failed to initialize iptables command executor due to %s", err.Error())
 	}
 	ipsets, err := utils.NewIPSet(false)
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Fatalf("failed to create ipsets command executor due to %s", err.Error())
 	}
 	err = ipsets.Save()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Fatalf("failed to initialize ipsets command executor due to %s", err.Error())
 	}
 
@@ -1401,14 +1397,14 @@ func (npc *NetworkPolicyController) Cleanup() {
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Errorf("Failed to initialize iptables executor: %s", err.Error())
 	}
 
 	// delete jump rules in FORWARD chain to pod specific firewall chain
 	forwardChainRules, err := iptablesCmdHandler.List("filter", "FORWARD")
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Errorf("Failed to delete iptable rules as part of cleanup")
 		return
 	}
@@ -1425,7 +1421,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	// delete jump rules in OUTPUT chain to pod specific firewall chain
 	forwardChainRules, err = iptablesCmdHandler.List("filter", "OUTPUT")
 	if err != nil {
-		metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+		metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 		glog.Errorf("Failed to delete iptable rules as part of cleanup")
 		return
 	}
@@ -1445,13 +1441,13 @@ func (npc *NetworkPolicyController) Cleanup() {
 		if strings.HasPrefix(chain, kubePodFirewallChainPrefix) {
 			err = iptablesCmdHandler.ClearChain("filter", chain)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+				metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 				glog.Errorf("Failed to cleanup iptable rules: " + err.Error())
 				return
 			}
 			err = iptablesCmdHandler.DeleteChain("filter", chain)
 			if err != nil {
-				metrics.ControllerErrors.WithLabelValues("NPC").Inc()
+				metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()
 				glog.Errorf("Failed to cleanup iptable rules: " + err.Error())
 				return
 			}
