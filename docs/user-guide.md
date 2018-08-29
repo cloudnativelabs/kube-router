@@ -47,7 +47,9 @@ Usage of kube-router:
   -h, --help                             Print usage information.
       --hostname-override string         Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
       --iptables-sync-period duration    The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
+      --iptables-sync-timeout duration   The timeout for iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 30s)
       --ipvs-sync-period duration        The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
+      --ipvs-sync-timeout duration       The timeout for ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 30s)
       --kubeconfig string                Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --masquerade-all                   SNAT all traffic to cluster IP/node port.
       --master string                    The address of the Kubernetes API server (overrides any value in kubeconfig).
@@ -63,6 +65,7 @@ Usage of kube-router:
       --peer-router-ports uints          The remote port of the external BGP to which all nodes will peer. If not set, default BGP port (179) will be used. (default [])
       --router-id string                 BGP router-id. Must be specified in a ipv6 only cluster.
       --routes-sync-period duration      The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
+      --routes-sync-timeout duration     The timeout for route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 30s)
       --run-firewall                     Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-router                       Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
       --run-service-proxy                Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
