@@ -104,7 +104,7 @@ var (
 	ControllerBGPadvertisements = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "controller_bgp_advertisements",
-		Help:      "Number of BGP advertisements received and sent",
+		Help:      "Number of BGP advertisements received and advertised",
 	}, []string{"type"})
 	ControllerIpvsMetricsExportTime = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,

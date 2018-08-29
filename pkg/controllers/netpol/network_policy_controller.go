@@ -955,6 +955,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		for podFwChain := range activePodFwChains {
 			podFwChainRules, err := iptablesCmdHandler.List("filter", podFwChain)
 			if err != nil {
+				metrics.ControllerErrors.WithLabelValues(networkPolicyControllerLabel).Inc()?
 				glog.Errorf("Failed to list iptable filters")
 			}
 			for i, rule := range podFwChainRules {
