@@ -149,7 +149,6 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 		}
 	}()
 	for {
-		healthcheck.SendHeartBeat(mc.healthChan, "MC")
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down metrics controller")
@@ -159,6 +158,7 @@ func (mc *MetricsController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) err
 			return nil
 		case <-t.C:
 			glog.V(4).Info("Metrics controller tick")
+			healthcheck.SendHeartBeat(mc.healthChan, "MC")
 		}
 	}
 }

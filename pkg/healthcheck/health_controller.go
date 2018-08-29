@@ -68,22 +68,21 @@ func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 //HandleHeartbeat handles received heartbeats on the health channel
 func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 	glog.V(3).Infof("Received heartbeat from %s", beat.Component)
-	now := time.Now()
 	hc.Status.Lock()
 	defer hc.Status.Unlock()
 
 	switch {
 	case beat.Component == "NSC":
-		hc.Status.NetworkServicesControllerAlive = now
+		hc.Status.NetworkServicesControllerAlive = time.Now()
 
 	case beat.Component == "NRC":
-		hc.Status.NetworkRoutingControllerAlive = now
+		hc.Status.NetworkRoutingControllerAlive = time.Now()
 
 	case beat.Component == "NPC":
-		hc.Status.NetworkPolicyControllerAlive = now
+		hc.Status.NetworkPolicyControllerAlive = time.Now()
 
 	case beat.Component == "MC":
-		hc.Status.MetricsControllerAlive = now
+		hc.Status.MetricsControllerAlive = time.Now()
 	}
 }
 
@@ -112,7 +111,7 @@ func (hc *HealthController) CheckHealth() bool {
 	}
 
 	if hc.Config.MetricsEnabled {
-		if time.Since(hc.Status.MetricsControllerAlive) > 5*time.Second {
+		if time.Since(hc.Status.MetricsControllerAlive) > 30*time.Second {
 			glog.Error("Metrics Controller heartbeat missed")
 			health = false
 		}
