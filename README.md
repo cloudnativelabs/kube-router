@@ -126,14 +126,14 @@ Kube-router build upon following libraries:
 
 ## Sponsorships
 
-E2E Tests sponsored by DigitalOcean
+E2E Tests sponsored by [DigitalOcean](https://www.digitalocean.com/)
 
 
 <p align="left">
   <img src="docs/img/do_logo_blue.png"> </image>
 </p>
 
-Testing and development by ShopGun
+Testing and development by [ShopGun](https://shopgun.com/)
 
 
 <p align="left">
