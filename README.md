@@ -129,9 +129,11 @@ Kube-router build upon following libraries:
 E2E Tests sponsored by DigitalOcean
 
 <p align="left">
-  <img src="docs/img/do_logo_blue.png"> </image>
+  <img height="90" src="docs/img/do_logo_blue.png"> </image>
 </p>
 
+Testing and development by ShopGun
+
 <p align="left">
-  <img src="docs/img/shopgun_logo.png"> </image>
+  <img height="90" src="docs/img/shopgun_logo.png"> </image>
 </p>
