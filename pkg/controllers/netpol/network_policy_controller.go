@@ -397,7 +397,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 		// so match on all sources, with specified port and protocol
 		if ingressRule.matchAllSource && !ingressRule.matchAllPorts {
 			for _, portProtocol := range ingressRule.ports {
-				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
+				comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
 					"-m", "set", "--set", targetDestPodIpSetName, "dst",
@@ -414,7 +414,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 		// case where nether ports nor from details are speified in the ingress rule
 		// so match on all ports, protocol, source IP's
 		if ingressRule.matchAllSource && ingressRule.matchAllPorts {
-			comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
+			comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
 				policy.name + " namespace " + policy.namespace
 			args := []string{"-m", "comment", "--comment", comment,
 				"-m", "set", "--set", targetDestPodIpSetName, "dst",
@@ -428,7 +428,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 		for _, cidr := range ingressRule.cidrs {
 			if !ingressRule.matchAllPorts {
 				for _, portProtocol := range ingressRule.ports {
-					comment := "rule to ACCEPT traffic from specified CIDR's to dest pods selected by policy name: " +
+					comment := "rule to ACCEPT traffic from specified CIDR to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
 					args := []string{"-m", "comment", "--comment", comment,
 						"-m", "set", "--set", targetDestPodIpSetName, "dst",
@@ -443,7 +443,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				}
 			}
 			if ingressRule.matchAllPorts {
-				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
+				comment := "rule to ACCEPT traffic from specified CIDR to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
 					"-m", "set", "--set", targetDestPodIpSetName, "dst",
@@ -532,7 +532,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 		// so match on all sources, with specified port and protocol
 		if egressRule.matchAllDestinations && !egressRule.matchAllPorts {
 			for _, portProtocol := range egressRule.ports {
-				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
+				comment := "rule to ACCEPT traffic from source pods to all destinations selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
 					"-m", "set", "--set", targetSourcePodIpSetName, "src",
@@ -549,7 +549,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 		// case where nether ports nor from details are speified in the egress rule
 		// so match on all ports, protocol, source IP's
 		if egressRule.matchAllDestinations && egressRule.matchAllPorts {
-			comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
+			comment := "rule to ACCEPT traffic from source pods to all destinations selected by policy name: " +
 				policy.name + " namespace " + policy.namespace
 			args := []string{"-m", "comment", "--comment", comment,
 				"-m", "set", "--set", targetSourcePodIpSetName, "src",
@@ -563,7 +563,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 		for _, cidr := range egressRule.cidrs {
 			if !egressRule.matchAllPorts {
 				for _, portProtocol := range egressRule.ports {
-					comment := "rule to ACCEPT traffic from specified CIDR's to dest pods selected by policy name: " +
+					comment := "rule to ACCEPT traffic from source pods to specified CIDR selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
 					args := []string{"-m", "comment", "--comment", comment,
 						"-m", "set", "--set", targetSourcePodIpSetName, "src",
@@ -578,7 +578,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 				}
 			}
 			if egressRule.matchAllPorts {
-				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
+				comment := "rule to ACCEPT traffic from source pods to specified CIDR selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
 					"-m", "set", "--set", targetSourcePodIpSetName, "src",
