@@ -222,7 +222,9 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	nrc.bgpServerStarted = true
-	defer nrc.bgpServer.Shutdown()
+	if !nrc.bgpGracefulRestart {
+		defer nrc.bgpServer.Shutdown()
+	}
 
 	// loop forever till notified to stop on stopCh
 	for {
