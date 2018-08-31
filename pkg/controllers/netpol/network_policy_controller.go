@@ -425,16 +425,26 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			}
 		}
 
-		for _, cidr := range ingressRule.cidrs {
+		if len(ingressRule.cidrs) != 0 {
+			srcIpBlockIpSetName := policyIndexedSourceIpBlockIpSetName(policy.namespace, policy.name, i)
+			srcIpBlockIpSet, err := npc.ipSetHandler.Create(srcIpBlockIpSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
+			if err != nil {
+				return fmt.Errorf("failed to create ipset: %s", err.Error())
+			}
+			activePolicyIpSets[srcIpBlockIpSet.Name] = true
+			err = srcIpBlockIpSet.Refresh(ingressRule.cidrs, utils.OptionTimeout, "0")
+			if err != nil {
+				glog.Errorf("failed to refresh srcIpBlockIpSet: " + err.Error())
+			}
 			if !ingressRule.matchAllPorts {
 				for _, portProtocol := range ingressRule.ports {
 					comment := "rule to ACCEPT traffic from specified CIDR's to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
 					args := []string{"-m", "comment", "--comment", comment,
+						"-m", "set", "--set", srcIpBlockIpSetName, "src",
 						"-m", "set", "--set", targetDestPodIpSetName, "dst",
 						"-p", portProtocol.protocol,
 						"--dport", portProtocol.port,
-						"-s", cidr,
 						"-j", "ACCEPT"}
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
@@ -446,8 +456,8 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
+					"-m", "set", "--set", srcIpBlockIpSetName, "src",
 					"-m", "set", "--set", targetDestPodIpSetName, "dst",
-					"-s", cidr,
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
@@ -1322,16 +1332,29 @@ func policyDestinationPodIpSetName(namespace, policyName string) string {
 }
 
 func policyIndexedSourcePodIpSetName(namespace, policyName string, ingressRuleNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo)))
+	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + "pod"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return "KUBE-SRC-" + encoded[:16]
 }
 
 func policyIndexedDestinationPodIpSetName(namespace, policyName string, egressRuleNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo)))
+	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + "pod"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return "KUBE-DST-" + encoded[:16]
 }
+
+func policyIndexedSourceIpBlockIpSetName(namespace, policyName string, ingressRuleNo int) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + "ipblock"))
+	encoded := base32.StdEncoding.EncodeToString(hash[:])
+	return "KUBE-SRC-" + encoded[:16]
+}
+
+func policyIndexedDestinationIpBlockIpSetName(namespace, policyName string, egressRuleNo int) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + "ipblock"))
+	encoded := base32.StdEncoding.EncodeToString(hash[:])
+	return "KUBE-DST-" + encoded[:16]
+}
+
 
 // Cleanup cleanup configurations done
 func (npc *NetworkPolicyController) Cleanup() {
