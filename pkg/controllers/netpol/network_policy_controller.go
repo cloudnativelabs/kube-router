@@ -569,17 +569,26 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
-
-		for _, cidr := range egressRule.cidrs {
+		if len(egressRule.cidrs) != 0 {
+			dstIpBlockIpSetName := policyIndexedDestinationIpBlockIpSetName(policy.namespace, policy.name, i)
+			dstIpBlockIpSet, err := npc.ipSetHandler.Create(dstIpBlockIpSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
+			if err != nil {
+				return fmt.Errorf("failed to create ipset: %s", err.Error())
+			}
+			activePolicyIpSets[dstIpBlockIpSet.Name] = true
+			err = dstIpBlockIpSet.Refresh(egressRule.cidrs, utils.OptionTimeout, "0")
+			if err != nil {
+				glog.Errorf("failed to refresh dstIpBlockIpSet: " + err.Error())
+			}
 			if !egressRule.matchAllPorts {
 				for _, portProtocol := range egressRule.ports {
 					comment := "rule to ACCEPT traffic from specified CIDR's to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
 					args := []string{"-m", "comment", "--comment", comment,
 						"-m", "set", "--set", targetSourcePodIpSetName, "src",
+						"-m", "set", "--set", dstIpBlockIpSetName, "dst",
 						"-p", portProtocol.protocol,
 						"--dport", portProtocol.port,
-						"-d", cidr,
 						"-j", "ACCEPT"}
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
@@ -592,7 +601,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
 					"-m", "set", "--set", targetSourcePodIpSetName, "src",
-					"-d", cidr,
+					"-m", "set", "--set", dstIpBlockIpSetName, "dst",
 					"-j", "ACCEPT"}
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
@@ -601,7 +610,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			}
 		}
 	}
-
 	return nil
 }
 
