@@ -30,11 +30,11 @@ import (
 )
 
 const (
-	networkPolicyAnnotation = "net.beta.kubernetes.io/network-policy"
-	kubePodFirewallChainPrefix = "KUBE-POD-FW-"
+	networkPolicyAnnotation      = "net.beta.kubernetes.io/network-policy"
+	kubePodFirewallChainPrefix   = "KUBE-POD-FW-"
 	kubeNetworkPolicyChainPrefix = "KUBE-NWPLCY-"
-	kubeSourceIpSetPrefix = "KUBE-SRC-"
-	kubeDestinationIpSetPrefix = "KUBE-DST-"
+	kubeSourceIpSetPrefix        = "KUBE-SRC-"
+	kubeDestinationIpSetPrefix   = "KUBE-DST-"
 )
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
@@ -1366,7 +1366,6 @@ func policyIndexedDestinationIpBlockIpSetName(namespace, policyName string, egre
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIpSetPrefix + encoded[:16]
 }
-
 
 // Cleanup cleanup configurations done
 func (npc *NetworkPolicyController) Cleanup() {
