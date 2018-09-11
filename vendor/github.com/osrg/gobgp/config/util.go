@@ -81,23 +81,6 @@ func getIPv6LinkLocalAddress(ifname string) (string, error) {
 	return "", fmt.Errorf("no ipv6 link local address for %s", ifname)
 }
 
-func isLocalLinkLocalAddress(ifindex int, addr net.IP) (bool, error) {
-	ifi, err := net.InterfaceByIndex(ifindex)
-	if err != nil {
-		return false, err
-	}
-	addrs, err := ifi.Addrs()
-	if err != nil {
-		return false, err
-	}
-	for _, a := range addrs {
-		if ip, _, _ := net.ParseCIDR(a.String()); addr.Equal(ip) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func (b *BgpConfigSet) getPeerGroup(n string) (*PeerGroup, error) {
 	if n == "" {
 		return nil, nil
@@ -216,7 +199,7 @@ func existPeerGroup(n string, b []PeerGroup) int {
 	return -1
 }
 
-func CheckAfiSafisChange(x, y []AfiSafi) bool {
+func isAfiSafiChanged(x, y []AfiSafi) bool {
 	if len(x) != len(y) {
 		return true
 	}
@@ -232,6 +215,17 @@ func CheckAfiSafisChange(x, y []AfiSafi) bool {
 	return false
 }
 
+func (n *Neighbor) NeedsResendOpenMessage(new *Neighbor) bool {
+	return !n.Config.Equal(&new.Config) ||
+		!n.Transport.Config.Equal(&new.Transport.Config) ||
+		!n.AddPaths.Config.Equal(&new.AddPaths.Config) ||
+		!n.GracefulRestart.Config.Equal(&new.GracefulRestart.Config) ||
+		isAfiSafiChanged(n.AfiSafis, new.AfiSafis)
+}
+
+// TODO: these regexp are duplicated in api
+var _regexpPrefixMaskLengthRange = regexp.MustCompile(`(\d+)\.\.(\d+)`)
+
 func ParseMaskLength(prefix, mask string) (int, int, error) {
 	_, ipNet, err := net.ParseCIDR(prefix)
 	if err != nil {
@@ -241,8 +235,7 @@ func ParseMaskLength(prefix, mask string) (int, int, error) {
 		l, _ := ipNet.Mask.Size()
 		return l, l, nil
 	}
-	exp := regexp.MustCompile("(\\d+)\\.\\.(\\d+)")
-	elems := exp.FindStringSubmatch(mask)
+	elems := _regexpPrefixMaskLengthRange.FindStringSubmatch(mask)
 	if len(elems) != 3 {
 		return 0, 0, fmt.Errorf("invalid mask length range: %s", mask)
 	}

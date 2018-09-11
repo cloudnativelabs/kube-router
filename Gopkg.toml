@@ -57,7 +57,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 
 [[constraint]]
   name = "github.com/osrg/gobgp"
-  revision = "d31262de7d91c81ff979b39950d2d859666dfa3f"
+  revision = "v1.33"
 
 [[constraint]]
   name = "github.com/prometheus/client_golang"

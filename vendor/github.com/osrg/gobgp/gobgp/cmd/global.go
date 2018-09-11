@@ -465,22 +465,23 @@ func ParseEvpnEthernetAutoDiscoveryArgs(args []string) (bgp.AddrPrefixInterface,
 
 func ParseEvpnMacAdvArgs(args []string) (bgp.AddrPrefixInterface, []string, error) {
 	// Format:
-	// <mac address> <ip address> [esi <esi>] etag <etag> label <label> rd <rd> [rt <rt>...] [encap <encap type>] [default-gateway]
+	// <mac address> <ip address> [esi <esi>] etag <etag> label <label> rd <rd> [rt <rt>...] [encap <encap type>] [router-mac <mac address>] [default-gateway]
 	// or
-	// <mac address> <ip address> <etag> [esi <esi>] label <label> rd <rd> [rt <rt>...] [encap <encap type>] [default-gateway]
+	// <mac address> <ip address> <etag> [esi <esi>] label <label> rd <rd> [rt <rt>...] [encap <encap type>] [router-mac <mac address>] [default-gateway]
 	// or
-	// <mac address> <ip address> <etag> <label> [esi <esi>] rd <rd> [rt <rt>...] [encap <encap type>] [default-gateway]
+	// <mac address> <ip address> <etag> <label> [esi <esi>] rd <rd> [rt <rt>...] [encap <encap type>] [router-mac <mac address>] [default-gateway]
 	req := 6
 	if len(args) < req {
 		return nil, nil, fmt.Errorf("%d args required at least, but got %d", req, len(args))
 	}
 	m, err := extractReserved(args, map[string]int{
-		"esi":   PARAM_LIST,
-		"etag":  PARAM_SINGLE,
-		"label": PARAM_SINGLE,
-		"rd":    PARAM_SINGLE,
-		"rt":    PARAM_LIST,
-		"encap": PARAM_SINGLE})
+		"esi":        PARAM_LIST,
+		"etag":       PARAM_SINGLE,
+		"label":      PARAM_SINGLE,
+		"rd":         PARAM_SINGLE,
+		"rt":         PARAM_LIST,
+		"encap":      PARAM_SINGLE,
+		"router-mac": PARAM_SINGLE})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -560,6 +561,15 @@ func ParseEvpnMacAdvArgs(args []string) (bgp.AddrPrefixInterface, []string, erro
 	if len(m["encap"]) > 0 {
 		extcomms = append(extcomms, "encap", m["encap"][0])
 	}
+
+	if len(m["router-mac"]) != 0 {
+		_, err := net.ParseMAC(m["router-mac"][0])
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid router-mac address: %s", m["router-mac"][0])
+		}
+		extcomms = append(extcomms, "router-mac", m["router-mac"][0])
+	}
+
 	for _, a := range args {
 		if a == "default-gateway" {
 			extcomms = append(extcomms, "default-gateway")
@@ -867,18 +877,21 @@ func toAs4Value(s string) (uint32, error) {
 	return uint32(i), nil
 }
 
+var (
+	_regexpASPathGroups  = regexp.MustCompile("[{}]")
+	_regexpASPathSegment = regexp.MustCompile(`,|\s+`)
+)
+
 func newAsPath(aspath string) (bgp.PathAttributeInterface, error) {
 	// For the first step, parses "aspath" into a list of uint32 list.
 	// e.g.) "10 20 {30,40} 50" -> [][]uint32{{10, 20}, {30, 40}, {50}}
-	exp := regexp.MustCompile("[{}]")
-	segments := exp.Split(aspath, -1)
+	segments := _regexpASPathGroups.Split(aspath, -1)
 	asPathPrams := make([]bgp.AsPathParamInterface, 0, len(segments))
-	exp = regexp.MustCompile(",|\\s+")
 	for idx, segment := range segments {
 		if segment == "" {
 			continue
 		}
-		nums := exp.Split(segment, -1)
+		nums := _regexpASPathSegment.Split(segment, -1)
 		asNums := make([]uint32, 0, len(nums))
 		for _, n := range nums {
 			if n == "" {
@@ -1061,22 +1074,6 @@ func extractAggregator(args []string) ([]string, bgp.PathAttributeInterface, err
 	return args, nil, nil
 }
 
-func extractRouteDistinguisher(args []string) ([]string, bgp.RouteDistinguisherInterface, error) {
-	for idx, arg := range args {
-		if arg == "rd" {
-			if len(args) < (idx + 1) {
-				return nil, nil, fmt.Errorf("invalid rd format")
-			}
-			rd, err := bgp.ParseRouteDistinguisher(args[idx+1])
-			if err != nil {
-				return nil, nil, err
-			}
-			return append(args[:idx], args[idx+2:]...), rd, nil
-		}
-	}
-	return args, nil, nil
-}
-
 func ParsePath(rf bgp.RouteFamily, args []string) (*table.Path, error) {
 	var nlri bgp.AddrPrefixInterface
 	var extcomms []string
@@ -1148,7 +1145,10 @@ func ParsePath(rf bgp.RouteFamily, args []string) (*table.Path, error) {
 		if len(args) < 5 || args[1] != "label" || args[3] != "rd" {
 			return nil, fmt.Errorf("invalid format")
 		}
-		ip, nw, _ := net.ParseCIDR(args[0])
+		ip, nw, err := net.ParseCIDR(args[0])
+		if err != nil {
+			return nil, err
+		}
 		ones, _ := nw.Mask.Size()
 
 		label, err := strconv.ParseUint(args[2], 10, 32)
@@ -1180,7 +1180,10 @@ func ParsePath(rf bgp.RouteFamily, args []string) (*table.Path, error) {
 			return nil, fmt.Errorf("invalid format")
 		}
 
-		ip, nw, _ := net.ParseCIDR(args[0])
+		ip, nw, err := net.ParseCIDR(args[0])
+		if err != nil {
+			return nil, err
+		}
 		ones, _ := nw.Mask.Size()
 
 		mpls, err := bgp.ParseMPLSLabelStack(args[1])
@@ -1234,7 +1237,7 @@ func ParsePath(rf bgp.RouteFamily, args []string) (*table.Path, error) {
 		attrs = append(attrs, mpreach)
 	}
 
-	if extcomms != nil && len(extcomms) > 0 {
+	if extcomms != nil {
 		extcomms, err := ParseExtendedCommunities(extcomms)
 		if err != nil {
 			return nil, err
@@ -1422,7 +1425,7 @@ usage: %s rib -a %%s %s%%s match <MATCH> then <THEN>%%s%%s%%s
 		helpErrMap[bgp.RF_EVPN] = fmt.Errorf(`error: %s
 usage: %s rib %s { a-d <A-D> | macadv <MACADV> | multicast <MULTICAST> | esi <ESI> | prefix <PREFIX> } -a evpn
     <A-D>       : esi <esi> etag <etag> label <label> rd <rd> [rt <rt>...] [encap <encap type>] [esi-label <esi-label> [single-active | all-active]]
-    <MACADV>    : <mac address> <ip address> [esi <esi>] etag <etag> label <label> rd <rd> [rt <rt>...] [encap <encap type>] [default-gateway]
+    <MACADV>    : <mac address> <ip address> [esi <esi>] etag <etag> label <label> rd <rd> [rt <rt>...] [encap <encap type>] [router-mac <mac address>] [default-gateway]
     <MULTICAST> : <ip address> etag <etag> rd <rd> [rt <rt>...] [encap <encap type>] [pmsi <type> [leaf-info-required] <label> <tunnel-id>]
     <ESI>       : <ip address> esi <esi> rd <rd> [rt <rt>...] [encap <encap type>]
     <PREFIX>    : <ip prefix> [gw <gateway>] [esi <esi>] etag <etag> [label <label>] rd <rd> [rt <rt>...] [encap <encap type>] [router-mac <mac address>]`,
