@@ -28,8 +28,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	uuid "github.com/satori/go.uuid"
-
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/packet/bgp"
 )
@@ -94,8 +92,6 @@ type originInfo struct {
 	source             *PeerInfo
 	timestamp          int64
 	validation         *Validation
-	key                string
-	uuid               uuid.UUID
 	noImplicitWithdraw bool
 	isFromExternal     bool
 	eor                bool
@@ -139,17 +135,17 @@ type Validation struct {
 }
 
 type Path struct {
-	info       *originInfo
-	IsWithdraw bool
-	pathAttrs  []bgp.PathAttributeInterface
-	attrsHash  uint32
-	reason     BestPathReason
-	parent     *Path
-	dels       []bgp.BGPAttrType
-	filtered   map[string]PolicyDirection
-	VrfIds     []uint16
+	info      *originInfo
+	parent    *Path
+	pathAttrs []bgp.PathAttributeInterface
+	dels      []bgp.BGPAttrType
+	attrsHash uint32
+	aslooped  bool
+	reason    BestPathReason
+
 	// For BGP Nexthop Tracking, this field shows if nexthop is invalidated by IGP.
 	IsNexthopInvalid bool
+	IsWithdraw       bool
 }
 
 func NewPath(source *PeerInfo, nlri bgp.AddrPrefixInterface, isWithdraw bool, pattrs []bgp.PathAttributeInterface, timestamp time.Time, noImplicitWithdraw bool) *Path {
@@ -170,7 +166,6 @@ func NewPath(source *PeerInfo, nlri bgp.AddrPrefixInterface, isWithdraw bool, pa
 		},
 		IsWithdraw: isWithdraw,
 		pathAttrs:  pattrs,
-		filtered:   make(map[string]PolicyDirection),
 	}
 }
 
@@ -182,7 +177,6 @@ func NewEOR(family bgp.RouteFamily) *Path {
 			nlri: nlri,
 			eor:  true,
 		},
-		filtered: make(map[string]PolicyDirection),
 	}
 }
 
@@ -296,16 +290,16 @@ func UpdatePathAttrs(global *config.Global, peer *config.Neighbor, info *PeerInf
 			}
 			// When an RR reflects a route, it MUST prepend the local CLUSTER_ID to the CLUSTER_LIST.
 			// If the CLUSTER_LIST is empty, it MUST create a new one.
-			id := string(peer.RouteReflector.Config.RouteReflectorClusterId)
+			clusterID := string(peer.RouteReflector.State.RouteReflectorClusterId)
 			if p := path.getPathAttr(bgp.BGP_ATTR_TYPE_CLUSTER_LIST); p == nil {
-				path.setPathAttr(bgp.NewPathAttributeClusterList([]string{id}))
+				path.setPathAttr(bgp.NewPathAttributeClusterList([]string{clusterID}))
 			} else {
 				clusterList := p.(*bgp.PathAttributeClusterList)
 				newClusterList := make([]string, 0, len(clusterList.Value))
 				for _, ip := range clusterList.Value {
 					newClusterList = append(newClusterList, ip.String())
 				}
-				path.setPathAttr(bgp.NewPathAttributeClusterList(append([]string{id}, newClusterList...)))
+				path.setPathAttr(bgp.NewPathAttributeClusterList(append([]string{clusterID}, newClusterList...)))
 			}
 		}
 
@@ -339,8 +333,8 @@ func (path *Path) Clone(isWithdraw bool) *Path {
 	return &Path{
 		parent:           path,
 		IsWithdraw:       isWithdraw,
-		filtered:         make(map[string]PolicyDirection),
 		IsNexthopInvalid: path.IsNexthopInvalid,
+		attrsHash:        path.attrsHash,
 	}
 }
 
@@ -384,26 +378,6 @@ func (path *Path) SetIsFromExternal(y bool) {
 	path.OriginInfo().isFromExternal = y
 }
 
-func (path *Path) UUID() uuid.UUID {
-	return path.OriginInfo().uuid
-}
-
-func (path *Path) SetUUID(id []byte) {
-	path.OriginInfo().uuid = uuid.FromBytesOrNil(id)
-}
-
-func (path *Path) AssignNewUUID() {
-	path.OriginInfo().uuid, _ = uuid.NewV4()
-}
-
-func (path *Path) Filter(id string, reason PolicyDirection) {
-	path.filtered[id] = reason
-}
-
-func (path *Path) Filtered(id string) PolicyDirection {
-	return path.filtered[id]
-}
-
 func (path *Path) GetRouteFamily() bgp.RouteFamily {
 	return bgp.AfiSafiToRouteFamily(path.OriginInfo().nlri.AFI(), path.OriginInfo().nlri.SAFI())
 }
@@ -423,9 +397,17 @@ func (path *Path) IsStale() bool {
 	return path.OriginInfo().stale
 }
 
+func (path *Path) IsAsLooped() bool {
+	return path.aslooped
+}
+
+func (path *Path) SetAsLooped(y bool) {
+	path.aslooped = y
+}
+
 func (path *Path) IsLLGRStale() bool {
 	for _, c := range path.GetCommunities() {
-		if c == bgp.COMMUNITY_LLGR_STALE {
+		if c == uint32(bgp.COMMUNITY_LLGR_STALE) {
 			return true
 		}
 	}
@@ -602,10 +584,7 @@ func (path *Path) String() string {
 }
 
 func (path *Path) getPrefix() string {
-	if path.OriginInfo().key == "" {
-		path.OriginInfo().key = path.GetNlri().String()
-	}
-	return path.OriginInfo().key
+	return path.GetNlri().String()
 }
 
 func (path *Path) GetAsPath() *bgp.PathAttributeAsPath {
@@ -819,7 +798,6 @@ func (path *Path) RemovePrivateAS(localAS uint32, option config.RemovePrivateAsO
 		}
 		path.setPathAttr(bgp.NewPathAttributeAsPath(newASParams))
 	}
-	return
 }
 
 func (path *Path) removeConfedAs() {
@@ -946,9 +924,7 @@ func (path *Path) GetExtCommunities() []bgp.ExtendedCommunityInterface {
 	eCommunityList := make([]bgp.ExtendedCommunityInterface, 0)
 	if attr := path.getPathAttr(bgp.BGP_ATTR_TYPE_EXTENDED_COMMUNITIES); attr != nil {
 		eCommunities := attr.(*bgp.PathAttributeExtendedCommunities).Value
-		for _, eCommunity := range eCommunities {
-			eCommunityList = append(eCommunityList, eCommunity)
-		}
+		eCommunityList = append(eCommunityList, eCommunities...)
 	}
 	return eCommunityList
 }
@@ -972,9 +948,7 @@ func (path *Path) GetLargeCommunities() []*bgp.LargeCommunity {
 	if a := path.getPathAttr(bgp.BGP_ATTR_TYPE_LARGE_COMMUNITY); a != nil {
 		v := a.(*bgp.PathAttributeLargeCommunities).Values
 		ret := make([]*bgp.LargeCommunity, 0, len(v))
-		for _, c := range v {
-			ret = append(ret, c)
-		}
+		ret = append(ret, v...)
 		return ret
 	}
 	return nil
@@ -1000,20 +974,19 @@ func (path *Path) GetMed() (uint32, error) {
 
 // SetMed replace, add or subtraction med with new ones.
 func (path *Path) SetMed(med int64, doReplace bool) error {
-
 	parseMed := func(orgMed uint32, med int64, doReplace bool) (*bgp.PathAttributeMultiExitDisc, error) {
-		newMed := &bgp.PathAttributeMultiExitDisc{}
 		if doReplace {
-			newMed = bgp.NewPathAttributeMultiExitDisc(uint32(med))
-		} else {
-			if int64(orgMed)+med < 0 {
-				return nil, fmt.Errorf("med value invalid. it's underflow threshold.")
-			} else if int64(orgMed)+med > int64(math.MaxUint32) {
-				return nil, fmt.Errorf("med value invalid. it's overflow threshold.")
-			}
-			newMed = bgp.NewPathAttributeMultiExitDisc(uint32(int64(orgMed) + med))
+			return bgp.NewPathAttributeMultiExitDisc(uint32(med)), nil
 		}
-		return newMed, nil
+
+		medVal := int64(orgMed) + med
+		if medVal < 0 {
+			return nil, fmt.Errorf("med value invalid. it's underflow threshold: %v", medVal)
+		} else if medVal > int64(math.MaxUint32) {
+			return nil, fmt.Errorf("med value invalid. it's overflow threshold: %v", medVal)
+		}
+
+		return bgp.NewPathAttributeMultiExitDisc(uint32(int64(orgMed) + med)), nil
 	}
 
 	m := uint32(0)
@@ -1094,7 +1067,6 @@ func (path *Path) MarshalJSON() ([]byte, error) {
 		SourceID   net.IP                       `json:"source-id,omitempty"`
 		NeighborIP net.IP                       `json:"neighbor-ip,omitempty"`
 		Stale      bool                         `json:"stale,omitempty"`
-		Filtered   bool                         `json:"filtered,omitempty"`
 		UUID       string                       `json:"uuid,omitempty"`
 		ID         uint32                       `json:"id,omitempty"`
 	}{
@@ -1106,8 +1078,6 @@ func (path *Path) MarshalJSON() ([]byte, error) {
 		SourceID:   path.GetSource().ID,
 		NeighborIP: path.GetSource().Address,
 		Stale:      path.IsStale(),
-		Filtered:   path.Filtered("") > POLICY_DIRECTION_NONE,
-		UUID:       path.UUID().String(),
 		ID:         path.GetNlri().PathIdentifier(),
 	})
 }
@@ -1153,10 +1123,14 @@ func (v *Vrf) ToGlobalPath(path *Path) error {
 	switch rf := path.GetRouteFamily(); rf {
 	case bgp.RF_IPv4_UC:
 		n := nlri.(*bgp.IPAddrPrefix)
+		pathIdentifier := path.GetNlri().PathIdentifier()
 		path.OriginInfo().nlri = bgp.NewLabeledVPNIPAddrPrefix(n.Length, n.Prefix.String(), *bgp.NewMPLSLabelStack(0), v.Rd)
+		path.GetNlri().SetPathIdentifier(pathIdentifier)
 	case bgp.RF_IPv6_UC:
 		n := nlri.(*bgp.IPv6AddrPrefix)
+		pathIdentifier := path.GetNlri().PathIdentifier()
 		path.OriginInfo().nlri = bgp.NewLabeledVPNIPv6AddrPrefix(n.Length, n.Prefix.String(), *bgp.NewMPLSLabelStack(0), v.Rd)
+		path.GetNlri().SetPathIdentifier(pathIdentifier)
 	case bgp.RF_EVPN:
 		n := nlri.(*bgp.EVPNNLRI)
 		switch n.RouteType {
@@ -1175,13 +1149,16 @@ func (v *Vrf) ToGlobalPath(path *Path) error {
 func (p *Path) ToGlobal(vrf *Vrf) *Path {
 	nlri := p.GetNlri()
 	nh := p.GetNexthop()
+	pathId := nlri.PathIdentifier()
 	switch rf := p.GetRouteFamily(); rf {
 	case bgp.RF_IPv4_UC:
 		n := nlri.(*bgp.IPAddrPrefix)
 		nlri = bgp.NewLabeledVPNIPAddrPrefix(n.Length, n.Prefix.String(), *bgp.NewMPLSLabelStack(0), vrf.Rd)
+		nlri.SetPathIdentifier(pathId)
 	case bgp.RF_IPv6_UC:
 		n := nlri.(*bgp.IPv6AddrPrefix)
 		nlri = bgp.NewLabeledVPNIPv6AddrPrefix(n.Length, n.Prefix.String(), *bgp.NewMPLSLabelStack(0), vrf.Rd)
+		nlri.SetPathIdentifier(pathId)
 	case bgp.RF_EVPN:
 		n := nlri.(*bgp.EVPNNLRI)
 		switch n.RouteType {
@@ -1222,17 +1199,20 @@ func (p *Path) ToGlobal(vrf *Vrf) *Path {
 func (p *Path) ToLocal() *Path {
 	nlri := p.GetNlri()
 	f := p.GetRouteFamily()
+	pathId := nlri.PathLocalIdentifier()
 	switch f {
 	case bgp.RF_IPv4_VPN:
 		n := nlri.(*bgp.LabeledVPNIPAddrPrefix)
 		_, c, _ := net.ParseCIDR(n.IPPrefix())
 		ones, _ := c.Mask.Size()
 		nlri = bgp.NewIPAddrPrefix(uint8(ones), c.IP.String())
+		nlri.SetPathLocalIdentifier(pathId)
 	case bgp.RF_IPv6_VPN:
 		n := nlri.(*bgp.LabeledVPNIPv6AddrPrefix)
 		_, c, _ := net.ParseCIDR(n.IPPrefix())
 		ones, _ := c.Mask.Size()
 		nlri = bgp.NewIPv6AddrPrefix(uint8(ones), c.IP.String())
+		nlri.SetPathLocalIdentifier(pathId)
 	default:
 		return p
 	}

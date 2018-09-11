@@ -263,8 +263,8 @@ const (
 	BGP_CAP_FOUR_OCTET_AS_NUMBER        BGPCapabilityCode = 65
 	BGP_CAP_ADD_PATH                    BGPCapabilityCode = 69
 	BGP_CAP_ENHANCED_ROUTE_REFRESH      BGPCapabilityCode = 70
+	BGP_CAP_LONG_LIVED_GRACEFUL_RESTART BGPCapabilityCode = 71
 	BGP_CAP_ROUTE_REFRESH_CISCO         BGPCapabilityCode = 128
-	BGP_CAP_LONG_LIVED_GRACEFUL_RESTART BGPCapabilityCode = 129
 )
 
 var CapNameMap = map[BGPCapabilityCode]string{
@@ -286,6 +286,51 @@ func (c BGPCapabilityCode) String() string {
 	}
 	return fmt.Sprintf("UnknownCapability(%d)", c)
 }
+
+var (
+	// Used parsing RouteDistinguisher
+	_regexpRouteDistinguisher = regexp.MustCompile(`^((\d+)\.(\d+)\.(\d+)\.(\d+)|((\d+)\.)?(\d+)|([\w]+:[\w:]*:[\w]+)):(\d+)$`)
+
+	// Used for operator and value for the FlowSpec numeric type
+	// Example:
+	// re.FindStringSubmatch("&==80")
+	// >>> ["&==80" "&" "==" "80"]
+	_regexpFlowSpecNumericType = regexp.MustCompile(`(&?)(==|=|>|>=|<|<=|!|!=|=!)?(\d+|-\d|true|false)`)
+
+	// - "=!" is used in the old style format of "tcp-flags" and "fragment".
+	// - The value field should be one of the followings:
+	//     * Decimal value (e.g., 80)
+	//     * Combination of the small letters, decimals, "-" and "+"
+	//       (e.g., tcp, ipv4, is-fragment+first-fragment)
+	//     * Capital letters (e.g., SA)
+	_regexpFlowSpecOperator      = regexp.MustCompile(`&|=|>|<|!|[\w\-+]+`)
+	_regexpFlowSpecOperatorValue = regexp.MustCompile(`[\w\-+]+`)
+
+	// Note: "(-*)" and "(.*)" catch the invalid flags
+	// Example: In this case, "Z" is unsupported flag type.
+	// re.FindStringSubmatch("&==-SZU")
+	// >>> ["&==-SZU" "&" "==" "-" "S" "ZU"]
+	_regexpFlowSpecTCPFlag = regexp.MustCompile("(&?)(==|=|!|!=|=!)?(-*)([FSRPAUCE]+)(.*)")
+
+	// Note: "(.*)" catches the invalid flags
+	// re.FindStringSubmatch("&!=+first-fragment+last-fragment+invalid-fragment")
+	// >>> ["&!=+first-fragment+last-fragment+invalid-fragment" "&" "!=" "+first-fragment+last-fragment" "+last-fragment" "+" "last" "+invalid-fragment"]
+	_regexpFlowSpecFragment = regexp.MustCompile(`(&?)(==|=|!|!=|=!)?(((\+)?(dont|is|first|last|not-a)-fragment)+)(.*)`)
+
+	// re.FindStringSubmatch("192.168.0.0/24")
+	// >>> ["192.168.0.0/24" "192.168.0.0" "/24" "24"]
+	// re.FindStringSubmatch("192.168.0.1")
+	// >>> ["192.168.0.1" "192.168.0.1" "" ""]
+	_regexpFindIPv4Prefix = regexp.MustCompile(`^([\d.]+)(/(\d{1,2}))?`)
+
+	// re.FindStringSubmatch("2001:dB8::/64")
+	// >>> ["2001:dB8::/64" "2001:dB8::" "/64" "64" "" ""]
+	// re.FindStringSubmatch("2001:dB8::/64/8")
+	// >>> ["2001:dB8::/64/8" "2001:dB8::" "/64" "64" "/8" "8"]
+	// re.FindStringSubmatch("2001:dB8::1")
+	// >>> ["2001:dB8::1" "2001:dB8::1" "" "" "" ""]
+	_regexpFindIPv6Prefix = regexp.MustCompile(`^([a-fA-F\d:.]+)(/(\d{1,3}))?(/(\d{1,3}))?`)
+)
 
 type ParameterCapabilityInterface interface {
 	DecodeFromBytes([]byte) error
@@ -386,6 +431,14 @@ func NewCapRouteRefresh() *CapRouteRefresh {
 
 type CapCarryingLabelInfo struct {
 	DefaultParameterCapability
+}
+
+func NewCapCarryingLabelInfo() *CapCarryingLabelInfo {
+	return &CapCarryingLabelInfo{
+		DefaultParameterCapability{
+			CapCode: BGP_CAP_CARRYING_LABEL_INFO,
+		},
+	}
 }
 
 type CapExtendedNexthopTuple struct {
@@ -836,6 +889,15 @@ type CapUnknown struct {
 	DefaultParameterCapability
 }
 
+func NewCapUnknown(code BGPCapabilityCode, value []byte) *CapUnknown {
+	return &CapUnknown{
+		DefaultParameterCapability{
+			CapCode:  code,
+			CapValue: value,
+		},
+	}
+}
+
 func DecodeCapability(data []byte) (ParameterCapabilityInterface, error) {
 	if len(data) < 2 {
 		return nil, NewMessageError(BGP_ERROR_OPEN_MESSAGE_ERROR, BGP_ERROR_SUB_UNSUPPORTED_CAPABILITY, nil, "Not all ParameterCapability bytes available")
@@ -942,6 +1004,9 @@ type BGPOpen struct {
 }
 
 func (msg *BGPOpen) DecodeFromBytes(data []byte, options ...*MarshallingOption) error {
+	if len(data) < 10 {
+		return NewMessageError(BGP_ERROR_MESSAGE_HEADER_ERROR, BGP_ERROR_SUB_BAD_MESSAGE_LENGTH, nil, "Not all BGP Open message bytes available")
+	}
 	msg.Version = data[0]
 	msg.MyAS = binary.BigEndian.Uint16(data[1:3])
 	msg.HoldTime = binary.BigEndian.Uint16(data[3:5])
@@ -1427,8 +1492,7 @@ func GetRouteDistinguisher(data []byte) RouteDistinguisherInterface {
 }
 
 func parseRdAndRt(input string) ([]string, error) {
-	exp := regexp.MustCompile("^((\\d+)\\.(\\d+)\\.(\\d+)\\.(\\d+)|((\\d+)\\.)?(\\d+)|([\\w]+:[\\w:]*:[\\w]+)):(\\d+)$")
-	elems := exp.FindStringSubmatch(input)
+	elems := _regexpRouteDistinguisher.FindStringSubmatch(input)
 	if len(elems) != 11 {
 		return nil, fmt.Errorf("failed to parse")
 	}
@@ -1508,7 +1572,8 @@ func (l *MPLSLabelStack) DecodeFromBytes(data []byte) error {
 			break
 		}
 	}
-	if foundBottom == false {
+
+	if !foundBottom {
 		l.Labels = []uint32{}
 		return nil
 	}
@@ -1785,13 +1850,13 @@ func (l *LabeledIPAddrPrefix) DecodeFromBytes(data []byte, options ...*Marshalli
 	l.Length = uint8(data[0])
 	data = data[1:]
 	l.Labels.DecodeFromBytes(data)
+
 	if int(l.Length)-8*(l.Labels.Len()) < 0 {
 		l.Labels.Labels = []uint32{}
 	}
 	restbits := int(l.Length) - 8*(l.Labels.Len())
 	data = data[l.Labels.Len():]
-	l.decodePrefix(data, uint8(restbits), l.addrlen)
-	return nil
+	return l.decodePrefix(data, uint8(restbits), l.addrlen)
 }
 
 func (l *LabeledIPAddrPrefix) Serialize(options ...*MarshallingOption) ([]byte, error) {
@@ -1891,7 +1956,7 @@ func (n *RouteTargetMembershipNLRI) DecodeFromBytes(data []byte, options ...*Mar
 		return NewMessageError(uint8(BGP_ERROR_UPDATE_MESSAGE_ERROR), uint8(BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST), nil, "prefix misses length field")
 	}
 	n.Length = data[0]
-	data = data[1:]
+	data = data[1 : n.Length/8+1]
 	if len(data) == 0 {
 		return nil
 	} else if len(data) != 12 {
@@ -1920,7 +1985,7 @@ func (n *RouteTargetMembershipNLRI) Serialize(options ...*MarshallingOption) ([]
 	}
 	offset := len(buf)
 	buf = append(buf, make([]byte, 5)...)
-	buf[offset] = 12 * 8
+	buf[offset] = 96
 	binary.BigEndian.PutUint32(buf[offset+1:], n.AS)
 	ebuf, err := n.RouteTarget.Serialize()
 	if err != nil {
@@ -2097,7 +2162,7 @@ func ParseEthernetSegmentIdentifier(args []string) (EthernetSegmentIdentifier, e
 	}
 
 	invalidEsiValuesError := fmt.Errorf("invalid esi values for type %s: %s", esi.Type.String(), args[1:])
-	esi.Value = make([]byte, 9, 9)
+	esi.Value = make([]byte, 9)
 	switch esi.Type {
 	case ESI_LACP:
 		fallthrough
@@ -2132,7 +2197,7 @@ func ParseEthernetSegmentIdentifier(args []string) (EthernetSegmentIdentifier, e
 		if err != nil {
 			return esi, invalidEsiValuesError
 		}
-		iBuf := make([]byte, 4, 4)
+		iBuf := make([]byte, 4)
 		binary.BigEndian.PutUint32(iBuf, uint32(i))
 		copy(esi.Value[6:9], iBuf[1:4])
 	case ESI_ROUTERID:
@@ -2214,7 +2279,7 @@ func labelSerialize(label uint32) ([]byte, error) {
 	if label > 0xffffff {
 		return nil, NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("Out of range Label: %d", label))
 	}
-	buf := make([]byte, 3, 3)
+	buf := make([]byte, 3)
 	buf[0] = byte((label >> 16) & 0xff)
 	buf[1] = byte((label >> 8) & 0xff)
 	buf[2] = byte(label & 0xff)
@@ -3139,22 +3204,12 @@ var FlowSpecValueMap = map[string]BGPFlowSpecType{
 // fmt.Printf("%q", normalizeFlowSpecOpValues(args))
 // >>> ["<=80" "tcp" "!=udp" "=!SA" "&=U" "!F" "=is-fragment+last-fragment"]
 func normalizeFlowSpecOpValues(args []string) []string {
-	// Note:
-	// - "=!" is used in the old style format of "tcp-flags" and "fragment".
-	// - The value field should be one of the followings:
-	//     * Decimal value (e.g., 80)
-	//     * Combination of the small letters, decimals, "-" and "+"
-	//       (e.g., tcp, ipv4, is-fragment+first-fragment)
-	//     * Capital letters (e.g., SA)
-	re := regexp.MustCompile("&|=|>|<|!|[\\w\\-+]+")
-	reValue := regexp.MustCompile("[\\w\\-+]+")
-
 	// Extracts keywords from the given args.
 	sub := ""
 	subs := make([]string, 0)
-	for _, s := range re.FindAllString(strings.Join(args, " "), -1) {
+	for _, s := range _regexpFlowSpecOperator.FindAllString(strings.Join(args, " "), -1) {
 		sub += s
-		if reValue.MatchString(s) {
+		if _regexpFlowSpecOperatorValue.MatchString(s) {
 			subs = append(subs, sub)
 			sub = ""
 		}
@@ -3192,12 +3247,8 @@ func parseFlowSpecNumericOperator(submatch []string) (operator uint8, err error)
 func parseFlowSpecNumericOpValues(typ BGPFlowSpecType, args []string, validationFunc func(uint64) error) (FlowSpecComponentInterface, error) {
 	argsLen := len(args)
 	items := make([]*FlowSpecComponentItem, 0, argsLen)
-	re := regexp.MustCompile("(&?)(==|=|>|>=|<|<=|!|!=|=!)?(\\d+|-\\d|true|false)")
 	for idx, arg := range args {
-		// Example:
-		// re.FindStringSubmatch("&==80")
-		// >>> ["&==80" "&" "==" "80"]
-		m := re.FindStringSubmatch(arg)
+		m := _regexpFlowSpecNumericType.FindStringSubmatch(arg)
 		if len(m) < 4 {
 			return nil, fmt.Errorf("invalid argument for %s: %s in %q", typ.String(), arg, args)
 		}
@@ -3295,12 +3346,7 @@ func flowSpecPrefixParser(rf RouteFamily, typ BGPFlowSpecType, args []string) (F
 			return nil, fmt.Errorf("cannot specify offset for ipv4 prefix")
 		}
 		invalidIPv4PrefixError := fmt.Errorf("invalid ipv4 prefix: %s", args[0])
-		re := regexp.MustCompile("^([\\d.]+)(/(\\d{1,2}))?")
-		// re.FindStringSubmatch("192.168.0.0/24")
-		// >>> ["192.168.0.0/24" "192.168.0.0" "/24" "24"]
-		// re.FindStringSubmatch("192.168.0.1")
-		// >>> ["192.168.0.1" "192.168.0.1" "" ""]
-		m := re.FindStringSubmatch(args[0])
+		m := _regexpFindIPv4Prefix.FindStringSubmatch(args[0])
 		if len(m) < 4 {
 			return nil, invalidIPv4PrefixError
 		}
@@ -3328,14 +3374,7 @@ func flowSpecPrefixParser(rf RouteFamily, typ BGPFlowSpecType, args []string) (F
 			return nil, fmt.Errorf("invalid arguments for ipv6 prefix: %q", args)
 		}
 		invalidIPv6PrefixError := fmt.Errorf("invalid ipv6 prefix: %s", args[0])
-		re := regexp.MustCompile("^([a-fA-F\\d:.]+)(/(\\d{1,3}))?(/(\\d{1,3}))?")
-		// re.FindStringSubmatch("2001:dB8::/64")
-		// >>> ["2001:dB8::/64" "2001:dB8::" "/64" "64" "" ""]
-		// re.FindStringSubmatch("2001:dB8::/64/8")
-		// >>> ["2001:dB8::/64/8" "2001:dB8::" "/64" "64" "/8" "8"]
-		// re.FindStringSubmatch("2001:dB8::1")
-		// >>> ["2001:dB8::1" "2001:dB8::1" "" "" "" ""]
-		m := re.FindStringSubmatch(args[0])
+		m := _regexpFindIPv6Prefix.FindStringSubmatch(args[0])
 		if len(m) < 4 {
 			return nil, invalidIPv6PrefixError
 		}
@@ -3416,13 +3455,9 @@ func flowSpecTcpFlagParser(_ RouteFamily, typ BGPFlowSpecType, args []string) (F
 
 	argsLen := len(args)
 	items := make([]*FlowSpecComponentItem, 0, argsLen)
-	// Note: "(-*)" and "(.*)" catch the invalid flags
-	re := regexp.MustCompile("(&?)(==|=|!|!=|=!)?(-*)([FSRPAUCE]+)(.*)")
+
 	for _, arg := range args {
-		// Example: In this case, "Z" is unsupported flag type.
-		// re.FindStringSubmatch("&==-SZU")
-		// >>> ["&==-SZU" "&" "==" "-" "S" "ZU"]
-		m := re.FindStringSubmatch(arg)
+		m := _regexpFlowSpecTCPFlag.FindStringSubmatch(arg)
 		if len(m) < 6 {
 			return nil, fmt.Errorf("invalid argument for %s: %s in %q", typ.String(), arg, args)
 		} else if mLast := m[len(m)-1]; mLast != "" || m[3] != "" {
@@ -3472,13 +3507,9 @@ func flowSpecFragmentParser(_ RouteFamily, typ BGPFlowSpecType, args []string) (
 
 	argsLen := len(args)
 	items := make([]*FlowSpecComponentItem, 0, argsLen)
-	// Note: "(.*)" catches the invalid flags
-	re := regexp.MustCompile("(&?)(==|=|!|!=|=!)?(((\\+)?(dont|is|first|last|not-a)-fragment)+)(.*)")
+
 	for _, arg := range args {
-		// Example:
-		// re.FindStringSubmatch("&!=+first-fragment+last-fragment+invalid-fragment")
-		// >>> ["&!=+first-fragment+last-fragment+invalid-fragment" "&" "!=" "+first-fragment+last-fragment" "+last-fragment" "+" "last" "+invalid-fragment"]
-		m := re.FindStringSubmatch(arg)
+		m := _regexpFlowSpecFragment.FindStringSubmatch(arg)
 		if len(m) < 4 {
 			return nil, fmt.Errorf("invalid argument for %s: %s in %q", typ.String(), arg, args)
 		} else if mLast := m[len(m)-1]; mLast != "" {
@@ -3921,13 +3952,10 @@ func (v *FlowSpecComponentItem) Len() int {
 }
 
 func (v *FlowSpecComponentItem) Serialize() ([]byte, error) {
-	if v.Value < 0 {
-		return nil, fmt.Errorf("invalid value size(too small): %d", v.Value)
-	}
-	if v.Op < 0 || v.Op > math.MaxUint8 {
+	if v.Op > math.MaxUint8 {
 		return nil, fmt.Errorf("invalid op size: %d", v.Op)
-
 	}
+
 	order := uint32(math.Log2(float64(v.Len())))
 	buf := make([]byte, 1+(1<<order))
 	buf[0] = byte(uint32(v.Op) | order<<4)
@@ -4755,12 +4783,32 @@ func GetRouteFamily(name string) (RouteFamily, error) {
 	return RouteFamily(0), fmt.Errorf("%s isn't a valid route family name", name)
 }
 
-func NewPrefixFromRouteFamily(afi uint16, safi uint8) (prefix AddrPrefixInterface, err error) {
-	switch AfiSafiToRouteFamily(afi, safi) {
+func NewPrefixFromRouteFamily(afi uint16, safi uint8, prefixStr ...string) (prefix AddrPrefixInterface, err error) {
+	family := AfiSafiToRouteFamily(afi, safi)
+
+	f := func(s string) AddrPrefixInterface {
+		addr, net, _ := net.ParseCIDR(s)
+		len, _ := net.Mask.Size()
+		switch family {
+		case RF_IPv4_UC, RF_IPv4_MC:
+			return NewIPAddrPrefix(uint8(len), addr.String())
+		}
+		return NewIPv6AddrPrefix(uint8(len), addr.String())
+	}
+
+	switch family {
 	case RF_IPv4_UC, RF_IPv4_MC:
-		prefix = NewIPAddrPrefix(0, "")
+		if len(prefixStr) > 0 {
+			prefix = f(prefixStr[0])
+		} else {
+			prefix = NewIPAddrPrefix(0, "")
+		}
 	case RF_IPv6_UC, RF_IPv6_MC:
-		prefix = NewIPv6AddrPrefix(0, "")
+		if len(prefixStr) > 0 {
+			prefix = f(prefixStr[0])
+		} else {
+			prefix = NewIPv6AddrPrefix(0, "")
+		}
 	case RF_IPv4_VPN:
 		prefix = NewLabeledVPNIPAddrPrefix(0, "", *NewMPLSLabelStack(), nil)
 	case RF_IPv6_VPN:
@@ -5438,7 +5486,7 @@ func (p *PathAttributeAsPath) DecodeFromBytes(data []byte, options ...*Marshalli
 	}
 	for len(value) > 0 {
 		var tuple AsPathParamInterface
-		if isAs4 == true {
+		if isAs4 {
 			tuple = &As4PathParam{}
 		} else {
 			tuple = &AsPathParam{}
@@ -5448,9 +5496,6 @@ func (p *PathAttributeAsPath) DecodeFromBytes(data []byte, options ...*Marshalli
 			return err
 		}
 		p.Value = append(p.Value, tuple)
-		if tuple.Len() > len(value) {
-
-		}
 		value = value[tuple.Len():]
 	}
 	return nil
@@ -5827,19 +5872,19 @@ type WellKnownCommunity uint32
 
 const (
 	COMMUNITY_INTERNET                   WellKnownCommunity = 0x00000000
-	COMMUNITY_PLANNED_SHUT                                  = 0xffff0000
-	COMMUNITY_ACCEPT_OWN                                    = 0xffff0001
-	COMMUNITY_ROUTE_FILTER_TRANSLATED_v4                    = 0xffff0002
-	COMMUNITY_ROUTE_FILTER_v4                               = 0xffff0003
-	COMMUNITY_ROUTE_FILTER_TRANSLATED_v6                    = 0xffff0004
-	COMMUNITY_ROUTE_FILTER_v6                               = 0xffff0005
-	COMMUNITY_LLGR_STALE                                    = 0xffff0006
-	COMMUNITY_NO_LLGR                                       = 0xffff0007
-	COMMUNITY_BLACKHOLE                                     = 0xffff029a
-	COMMUNITY_NO_EXPORT                                     = 0xffffff01
-	COMMUNITY_NO_ADVERTISE                                  = 0xffffff02
-	COMMUNITY_NO_EXPORT_SUBCONFED                           = 0xffffff03
-	COMMUNITY_NO_PEER                                       = 0xffffff04
+	COMMUNITY_PLANNED_SHUT               WellKnownCommunity = 0xffff0000
+	COMMUNITY_ACCEPT_OWN                 WellKnownCommunity = 0xffff0001
+	COMMUNITY_ROUTE_FILTER_TRANSLATED_v4 WellKnownCommunity = 0xffff0002
+	COMMUNITY_ROUTE_FILTER_v4            WellKnownCommunity = 0xffff0003
+	COMMUNITY_ROUTE_FILTER_TRANSLATED_v6 WellKnownCommunity = 0xffff0004
+	COMMUNITY_ROUTE_FILTER_v6            WellKnownCommunity = 0xffff0005
+	COMMUNITY_LLGR_STALE                 WellKnownCommunity = 0xffff0006
+	COMMUNITY_NO_LLGR                    WellKnownCommunity = 0xffff0007
+	COMMUNITY_BLACKHOLE                  WellKnownCommunity = 0xffff029a
+	COMMUNITY_NO_EXPORT                  WellKnownCommunity = 0xffffff01
+	COMMUNITY_NO_ADVERTISE               WellKnownCommunity = 0xffffff02
+	COMMUNITY_NO_EXPORT_SUBCONFED        WellKnownCommunity = 0xffffff03
+	COMMUNITY_NO_PEER                    WellKnownCommunity = 0xffffff04
 )
 
 var WellKnownCommunityNameMap = map[WellKnownCommunity]string{
@@ -5946,7 +5991,7 @@ func (p *PathAttributeOriginatorId) MarshalJSON() ([]byte, error) {
 }
 
 func (p *PathAttributeOriginatorId) Serialize(options ...*MarshallingOption) ([]byte, error) {
-	buf := make([]byte, 4, 4)
+	buf := make([]byte, 4)
 	copy(buf, p.Value)
 	return p.PathAttribute.Serialize(buf, options...)
 }
@@ -6622,6 +6667,19 @@ func ParseRouteTarget(rt string) (ExtendedCommunityInterface, error) {
 	return ParseExtendedCommunity(EC_SUBTYPE_ROUTE_TARGET, rt)
 }
 
+func SerializeExtendedCommunities(comms []ExtendedCommunityInterface) ([][]byte, error) {
+	var bufs [][]byte
+	var err error
+	for _, c := range comms {
+		buf, err := c.Serialize()
+		if err != nil {
+			return nil, err
+		}
+		bufs = append(bufs, buf)
+	}
+	return bufs, err
+}
+
 type ValidationState uint8
 
 const (
@@ -6647,7 +6705,7 @@ type ValidationExtended struct {
 }
 
 func (e *ValidationExtended) Serialize() ([]byte, error) {
-	buf := make([]byte, 8, 8)
+	buf := make([]byte, 8)
 	typ, subType := e.GetTypes()
 	buf[0] = byte(typ)
 	buf[1] = byte(subType)
@@ -6687,7 +6745,7 @@ type ColorExtended struct {
 }
 
 func (e *ColorExtended) Serialize() ([]byte, error) {
-	buf := make([]byte, 8, 8)
+	buf := make([]byte, 8)
 	typ, subType := e.GetTypes()
 	buf[0] = byte(typ)
 	buf[1] = byte(subType)
@@ -6727,7 +6785,7 @@ type EncapExtended struct {
 }
 
 func (e *EncapExtended) Serialize() ([]byte, error) {
-	buf := make([]byte, 8, 8)
+	buf := make([]byte, 8)
 	typ, subType := e.GetTypes()
 	buf[0] = byte(typ)
 	buf[1] = byte(subType)
@@ -6787,7 +6845,7 @@ type DefaultGatewayExtended struct {
 }
 
 func (e *DefaultGatewayExtended) Serialize() ([]byte, error) {
-	buf := make([]byte, 8, 8)
+	buf := make([]byte, 8)
 	typ, subType := e.GetTypes()
 	buf[0] = byte(typ)
 	buf[1] = byte(subType)
@@ -6826,7 +6884,7 @@ func (e *OpaqueExtended) Serialize() ([]byte, error) {
 	if len(e.Value) != 7 {
 		return nil, fmt.Errorf("invalid value length for opaque extended community: %d", len(e.Value))
 	}
-	buf := make([]byte, 8, 8)
+	buf := make([]byte, 8)
 	if e.IsTransitive {
 		buf[0] = byte(EC_TYPE_TRANSITIVE_OPAQUE)
 	} else {
@@ -6837,7 +6895,7 @@ func (e *OpaqueExtended) Serialize() ([]byte, error) {
 }
 
 func (e *OpaqueExtended) String() string {
-	buf := make([]byte, 8, 8)
+	buf := make([]byte, 8)
 	copy(buf[1:], e.Value)
 	return fmt.Sprintf("%d", binary.BigEndian.Uint64(buf))
 }
@@ -6868,7 +6926,7 @@ func (e *OpaqueExtended) MarshalJSON() ([]byte, error) {
 }
 
 func NewOpaqueExtended(isTransitive bool, value []byte) *OpaqueExtended {
-	v := make([]byte, 7, 7)
+	v := make([]byte, 7)
 	copy(v, value)
 	return &OpaqueExtended{
 		IsTransitive: isTransitive,
@@ -7489,7 +7547,7 @@ func (e *UnknownExtended) Serialize() ([]byte, error) {
 	if len(e.Value) != 7 {
 		return nil, fmt.Errorf("invalid value length for unknown extended community: %d", len(e.Value))
 	}
-	buf := make([]byte, 8, 8)
+	buf := make([]byte, 8)
 	buf[0] = uint8(e.Type)
 	copy(buf[1:], e.Value)
 	return buf, nil
@@ -7524,7 +7582,7 @@ func (e *UnknownExtended) GetTypes() (ExtendedCommunityAttrType, ExtendedCommuni
 }
 
 func NewUnknownExtended(typ ExtendedCommunityAttrType, value []byte) *UnknownExtended {
-	v := make([]byte, 7, 7)
+	v := make([]byte, 7)
 	copy(v, value)
 	return &UnknownExtended{
 		Type:  typ,
@@ -7668,9 +7726,11 @@ func (p *PathAttributeAs4Path) DecodeFromBytes(data []byte, options ...*Marshall
 	if err != nil {
 		return err
 	}
-	if isAs4 == false {
+
+	if !isAs4 {
 		return NewMessageError(eCode, eSubCode, nil, "AS4 PATH param is malformed")
 	}
+
 	for len(value) > 0 {
 		tuple := &As4PathParam{}
 		tuple.DecodeFromBytes(value)
@@ -8086,7 +8146,7 @@ func (p *TunnelEncapTLV) Serialize() ([]byte, error) {
 }
 
 func (p *TunnelEncapTLV) String() string {
-	tlvList := make([]string, len(p.Value), len(p.Value))
+	tlvList := make([]string, len(p.Value))
 	for i, v := range p.Value {
 		tlvList[i] = v.String()
 	}
@@ -8145,7 +8205,7 @@ func (p *PathAttributeTunnelEncap) Serialize(options ...*MarshallingOption) ([]b
 }
 
 func (p *PathAttributeTunnelEncap) String() string {
-	tlvList := make([]string, len(p.Value), len(p.Value))
+	tlvList := make([]string, len(p.Value))
 	for i, v := range p.Value {
 		tlvList[i] = v.String()
 	}
@@ -9198,10 +9258,12 @@ func (msg *BGPHeader) DecodeFromBytes(data []byte, options ...*MarshallingOption
 	if uint16(len(data)) < BGP_HEADER_LENGTH {
 		return NewMessageError(BGP_ERROR_MESSAGE_HEADER_ERROR, BGP_ERROR_SUB_BAD_MESSAGE_LENGTH, nil, "not all BGP message header")
 	}
+
 	msg.Len = binary.BigEndian.Uint16(data[16:18])
 	if int(msg.Len) < BGP_HEADER_LENGTH {
 		return NewMessageError(BGP_ERROR_MESSAGE_HEADER_ERROR, BGP_ERROR_SUB_BAD_MESSAGE_LENGTH, nil, "unknown message type")
 	}
+
 	msg.Type = data[18]
 	return nil
 }
@@ -9251,6 +9313,11 @@ func ParseBGPMessage(data []byte, options ...*MarshallingOption) (*BGPMessage, e
 	if err != nil {
 		return nil, err
 	}
+
+	if int(h.Len) > len(data) {
+		return nil, NewMessageError(BGP_ERROR_MESSAGE_HEADER_ERROR, BGP_ERROR_SUB_BAD_MESSAGE_LENGTH, nil, "unknown message type")
+	}
+
 	return parseBody(h, data[19:h.Len], options...)
 }
 
