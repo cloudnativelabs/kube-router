@@ -466,7 +466,7 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	}
 
 	// delete all ipsets created by kube-router
-	ipset, err := utils.NewIPSet()
+	ipset, err := utils.NewIPSet(false)
 	if err != nil {
 		glog.Errorf("Failed to clean up ipsets: " + err.Error())
 	}
@@ -804,7 +804,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	}
 
-	nrc.ipSetHandler, err = utils.NewIPSet()
+	nrc.ipSetHandler, err = utils.NewIPSet(false)
 	if err != nil {
 		return nil, err
 	}

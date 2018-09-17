@@ -839,7 +839,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 	if err != nil {
 		glog.Fatalf("failed to initialize iptables command executor due to %s", err.Error())
 	}
-	ipsets, err := utils.NewIPSet()
+	ipsets, err := utils.NewIPSet(false)
 	if err != nil {
 		glog.Fatalf("failed to create ipsets command executor due to %s", err.Error())
 	}
@@ -1410,7 +1410,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	// delete all ipsets
-	ipset, err := utils.NewIPSet()
+	ipset, err := utils.NewIPSet(false)
 	if err != nil {
 		glog.Errorf("Failed to clean up ipsets: " + err.Error())
 	}
@@ -1514,7 +1514,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 	npc.nodeIP = nodeIP
 
-	ipset, err := utils.NewIPSet()
+	ipset, err := utils.NewIPSet(false)
 	if err != nil {
 		return nil, err
 	}
