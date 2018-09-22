@@ -90,6 +90,7 @@ type NetworkRoutingController struct {
 	bgpRRServer             bool
 	bgpClusterID            uint32
 	cniConfFile             string
+	disableSrcDstCheck      bool
 	initSrcDstCheckDone     bool
 	ec2IamAuthorized        bool
 	pathPrependAS           string
@@ -121,8 +122,10 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	// In case of cluster provisioned on AWS disable source-destination check
-	nrc.disableSourceDestinationCheck()
-	nrc.initSrcDstCheckDone = true
+	if nrc.disableSrcDstCheck {
+		nrc.disableSourceDestinationCheck()
+		nrc.initSrcDstCheckDone = true
+	}
 
 	// enable IP forwarding for the packets coming in/out from the pods
 	err = nrc.enableForwarding()
@@ -789,6 +792,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpRRClient = false
 	nrc.bgpRRServer = false
 	nrc.bgpServerStarted = false
+	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
 
 	// lets start with assumption we hace necessary IAM creds to access EC2 api
