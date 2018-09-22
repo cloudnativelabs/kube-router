@@ -36,6 +36,7 @@ Usage of kube-router:
       --cleanup-config                   Cleanup iptables rules, ipvs, ipset configuration and exit.
       --cluster-asn uint                 ASN number under which cluster nodes will run iBGP.
       --cluster-cidr string              CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.
+      --disable-source-dest-check        Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way. (default true)
       --enable-cni                       Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin. (default true)
       --enable-ibgp                      Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers (default true)
       --enable-overlay                   When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)

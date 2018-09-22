@@ -333,7 +333,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(obj interface{}) {
 
 	// skip if first round of disableSourceDestinationCheck() is not done yet, this is to prevent
 	// all the nodes for all the node add update trying to perfrom disableSourceDestinationCheck
-	if nrc.initSrcDstCheckDone && nrc.ec2IamAuthorized {
+	if nrc.disableSrcDstCheck && nrc.initSrcDstCheckDone && nrc.ec2IamAuthorized {
 		nrc.disableSourceDestinationCheck()
 	}
 }

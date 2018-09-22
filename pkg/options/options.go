@@ -21,6 +21,7 @@ type KubeRouterConfig struct {
 	CleanupConfig           bool
 	ClusterAsn              uint
 	ClusterCIDR             string
+	DisableSrcDstCheck      bool
 	EnableCNI               bool
 	EnableiBGP              bool
 	EnableOverlay           bool
@@ -144,4 +145,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
 	fs.Uint16Var(&s.HealthPort, "health-port", 20244, "Health check port, 0 = Disabled")
 	fs.BoolVar(&s.OverrideNextHop, "override-nexthop", false, "Override the next-hop in bgp routes sent to peers with the local ip.")
+	fs.BoolVar(&s.DisableSrcDstCheck, "disable-source-dest-check", true,
+		"Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way.")
 }
