@@ -83,6 +83,7 @@ const (
 type IPSet struct {
 	ipSetPath *string
 	Sets      map[string]*Set
+	isIpv6    bool
 }
 
 // Set reprensent a ipset set entry.
@@ -146,7 +147,7 @@ func (ipset *IPSet) runWithStdin(stdin *bytes.Buffer, args ...string) (string, e
 }
 
 // NewIPSet create a new IPSet with ipSetPath initialized.
-func NewIPSet() (*IPSet, error) {
+func NewIPSet(isIpv6 bool) (*IPSet, error) {
 	ipSetPath, err := getIPSetPath()
 	if err != nil {
 		return nil, err
@@ -154,6 +155,7 @@ func NewIPSet() (*IPSet, error) {
 	ipSet := &IPSet{
 		ipSetPath: ipSetPath,
 		Sets:      make(map[string]*Set),
+		isIpv6:    isIpv6,
 	}
 	return ipSet, nil
 }
@@ -180,13 +182,22 @@ func (ipset *IPSet) Create(setName string, createOptions ...string) (*Set, error
 
 	// Create set if missing from the system
 	if !setIsActive {
-		_, err := ipset.run(append([]string{"create", "-exist", setName},
-			createOptions...)...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to create ipset set on system: %s", err)
+		if ipset.isIpv6 {
+			// Add "family inet6" option and a "inet6:" prefix for IPv6 sets.
+			args := []string{"create", "-exist", ipset.Sets[setName].name()}
+			args = append(args, createOptions...)
+			args = append(args, "family", "inet6")
+			if _, err := ipset.run(args...); err != nil {
+				return nil, fmt.Errorf("Failed to create ipset set on system: %s", err)
+			}
+		} else {
+			_, err := ipset.run(append([]string{"create", "-exist", setName},
+				createOptions...)...)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to create ipset set on system: %s", err)
+			}
 		}
 	}
-
 	return ipset.Sets[setName], nil
 }
 
@@ -215,7 +226,7 @@ func (set *Set) Add(addOptions ...string) (*Entry, error) {
 		Options: addOptions,
 	}
 	set.Entries = append(set.Entries, entry)
-	_, err := set.Parent.run(append([]string{"add", "-exist", entry.Set.Name}, addOptions...)...)
+	_, err := set.Parent.run(append([]string{"add", "-exist", entry.Set.name()}, addOptions...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +236,7 @@ func (set *Set) Add(addOptions ...string) (*Entry, error) {
 // Del an entry from a set. If the -exist option is specified and the entry is
 // not in the set (maybe already expired), then the command is ignored.
 func (entry *Entry) Del() error {
-	_, err := entry.Set.Parent.run(append([]string{"del", entry.Set.Name}, entry.Options...)...)
+	_, err := entry.Set.Parent.run(append([]string{"del", entry.Set.name()}, entry.Options...)...)
 	if err != nil {
 		return err
 	}
@@ -236,7 +247,7 @@ func (entry *Entry) Del() error {
 // Test wether an entry is in a set or not. Exit status number is zero if the
 // tested entry is in the set and nonzero if it is missing from the set.
 func (set *Set) Test(testOptions ...string) (bool, error) {
-	_, err := set.Parent.run(append([]string{"test", set.Name}, testOptions...)...)
+	_, err := set.Parent.run(append([]string{"test", set.name()}, testOptions...)...)
 	if err != nil {
 		return false, err
 	}
@@ -246,13 +257,12 @@ func (set *Set) Test(testOptions ...string) (bool, error) {
 // Destroy the specified set or all the sets if none is given. If the set has
 // got reference(s), nothing is done and no set destroyed.
 func (set *Set) Destroy() error {
-	_, err := set.Parent.run("destroy", set.Name)
+	_, err := set.Parent.run("destroy", set.name())
 	if err != nil {
 		return err
 	}
 
 	delete(set.Parent.Sets, set.Name)
-
 	return nil
 }
 
@@ -287,7 +297,7 @@ func (ipset *IPSet) DestroyAllWithin() error {
 
 // IsActive checks if a set exists on the system with the same name.
 func (set *Set) IsActive() (bool, error) {
-	_, err := set.Parent.run("list", set.Name)
+	_, err := set.Parent.run("list", set.name())
 	if err != nil {
 		if strings.Contains(err.Error(), "name does not exist") {
 			return false, nil
@@ -295,6 +305,14 @@ func (set *Set) IsActive() (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (set *Set) name() string {
+	if set.Parent.isIpv6 {
+		return "inet6:" + set.Name
+	} else {
+		return set.Name
+	}
 }
 
 // Parse ipset save stdout.
@@ -398,7 +416,10 @@ func (ipset *IPSet) Get(setName string) *Set {
 
 // Rename a set. Set identified by SETNAME-TO must not exist.
 func (set *Set) Rename(newName string) error {
-	_, err := set.Parent.run("rename", set.Name, newName)
+	if set.Parent.isIpv6 {
+		newName = "ipv6:" + newName
+	}
+	_, err := set.Parent.run("rename", set.name(), newName)
 	if err != nil {
 		return err
 	}
@@ -409,7 +430,7 @@ func (set *Set) Rename(newName string) error {
 // sets. The referred sets must exist and compatible type of sets can be
 // swapped only.
 func (set *Set) Swap(setTo *Set) error {
-	_, err := set.Parent.run("swap", set.Name, setTo.Name)
+	_, err := set.Parent.run("swap", set.name(), setTo.name())
 	if err != nil {
 		return err
 	}
