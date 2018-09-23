@@ -240,7 +240,7 @@ func (entry *Entry) Del() error {
 	if err != nil {
 		return err
 	}
-	entry.Set.Parent.Save() // <-- EKM: Implications??
+	entry.Set.Parent.Save()
 	return nil
 }
 
