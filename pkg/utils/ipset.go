@@ -472,3 +472,38 @@ func (set *Set) Refresh(entries []string, extraOptions ...string) error {
 
 	return nil
 }
+
+// Refresh a Set with new entries with built-in options.
+func (set *Set) RefreshWithBuiltinOptions(entries [][]string) error {
+	var err error
+	tempName := set.Name + "-temp"
+	newSet := &Set{
+		Parent:  set.Parent,
+		Name:    tempName,
+		Options: set.Options,
+	}
+
+	err = set.Parent.Add(newSet)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		_, err = newSet.Add(entry...)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = set.Swap(newSet)
+	if err != nil {
+		return err
+	}
+
+	err = set.Parent.Destroy(tempName)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
