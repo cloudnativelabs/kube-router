@@ -98,7 +98,7 @@ func getNodeSubnet(nodeIp net.IP) (net.IPNet, string, error) {
 		return net.IPNet{}, "", errors.New("Failed to get list of links")
 	}
 	for _, link := range links {
-		addresses, err := netlink.AddrList(link, netlink.FAMILY_V4)
+		addresses, err := netlink.AddrList(link, netlink.FAMILY_ALL)
 		if err != nil {
 			return net.IPNet{}, "", errors.New("Failed to get list of addr")
 		}

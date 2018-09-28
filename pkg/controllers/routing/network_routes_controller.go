@@ -60,6 +60,7 @@ type NetworkRoutingController struct {
 	nodeName                string
 	nodeSubnet              net.IPNet
 	nodeInterface           string
+	isIpv6                  bool
 	activeNodes             map[string]bool
 	mu                      sync.Mutex
 	clientset               kubernetes.Interface
@@ -151,7 +152,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	glog.V(1).Info("Performing cleanup of depreciated rules/ipsets (if needed).")
-	err = deleteBadPodEgressRules()
+	err = nrc.deleteBadPodEgressRules()
 	if err != nil {
 		glog.Errorf("Error cleaning up old/bad Pod egress rules: %s", err.Error())
 	}
@@ -160,14 +161,14 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	if nrc.enablePodEgress {
 		glog.V(1).Infoln("Enabling Pod egress.")
 
-		err = createPodEgressRule()
+		err = nrc.createPodEgressRule()
 		if err != nil {
 			glog.Errorf("Error enabling Pod egress: %s", err.Error())
 		}
 	} else {
 		glog.V(1).Infoln("Disabling Pod egress.")
 
-		err = deletePodEgressRule()
+		err = nrc.deletePodEgressRule()
 		if err != nil {
 			glog.Warningf("Error cleaning up Pod Egress related networking: %s", err)
 		}
@@ -458,18 +459,18 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 // Cleanup performs the cleanup of configurations done
 func (nrc *NetworkRoutingController) Cleanup() {
 	// Pod egress cleanup
-	err := deletePodEgressRule()
+	err := nrc.deletePodEgressRule()
 	if err != nil {
 		glog.Warningf("Error deleting Pod egress iptable rule: %s", err.Error())
 	}
 
-	err = deleteBadPodEgressRules()
+	err = nrc.deleteBadPodEgressRules()
 	if err != nil {
 		glog.Warningf("Error deleting Pod egress iptable rule: %s", err.Error())
 	}
 
 	// delete all ipsets created by kube-router
-	ipset, err := utils.NewIPSet(false)
+	ipset, err := utils.NewIPSet(nrc.isIpv6)
 	if err != nil {
 		glog.Errorf("Failed to clean up ipsets: " + err.Error())
 	}
@@ -535,12 +536,20 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	return nil
 }
 
+func (nrc *NetworkRoutingController) newIptablesCmdHandler() (*iptables.IPTables, error) {
+	if nrc.isIpv6 {
+		return iptables.NewWithProtocol(iptables.ProtocolIPv6)
+	} else {
+		return iptables.NewWithProtocol(iptables.ProtocolIPv4)
+	}
+}
+
 // ensure there is rule in filter table and FORWARD chain to permit in/out traffic from pods
 // this rules will be appended so that any iptable rules for network policies will take
 // precedence
 func (nrc *NetworkRoutingController) enableForwarding() error {
 
-	iptablesCmdHandler, err := iptables.New()
+	iptablesCmdHandler, _ := nrc.newIptablesCmdHandler()
 
 	comment := "allow outbound traffic from pods"
 	args := []string{"-m", "comment", "--comment", comment, "-i", "kube-bridge", "-j", "ACCEPT"}
@@ -661,7 +670,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	if ipv6IsEnabled() {
-		localAddressList = append(localAddressList, "::")
+		localAddressList = append(localAddressList, "::1")
 	}
 
 	global := &config.Global{
@@ -795,6 +804,21 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
 
+	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
+	node, err := utils.GetNodeObject(clientset, nrc.hostnameOverride)
+	if err != nil {
+		return nil, errors.New("Failed getting node object from API server: " + err.Error())
+	}
+
+	nrc.nodeName = node.Name
+
+	nodeIP, err := utils.GetNodeIP(node)
+	if err != nil {
+		return nil, errors.New("Failed getting IP address from node object: " + err.Error())
+	}
+	nrc.nodeIP = nodeIP
+	nrc.isIpv6 = nodeIP.To4() == nil
+
 	// lets start with assumption we hace necessary IAM creds to access EC2 api
 	nrc.ec2IamAuthorized = true
 
@@ -808,7 +832,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	}
 
-	nrc.ipSetHandler, err = utils.NewIPSet(false)
+	nrc.ipSetHandler, err = utils.NewIPSet(nrc.isIpv6)
 	if err != nil {
 		return nil, err
 	}
@@ -871,20 +895,6 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	if err != nil {
 		return nil, fmt.Errorf("Error processing Global Peer Router configs: %s", err)
 	}
-
-	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
-	node, err := utils.GetNodeObject(clientset, nrc.hostnameOverride)
-	if err != nil {
-		return nil, errors.New("Failed getting node object from API server: " + err.Error())
-	}
-
-	nrc.nodeName = node.Name
-
-	nodeIP, err := utils.GetNodeIP(node)
-	if err != nil {
-		return nil, errors.New("Failed getting IP address from node object: " + err.Error())
-	}
-	nrc.nodeIP = nodeIP
 
 	nrc.nodeSubnet, nrc.nodeInterface, err = getNodeSubnet(nodeIP)
 	if err != nil {

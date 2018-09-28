@@ -4,28 +4,38 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 )
 
 // set up MASQUERADE rule so that egress traffic from the pods gets masquraded to node's IP
 
 var (
-	podEgressArgs = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
+	podEgressArgs4 = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
 		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
 		"-j", "MASQUERADE"}
-	podEgressArgsBad = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
+	podEgressArgs6 = []string{"-m", "set", "--match-set", "inet6:" + podSubnetsIPSetName, "src",
+		"-m", "set", "!", "--match-set", "inet6:" + podSubnetsIPSetName, "dst",
+		"-m", "set", "!", "--match-set", "inet6:" + nodeAddrsIPSetName, "dst",
+		"-j", "MASQUERADE"}
+	podEgressArgsBad4 = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
+		"-j", "MASQUERADE"}}
+	podEgressArgsBad6 = [][]string{{"-m", "set", "--match-set", "inet6:" + podSubnetsIPSetName, "src",
+		"-m", "set", "!", "--match-set", "inet6:" + podSubnetsIPSetName, "dst",
 		"-j", "MASQUERADE"}}
 )
 
-func createPodEgressRule() error {
-	iptablesCmdHandler, err := iptables.New()
+func (nrc *NetworkRoutingController) createPodEgressRule() error {
+	iptablesCmdHandler, err := nrc.newIptablesCmdHandler()
 	if err != nil {
 		return errors.New("Failed create iptables handler:" + err.Error())
 	}
 
+	podEgressArgs := podEgressArgs4
+	if nrc.isIpv6 {
+		podEgressArgs = podEgressArgs6
+	}
 	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", podEgressArgs...)
 	if err != nil {
 		return errors.New("Failed to add iptable rule to masqurade outbound traffic from pods: " +
@@ -37,12 +47,16 @@ func createPodEgressRule() error {
 	return nil
 }
 
-func deletePodEgressRule() error {
-	iptablesCmdHandler, err := iptables.New()
+func (nrc *NetworkRoutingController) deletePodEgressRule() error {
+	iptablesCmdHandler, err := nrc.newIptablesCmdHandler()
 	if err != nil {
 		return errors.New("Failed create iptables handler:" + err.Error())
 	}
 
+	podEgressArgs := podEgressArgs4
+	if nrc.isIpv6 {
+		podEgressArgs = podEgressArgs6
+	}
 	exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", podEgressArgs...)
 	if err != nil {
 		return errors.New("Failed to lookup iptable rule to masqurade outbound traffic from pods: " + err.Error())
@@ -60,12 +74,15 @@ func deletePodEgressRule() error {
 	return nil
 }
 
-func deleteBadPodEgressRules() error {
-	iptablesCmdHandler, err := iptables.New()
+func (nrc *NetworkRoutingController) deleteBadPodEgressRules() error {
+	iptablesCmdHandler, err := nrc.newIptablesCmdHandler()
 	if err != nil {
 		return errors.New("Failed create iptables handler:" + err.Error())
 	}
-
+	podEgressArgsBad := podEgressArgsBad4
+	if nrc.isIpv6 {
+		podEgressArgsBad = podEgressArgsBad6
+	}
 	for _, args := range podEgressArgsBad {
 		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {
