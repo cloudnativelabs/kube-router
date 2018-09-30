@@ -1137,14 +1137,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 				ingressRule.matchAllSource = false
 				var matchingPods []*api.Pod
 				for _, peer := range specIngressRule.From {
-					peerPods, err := npc.evalPeer(policy, peer)
+					peerPods, err := npc.evalPodPeer(policy, peer)
 					matchingPods = append(matchingPods, peerPods...)
-					if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
-						ingressRule.srcIPBlocks = append(ingressRule.srcIPBlocks, []string{peer.IPBlock.CIDR, utils.OptionTimeout, "0"})
-						for i := range peer.IPBlock.Except {
-							ingressRule.srcIPBlocks = append(ingressRule.srcIPBlocks, []string{peer.IPBlock.Except[i], utils.OptionTimeout, "0", utils.OptionNoMatch})
-						}
-					}
+					ingressRule.srcIPBlocks = append(ingressRule.srcIPBlocks, npc.evalIPBlockPeer(peer)...)
 					if err == nil {
 						for _, matchingPod := range matchingPods {
 							if matchingPod.Status.PodIP == "" {
@@ -1189,14 +1184,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 				egressRule.matchAllDestinations = false
 				var matchingPods []*api.Pod
 				for _, peer := range specEgressRule.To {
-					peerPods, err := npc.evalPeer(policy, peer)
+					peerPods, err := npc.evalPodPeer(policy, peer)
 					matchingPods = append(matchingPods, peerPods...)
-					if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
-						egressRule.dstIPBlocks = append(egressRule.dstIPBlocks, []string{peer.IPBlock.CIDR, utils.OptionTimeout, "0"})
-						for i := range peer.IPBlock.Except {
-							egressRule.dstIPBlocks = append(egressRule.dstIPBlocks, []string{peer.IPBlock.Except[i], utils.OptionTimeout, "0", utils.OptionNoMatch})
-						}
-					}
+					egressRule.dstIPBlocks = append(egressRule.dstIPBlocks, npc.evalIPBlockPeer(peer)...)
 					if err == nil {
 						for _, matchingPod := range matchingPods {
 							egressRule.dstPods = append(egressRule.dstPods,
@@ -1217,7 +1207,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 	return &NetworkPolicies, nil
 }
 
-func (npc *NetworkPolicyController) evalPeer(policy *networking.NetworkPolicy, peer networking.NetworkPolicyPeer) ([]*api.Pod, error) {
+func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy, peer networking.NetworkPolicyPeer) ([]*api.Pod, error) {
 
 	var matchingPods []*api.Pod
 	matchingPods = make([]*api.Pod, 0)
@@ -1263,6 +1253,25 @@ func (npc *NetworkPolicyController) ListNamespaceByLabels(set labels.Set) ([]*ap
 		return nil, err
 	}
 	return matchedNamespaces, nil
+}
+
+func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolicyPeer) [][]string {
+	ipBlock := make([][]string, 0)
+	if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
+		if cidr := peer.IPBlock.CIDR; strings.HasSuffix(cidr, "/0") {
+			ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0"}, []string{"128.0.0.0/1", utils.OptionTimeout, "0"})
+		} else {
+			ipBlock = append(ipBlock, []string{cidr, utils.OptionTimeout, "0"})
+		}
+		for _, except := range peer.IPBlock.Except {
+			if strings.HasSuffix(except, "/0") {
+				ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch}, []string{"128.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch})
+			} else {
+				ipBlock = append(ipBlock, []string{except, utils.OptionTimeout, "0", utils.OptionNoMatch})
+			}
+		}
+	}
+	return ipBlock
 }
 
 func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
