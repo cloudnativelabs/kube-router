@@ -35,6 +35,7 @@ type KubeRouterConfig struct {
 	IPTablesSyncPeriod      time.Duration
 	IpvsSyncPeriod          time.Duration
 	Kubeconfig              string
+	LocalServices           bool
 	MasqueradeAll           bool
 	Master                  string
 	MetricsEnabled          bool
@@ -147,4 +148,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.OverrideNextHop, "override-nexthop", false, "Override the next-hop in bgp routes sent to peers with the local ip.")
 	fs.BoolVar(&s.DisableSrcDstCheck, "disable-source-dest-check", true,
 		"Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way.")
+	fs.BoolVar(&s.LocalServices, "local-services", false,
+		"Only advertise service VIPs from nodes that have at least one service endpoint pod.")
 }

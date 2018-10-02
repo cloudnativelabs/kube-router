@@ -208,6 +208,7 @@ type NetworkServicesController struct {
 	MetricsEnabled      bool
 	ln                  LinuxNetworking
 	readyForUpdates     bool
+	localServices       bool
 
 	svcLister cache.Indexer
 	epLister  cache.Indexer
@@ -1086,7 +1087,7 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 				name:        svc.ObjectMeta.Name,
 				namespace:   svc.ObjectMeta.Namespace,
 				externalIPs: make([]string, len(svc.Spec.ExternalIPs)),
-				local:       false,
+				local:       nsc.localServices,
 			}
 			dsrMethod, ok := svc.ObjectMeta.Annotations[svcDSRAnnotation]
 			if ok {
@@ -1964,6 +1965,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.syncPeriod = config.IpvsSyncPeriod
 	nsc.globalHairpin = config.GlobalHairpinMode
+	nsc.localServices = config.LocalServices
 
 	nsc.serviceMap = make(serviceInfoMap)
 	nsc.endpointsMap = make(endpointsInfoMap)
