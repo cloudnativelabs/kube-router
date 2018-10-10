@@ -64,7 +64,7 @@ passed to `make container` and `make push`.
 
 Example:
 ```console
-$ make container IMG_FQDN=quay.io IMG_NAMESPACE=bzub IMAGE_TAG=custom
+$ make container IMG_FQDN=quay.io IMG_NAMESPACE=bzub IMG_TAG=custom
 docker build -t "quay.io/bzub/kube-router-git:custom" .
 Sending build context to Docker daemon  151.5MB
 Step 1/4 : FROM alpine
@@ -93,7 +93,7 @@ Successfully tagged quay.io/bzub/kube-router-git:custom
   - Example: quay.io/IMG_NAMESPACE/kube-router
 - `NAME` goes onto the end of the Docker registry URL that will be used.
   - Example: quay.io/cloudnativelabs/NAME
-- `IMAGE_TAG` is used to override the tag of the Docker image being built.
+- `IMG_TAG` is used to override the tag of the Docker image being built.
 - `DEV_SUFFIX` is appended to Docker image names that are not for release.  By
   default these images get a name ending with `-git` to signify that they are
   for testing purposes.
