@@ -440,7 +440,8 @@ func (set *Set) Swap(setTo *Set) error {
 // Refresh a Set with new entries.
 func (set *Set) Refresh(entries []string, extraOptions ...string) error {
 	var err error
-	tempName := set.Name + "-temp"
+	// The set-name must be < 32 characters!
+	tempName := set.Name + "-"
 
 	newSet := &Set{
 		Parent:  set.Parent,
