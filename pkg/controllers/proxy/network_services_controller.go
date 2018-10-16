@@ -215,6 +215,8 @@ type NetworkServicesController struct {
 
 	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
+
+	standalone bool
 }
 
 // internal representation of kubernetes service
@@ -1075,6 +1077,17 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 		if svc.Spec.Type == "ExternalName" {
 			glog.V(2).Infof("Skipping service name:%s namespace:%s due to service Type=%s", svc.Name, svc.Namespace, svc.Spec.Type)
 			continue
+		}
+
+		if nsc.standalone {
+			if svc.Spec.Type == "LoadBalancer" {
+				glog.V(2).Infof("Skipping service name:%s namespace:%s due to service Type=%s", svc.Name, svc.Namespace, svc.Spec.Type)
+				continue
+			}
+			if svc.Spec.Type == "NodePort" {
+				glog.V(2).Infof("Skipping service name:%s namespace:%s due to service Type=%s", svc.Name, svc.Namespace, svc.Spec.Type)
+				continue
+			}
 		}
 
 		for _, port := range svc.Spec.Ports {
@@ -2013,6 +2026,10 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 			return nil, fmt.Errorf("could not convert %s to a valid IP address", config.StandaloneIP)
 		}
 	}
+
+	nsc.standalone = config.Standalone
+
+	glog.V(6).Infof("nodeIP initialized to: %s", nsc.nodeIP)
 
 	nsc.podLister = podInformer.GetIndexer()
 
