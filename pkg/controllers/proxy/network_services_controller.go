@@ -138,7 +138,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
 		NodeIP.String(), "table", "local").CombinedOutput()
 	if err != nil {
-		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
+		glog.Errorf("Failed to replace route to service VIP %s configured on %s , src: %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, NodeIP.String(), err, out)
 	}
 	return nil
 }
@@ -2025,11 +2025,11 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		if nsc.nodeIP == nil {
 			return nil, fmt.Errorf("could not convert %s to a valid IP address", config.StandaloneIP)
 		}
+		//not sure about this but it seems necessary
+		NodeIP = nsc.nodeIP
 	}
 
 	nsc.standalone = config.Standalone
-
-	glog.V(6).Infof("nodeIP initialized to: %s", nsc.nodeIP)
 
 	nsc.podLister = podInformer.GetIndexer()
 
