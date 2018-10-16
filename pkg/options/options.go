@@ -4,8 +4,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/spf13/pflag"
 	"strconv"
+
+	"github.com/spf13/pflag"
 )
 
 const DEFAULT_BGP_PORT = 179
@@ -53,6 +54,9 @@ type KubeRouterConfig struct {
 	RunServiceProxy         bool
 	Version                 bool
 	VLevel                  string
+	Standalone              bool
+	StandaloneHostname      string
+	StandaloneIP            string
 	// FullMeshPassword    string
 }
 
@@ -147,4 +151,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.OverrideNextHop, "override-nexthop", false, "Override the next-hop in bgp routes sent to peers with the local ip.")
 	fs.BoolVar(&s.DisableSrcDstCheck, "disable-source-dest-check", true,
 		"Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way.")
+	fs.BoolVar(&s.Standalone, "standalone", false,
+		"Whether kube-router is running on a kubernetes node or in standalone mode. Default is false. When this option is true only the service proxy can be run and standlone-hostname and stanalone-ip must be specified.")
+	fs.StringVar(&s.StandaloneHostname, "standalone-hostname", "", "Defines the hostname to be used in standalone mode, mandatory when standalone is true")
+	fs.StringVar(&s.StandaloneIP, "standalone-ip", "", "Defines the ip to be used in standalone mode in octects format, mandatory when standalone is true")
 }

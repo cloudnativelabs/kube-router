@@ -1986,17 +1986,33 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		nsc.podCidr = cidr
 	}
 
-	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
-	if err != nil {
-		return nil, err
-	}
+	if !config.Standalone {
 
-	nsc.nodeHostName = node.Name
-	NodeIP, err = utils.GetNodeIP(node)
-	if err != nil {
-		return nil, err
+		node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
+		if err != nil {
+			return nil, err
+		}
+
+		nsc.nodeHostName = node.Name
+		NodeIP, err = utils.GetNodeIP(node)
+		if err != nil {
+			return nil, err
+		}
+		nsc.nodeIP = NodeIP
+
+	} else {
+		if config.StandaloneHostname == "" {
+			return nil, fmt.Errorf("standalone-hostname must not be null when standalone it true")
+		}
+		nsc.nodeHostName = config.StandaloneHostname
+		if config.StandaloneIP == "" {
+			return nil, fmt.Errorf("standalone-ip must not be null when standalone it true")
+		}
+		nsc.nodeIP = net.ParseIP(config.StandaloneIP)
+		if nsc.nodeIP == nil {
+			return nil, fmt.Errorf("could not convert %s to a valid IP address", config.StandaloneIP)
+		}
 	}
-	nsc.nodeIP = NodeIP
 
 	nsc.podLister = podInformer.GetIndexer()
 
