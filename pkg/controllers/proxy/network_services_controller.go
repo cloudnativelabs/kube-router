@@ -2021,12 +2021,11 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		if config.StandaloneIP == "" {
 			return nil, fmt.Errorf("standalone-ip must not be null when standalone it true")
 		}
-		nsc.nodeIP = net.ParseIP(config.StandaloneIP)
-		if nsc.nodeIP == nil {
+		NodeIP = net.ParseIP(config.StandaloneIP)
+		if NodeIP == nil {
 			return nil, fmt.Errorf("could not convert %s to a valid IP address", config.StandaloneIP)
 		}
-		//not sure about this but it seems necessary
-		NodeIP = nsc.nodeIP
+		nsc.nodeIP = NodeIP
 	}
 
 	nsc.standalone = config.Standalone
