@@ -57,6 +57,7 @@ type KubeRouterConfig struct {
 	Standalone              bool
 	StandaloneHostname      string
 	StandaloneIP            string
+	StandaloneIF            string
 	// FullMeshPassword    string
 }
 
@@ -155,4 +156,5 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Whether kube-router is running on a kubernetes node or in standalone mode. Default is false. When this option is true only the service proxy can be run and standlone-hostname and stanalone-ip must be specified.")
 	fs.StringVar(&s.StandaloneHostname, "standalone-hostname", "", "Defines the hostname to be used in standalone mode, mandatory when standalone is true")
 	fs.StringVar(&s.StandaloneIP, "standalone-ip", "", "Defines the ip to be used in standalone mode in octects format, mandatory when standalone is true")
+	fs.StringVar(&s.StandaloneIP, "standalone-if", "", "Defines the interface to be used in standalone, mandatory when standalone is true")
 }

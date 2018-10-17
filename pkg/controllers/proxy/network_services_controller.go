@@ -38,7 +38,6 @@ import (
 )
 
 const (
-	KUBE_DUMMY_IF      = "kube-dummy-if"
 	KUBE_TUNNEL_IF     = "kube-tunnel-if"
 	IFACE_NOT_FOUND    = "Link not found"
 	IFACE_HAS_ADDR     = "file exists"
@@ -55,8 +54,9 @@ const (
 )
 
 var (
-	h      *ipvs.Handle
-	NodeIP net.IP
+	h             *ipvs.Handle
+	NodeIP        net.IP
+	KUBE_DUMMY_IF string
 )
 
 type ipvsCalls interface {
@@ -1906,6 +1906,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 			glog.Infof("Dummy interface: " + KUBE_DUMMY_IF + " does not exist")
 		}
 	} else {
+		/* Raf delete this only if not standalone */
 		err = netlink.LinkDel(dummyVipInterface)
 		if err != nil {
 			glog.Errorf("Could not delete dummy interface " + KUBE_DUMMY_IF + " due to " + err.Error())
@@ -2013,19 +2014,26 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		}
 		nsc.nodeIP = NodeIP
 
+		KUBE_DUMMY_IF = "kube-dummy-if"
+
 	} else {
 		if config.StandaloneHostname == "" {
-			return nil, fmt.Errorf("standalone-hostname must not be null when standalone it true")
+			return nil, fmt.Errorf("standalone-hostname must not be null when standalone is true")
 		}
 		nsc.nodeHostName = config.StandaloneHostname
 		if config.StandaloneIP == "" {
-			return nil, fmt.Errorf("standalone-ip must not be null when standalone it true")
+			return nil, fmt.Errorf("standalone-ip must not be null when standalone is true")
 		}
 		NodeIP = net.ParseIP(config.StandaloneIP)
 		if NodeIP == nil {
 			return nil, fmt.Errorf("could not convert %s to a valid IP address", config.StandaloneIP)
 		}
 		nsc.nodeIP = NodeIP
+
+		if config.StandaloneIF == "" {
+			return nil, fmt.Errorf("standalone-if must not be null when standalone is true")
+		}
+		KUBE_DUMMY_IF = config.StandaloneIF
 	}
 
 	nsc.standalone = config.Standalone
