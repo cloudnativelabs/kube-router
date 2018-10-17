@@ -2030,10 +2030,10 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		}
 		nsc.nodeIP = NodeIP
 
-		if config.StandaloneIF == "" {
+		if config.StandaloneIface == "" {
 			return nil, fmt.Errorf("standalone-if must not be null when standalone is true")
 		}
-		KUBE_DUMMY_IF = config.StandaloneIF
+		KUBE_DUMMY_IF = config.StandaloneIface
 	}
 
 	nsc.standalone = config.Standalone
