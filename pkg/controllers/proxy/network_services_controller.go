@@ -788,6 +788,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		return errors.New("Failed to list dummy interface IPs: " + err.Error())
 	}
 	for _, addr := range addrs {
+		if addr.IP.String() == NodeIP.String() {
+			continue
+		}
 		isActive := addrActive[addr.IP.String()]
 		if !isActive {
 			glog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
