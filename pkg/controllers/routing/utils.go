@@ -83,7 +83,7 @@ func ipv4IsEnabled() bool {
 }
 
 func ipv6IsEnabled() bool {
-	l, err := net.Listen("tcp6", "")
+	l, err := net.Listen("tcp6", "[::1]:0")
 	if err != nil {
 		return false
 	}
