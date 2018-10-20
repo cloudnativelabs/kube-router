@@ -265,11 +265,15 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
 
+	glog.V(1).Info("step 1")
+
 	// enable ipvs connection tracking
 	err = ensureIpvsConntrack()
 	if err != nil {
 		return errors.New("Failed to do sysctl net.ipv4.vs.conntrack=1 due to: %s" + err.Error())
 	}
+
+	glog.V(1).Info("step 2")
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
 	err = ensureIpvsExpireNodestConn()
@@ -277,11 +281,15 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New("Failed to do sysctl net.ipv4.vs.expire_nodest_conn=1 due to: %s" + err.Error())
 	}
 
+	glog.V(1).Info("step 3")
+
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
 	err = ensureIpvsQuiescentTemplate()
 	if err != nil {
 		return errors.New("Failed to do sysctl net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
 	}
+
+	glog.V(1).Info("step 4")
 
 	// loop forever unitl notified to stop on stopCh
 	for {
