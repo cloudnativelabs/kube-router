@@ -58,6 +58,7 @@ type KubeRouterConfig struct {
 	StandaloneHostname      string
 	StandaloneIP            string
 	StandaloneIface         string
+	ServiceCIDR             string
 	// FullMeshPassword    string
 }
 
@@ -157,4 +158,5 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.StandaloneHostname, "standalone-hostname", "", "Defines the hostname to be used in standalone mode, mandatory when standalone is true")
 	fs.StringVar(&s.StandaloneIP, "standalone-ip", "", "Defines the ip to be used in standalone mode in octects format, mandatory when standalone is true")
 	fs.StringVar(&s.StandaloneIface, "standalone-iface", "", "Defines the interface to be used in standalone, mandatory when standalone is true")
+	fs.StringVar(&s.ServiceCIDR, "service-cidr", "", "Defines the service cidr for which this instance of kube-router is responsible. Useful if running multiple instance of kube-router on the same host.")
 }

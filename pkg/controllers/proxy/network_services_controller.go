@@ -217,6 +217,8 @@ type NetworkServicesController struct {
 	EndpointsEventHandler cache.ResourceEventHandler
 
 	standalone bool
+
+	serviceCIDR *net.IPNet
 }
 
 // internal representation of kubernetes service
@@ -796,17 +798,16 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		return errors.New("Failed to list dummy interface IPs: " + err.Error())
 	}
 	for _, addr := range addrs {
-		if addr.IP.String() == NodeIP.String() {
-			continue
-		}
-		isActive := addrActive[addr.IP.String()]
-		if !isActive {
-			glog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
-			err := nsc.ln.ipAddrDel(dummyVipInterface, addr.IP.String())
-			if err != nil {
-				glog.Errorf("Failed to delete stale IP %s due to: %s",
-					addr.IP.String(), err.Error())
-				continue
+		if nsc.serviceCIDR.Contains(addr.IP) {
+			isActive := addrActive[addr.IP.String()]
+			if !isActive {
+				glog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
+				err := nsc.ln.ipAddrDel(dummyVipInterface, addr.IP.String())
+				if err != nil {
+					glog.Errorf("Failed to delete stale IP %s due to: %s",
+						addr.IP.String(), err.Error())
+					continue
+				}
 			}
 		}
 	}
@@ -2045,6 +2046,13 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 			return nil, fmt.Errorf("standalone-if must not be null when standalone is true")
 		}
 		KUBE_DUMMY_IF = config.StandaloneIface
+
+		if config.ServiceCIDR != "" {
+			_, nsc.serviceCIDR, err = net.ParseCIDR(config.ServiceCIDR)
+			if err != nil {
+				return nil, fmt.Errorf("unable to parse service cidr: %s", config.ServiceCIDR)
+			}
+		}
 	}
 
 	nsc.standalone = config.Standalone
