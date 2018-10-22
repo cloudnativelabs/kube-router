@@ -573,7 +573,8 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
-		err := nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
+		// add route only of not standalone
+		err := nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), !nsc.standalone)
 		if err != nil {
 			continue
 		}
@@ -798,16 +799,18 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		return errors.New("Failed to list dummy interface IPs: " + err.Error())
 	}
 	for _, addr := range addrs {
-		if nsc.serviceCIDR.Contains(addr.IP) {
-			isActive := addrActive[addr.IP.String()]
-			if !isActive {
-				glog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
-				err := nsc.ln.ipAddrDel(dummyVipInterface, addr.IP.String())
-				if err != nil {
-					glog.Errorf("Failed to delete stale IP %s due to: %s",
-						addr.IP.String(), err.Error())
-					continue
-				}
+		// RAF skip cleanup if this instance does not own the service
+		if nsc.standalone && !nsc.serviceCIDR.Contains(addr.IP) {
+			continue
+		}
+		isActive := addrActive[addr.IP.String()]
+		if !isActive {
+			glog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
+			err := nsc.ln.ipAddrDel(dummyVipInterface, addr.IP.String())
+			if err != nil {
+				glog.Errorf("Failed to delete stale IP %s due to: %s",
+					addr.IP.String(), err.Error())
+				continue
 			}
 		}
 	}
@@ -832,6 +835,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		} else if ipvsSvc.FWMark != 0 {
 			key = fmt.Sprint(ipvsSvc.FWMark)
 		} else {
+			continue
+		}
+
+		// RAF skip cleanup if this instance does not own the service
+		if nsc.standalone && !nsc.serviceCIDR.Contains(ipvsSvc.Address) {
 			continue
 		}
 
