@@ -47,6 +47,7 @@ type KubeRouterConfig struct {
 	PeerPasswords           []string
 	PeerPorts               []uint
 	PeerRouters             []net.IP
+	RouterId                string
 	RoutesSyncPeriod        time.Duration
 	RunFirewall             bool
 	RunRouter               bool
@@ -121,6 +122,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
 	fs.Uint16Var(&s.BGPPort, "bgp-port", DEFAULT_BGP_PORT,
 		"The port open for incoming BGP connections and to use for connecting with other BGP peers.")
+	fs.StringVar(&s.RouterId, "router-id", "", "BGP router-id. Must be specified in a ipv6 only cluster.")
 	fs.BoolVar(&s.EnableCNI, "enable-cni", true,
 		"Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin.")
 	fs.BoolVar(&s.EnableiBGP, "enable-ibgp", true,

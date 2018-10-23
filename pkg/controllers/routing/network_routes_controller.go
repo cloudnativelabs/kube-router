@@ -60,6 +60,7 @@ type NetworkRoutingController struct {
 	nodeName                string
 	nodeSubnet              net.IPNet
 	nodeInterface           string
+	routerId                string
 	isIpv6                  bool
 	activeNodes             map[string]bool
 	mu                      sync.Mutex
@@ -676,7 +677,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	global := &config.Global{
 		Config: config.GlobalConfig{
 			As:               nodeAsnNumber,
-			RouterId:         nrc.nodeIP.String(),
+			RouterId:         nrc.routerId,
 			LocalAddressList: localAddressList,
 			Port:             int32(nrc.bgpPort),
 		},
@@ -818,6 +819,15 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 	nrc.nodeIP = nodeIP
 	nrc.isIpv6 = nodeIP.To4() == nil
+
+	if kubeRouterConfig.RouterId != "" {
+		nrc.routerId = kubeRouterConfig.RouterId
+	} else {
+		if nrc.isIpv6 {
+			return nil, errors.New("Router-id must be specified in ipv6 operation")
+		}
+		nrc.routerId = nrc.nodeIP.String()
+	}
 
 	// lets start with assumption we hace necessary IAM creds to access EC2 api
 	nrc.ec2IamAuthorized = true
