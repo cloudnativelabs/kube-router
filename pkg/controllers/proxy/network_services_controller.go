@@ -44,12 +44,17 @@ const (
 	IFACE_HAS_ADDR     = "file exists"
 	IFACE_HAS_NO_ADDR  = "cannot assign requested address"
 	IPVS_SERVER_EXISTS = "file exists"
+	IPVS_MAGLEV_HASHING	= "mh"
+	IPVS_SVC_F_SCHED1	= "flag-1"
+	IPVS_SVC_F_SCHED2	= "flag-2"
+	IPVS_SVC_F_SCHED3	= "flag-3"
 
 	svcDSRAnnotation       = "kube-router.io/service.dsr"
 	svcSchedulerAnnotation = "kube-router.io/service.scheduler"
 	svcHairpinAnnotation   = "kube-router.io/service.hairpin"
 	svcLocalAnnotation     = "kube-router.io/service.local"
 	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
+	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
@@ -234,6 +239,14 @@ type serviceInfo struct {
 	externalIPs              []string
 	loadBalancerIPs          []string
 	local                    bool
+	flags				 	 schedFlags
+}
+
+// IPVS scheduler flags
+type schedFlags struct {
+	flag1					 bool
+	flag2					 bool
+	flag3					 bool
 }
 
 // map of all services, with unique service id(namespace name, service name, port) as key
@@ -1104,8 +1117,16 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 					svcInfo.scheduler = ipvs.DestinationHashing
 				} else if schedulingMethod == ipvs.SourceHashing {
 					svcInfo.scheduler = ipvs.SourceHashing
+				} else if schedulingMethod == IPVS_MAGLEV_HASHING {
+					svcInfo.scheduler = IPVS_MAGLEV_HASHING
 				}
 			}
+
+			flags, ok := svc.ObjectMeta.Annotations[svcSchedFlagsAnnotation]
+			if ok && svcInfo.scheduler == IPVS_MAGLEV_HASHING {
+				svcInfo.flags = parseSchedFlags(flags)
+			}
+
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
 			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
 				if len(lbIngress.IP) > 0 {
@@ -1125,6 +1146,32 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 		}
 	}
 	return serviceMap
+}
+
+func parseSchedFlags(value string) schedFlags {
+	var flag1, flag2, flag3 bool
+
+	if len(value) < 1 {
+		return schedFlags{}
+	}
+
+	flags := strings.Split(value, ",")
+	for flag := range flags {
+		switch strings.Trim(flag, " ") {
+		case IPVS_SVC_F_SCHED1:
+			flag1 = true
+			break
+		case IPVS_SVC_F_SCHED2:
+			flag2 = true
+			break
+		case IPVS_SVC_F_SCHED3:
+			flag3= true
+			break
+		default:
+		}
+	}
+
+	return schedFlags{flag1, flag2, flag3}
 }
 
 func shuffle(endPoints []endpointsInfo) []endpointsInfo {
