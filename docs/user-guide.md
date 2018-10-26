@@ -65,6 +65,11 @@ Usage of kube-router:
       --run-firewall                     Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-router                       Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
       --run-service-proxy                Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
+      --service-cidr string              Defines the service cidr for which this instance of kube-router is responsible. Useful if running multiple instance of kube-router on the same host.
+      --standalone                       Whether kube-router is running on a kubernetes node or in standalone mode. Default is false. When this option is true only the service proxy can be run and standlone-hostname and stanalone-ip must be specified.
+      --standalone-hostname string       Defines the hostname to be used in standalone mode, mandatory when standalone is true
+      --standalone-iface string          Defines the interface to be used in standalone, mandatory when standalone is true
+      --standalone-ip string             Defines the ip to be used in standalone mode in octects format, mandatory when standalone is true      
   -v, --v string                         log level for V logs (default "0")
   -V, --version                          Print version information.
 ```
