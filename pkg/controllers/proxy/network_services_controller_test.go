@@ -49,7 +49,7 @@ func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {
 func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr string, addRouter bool) error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination, local bool, podCidr string) error {
+func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 	return nil
 }
 func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
