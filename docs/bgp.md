@@ -43,7 +43,7 @@ scale better. In this mode kube-router expects each node is configured either in
 Route Reflector server mode or in Route Reflector client mode. This is done
 with node `kube-router.io/rr.server=ClusterID`, `kube-router.io/rr.client=ClusterId`
 respectively. In this mode each Route Reflector Client will only peer with Route
-Reflector Servers. Each Route Route Reflector Server will peer other Route Reflector
+Reflector Servers. Each Route Reflector Server will peer other Route Reflector
 Server and with Route Reflector Clients enabling reflection.
 
 Users can annotate node objects with the following command:
