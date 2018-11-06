@@ -45,7 +45,9 @@ type KubeRouterConfig struct {
 	MetricsEnabled                 bool
 	MetricsPath                    string
 	MetricsPort                    uint16
+	NodeDefaultWeight              uint16
 	NodePortBindOnAllIp            bool
+	NodeWeightAnnotation           string
 	OverrideNextHop                bool
 	PeerASNs                       []uint
 	PeerMultihopTtl                uint8
@@ -167,4 +169,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.OverrideNextHop, "override-nexthop", false, "Override the next-hop in bgp routes sent to peers with the local ip.")
 	fs.BoolVar(&s.DisableSrcDstCheck, "disable-source-dest-check", true,
 		"Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way.")
+	fs.Uint16Var(&s.NodeDefaultWeight, "node-default-weight", 1, "Default weight of a node, Default 1")
+	fs.StringVar(&s.NodeWeightAnnotation, "node-weight-annotation", "kube-router.io/node.weight",
+		"Node annotation to determine the endpoint's weight based on the node it is running on. "+
+			"If no annotation is found the \"node-default-weight\" will be used. Default \"kube-router.io/node.weight\"")
 }

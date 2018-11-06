@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,4 +58,20 @@ func GetNodeIP(node *apiv1.Node) (net.IP, error) {
 		return net.ParseIP(addresses[0].Address), nil
 	}
 	return nil, errors.New("host IP unknown")
+}
+
+//GetNodeWeight returns the node's weight based on the node's annotations
+func GetNodeWeight(node *apiv1.Node, weightAnnotation string) (int, error) {
+	var weight int
+	var err error
+
+	if weightString, found := node.ObjectMeta.Annotations[weightAnnotation]; found {
+		if weight, err = strconv.Atoi(weightString); err == nil {
+			return weight, nil
+		}
+	} else {
+		err = fmt.Errorf("weight annotation '%s' not found on node %s", weightAnnotation, node.GetName())
+	}
+
+	return -1, err
 }

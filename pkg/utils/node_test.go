@@ -189,3 +189,72 @@ func Test_GetNodeIP(t *testing.T) {
 		})
 	}
 }
+
+func Test_GetNodeWeight(t *testing.T) {
+	var nodeName, nodeWeightAnnotation = "test-node", "node-weight"
+
+	testcases := []struct {
+		name   string
+		node   *apiv1.Node
+		weight int
+		err    error
+	}{
+		{
+			"has node annotation",
+			&apiv1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nodeName,
+					Annotations: map[string]string{
+						nodeWeightAnnotation: "10",
+					},
+				},
+			},
+			10,
+			nil,
+		},
+		{
+			"missing node weight annotation",
+			&apiv1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        nodeName,
+					Annotations: map[string]string{},
+				},
+			},
+			-1,
+			errors.New("should fail with an error"),
+		},
+		{
+			"unparseable node weight annotation",
+			&apiv1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nodeName,
+					Annotations: map[string]string{
+						nodeWeightAnnotation: "this is not a int weight",
+					},
+				},
+			},
+			-1,
+			errors.New("should fail with an error"),
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			weight, err := GetNodeWeight(testcase.node, "node-weight")
+			if testcase.err != nil {
+				if err == nil {
+					t.Error("did not get expected error")
+				}
+			} else {
+				if err != nil {
+					t.Logf("unexpected error: %v", err)
+					t.Error("unexpected error")
+				} else if weight != testcase.weight {
+					t.Logf("actual weight: %d", weight)
+					t.Logf("expected weight: %v", testcase.weight)
+					t.Error("did not get expected node weight")
+				}
+			}
+		})
+	}
+}

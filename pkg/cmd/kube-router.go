@@ -167,7 +167,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunServiceProxy {
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
-			svcInformer, epInformer, podInformer)
+			svcInformer, epInformer, podInformer, nodeInformer)
 		if err != nil {
 			return errors.New("Failed to create network services controller: " + err.Error())
 		}
