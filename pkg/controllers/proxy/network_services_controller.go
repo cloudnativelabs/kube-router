@@ -38,18 +38,23 @@ import (
 )
 
 const (
-	KUBE_DUMMY_IF      = "kube-dummy-if"
-	KUBE_TUNNEL_IF     = "kube-tunnel-if"
-	IFACE_NOT_FOUND    = "Link not found"
-	IFACE_HAS_ADDR     = "file exists"
-	IFACE_HAS_NO_ADDR  = "cannot assign requested address"
-	IPVS_SERVER_EXISTS = "file exists"
+	KUBE_DUMMY_IF       = "kube-dummy-if"
+	KUBE_TUNNEL_IF      = "kube-tunnel-if"
+	IFACE_NOT_FOUND     = "Link not found"
+	IFACE_HAS_ADDR      = "file exists"
+	IFACE_HAS_NO_ADDR   = "cannot assign requested address"
+	IPVS_SERVER_EXISTS  = "file exists"
+	IPVS_MAGLEV_HASHING = "mh"
+	IPVS_SVC_F_SCHED1   = "flag-1"
+	IPVS_SVC_F_SCHED2   = "flag-2"
+	IPVS_SVC_F_SCHED3   = "flag-3"
 
-	svcDSRAnnotation       = "kube-router.io/service.dsr"
-	svcSchedulerAnnotation = "kube-router.io/service.scheduler"
-	svcHairpinAnnotation   = "kube-router.io/service.hairpin"
-	svcLocalAnnotation     = "kube-router.io/service.local"
-	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
+	svcDSRAnnotation        = "kube-router.io/service.dsr"
+	svcSchedulerAnnotation  = "kube-router.io/service.scheduler"
+	svcHairpinAnnotation    = "kube-router.io/service.hairpin"
+	svcLocalAnnotation      = "kube-router.io/service.local"
+	svcSkipLbIpsAnnotation  = "kube-router.io/service.skiplbips"
+	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 )
@@ -61,7 +66,7 @@ var (
 
 type ipvsCalls interface {
 	ipvsNewService(ipvsSvc *ipvs.Service) error
-	ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error)
+	ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error)
 	ipvsDelService(ipvsSvc *ipvs.Service) error
 	ipvsUpdateService(ipvsSvc *ipvs.Service) error
 	ipvsGetServices() ([]*ipvs.Service, error)
@@ -70,7 +75,7 @@ type ipvsCalls interface {
 	ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
 	ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error)
 	ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
-	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error)
+	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error)
 }
 
 type netlinkCalls interface {
@@ -234,6 +239,14 @@ type serviceInfo struct {
 	externalIPs              []string
 	loadBalancerIPs          []string
 	local                    bool
+	flags                    schedFlags
+}
+
+// IPVS scheduler flags
+type schedFlags struct {
+	flag1 bool /* ipvs scheduler flag-1 */
+	flag2 bool /* ipvs scheduler flag-2 */
+	flag3 bool /* ipvs scheduler flag-3 */
 }
 
 // map of all services, with unique service id(namespace name, service name, port) as key
@@ -552,7 +565,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// create IPVS service for the service to be exposed through the cluster ip
-		ipvsClusterVipSvc, err := nsc.ln.ipvsAddService(ipvsSvcs, svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
+		ipvsClusterVipSvc, err := nsc.ln.ipvsAddService(ipvsSvcs, svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler, svc.flags)
 		if err != nil {
 			glog.Errorf("Failed to create ipvs service for cluster ip: %s", err.Error())
 			continue
@@ -584,7 +597,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				nodeServiceIds = make([]string, len(addrs))
 
 				for i, addr := range addrs {
-					ipvsNodeportSvcs[i], err = nsc.ln.ipvsAddService(ipvsSvcs, addr.IP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
+					ipvsNodeportSvcs[i], err = nsc.ln.ipvsAddService(ipvsSvcs, addr.IP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler, svc.flags)
 					if err != nil {
 						glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
 						continue
@@ -595,7 +608,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 			} else {
 				ipvsNodeportSvcs = make([]*ipvs.Service, 1)
-				ipvsNodeportSvcs[0], err = nsc.ln.ipvsAddService(ipvsSvcs, nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler)
+				ipvsNodeportSvcs[0], err = nsc.ln.ipvsAddService(ipvsSvcs, nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler, svc.flags)
 				if err != nil {
 					glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
 					continue
@@ -621,7 +634,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		for _, externalIP := range extIPSet.List() {
 			var externalIpServiceId string
 			if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
-				ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
+				ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler, svc.flags)
 				if err != nil {
 					glog.Errorf("Failed to create ipvs service for External IP: %s due to: %s", externalIP, err.Error())
 					continue
@@ -655,7 +668,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 
 				// create IPVS service for the service to be exposed through the external ip
-				ipvsExternalIPSvc, err := nsc.ln.ipvsAddService(ipvsSvcs, net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler)
+				ipvsExternalIPSvc, err := nsc.ln.ipvsAddService(ipvsSvcs, net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler, svc.flags)
 				if err != nil {
 					glog.Errorf("Failed to create ipvs service for external ip: %s due to %s", externalIP, err.Error())
 					continue
@@ -1079,8 +1092,16 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 					svcInfo.scheduler = ipvs.DestinationHashing
 				} else if schedulingMethod == ipvs.SourceHashing {
 					svcInfo.scheduler = ipvs.SourceHashing
+				} else if schedulingMethod == IPVS_MAGLEV_HASHING {
+					svcInfo.scheduler = IPVS_MAGLEV_HASHING
 				}
 			}
+
+			flags, ok := svc.ObjectMeta.Annotations[svcSchedFlagsAnnotation]
+			if ok && svcInfo.scheduler == IPVS_MAGLEV_HASHING {
+				svcInfo.flags = parseSchedFlags(flags)
+			}
+
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
 			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
 				if len(lbIngress.IP) > 0 {
@@ -1100,6 +1121,32 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 		}
 	}
 	return serviceMap
+}
+
+func parseSchedFlags(value string) schedFlags {
+	var flag1, flag2, flag3 bool
+
+	if len(value) < 1 {
+		return schedFlags{}
+	}
+
+	flags := strings.Split(value, ",")
+	for _, flag := range flags {
+		switch strings.Trim(flag, " ") {
+		case IPVS_SVC_F_SCHED1:
+			flag1 = true
+			break
+		case IPVS_SVC_F_SCHED2:
+			flag2 = true
+			break
+		case IPVS_SVC_F_SCHED3:
+			flag3 = true
+			break
+		default:
+		}
+	}
+
+	return schedFlags{flag1, flag2, flag3}
 }
 
 func shuffle(endPoints []endpointsInfo) []endpointsInfo {
@@ -1412,6 +1459,18 @@ func ipvsServiceString(s *ipvs.Service) string {
 		flags = flags + "[one-packet scheduling]"
 	}
 
+	if s.Flags&0x0008 != 0 {
+		flags = flags + "[flag-1(fallback)]"
+	}
+
+	if s.Flags&0x0010 != 0 {
+		flags = flags + "[flag-2(port)]"
+	}
+
+	if s.Flags&0x0020 != 0 {
+		flags = flags + "[flag-3]"
+	}
+
 	return fmt.Sprintf("%s:%s:%v (Flags: %s)", protocol, s.Address, s.Port, flags)
 }
 
@@ -1432,7 +1491,51 @@ func ipvsSetPersistence(svc *ipvs.Service, p bool) {
 	}
 }
 
-func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
+func ipvsSetSchedFlags(svc *ipvs.Service, s schedFlags) {
+	if s.flag1 {
+		svc.Flags |= 0x0008
+	} else {
+		svc.Flags &^= 0x0008
+	}
+
+	if s.flag2 {
+		svc.Flags |= 0x0010
+	} else {
+		svc.Flags &^= 0x0010
+	}
+
+	if s.flag3 {
+		svc.Flags |= 0x0020
+	} else {
+		svc.Flags &^= 0x0020
+	}
+
+	/* Keep netmask which is set by ipvsSetPersistence() before */
+	if (svc.Netmask&0xFFFFFFFF != 0) || (s.flag1 || s.flag2 || s.flag3) {
+		svc.Netmask |= 0xFFFFFFFF
+	} else {
+		svc.Netmask &^= 0xFFFFFFFF
+	}
+}
+
+/* Compare service scheduler flags with ipvs service */
+func changedIpvsSchedFlags(svc *ipvs.Service, s schedFlags) bool {
+	if (s.flag1 && (svc.Flags&0x0008) == 0) || (!s.flag1 && (svc.Flags&0x0008) != 0) {
+		return true
+	}
+
+	if (s.flag2 && (svc.Flags&0x0010) == 0) || (!s.flag2 && (svc.Flags&0x0010) != 0) {
+		return true
+	}
+
+	if (s.flag3 && (svc.Flags&0x0020) == 0) || (!s.flag3 && (svc.Flags&0x0020) != 0) {
+		return true
+	}
+
+	return false
+}
+
+func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 
 	var err error
 	for _, svc := range svcs {
@@ -1440,11 +1543,25 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) {
 				ipvsSetPersistence(svc, persistent)
 
+				if changedIpvsSchedFlags(svc, flags) {
+					ipvsSetSchedFlags(svc, flags)
+				}
+
 				err = ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, err
 				}
 				glog.V(2).Infof("Updated persistence/session-affinity for service: %s", ipvsServiceString(svc))
+			}
+
+			if changedIpvsSchedFlags(svc, flags) {
+				ipvsSetSchedFlags(svc, flags)
+
+				err = ln.ipvsUpdateService(svc)
+				if err != nil {
+					return nil, err
+				}
+				glog.V(2).Infof("Updated scheduler flags for service: %s", ipvsServiceString(svc))
 			}
 
 			if scheduler != svc.SchedName {
@@ -1472,6 +1589,7 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 	}
 
 	ipvsSetPersistence(&svc, persistent)
+	ipvsSetSchedFlags(&svc, flags)
 
 	err = ln.ipvsNewService(&svc)
 	if err != nil {
@@ -1492,7 +1610,7 @@ func generateFwmark(ip, protocol, port string) uint32 {
 }
 
 // ipvsAddFWMarkService: creates a IPVS service using FWMARK
-func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, scheduler string) (*ipvs.Service, error) {
+func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 
 	var protocolStr string
 	if protocol == syscall.IPPROTO_TCP {
@@ -1516,11 +1634,25 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) {
 				ipvsSetPersistence(svc, persistent)
 
+				if changedIpvsSchedFlags(svc, flags) {
+					ipvsSetSchedFlags(svc, flags)
+				}
+
 				err = ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, err
 				}
 				glog.V(2).Infof("Updated persistence/session-affinity for service: %s", ipvsServiceString(svc))
+			}
+
+			if changedIpvsSchedFlags(svc, flags) {
+				ipvsSetSchedFlags(svc, flags)
+
+				err = ln.ipvsUpdateService(svc)
+				if err != nil {
+					return nil, err
+				}
+				glog.V(2).Infof("Updated scheduler flags for service: %s", ipvsServiceString(svc))
 			}
 
 			if scheduler != svc.SchedName {
@@ -1548,6 +1680,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 	}
 
 	ipvsSetPersistence(&svc, persistent)
+	ipvsSetSchedFlags(&svc, flags)
 
 	err = ln.ipvsNewService(&svc)
 	if err != nil {
