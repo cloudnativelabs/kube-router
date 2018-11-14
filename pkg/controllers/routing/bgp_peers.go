@@ -130,11 +130,11 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				n.RouteReflector = config.RouteReflector{
 					Config: config.RouteReflectorConfig{
 						RouteReflectorClient:    true,
-						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterID),
+						RouteReflectorClusterId: config.RrClusterIdType(fmt.Sprint(nrc.bgpClusterID)),
 					},
 					State: config.RouteReflectorState{
 						RouteReflectorClient:    true,
-						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterID),
+						RouteReflectorClusterId: config.RrClusterIdType(fmt.Sprint(nrc.bgpClusterID)),
 					},
 				}
 			}
