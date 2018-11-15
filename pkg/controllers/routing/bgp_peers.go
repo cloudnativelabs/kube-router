@@ -257,10 +257,13 @@ func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []str
 	}
 
 	for i := 0; i < len(ips); i++ {
-		if !((asns[i] >= 64512 && asns[i] <= 65535) ||
-			(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
-			return nil, fmt.Errorf("Invalid ASN number \"%d\" for global BGP peer",
-				asns[i])
+		if !((asns[i] >= 1 && asns[i] <= 23455) ||
+			(asns[i] >= 23457 && asns[i] <= 63999) ||
+				(asns[i] >= 64512 && asns[i] <= 65534) ||
+					(asns[i] >= 131072 && asns[i] <= 4199999999) ||
+						(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
+						return nil, fmt.Errorf("Reserved ASN number \"%d\" for global BGP peer",
+						asns[i])
 		}
 
 		peer := &config.Neighbor{
