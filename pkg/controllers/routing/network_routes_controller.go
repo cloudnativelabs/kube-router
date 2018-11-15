@@ -40,18 +40,24 @@ const (
 	podSubnetsIPSetName  = "kube-router-pod-subnets"
 	nodeAddrsIPSetName   = "kube-router-node-ips"
 
-	nodeASNAnnotation                 = "kube-router.io/node.asn"
-	pathPrependASNAnnotation          = "kube-router.io/path-prepend.as"
-	pathPrependRepeatNAnnotation      = "kube-router.io/path-prepend.repeat-n"
-	peerASNAnnotation                 = "kube-router.io/peer.asns"
-	peerIPAnnotation                  = "kube-router.io/peer.ips"
-	peerPasswordAnnotation            = "kube-router.io/peer.passwords"
-	peerPortAnnotation                = "kube-router.io/peer.ports"
-	rrClientAnnotation                = "kube-router.io/rr.client"
-	rrServerAnnotation                = "kube-router.io/rr.server"
-	svcLocalAnnotation                = "kube-router.io/service.local"
-	bgpLocalAddressAnnotation         = "kube-router.io/bgp-local-addresses"
-	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
+	nodeASNAnnotation                  = "kube-router.io/node.asn"
+	pathPrependASNAnnotation           = "kube-router.io/path-prepend.as"
+	pathPrependRepeatNAnnotation       = "kube-router.io/path-prepend.repeat-n"
+	peerASNAnnotation                  = "kube-router.io/peer.asns"
+	peerIPAnnotation                   = "kube-router.io/peer.ips"
+	peerPasswordAnnotation             = "kube-router.io/peer.passwords"
+	peerPortAnnotation                 = "kube-router.io/peer.ports"
+	rrClientAnnotation                 = "kube-router.io/rr.client"
+	rrServerAnnotation                 = "kube-router.io/rr.server"
+	svcLocalAnnotation                 = "kube-router.io/service.local"
+	bgpLocalAddressAnnotation          = "kube-router.io/bgp-local-addresses"
+	svcAdvertiseClusterAnnotation      = "kube-router.io/service.advertise.cluster"
+	svcAdvertiseExternalAnnotation     = "kube-router.io/service.advertise.external"
+	svcAdvertiseLoadBalancerAnnotation = "kube-router.io/service.advertise.loadbalancer"
+	LeaderElectionRecordAnnotationKey  = "control-plane.alpha.kubernetes.io/leader"
+
+	// Deprecated: use kube-router.io/service.advertise.loadbalancer instead
+	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
 )
 
 // NetworkRoutingController is struct to hold necessary information required by controller
