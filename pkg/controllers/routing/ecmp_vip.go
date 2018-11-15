@@ -268,12 +268,9 @@ func (nrc *NetworkRoutingController) getLoadBalancerIps(svc *v1core.Service) []s
 	if svc.Spec.Type == "LoadBalancer" {
 		// skip headless services
 		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
-			_, skiplbips := svc.ObjectMeta.Annotations["kube-router.io/service.skiplbips"]
-			if !skiplbips {
-				for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
-					if len(lbIngress.IP) > 0 {
-						loadBalancerIpList = append(loadBalancerIpList, lbIngress.IP)
-					}
+			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
+				if len(lbIngress.IP) > 0 {
+					loadBalancerIpList = append(loadBalancerIpList, lbIngress.IP)
 				}
 			}
 		}
@@ -313,6 +310,16 @@ func (nrc *NetworkRoutingController) getVIPs(onlyActiveEndpoints bool) ([]string
 	return toAdvertiseList, toWithdrawList, nil
 }
 
+func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service, annotation string, defaultValue bool) bool {
+	returnValue := defaultValue
+	stringValue, exists := svc.Annotations[annotation]
+	if exists {
+		// Service annotations overrides defaults.
+		returnValue, _ = strconv.ParseBool(stringValue)
+	}
+	return returnValue
+}
+
 func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, onlyActiveEndpoints bool) ([]string, []string, error) {
 	ipList := make([]string, 0)
 	var err error
@@ -328,16 +335,21 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 		}
 	}
 
-	if nrc.advertiseClusterIP {
+	if nrc.shouldAdvertiseService(svc, svcAdvertiseClusterAnnotation, nrc.advertiseClusterIP) {
 		clusterIp := nrc.getClusterIp(svc)
 		if clusterIp != "" {
 			ipList = append(ipList, clusterIp)
 		}
 	}
-	if nrc.advertiseExternalIP {
+
+	if nrc.shouldAdvertiseService(svc, svcAdvertiseExternalAnnotation, nrc.advertiseExternalIP) {
 		ipList = append(ipList, nrc.getExternalIps(svc)...)
 	}
-	if nrc.advertiseLoadBalancerIP {
+
+	// Deprecated: Use service.advertise.loadbalancer=false instead of service.skiplbips.
+	_, skiplbips := svc.Annotations[svcSkipLbIpsAnnotation]
+	advertiseLoadBalancer := nrc.shouldAdvertiseService(svc, svcAdvertiseLoadBalancerAnnotation, nrc.advertiseLoadBalancerIP)
+	if advertiseLoadBalancer && !skiplbips {
 		ipList = append(ipList, nrc.getLoadBalancerIps(svc)...)
 	}
 
