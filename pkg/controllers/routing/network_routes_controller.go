@@ -51,9 +51,9 @@ const (
 	rrServerAnnotation                 = "kube-router.io/rr.server"
 	svcLocalAnnotation                 = "kube-router.io/service.local"
 	bgpLocalAddressAnnotation          = "kube-router.io/bgp-local-addresses"
-	svcAdvertiseClusterAnnotation      = "kube-router.io/service.advertise.cluster"
-	svcAdvertiseExternalAnnotation     = "kube-router.io/service.advertise.external"
-	svcAdvertiseLoadBalancerAnnotation = "kube-router.io/service.advertise.loadbalancer"
+	svcAdvertiseClusterAnnotation      = "kube-router.io/service.advertise.clusterip"
+	svcAdvertiseExternalAnnotation     = "kube-router.io/service.advertise.externalip"
+	svcAdvertiseLoadBalancerAnnotation = "kube-router.io/service.advertise.loadbalancerip"
 	LeaderElectionRecordAnnotationKey  = "control-plane.alpha.kubernetes.io/leader"
 
 	// Deprecated: use kube-router.io/service.advertise.loadbalancer instead
