@@ -49,50 +49,6 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			},
 		},
 		{
-			"add bgp path for service with ClusterIP and kube-router.io/service.advertise.cluster=true annotation",
-			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
-			},
-			[]*v1core.Service{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
-						Annotations: map[string]string{
-							"kube-router.io/service.advertise.cluster": "true",
-						},
-					},
-					Spec: v1core.ServiceSpec{
-						Type:      "ClusterIP",
-						ClusterIP: "10.0.0.1",
-					},
-				},
-			},
-			map[string]bool{
-				"10.0.0.1/32": true,
-			},
-		},
-		{
-			"no bgp path for service with ClusterIP and kube-router.io/service.advertise.cluster=false annotation",
-			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
-			},
-			[]*v1core.Service{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
-						Annotations: map[string]string{
-							"kube-router.io/service.advertise.cluster": "false",
-						},
-					},
-					Spec: v1core.ServiceSpec{
-						Type:      "ClusterIP",
-						ClusterIP: "10.0.0.1",
-					},
-				},
-			},
-			map[string]bool{},
-		},
-		{
 			"add bgp path for service with ClusterIP/NodePort/LoadBalancer",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
@@ -279,28 +235,6 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				"1.1.1.1/32": true,
 				"2.2.2.2/32": true,
 			},
-		},
-		{
-			"no bgp path for service with external IPs and kube-router.io/service.advertise.external=false annotation",
-			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
-			},
-			[]*v1core.Service{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
-						Annotations: map[string]string{
-							"kube-router.io/service.advertise.external": "false",
-						},
-					},
-					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-					},
-				},
-			},
-			map[string]bool{},
 		},
 		{
 			"add bgp path for services with external IPs of type ClusterIP/NodePort/LoadBalancer",
@@ -513,39 +447,6 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-1",
 						Annotations: map[string]string{
 							svcSkipLbIpsAnnotation: "true",
-						},
-					},
-					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
-						ClusterIP: "10.0.0.1",
-					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
-								{
-									IP: "10.0.255.1",
-								},
-								{
-									IP: "10.0.255.2",
-								},
-							},
-						},
-					},
-				},
-			},
-			map[string]bool{},
-		},
-		{
-			"no bgp path to loadbalancerIPs for service with LoadBalancer and kube-router.io/service.advertise.loadbalancer=false annotation",
-			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
-			},
-			[]*v1core.Service{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
-						Annotations: map[string]string{
-							svcAdvertiseLoadBalancerAnnotation: "false",
 						},
 					},
 					Spec: v1core.ServiceSpec{
