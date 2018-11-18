@@ -296,7 +296,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 
 	err = ensureIpvsConnReuseMode()
 	if err != nil {
-		return errors.New("Failed to do sysctl net.ipv4.vs.conn_reuse_mode=0 due to: %s" + err.Error())
+		return fmt.Errorf("failed to set net.ipv4.vs.conn_reuse_mode=0: %s", err)
 	}
 
 	// loop forever unitl notified to stop on stopCh
