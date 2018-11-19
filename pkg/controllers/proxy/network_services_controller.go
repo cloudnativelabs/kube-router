@@ -1419,7 +1419,7 @@ func ensureIpvsConnReuseMode() error {
 		glog.Errorf("skipping setting net.ipv4.vs.conn_reuse_mode=0, error stating: %s : %s", sysctlPath, err.Error())
 		return nil
 	}
-	return ioutil.WriteFile("sysctlPath", []byte(strconv.Itoa(0)), 0640)
+	return ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(0)), 0640)
 }
 
 func ensureIpvsExpireNodestConn() error {
