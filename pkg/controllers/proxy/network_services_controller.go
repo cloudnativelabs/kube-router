@@ -1410,7 +1410,16 @@ func ensureIpvsConntrack() error {
 }
 
 func ensureIpvsConnReuseMode() error {
-	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/conn_reuse_mode", []byte(strconv.Itoa(0)), 0640)
+	sysctlPath := "/proc/sys/net/ipv4/vs/conn_reuse_mode"
+	if _, err := os.Stat(sysctlPath); err != nil {
+		if os.IsNotExist(err) {
+			glog.Infof("%s not found, skipping setting net.ipv4.vs.conn_reuse_mode=0 (non fatal error, feature introduced into kernel in 4.1)", sysctlPath)
+			return nil
+		}
+		glog.Errorf("skipping setting net.ipv4.vs.conn_reuse_mode=0, error stating: %s : %s", sysctlPath, err.Error())
+		return nil
+	}
+	return ioutil.WriteFile("sysctlPath", []byte(strconv.Itoa(0)), 0640)
 }
 
 func ensureIpvsExpireNodestConn() error {
