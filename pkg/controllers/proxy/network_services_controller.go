@@ -30,7 +30,6 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/net/context"
-
 	api "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
@@ -293,6 +292,11 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	err = ensureIpvsQuiescentTemplate()
 	if err != nil {
 		return errors.New("Failed to do sysctl net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
+	}
+
+	err = ensureIpvsConnReuseMode()
+	if err != nil {
+		return fmt.Errorf("failed to set net.ipv4.vs.conn_reuse_mode=0: %s", err)
 	}
 
 	// loop forever unitl notified to stop on stopCh
@@ -1403,6 +1407,19 @@ func deleteHairpinIptablesRules() error {
 
 func ensureIpvsConntrack() error {
 	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/conntrack", []byte(strconv.Itoa(1)), 0640)
+}
+
+func ensureIpvsConnReuseMode() error {
+	sysctlPath := "/proc/sys/net/ipv4/vs/conn_reuse_mode"
+	if _, err := os.Stat(sysctlPath); err != nil {
+		if os.IsNotExist(err) {
+			glog.Infof("%s not found, skipping setting net.ipv4.vs.conn_reuse_mode=0 (non fatal error, feature introduced into kernel in 4.1)", sysctlPath)
+			return nil
+		}
+		glog.Errorf("skipping setting net.ipv4.vs.conn_reuse_mode=0, error stating: %s : %s", sysctlPath, err.Error())
+		return nil
+	}
+	return ioutil.WriteFile("sysctlPath", []byte(strconv.Itoa(0)), 0640)
 }
 
 func ensureIpvsExpireNodestConn() error {
