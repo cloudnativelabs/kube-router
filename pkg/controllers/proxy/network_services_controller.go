@@ -277,26 +277,36 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 
 	// enable ipvs connection tracking
-	err = ensureIpvsConntrack()
+	err = utils.setSysctl("net/ipv4/vs/conntrack", 1)
 	if err != nil {
 		return errors.New("Failed to do sysctl net.ipv4.vs.conntrack=1 due to: %s" + err.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	err = ensureIpvsExpireNodestConn()
+	err = utils.setSysctl("net/ipv4/vs/expire_nodest_conn", 1)
 	if err != nil {
 		return errors.New("Failed to do sysctl net.ipv4.vs.expire_nodest_conn=1 due to: %s" + err.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	err = ensureIpvsQuiescentTemplate()
+	err = utils.setSysctl("net/ipv4/vs/expire_quiescent_templat", 1)
 	if err != nil {
 		return errors.New("Failed to do sysctl net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
 	}
 
-	err = ensureIpvsConnReuseMode()
+	err = utils.setSysctl("net/ipv4/vs/conn_reuse_mode", 0)
 	if err != nil {
 		return fmt.Errorf("failed to set net.ipv4.vs.conn_reuse_mode=0: %s", err)
+	}
+
+	err = utils.setSysctl("net/ipv4/conf/all/arp_ignore", 1)
+	if err != nil {
+		return fmt.Errorf("failed to set net.ipv4.conf.all.arp_ignore=1: %s", err)
+	}
+
+	err = utils.setSysctl("net/ipv4/conf/all/arp_announce", 2)
+	if err != nil {
+		return fmt.Errorf("failed to set net.ipv4.conf.all.arp_announce=2: %s", err)
 	}
 
 	// loop forever unitl notified to stop on stopCh
@@ -1403,31 +1413,6 @@ func deleteHairpinIptablesRules() error {
 			"\": " + err.Error())
 	}
 	return nil
-}
-
-func ensureIpvsConntrack() error {
-	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/conntrack", []byte(strconv.Itoa(1)), 0640)
-}
-
-func ensureIpvsConnReuseMode() error {
-	sysctlPath := "/proc/sys/net/ipv4/vs/conn_reuse_mode"
-	if _, err := os.Stat(sysctlPath); err != nil {
-		if os.IsNotExist(err) {
-			glog.Infof("%s not found, skipping setting net.ipv4.vs.conn_reuse_mode=0 (non fatal error, feature introduced into kernel in 4.1)", sysctlPath)
-			return nil
-		}
-		glog.Errorf("skipping setting net.ipv4.vs.conn_reuse_mode=0, error stating: %s : %s", sysctlPath, err.Error())
-		return nil
-	}
-	return ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(0)), 0640)
-}
-
-func ensureIpvsExpireNodestConn() error {
-	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/expire_nodest_conn", []byte(strconv.Itoa(1)), 0640)
-}
-
-func ensureIpvsQuiescentTemplate() error {
-	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/expire_quiescent_template", []byte(strconv.Itoa(1)), 0640)
 }
 
 func deleteMasqueradeIptablesRule() error {
