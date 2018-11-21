@@ -275,7 +275,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	if err != nil {
 		return errors.New("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
-
+	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
 	err = utils.setSysctl("net/ipv4/vs/conntrack", 1)
 	if err != nil {
@@ -294,16 +294,19 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New("Failed to do sysctl net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
 	}
 
+	// https://github.com/kubernetes/kubernetes/pull/71114
 	err = utils.setSysctl("net/ipv4/vs/conn_reuse_mode", 0)
 	if err != nil {
 		return fmt.Errorf("failed to set net.ipv4.vs.conn_reuse_mode=0: %s", err)
 	}
 
+	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	err = utils.setSysctl("net/ipv4/conf/all/arp_ignore", 1)
 	if err != nil {
 		return fmt.Errorf("failed to set net.ipv4.conf.all.arp_ignore=1: %s", err)
 	}
 
+	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	err = utils.setSysctl("net/ipv4/conf/all/arp_announce", 2)
 	if err != nil {
 		return fmt.Errorf("failed to set net.ipv4.conf.all.arp_announce=2: %s", err)
