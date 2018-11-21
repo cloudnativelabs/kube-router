@@ -9,7 +9,7 @@ import (
 	"github.com/golang/glog"
 )
 
-func setSysctl(path string, value int) error {
+func SetSysctl(path string, value int) error {
 
 	sysctlPath := fmt.Sprintf("/proc/sys/%s", path)
 	if _, err := os.Stat(sysctlPath); err != nil {
