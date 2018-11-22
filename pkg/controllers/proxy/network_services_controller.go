@@ -277,44 +277,44 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
-	errs := utils.SetSysctl("net/ipv4/vs/conntrack", 1)
-	if errs != nil {
-		return errors.New(errs.Error())
+	sysctlErr := utils.SetSysctl("net/ipv4/vs/conntrack", 1)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	errs = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
-	if errs != nil {
-		return errors.New(errs.Error())
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	errs = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", 1)
-	if errs != nil {
-		return errors.New(errs.Error())
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", 1)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/71114
-	errs = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
-	if errs != nil {
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
+	if sysctlErr != nil {
 		// Check if the error is fatal, on older kernels this option does not exist and the same behaviour is default
 		// if option is not found just log it
-		if errs.IsFatal() {
-			return errors.New(errs.Error())
+		if sysctlErr.IsFatal() {
+			return errors.New(sysctlErr.Error())
 		}
-		glog.Info(errs.Error())
+		glog.Info(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	errs = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", 1)
-	if errs != nil {
-		return errors.New(errs.Error())
+	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", 1)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	errs = utils.SetSysctl("net/ipv4/conf/all/arp_announce", 2)
-	if errs != nil {
-		return errors.New(errs.Error())
+	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_announce", 2)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
 	// loop forever unitl notified to stop on stopCh
