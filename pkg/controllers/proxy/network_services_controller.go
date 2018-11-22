@@ -279,34 +279,26 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	// enable ipvs connection tracking
 	errs := utils.SetSysctl("net/ipv4/vs/conntrack", 1)
 	if errs != nil {
-		if errs.IsFatal() {
-			return errors.New(errs.Error())
-		}
-		glog.Info(errs.Error())
+		return errors.New(errs.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
 	errs = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
 	if errs != nil {
-		if errs.IsFatal() {
-			return errors.New(errs.Error())
-		}
-		glog.Info(errs.Error())
-
+		return errors.New(errs.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
 	errs = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", 1)
 	if errs != nil {
-		if errs.IsFatal() {
-			return errors.New(errs.Error())
-		}
-		glog.Info(errs.Error())
+		return errors.New(errs.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/71114
 	errs = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
 	if errs != nil {
+		// Check if the error is fatal, on older kernels this option does not exist and the same behaviour is default
+		// if option is not found just log it
 		if errs.IsFatal() {
 			return errors.New(errs.Error())
 		}
@@ -316,20 +308,13 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	errs = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", 1)
 	if errs != nil {
-		if errs.IsFatal() {
-			return errors.New(errs.Error())
-		}
-		glog.Info(errs.Error())
+		return errors.New(errs.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	errs = utils.SetSysctl("net/ipv4/conf/all/arp_announce", 2)
 	if errs != nil {
-		if errs.IsFatal() {
-			return errors.New(errs.Error())
-		}
-		glog.Info(errs.Error())
-
+		return errors.New(errs.Error())
 	}
 
 	// loop forever unitl notified to stop on stopCh
