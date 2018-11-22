@@ -281,39 +281,36 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	if errs != nil {
 		if errs.IsFatal() {
 			return errors.New(errs.Error())
-		} else {
-			glog.Info(errs.Error)
 		}
+		glog.Info(errs.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
 	errs = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
 	if errs != nil {
 		if errs.IsFatal() {
-			return errors.New(errs.Error())
-		} else {
-			glog.Info(errs.Error)
+			return errors.New(*errs.Error())
 		}
+		glog.Info(errs.Error())
+
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	errs = utils.SetSysctl("net/ipv4/vs/expire_quiescent_templat", 1)
+	errs = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", 1)
 	if errs != nil {
 		if errs.IsFatal() {
-			return errors.New(errs.Error())
-		} else {
-			glog.Info(errs.Error)
+			return errors.New(*errs.Error())
 		}
+		glog.Info(errs.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/71114
 	errs = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
 	if errs != nil {
 		if errs.IsFatal() {
-			return errors.New(errs.Error())
-		} else {
-			glog.Info(errs.Error)
+			return errors.New(*errs.Error())
 		}
+		glog.Info(errs.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
@@ -321,9 +318,8 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	if errs != nil {
 		if errs.IsFatal() {
 			return errors.New(errs.Error())
-		} else {
-			glog.Info(errs.Error)
 		}
+		glog.Info(errs.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
@@ -331,9 +327,9 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	if errs != nil {
 		if errs.IsFatal() {
 			return errors.New(errs.Error())
-		} else {
-			glog.Info(errs.Error)
 		}
+		glog.Info(errs.Error())
+
 	}
 
 	// loop forever unitl notified to stop on stopCh
