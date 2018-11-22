@@ -275,28 +275,46 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	if err != nil {
 		return errors.New("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
-
+	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
-	err = ensureIpvsConntrack()
-	if err != nil {
-		return errors.New("Failed to do sysctl net.ipv4.vs.conntrack=1 due to: %s" + err.Error())
+	sysctlErr := utils.SetSysctl("net/ipv4/vs/conntrack", 1)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	err = ensureIpvsExpireNodestConn()
-	if err != nil {
-		return errors.New("Failed to do sysctl net.ipv4.vs.expire_nodest_conn=1 due to: %s" + err.Error())
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	err = ensureIpvsQuiescentTemplate()
-	if err != nil {
-		return errors.New("Failed to do sysctl net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", 1)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
-	err = ensureIpvsConnReuseMode()
-	if err != nil {
-		return fmt.Errorf("failed to set net.ipv4.vs.conn_reuse_mode=0: %s", err)
+	// https://github.com/kubernetes/kubernetes/pull/71114
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
+	if sysctlErr != nil {
+		// Check if the error is fatal, on older kernels this option does not exist and the same behaviour is default
+		// if option is not found just log it
+		if sysctlErr.IsFatal() {
+			return errors.New(sysctlErr.Error())
+		}
+		glog.Info(sysctlErr.Error())
+	}
+
+	// https://github.com/kubernetes/kubernetes/pull/70530/files
+	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", 1)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
+	}
+
+	// https://github.com/kubernetes/kubernetes/pull/70530/files
+	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_announce", 2)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
 	}
 
 	// loop forever unitl notified to stop on stopCh
@@ -1403,31 +1421,6 @@ func deleteHairpinIptablesRules() error {
 			"\": " + err.Error())
 	}
 	return nil
-}
-
-func ensureIpvsConntrack() error {
-	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/conntrack", []byte(strconv.Itoa(1)), 0640)
-}
-
-func ensureIpvsConnReuseMode() error {
-	sysctlPath := "/proc/sys/net/ipv4/vs/conn_reuse_mode"
-	if _, err := os.Stat(sysctlPath); err != nil {
-		if os.IsNotExist(err) {
-			glog.Infof("%s not found, skipping setting net.ipv4.vs.conn_reuse_mode=0 (non fatal error, feature introduced into kernel in 4.1)", sysctlPath)
-			return nil
-		}
-		glog.Errorf("skipping setting net.ipv4.vs.conn_reuse_mode=0, error stating: %s : %s", sysctlPath, err.Error())
-		return nil
-	}
-	return ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(0)), 0640)
-}
-
-func ensureIpvsExpireNodestConn() error {
-	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/expire_nodest_conn", []byte(strconv.Itoa(1)), 0640)
-}
-
-func ensureIpvsQuiescentTemplate() error {
-	return ioutil.WriteFile("/proc/sys/net/ipv4/vs/expire_quiescent_template", []byte(strconv.Itoa(1)), 0640)
 }
 
 func deleteMasqueradeIptablesRule() error {
