@@ -289,7 +289,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	errs = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
 	if errs != nil {
 		if errs.IsFatal() {
-			return errors.New(*errs.Error())
+			return errors.New(errs.Error())
 		}
 		glog.Info(errs.Error())
 
@@ -299,7 +299,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	errs = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", 1)
 	if errs != nil {
 		if errs.IsFatal() {
-			return errors.New(*errs.Error())
+			return errors.New(errs.Error())
 		}
 		glog.Info(errs.Error())
 	}
@@ -308,7 +308,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	errs = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
 	if errs != nil {
 		if errs.IsFatal() {
-			return errors.New(*errs.Error())
+			return errors.New(errs.Error())
 		}
 		glog.Info(errs.Error())
 	}
