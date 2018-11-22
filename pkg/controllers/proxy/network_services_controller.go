@@ -277,39 +277,63 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
-	err = utils.SetSysctl("net/ipv4/vs/conntrack", 1)
-	if err != nil {
-		return errors.New("Failed to set net.ipv4.vs.conntrack=1 due to: %s" + err.Error())
+	errs := utils.SetSysctl("net/ipv4/vs/conntrack", 1)
+	if errs != nil {
+		if errs.IsFatal() {
+			return errors.New(errs.Error())
+		} else {
+			glog.Info(errs.Error)
+		}
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	err = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
-	if err != nil {
-		return errors.New("Failed to set net.ipv4.vs.expire_nodest_conn=1 due to: %s" + err.Error())
+	errs = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
+	if errs != nil {
+		if errs.IsFatal() {
+			return errors.New(errs.Error())
+		} else {
+			glog.Info(errs.Error)
+		}
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	err = utils.SetSysctl("net/ipv4/vs/expire_quiescent_templat", 1)
-	if err != nil {
-		return errors.New("Failed to set net.ipv4.vs.expire_quiescent_template=1 due to: %s" + err.Error())
+	errs = utils.SetSysctl("net/ipv4/vs/expire_quiescent_templat", 1)
+	if errs != nil {
+		if errs.IsFatal() {
+			return errors.New(errs.Error())
+		} else {
+			glog.Info(errs.Error)
+		}
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/71114
-	err = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
-	if err != nil {
-		return fmt.Errorf("failed to set net.ipv4.vs.conn_reuse_mode=0 due to: %s", err)
+	errs = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
+	if errs != nil {
+		if errs.IsFatal() {
+			return errors.New(errs.Error())
+		} else {
+			glog.Info(errs.Error)
+		}
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	err = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", 1)
-	if err != nil {
-		return fmt.Errorf("failed to set net.ipv4.conf.all.arp_ignore=1 due to: %s", err)
+	errs = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", 1)
+	if errs != nil {
+		if errs.IsFatal() {
+			return errors.New(errs.Error())
+		} else {
+			glog.Info(errs.Error)
+		}
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	err = utils.SetSysctl("net/ipv4/conf/all/arp_announce", 2)
-	if err != nil {
-		return fmt.Errorf("failed to set net.ipv4.conf.all.arp_announce=2 due to: %s", err)
+	errs = utils.SetSysctl("net/ipv4/conf/all/arp_announce", 2)
+	if errs != nil {
+		if errs.IsFatal() {
+			return errors.New(errs.Error())
+		} else {
+			glog.Info(errs.Error)
+		}
 	}
 
 	// loop forever unitl notified to stop on stopCh
