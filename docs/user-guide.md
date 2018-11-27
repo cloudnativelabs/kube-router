@@ -16,6 +16,16 @@ Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/maste
 ### generic
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/generic.md) to deploy kube-router on manually installed clusters
 
+### Amazon specific notes
+When running in an AWS environment that requires an explicit proxy you need to inject the proxy server as a [environment variable](https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/) in your kube-router deployment
+
+Example:
+
+    env:
+    - name: HTTP_PROXY
+      value: "http://proxy.example.com:80"
+
+
 ## deployment
 
 Depending on what functionality of kube-router you want to use, multiple deployment options are possible. You can use the flags `--run-firewall`, `--run-router`, `--run-service-proxy` to selectively enable only required functionality of kube-router.
