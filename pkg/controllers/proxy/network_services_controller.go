@@ -317,6 +317,13 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New(sysctlErr.Error())
 	}
 
+	// https://success.docker.com/article/ipvs-connection-timeout-issue
+	// https://github.com/cloudnativelabs/kube-router/issues/521
+	sysctlErr = utils.SetSysctl("net/ipv4/tcp_keepalive_time", 600)
+	if sysctlErr != nil {
+		return errors.New(sysctlErr.Error())
+	}
+
 	// loop forever unitl notified to stop on stopCh
 	for {
 		select {
