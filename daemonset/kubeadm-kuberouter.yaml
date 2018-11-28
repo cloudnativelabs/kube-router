@@ -99,6 +99,9 @@ spec:
       - effect: NoSchedule
         key: node.kubernetes.io/not-ready
         operator: Exists
+      - effect: NoSchedule
+        key: kubeadmNode
+        operator: Exists
       volumes:
       - name: lib-modules
         hostPath:
