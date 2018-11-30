@@ -454,7 +454,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 		return netlink.RouteDel(route)
 	}
 	glog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nexthop)
-	return netlink.RouteReplace(route)
+	return netlink.RouteAdd(route)
 }
 
 // Cleanup performs the cleanup of configurations done
