@@ -120,8 +120,8 @@ kube-router requires that they are encoded as base64.
 
 On a Linux or MacOS system you can encode your passwords on the command line:
 ```
-$ echo "SecurePassword" | base64
-U2VjdXJlUGFzc3dvcmQK
+$ printf "SecurePassword" | base64
+U2VjdXJlUGFzc3dvcmQ=
 ```
 
 #### Password Configuration Examples
