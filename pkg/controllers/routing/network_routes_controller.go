@@ -250,6 +250,12 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			}
 		}
 
+		// enable IP forwarding for the packets coming in/out from the pods
+		err = nrc.enableForwarding()
+		if err != nil {
+			glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
+		}
+
 		// advertise or withdraw IPs for the services to be reachable via host
 		toAdvertise, toWithdraw, err := nrc.getActiveVIPs()
 		if err != nil {
