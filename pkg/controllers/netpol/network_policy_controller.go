@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,7 +27,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"regexp"
 )
 
 const (
@@ -215,7 +215,7 @@ func (npc *NetworkPolicyController) Sync() error {
 	defer func() {
 		endTime := time.Since(start)
 		if npc.MetricsEnabled {
-			metrics.ControllerIptablesSyncTime.WithLabelValues().Set(float64(endTime.Seconds()))
+			metrics.ControllerIptablesSyncTime.Observe(endTime.Seconds())
 		}
 		glog.V(1).Infof("sync iptables took %v", endTime)
 	}()
@@ -258,7 +258,12 @@ func (npc *NetworkPolicyController) Sync() error {
 // policyspec is evaluated to set of matching pods, which are grouped in to a
 // ipset used for source ip addr matching.
 func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map[string]bool, map[string]bool, error) {
-
+	start := time.Now()
+	defer func() {
+		endTime := time.Since(start)
+		metrics.ControllerPolicyChainsSyncTime.Observe(endTime.Seconds())
+		glog.V(2).Infof("Syncing networl policy chains took %v", endTime)
+	}()
 	activePolicyChains := make(map[string]bool)
 	activePolicyIpSets := make(map[string]bool)
 
@@ -1536,6 +1541,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
 		prometheus.MustRegister(metrics.ControllerIptablesSyncTime)
+		prometheus.MustRegister(metrics.ControllerPolicyChainsSyncTime)
 		npc.MetricsEnabled = true
 	}
 

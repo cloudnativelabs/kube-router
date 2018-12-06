@@ -30,7 +30,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		metrics.ControllerBGPInternalPeersSyncTime.WithLabelValues().Set(float64(endTime.Seconds()))
+		if nrc.MetricsEnabled {
+			metrics.ControllerBGPInternalPeersSyncTime.Observe(endTime.Seconds())
+		}
 		glog.V(2).Infof("Syncing BGP peers for the node took %v", endTime)
 	}()
 
@@ -40,8 +42,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
 		return
 	}
-
-	metrics.ControllerBPGpeers.WithLabelValues().Set(float64(len(nodes.Items)))
+	if nrc.MetricsEnabled {
+		metrics.ControllerBPGpeers.Set(float64(len(nodes.Items)))
+	}
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, node := range nodes.Items {
