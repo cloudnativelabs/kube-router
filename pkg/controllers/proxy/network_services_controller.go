@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/controllers/graceful"
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
@@ -220,6 +221,8 @@ type NetworkServicesController struct {
 
 	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
+
+	gracefulHandler *graceful.Handler
 }
 
 // internal representation of kubernetes service
@@ -264,6 +267,9 @@ type endpointsInfoMap map[string][]endpointsInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // cancel when we are finished consuming integers
+	go nsc.gracefulHandler.Run(ctx)
 
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
@@ -925,7 +931,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				if !validEp {
 					glog.V(1).Infof("Found a destination %s in service %s which is no longer needed so cleaning up",
 						ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					err := nsc.ln.ipvsDelDestination(ipvsSvc, dst)
+					err := nsc.gracefulHandler.Delete(ipvsSvc, dst)
 					if err != nil {
 						glog.Errorf("Failed to delete destination %s from ipvs service %s",
 							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
@@ -1201,8 +1207,8 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 				svcInfo.local = true
 			}
 
-			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
-			serviceMap[svcId] = &svcInfo
+			svcID := generateServiceId(svc.Namespace, svc.Name, port.Name)
+			serviceMap[svcID] = &svcInfo
 		}
 	}
 	return serviceMap
@@ -2108,11 +2114,21 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	epInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer) (*NetworkServicesController, error) {
 
 	var err error
+
+	gm, err := graceful.NewGracefulHandler()
+	if err != nil {
+		return nil, err
+	}
+
 	ln, err := newLinuxNetworking()
 	if err != nil {
 		return nil, err
 	}
-	nsc := NetworkServicesController{ln: ln}
+
+	nsc := NetworkServicesController{
+		ln:              ln,
+		gracefulHandler: gm,
+	}
 
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
