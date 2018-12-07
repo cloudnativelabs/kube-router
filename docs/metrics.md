@@ -58,9 +58,9 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
 * controller_bgp_peers
   Number of BGP peers of the instance
 * controller_bgp_advertisements_received
-  Number of total BGP advertisements received since kube-router start
+  Total number of BGP advertisements received since kube-router started
 * controller_bgp_advertisements_sent
-  Number of total BGP advertisements sent since kube-router start
+  Total number of BGP advertisements sent since kube-router started
 * controller_bgp_internal_peers_sync_time
   Time it took for the BGP internal peer sync loop to complete
 * controller_routes_sync_time
@@ -70,7 +70,7 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
 
 * controller_iptables_sync_time
   Time it took for the iptables sync loop to complete
-* controller_policy_chains_sync_time"
+* controller_policy_chains_sync_time
   Time it took for controller to sync policy chains
 
 ### run-service-proxy = true
