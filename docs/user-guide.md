@@ -58,6 +58,7 @@ Usage of kube-router:
       --hostname-override string         Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
       --iptables-sync-period duration    The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
       --ipvs-sync-period duration        The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
+      --ipvs-graceful-period duration    The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --kubeconfig string                Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --masquerade-all                   SNAT all traffic to cluster IP/node port.
       --master string                    The address of the Kubernetes API server (overrides any value in kubeconfig).

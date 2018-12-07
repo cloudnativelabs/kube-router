@@ -268,7 +268,7 @@ type endpointsInfoMap map[string][]endpointsInfo
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // cancel when we are finished consuming integers
+	defer cancel() // stops graceful manager when NSC exits
 	go nsc.gracefulHandler.Run(ctx)
 
 	t := time.NewTicker(nsc.syncPeriod)
@@ -2115,7 +2115,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	var err error
 
-	gm, err := graceful.NewGracefulHandler()
+	gm, err := graceful.NewGracefulHandler(config)
 	if err != nil {
 		return nil, err
 	}

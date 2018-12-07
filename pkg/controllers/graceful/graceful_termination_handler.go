@@ -4,14 +4,14 @@ import (
 	"context"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/golang/glog"
 
 	"github.com/docker/libnetwork/ipvs"
 )
 
 const (
-	gracefulQueueSize     = 10
-	defaulGracefulTimeout = 3 * time.Minute
+	gracefulQueueSize = 10
 )
 
 // gracefulRequest Holds our request to gracefully remove the backend
@@ -19,7 +19,6 @@ type gracefulRequest struct {
 	ipvsSvc      *ipvs.Service
 	ipvsDst      *ipvs.Destination
 	deletionTime time.Time
-	retries      int
 }
 
 // Handler handles gracefully removing backends
@@ -27,6 +26,7 @@ type Handler struct {
 	ipvsHandle *ipvs.Handle
 	queueChan  chan gracefulRequest
 	jobQueue   []gracefulRequest
+	config     *options.KubeRouterConfig
 }
 
 // Delete a service destination gracefully
@@ -45,12 +45,11 @@ func (gh *Handler) Delete(svc *ipvs.Service, dst *ipvs.Destination) error {
 	if err != nil {
 		return err
 	}
-
+	deltionTime := time.Now()
 	req := gracefulRequest{
 		ipvsSvc:      svc,
 		ipvsDst:      newDest,
-		deletionTime: time.Now(),
-		retries:      0,
+		deletionTime: deltionTime,
 	}
 	gh.queueChan <- req
 	return nil
@@ -59,19 +58,13 @@ func (gh *Handler) Delete(svc *ipvs.Service, dst *ipvs.Destination) error {
 func (gh *Handler) cleanup() {
 	var newQueue []gracefulRequest
 	for _, dest := range gh.jobQueue {
-		if dest.retries > 3 {
-			glog.Errorf("Giving up on deleting IPVS destination: %v", dest.ipvsDst)
-			continue
-		}
-		if time.Since(dest.deletionTime) > defaulGracefulTimeout {
-			glog.V(2).Infof("Deleting IPVS destination %v", dest.ipvsDst)
+		if time.Since(dest.deletionTime) > gh.config.IpvsGracefulPeriod {
+			glog.V(2).Infof("Deleting IPVS destination: %v", dest.ipvsDst)
 			err := gh.ipvsHandle.DelDestination(dest.ipvsSvc, dest.ipvsDst)
 			if err != nil {
-				glog.Errorf("Failed to delete IPVS destination attempt %d : %v", dest.retries, dest.ipvsDst)
-				dest.retries++
-				newQueue = append(newQueue, dest)
-				continue
+				glog.Errorf("Failed to delete IPVS destination: %v, %s", dest.ipvsDst, err.Error())
 			}
+			continue
 		}
 		newQueue = append(newQueue, dest)
 	}
@@ -86,16 +79,23 @@ func (gh *Handler) Run(ctx context.Context) {
 
 	for {
 		select {
+		// Receive graceful termination requests
 		case req := <-gh.queueChan:
+			glog.V(2).Infof("Got deletion request for %v", req)
 			for _, dst := range gh.jobQueue {
 				if req.ipvsSvc == dst.ipvsSvc && req.ipvsDst == dst.ipvsDst {
+					glog.V(2).Infof("IPVS destination already scheduled for deletion: %v", req.ipvsDst)
 					break
 				}
-				gh.jobQueue = append(gh.jobQueue, req)
-
 			}
+			gh.jobQueue = append(gh.jobQueue, req)
+
+			// Perform periodic cleanup
 		case <-ticker.C:
+			glog.V(2).Info("Tick")
 			gh.cleanup()
+
+		// Handle shutdown signal
 		case <-ctx.Done():
 			glog.Info("Shutting down IPVS graceful manager")
 			return
@@ -104,7 +104,7 @@ func (gh *Handler) Run(ctx context.Context) {
 }
 
 //NewGracefulHandler starts a new controller
-func NewGracefulHandler() (*Handler, error) {
+func NewGracefulHandler(config *options.KubeRouterConfig) (*Handler, error) {
 	queue := make(chan gracefulRequest, gracefulQueueSize)
 
 	ipvsHandle, err := ipvs.New("")
@@ -115,5 +115,6 @@ func NewGracefulHandler() (*Handler, error) {
 	return &Handler{
 		ipvsHandle: ipvsHandle,
 		queueChan:  queue,
+		config:     config,
 	}, nil
 }
