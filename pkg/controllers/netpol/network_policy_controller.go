@@ -262,7 +262,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 	defer func() {
 		endTime := time.Since(start)
 		metrics.ControllerPolicyChainsSyncTime.Observe(endTime.Seconds())
-		glog.V(2).Infof("Syncing networl policy chains took %v", endTime)
+		glog.V(2).Infof("Syncing network policy chains took %v", endTime)
 	}()
 	activePolicyChains := make(map[string]bool)
 	activePolicyIpSets := make(map[string]bool)
