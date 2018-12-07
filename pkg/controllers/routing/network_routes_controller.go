@@ -325,7 +325,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 			case *gobgp.WatchEventBestPath:
 				glog.V(3).Info("Processing bgp route advertisement from peer")
 				if nrc.MetricsEnabled {
-					metrics.ControllerBGPadvertisementsReceived.WithLabelValues().Add(float64(1))
+					metrics.ControllerBGPadvertisementsReceived.Inc()
 				}
 				for _, path := range msg.PathList {
 					if path.IsLocal() {
@@ -342,6 +342,9 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 }
 
 func (nrc *NetworkRoutingController) advertisePodRoute() error {
+	if nrc.MetricsEnabled {
+		metrics.ControllerBGPadvertisementsSent.Inc()
+	}
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
 		return err
@@ -486,6 +489,12 @@ func (nrc *NetworkRoutingController) Cleanup() {
 }
 
 func (nrc *NetworkRoutingController) syncNodeIPSets() error {
+	start := time.Now()
+	defer func() {
+		if nrc.MetricsEnabled {
+			metrics.ControllerRoutesSyncTime.Observe(time.Since(start).Seconds())
+		}
+	}()
 	// Get the current list of the nodes from API server
 	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
@@ -786,6 +795,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		prometheus.MustRegister(metrics.ControllerBGPadvertisementsReceived)
 		prometheus.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
 		prometheus.MustRegister(metrics.ControllerBPGpeers)
+		prometheus.MustRegister(metrics.ControllerRoutesSyncTime)
 		nrc.MetricsEnabled = true
 	}
 

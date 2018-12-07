@@ -22,6 +22,8 @@ The default values unless other specified is
 By enabling [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) in Prometheus configuration & adding required annotations Prometheus can automaticly discover & scrape kube-router metrics
 
 ## Version notes
+kube-router v0.2.4 received a metrics overhaul where some metrics were changed into histograms, additional metrics was also added. Please make sure you are using the latest dashboard version with versions => v0.2.4
+
 kube-router 0.1.0-rc2 and upwards supports the runtime configuration for controlling where to expose the metrics. If you are using a older version, metrics path & port is locked to `/metrics` & `8080`
 
 ## Supported annotations
@@ -56,14 +58,20 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
 * controller_bgp_peers
   Number of BGP peers of the instance
 * controller_bgp_advertisements_received
-  Number of total BGP advertisements received since kube-router start
+  Total number of BGP advertisements received since kube-router started
+* controller_bgp_advertisements_sent
+  Total number of BGP advertisements sent since kube-router started
 * controller_bgp_internal_peers_sync_time
   Time it took for the BGP internal peer sync loop to complete
+* controller_routes_sync_time
+  Time it took for controller to sync routes
 
 ### run-firewall=true
 
 * controller_iptables_sync_time
   Time it took for the iptables sync loop to complete
+* controller_policy_chains_sync_time
+  Time it took for controller to sync policy chains
 
 ### run-service-proxy = true
 
@@ -95,7 +103,7 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
   Outgoing bytes per second
 
 To get a grouped list of CPS for each service a Prometheus query could look like this e.g: 
-`sum(kube_router_service_cps) by (namespace, service_name)`
+`sum(kube_router_service_cps) by (svc_namespace, service_name)`
 
 ## Grafana Dashboard
 
