@@ -2,6 +2,10 @@ package graceful
 
 import (
 	"context"
+	"os/exec"
+	"regexp"
+	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/options"
@@ -56,6 +60,8 @@ func (gh *Handler) Delete(svc *ipvs.Service, dst *ipvs.Destination) error {
 }
 
 func (gh *Handler) cleanup() {
+	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to check output and don't Error when matching
+	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
 	var newQueue []gracefulRequest
 	for _, dest := range gh.jobQueue {
 		if time.Since(dest.deletionTime) > gh.config.IpvsGracefulPeriod {
@@ -63,6 +69,16 @@ func (gh *Handler) cleanup() {
 			err := gh.ipvsHandle.DelDestination(dest.ipvsSvc, dest.ipvsDst)
 			if err != nil {
 				glog.Errorf("Failed to delete IPVS destination: %v, %s", dest.ipvsDst, err.Error())
+			}
+			// flush conntrack when endpoint for a UDP service changes
+			if dest.ipvsSvc.Protocol == uint16(syscall.IPPROTO_UDP) {
+				out, err := exec.Command("conntrack", "-D", "--orig-dst", dest.ipvsSvc.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(dest.ipvsSvc.Port))).CombinedOutput()
+				if err != nil {
+					if matched := re.MatchString(string(out)); !matched {
+						glog.Error("Failed to delete conntrack entry for endpoint: " + dest.ipvsSvc.Address.String() + ":" + strconv.Itoa(int(dest.ipvsSvc.Port)) + " due to " + err.Error())
+					}
+				}
+				glog.V(1).Infof("Deleted conntrack entry for endpoint: " + dest.ipvsSvc.Address.String() + ":" + strconv.Itoa(int(dest.ipvsSvc.Port)))
 			}
 			continue
 		}

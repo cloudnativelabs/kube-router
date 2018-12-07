@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -583,9 +582,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	var ipvsSvcs []*ipvs.Service
 
-	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to check output and don't Error when matching
-	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
-
 	start := time.Now()
 
 	defer func() {
@@ -935,17 +931,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 					if err != nil {
 						glog.Errorf("Failed to delete destination %s from ipvs service %s",
 							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					}
-
-					// flush conntrack when endpoint for a UDP service changes
-					if ipvsSvc.Protocol == syscall.IPPROTO_UDP {
-						out, err := exec.Command("conntrack", "-D", "--orig-dst", dst.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(dst.Port))).CombinedOutput()
-						if err != nil {
-							if matched := re.MatchString(string(out)); !matched {
-								glog.Error("Failed to delete conntrack entry for endpoint: " + dst.Address.String() + ":" + strconv.Itoa(int(dst.Port)) + " due to " + err.Error())
-							}
-						}
-						glog.V(1).Infof("Deleted conntrack entry for endpoint: " + dst.Address.String() + ":" + strconv.Itoa(int(dst.Port)))
 					}
 				}
 			}
