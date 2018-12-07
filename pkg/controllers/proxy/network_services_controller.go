@@ -221,7 +221,7 @@ type NetworkServicesController struct {
 	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
 
-	gracefulHandler *graceful.Handler
+	gracefulHandler *graceful.TerminationController
 }
 
 // internal representation of kubernetes service
@@ -2100,7 +2100,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	var err error
 
-	gm, err := graceful.NewGracefulHandler(config)
+	gm, err := graceful.NewTerminationController(config)
 	if err != nil {
 		return nil, err
 	}
