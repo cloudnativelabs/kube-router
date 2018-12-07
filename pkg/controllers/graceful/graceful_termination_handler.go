@@ -45,11 +45,11 @@ func (gh *Handler) Delete(svc *ipvs.Service, dst *ipvs.Destination) error {
 	if err != nil {
 		return err
 	}
-	deltionTime := time.Now()
+	deletionTime := time.Now()
 	req := gracefulRequest{
 		ipvsSvc:      svc,
 		ipvsDst:      newDest,
-		deletionTime: deltionTime,
+		deletionTime: deletionTime,
 	}
 	gh.queueChan <- req
 	return nil
@@ -79,6 +79,7 @@ func (gh *Handler) Run(ctx context.Context) {
 
 	for {
 		select {
+
 		// Receive graceful termination requests
 		case req := <-gh.queueChan:
 			glog.V(2).Infof("Got deletion request for %v", req)
@@ -90,7 +91,7 @@ func (gh *Handler) Run(ctx context.Context) {
 			}
 			gh.jobQueue = append(gh.jobQueue, req)
 
-			// Perform periodic cleanup
+		// Perform periodic cleanup
 		case <-ticker.C:
 			glog.V(2).Info("Tick")
 			gh.cleanup()
