@@ -100,9 +100,11 @@ func (gh *Handler) Run(ctx context.Context) {
 		case req := <-gh.queueChan:
 			glog.V(2).Infof("Got deletion request for %v", req)
 			for _, dst := range gh.jobQueue {
-				if req.ipvsSvc == dst.ipvsSvc && req.ipvsDst == dst.ipvsDst {
-					glog.V(2).Infof("IPVS destination already scheduled for deletion: %v", req.ipvsDst)
-					break
+				if req.ipvsSvc.Address.String() == dst.ipvsSvc.Address.String() && req.ipvsSvc.Port == dst.ipvsSvc.Port && req.ipvsSvc.Protocol == dst.ipvsSvc.Protocol {
+					if req.ipvsDst.Address.String() == dst.ipvsDst.Address.String() && req.ipvsDst.Port == dst.ipvsDst.Port {
+						glog.V(2).Infof("IPVS destination already scheduled for deletion: %v", req.ipvsDst)
+						break
+					}
 				}
 			}
 			gh.jobQueue = append(gh.jobQueue, req)
