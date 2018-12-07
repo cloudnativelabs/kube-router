@@ -276,6 +276,14 @@
   revision = "811b1089cde9dad18d4d0c2d09fbdbf28dbd27a5"
 
 [[projects]]
+  digest = "1:b3d20bcdedab2050e6bc58e52f4fdc46f710b4c74e1a1ecee262ebec1aee7b6e"
+  name = "github.com/godbus/dbus"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "2ff6f7ffd60f0f2410b3105864bdd12c7894f844"
+  version = "v5.0.1"
+
+[[projects]]
   digest = "1:a7534feda0f15b5fd691e59e4fb6b7547e27df4b415a62e02c7cb71b3439c1b1"
   name = "github.com/gogo/protobuf"
   packages = [
@@ -961,6 +969,14 @@
   version = "kubernetes-1.8.0-rc.1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:a05e7357700dcce1322ff01eb4ec68fc556e3ac2d5fd7fe9e4ffdcd9b337f094"
+  name = "k8s.io/apiserver"
+  packages = ["pkg/util/trace"]
+  pruneopts = "UT"
+  revision = "f9c2597c8687b120d0d48165c42b45f4fc95c82f"
+
+[[projects]]
   branch = "release-5.0"
   digest = "1:591d0813c53cf297e808a2eabcd8bac67da8f92a4a2d1341812397f909618f65"
   name = "k8s.io/client-go"
@@ -1096,12 +1112,40 @@
   revision = "45cf21002ef6b0320709b00606e38d89ed750fab"
 
 [[projects]]
+  digest = "1:e2999bf1bb6eddc2a6aa03fe5e6629120a53088926520ca3b4765f77d7ff7eab"
+  name = "k8s.io/klog"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a5bc97fbc634d635061f3146511332c7e313a55a"
+  version = "v0.1.0"
+
+[[projects]]
   branch = "master"
   digest = "1:f60e3ccfe35ad7632217492c6709871d6c84b2ba77219f054f8d0ef7d1b996e2"
   name = "k8s.io/kube-openapi"
   packages = ["pkg/common"]
   pruneopts = "UT"
   revision = "f442ecb314a3679150c272e2b9713d8deed5955d"
+
+[[projects]]
+  digest = "1:a26efa0d58579e2ae53c6600a27805fe5d57743772a6d1e6025ab440284d2fcb"
+  name = "k8s.io/kubernetes"
+  packages = [
+    "pkg/util/dbus",
+    "pkg/util/iptables",
+    "pkg/util/version",
+  ]
+  pruneopts = "UT"
+  revision = "435f92c719f279a3a67808c80521ea17d5715c66"
+  version = "v1.12.3"
+
+[[projects]]
+  branch = "master"
+  digest = "1:381323c2fe2e890a3dd3b5d6dc6f2199068408cca89b24f6b7ca1c60f32644a5"
+  name = "k8s.io/utils"
+  packages = ["exec"]
+  pruneopts = "UT"
+  revision = "0d26856f57b32ec3398579285e5c8a2bfe8c5243"
 
 [solve-meta]
   analyzer-name = "dep"
@@ -1145,6 +1189,9 @@
     "k8s.io/client-go/rest",
     "k8s.io/client-go/tools/cache",
     "k8s.io/client-go/tools/clientcmd",
+    "k8s.io/kubernetes/pkg/util/dbus",
+    "k8s.io/kubernetes/pkg/util/iptables",
+    "k8s.io/utils/exec",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

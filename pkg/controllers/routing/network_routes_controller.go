@@ -17,7 +17,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
-	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	bgpapi "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/config"
@@ -30,6 +29,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+
+	utildbus "k8s.io/kubernetes/pkg/util/dbus"
+	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
+	utilexec "k8s.io/utils/exec"
 )
 
 const (
@@ -100,6 +103,7 @@ type NetworkRoutingController struct {
 	pathPrepend             bool
 	localAddressList        []string
 	overrideNextHop         bool
+	iptClient               utiliptables.Interface
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -537,58 +541,26 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	return nil
 }
 
-func (nrc *NetworkRoutingController) newIptablesCmdHandler() (*iptables.IPTables, error) {
-	if nrc.isIpv6 {
-		return iptables.NewWithProtocol(iptables.ProtocolIPv6)
-	} else {
-		return iptables.NewWithProtocol(iptables.ProtocolIPv4)
-	}
-}
-
 // ensure there is rule in filter table and FORWARD chain to permit in/out traffic from pods
 // this rules will be appended so that any iptable rules for network policies will take
 // precedence
 func (nrc *NetworkRoutingController) enableForwarding() error {
-
-	iptablesCmdHandler, _ := nrc.newIptablesCmdHandler()
-
 	comment := "allow outbound traffic from pods"
 	args := []string{"-m", "comment", "--comment", comment, "-i", "kube-bridge", "-j", "ACCEPT"}
-	exists, err := iptablesCmdHandler.Exists("filter", "FORWARD", args...)
-	if err != nil {
+	if _, err := nrc.iptClient.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter, utiliptables.ChainForward, args...); err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-	}
-	if !exists {
-		err := iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
-		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
 	}
 
 	comment = "allow inbound traffic to pods"
 	args = []string{"-m", "comment", "--comment", comment, "-o", "kube-bridge", "-j", "ACCEPT"}
-	exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
-	if err != nil {
+	if _, err := nrc.iptClient.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter, utiliptables.ChainForward, args...); err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-	}
-	if !exists {
-		err = iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
-		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
 	}
 
 	comment = "allow outbound node port traffic on node interface with which node ip is associated"
 	args = []string{"-m", "comment", "--comment", comment, "-o", nrc.nodeInterface, "-j", "ACCEPT"}
-	exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
-	if err != nil {
+	if _, err := nrc.iptClient.EnsureRule(utiliptables.Prepend, utiliptables.TableFilter, utiliptables.ChainForward, args...); err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-	}
-	if !exists {
-		err = iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
-		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
 	}
 
 	return nil
@@ -935,6 +907,12 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 
 	nrc.nodeLister = nodeInformer.GetIndexer()
 	nrc.NodeEventHandler = nrc.newNodeEventHandler()
+
+	protocol := utiliptables.ProtocolIpv4
+	if nrc.isIpv6 {
+		protocol = utiliptables.ProtocolIpv6
+	}
+	nrc.iptClient = utiliptables.New(utilexec.New(), utildbus.New(), protocol)
 
 	return &nrc, nil
 }

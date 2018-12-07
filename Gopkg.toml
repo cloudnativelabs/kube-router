@@ -98,3 +98,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 [prune]
   go-tests = true
   unused-packages = true
+
+[[constraint]]
+  name = "k8s.io/kubernetes"
+  version = "1.12.3"

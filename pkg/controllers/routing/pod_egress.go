@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/golang/glog"
+	utiliptables "k8s.io/kubernetes/pkg/util/iptables"
 )
 
 // set up MASQUERADE rule so that egress traffic from the pods gets masquraded to node's IP
@@ -27,20 +28,14 @@ var (
 )
 
 func (nrc *NetworkRoutingController) createPodEgressRule() error {
-	iptablesCmdHandler, err := nrc.newIptablesCmdHandler()
-	if err != nil {
-		return errors.New("Failed create iptables handler:" + err.Error())
-	}
-
 	podEgressArgs := podEgressArgs4
 	if nrc.isIpv6 {
 		podEgressArgs = podEgressArgs6
 	}
-	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", podEgressArgs...)
-	if err != nil {
+
+	if _, err := nrc.iptClient.EnsureRule(utiliptables.Append, utiliptables.TableNAT, utiliptables.ChainPostrouting, podEgressArgs...); err != nil {
 		return errors.New("Failed to add iptable rule to masqurade outbound traffic from pods: " +
 			err.Error() + "External connectivity will not work.")
-
 	}
 
 	glog.V(1).Infof("Added iptables rule to masqurade outbound traffic from pods.")
@@ -48,57 +43,35 @@ func (nrc *NetworkRoutingController) createPodEgressRule() error {
 }
 
 func (nrc *NetworkRoutingController) deletePodEgressRule() error {
-	iptablesCmdHandler, err := nrc.newIptablesCmdHandler()
-	if err != nil {
-		return errors.New("Failed create iptables handler:" + err.Error())
-	}
-
 	podEgressArgs := podEgressArgs4
 	if nrc.isIpv6 {
 		podEgressArgs = podEgressArgs6
 	}
-	exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", podEgressArgs...)
-	if err != nil {
-		return errors.New("Failed to lookup iptable rule to masqurade outbound traffic from pods: " + err.Error())
+
+	if err := nrc.iptClient.DeleteRule(utiliptables.TableNAT, utiliptables.ChainPostrouting, podEgressArgs...); err != nil {
+		return errors.New("Failed to delete iptable rule to masqurade outbound traffic from pods: " +
+			err.Error() + ". Pod egress might still work...")
 	}
 
-	if exists {
-		err = iptablesCmdHandler.Delete("nat", "POSTROUTING", podEgressArgs...)
-		if err != nil {
-			return errors.New("Failed to delete iptable rule to masqurade outbound traffic from pods: " +
-				err.Error() + ". Pod egress might still work...")
-		}
-		glog.Infof("Deleted iptables rule to masqurade outbound traffic from pods.")
-	}
+	glog.Infof("Deleted iptables rule to masqurade outbound traffic from pods.")
 
 	return nil
 }
 
 func (nrc *NetworkRoutingController) deleteBadPodEgressRules() error {
-	iptablesCmdHandler, err := nrc.newIptablesCmdHandler()
-	if err != nil {
-		return errors.New("Failed create iptables handler:" + err.Error())
-	}
 	podEgressArgsBad := podEgressArgsBad4
 	if nrc.isIpv6 {
 		podEgressArgsBad = podEgressArgsBad6
 	}
-	for _, args := range podEgressArgsBad {
-		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
-		if err != nil {
-			return fmt.Errorf("Failed to lookup iptables rule: %s", err.Error())
-		}
 
-		if exists {
-			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
-			if err != nil {
-				return fmt.Errorf("Failed to delete old/bad iptable rule to "+
-					"masqurade outbound traffic from pods: %s.\n"+
-					"Pod egress might still work, or bugs may persist after upgrade...",
-					err)
-			}
-			glog.Infof("Deleted old/bad iptables rule to masqurade outbound traffic from pods.")
+	for _, args := range podEgressArgsBad {
+		if err := nrc.iptClient.DeleteRule(utiliptables.TableNAT, utiliptables.ChainPostrouting, args...); err != nil {
+			return fmt.Errorf("Failed to delete old/bad iptable rule to "+
+				"masqurade outbound traffic from pods: %s.\n"+
+				"Pod egress might still work, or bugs may persist after upgrade...",
+				err)
 		}
+		glog.Infof("Deleted old/bad iptables rule to masqurade outbound traffic from pods.")
 	}
 
 	return nil
