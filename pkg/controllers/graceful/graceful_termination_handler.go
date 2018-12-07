@@ -96,18 +96,22 @@ func (gh *Handler) Run(ctx context.Context) {
 	for {
 		select {
 
-		// Receive graceful termination requests
+		// Receive graceful termination requests as well as de-duplicate them
 		case req := <-gh.queueChan:
-			glog.V(2).Infof("Got deletion request for %v", req)
+			var found bool
+			glog.V(2).Infof("Got deletion request for svc: %v dst: %v", *req.ipvsSvc, *req.ipvsDst)
 			for _, dst := range gh.jobQueue {
 				if req.ipvsSvc.Address.String() == dst.ipvsSvc.Address.String() && req.ipvsSvc.Port == dst.ipvsSvc.Port && req.ipvsSvc.Protocol == dst.ipvsSvc.Protocol {
 					if req.ipvsDst.Address.String() == dst.ipvsDst.Address.String() && req.ipvsDst.Port == dst.ipvsDst.Port {
 						glog.V(2).Infof("IPVS destination already scheduled for deletion: %v", req.ipvsDst)
+						found = true
 						break
 					}
 				}
 			}
-			gh.jobQueue = append(gh.jobQueue, req)
+			if !found {
+				gh.jobQueue = append(gh.jobQueue, req)
+			}
 
 		// Perform periodic cleanup
 		case <-ticker.C:
