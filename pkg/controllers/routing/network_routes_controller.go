@@ -836,6 +836,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	if kubeRouterConfig.MetricsEnabled {
 		//Register the metrics for this controller
 		prometheus.MustRegister(metrics.ControllerBGPadvertisementsReceived)
+		prometheus.MustRegister(metrics.ControllerBGPadvertisementsSent)
 		prometheus.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
 		prometheus.MustRegister(metrics.ControllerBPGpeers)
 		prometheus.MustRegister(metrics.ControllerRoutesSyncTime)

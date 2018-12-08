@@ -9,8 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/golang/glog"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/docker/libnetwork/ipvs"
 )
@@ -138,6 +140,9 @@ func (gh *TerminationController) Run(ctx context.Context) {
 
 		// Perform periodic cleanup
 		case <-ticker.C:
+			if gh.config.MetricsEnabled {
+				metrics.ControllerGracefulTerminationQueueSize.Set(float64(len(gh.jobQueue)))
+			}
 			gh.cleanup()
 
 		// Handle shutdown signal
@@ -158,6 +163,11 @@ func NewTerminationController(config *options.KubeRouterConfig) (*TerminationCon
 	if err != nil {
 		return nil, err
 	}
+
+	if config.MetricsEnabled {
+		prometheus.MustRegister(metrics.ControllerGracefulTerminationQueueSize)
+	}
+
 	// Return a new GrafefulHandler
 	return &TerminationController{
 		ipvsHandle: ipvsHandle,

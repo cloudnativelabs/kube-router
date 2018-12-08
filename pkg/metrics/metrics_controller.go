@@ -117,13 +117,13 @@ var (
 		Name:      "controller_bgp_internal_peers_sync_time",
 		Help:      "Time it took to sync internal bgp peers",
 	})
-	// ControllerBGPadvertisementsReceived Time it took to sync internal bgp peers
+	// ControllerBGPadvertisementsReceived BGP advertisements received
 	ControllerBGPadvertisementsReceived = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "controller_bgp_advertisements_received",
 		Help:      "BGP advertisements received",
 	})
-	// ControllerBGPadvertisementsSent Time it took to sync internal bgp peers
+	// ControllerBGPadvertisementsSent BGP advertisements sent
 	ControllerBGPadvertisementsSent = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace: namespace,
 		Name:      "controller_bgp_advertisements_sent",
@@ -135,11 +135,17 @@ var (
 		Name:      "controller_ipvs_metrics_export_time",
 		Help:      "Time it took to export metrics",
 	})
-	// ControllerPolicyChainsSyncTime Time it took for controller to sync policys
+	// ControllerPolicyChainsSyncTime Time it took for controller to sync policy chains
 	ControllerPolicyChainsSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Name:      "controller_policy_chains_sync_time",
 		Help:      "Time it took for controller to sync policy chains",
+	})
+	//ControllerGracefulTerminationQueueSize the number of items in graceful termination queue
+	ControllerGracefulTerminationQueueSize = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_graceful_termination_queue_size",
+		Help:      "The number of entries in the IPVS graceful termination queue",
 	})
 )
 

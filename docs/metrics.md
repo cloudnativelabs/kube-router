@@ -22,6 +22,7 @@ The default values unless other specified is
 By enabling [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) in Prometheus configuration & adding required annotations Prometheus can automaticly discover & scrape kube-router metrics
 
 ## Version notes
+
 kube-router v0.2.4 received a metrics overhaul where some metrics were changed into histograms, additional metrics was also added. Please make sure you are using the latest dashboard version with versions => v0.2.4
 
 kube-router 0.1.0-rc2 and upwards supports the runtime configuration for controlling where to expose the metrics. If you are using a older version, metrics path & port is locked to `/metrics` & `8080`
@@ -75,6 +76,8 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
 
 ### run-service-proxy = true
 
+* controller_graceful_queue_size
+  The number of entries in the IPVS graceful termination queue
 * controller_ipvs_services_sync_time
   Time it took for the ipvs sync loop to complete
 * controller_ipvs_services
@@ -102,8 +105,9 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
 * service_bps_out
   Outgoing bytes per second
 
-To get a grouped list of CPS for each service a Prometheus query could look like this e.g: 
-`sum(kube_router_service_cps) by (svc_namespace, service_name)`
+To get a grouped list of CPS for each service a Prometheus query could look like this e.g:
+
+    sum(kube_router_service_cps) by (svc_namespace, service_name)
 
 ## Grafana Dashboard
 
