@@ -23,9 +23,10 @@ const (
 
 // gracefulRequest Holds our request to gracefully remove the backend
 type gracefulRequest struct {
-	ipvsSvc      *ipvs.Service
-	ipvsDst      *ipvs.Destination
-	deletionTime time.Time
+	ipvsSvc                   *ipvs.Service
+	ipvsDst                   *ipvs.Destination
+	deletionTime              time.Time
+	gracefulTerminationPeriod time.Duration
 }
 
 // TerminationController handles gracefully removing backends
@@ -37,7 +38,14 @@ type TerminationController struct {
 }
 
 // Delete a service destination gracefully
-func (gh *TerminationController) Delete(svc *ipvs.Service, dst *ipvs.Destination) error {
+func (gh *TerminationController) Delete(svc *ipvs.Service, dst *ipvs.Destination, gtp time.Duration) error {
+	var gracefulPeriod time.Duration
+	if gtp == 0 {
+		gracefulPeriod = gh.config.IpvsGracefulPeriod
+	} else {
+		gracefulPeriod = gtp
+	}
+
 	newDest := &ipvs.Destination{
 		Address:         dst.Address,
 		Port:            dst.Port,
@@ -48,10 +56,12 @@ func (gh *TerminationController) Delete(svc *ipvs.Service, dst *ipvs.Destination
 		LowerThreshold:  dst.LowerThreshold,
 	}
 	deletionTime := time.Now()
+
 	req := gracefulRequest{
-		ipvsSvc:      svc,
-		ipvsDst:      newDest,
-		deletionTime: deletionTime,
+		ipvsSvc:                   svc,
+		ipvsDst:                   newDest,
+		deletionTime:              deletionTime,
+		gracefulTerminationPeriod: gracefulPeriod,
 	}
 
 	//And push it to the controller queue
@@ -64,7 +74,7 @@ func (gh *TerminationController) cleanup() {
 	var newQueue []gracefulRequest
 	for _, dest := range gh.jobQueue {
 		// Check if our destination is old enough to consider
-		if time.Since(dest.deletionTime) > gh.config.IpvsGracefulPeriod {
+		if time.Since(dest.deletionTime) > dest.gracefulTerminationPeriod {
 			glog.V(2).Infof("Deleting IPVS destination: %v", dest.ipvsDst)
 			if err := gh.ipvsHandle.DelDestination(dest.ipvsSvc, dest.ipvsDst); err != nil {
 				glog.Errorf("Failed to delete IPVS destination: %v, %s", dest.ipvsDst, err.Error())

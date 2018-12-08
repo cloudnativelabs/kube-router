@@ -285,6 +285,18 @@ If you would like to use `HostPort` functionality below changes are required in 
 
 For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-hostport.yaml) with necessary changes required for `HostPort` functionality.
 
+## IPVS Graceful termination support
+
+As of 0.2.4 we support graceful termination of IPVS destinations. The default period is 5 minutes and can be set using `--ipvs-graceful-period` cli-opt 
+
+The timeout can be overriden per service by setting the annotation `kube-router.io/service.gracefulterminationperiod` to a duration string
+
+example:
+
+    kube-router.io/service.gracefulterminationperiod: 30s
+
+If the duration string is invalid the default period set by `--ipvs-graceful-period` will be used
+
 ## BGP configuration
 
 [Configuring BGP Peers](bgp.md)

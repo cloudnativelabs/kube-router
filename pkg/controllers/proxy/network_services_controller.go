@@ -48,12 +48,13 @@ const (
 	IPVS_SVC_F_SCHED2   = "flag-2"
 	IPVS_SVC_F_SCHED3   = "flag-3"
 
-	svcDSRAnnotation        = "kube-router.io/service.dsr"
-	svcSchedulerAnnotation  = "kube-router.io/service.scheduler"
-	svcHairpinAnnotation    = "kube-router.io/service.hairpin"
-	svcLocalAnnotation      = "kube-router.io/service.local"
-	svcSkipLbIpsAnnotation  = "kube-router.io/service.skiplbips"
-	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
+	gracefulTerminationAnnotation = "kube-router.io/service.gracefulterminationperiod"
+	svcDSRAnnotation              = "kube-router.io/service.dsr"
+	svcSchedulerAnnotation        = "kube-router.io/service.scheduler"
+	svcHairpinAnnotation          = "kube-router.io/service.hairpin"
+	svcLocalAnnotation            = "kube-router.io/service.local"
+	svcSkipLbIpsAnnotation        = "kube-router.io/service.skiplbips"
+	svcSchedFlagsAnnotation       = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 	svcIpSetName                      = "KUBE-SVC-ALL"
@@ -221,27 +222,28 @@ type NetworkServicesController struct {
 	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
 
-	gracefulHandler *graceful.TerminationController
+	gracefulController *graceful.TerminationController
 }
 
 // internal representation of kubernetes service
 type serviceInfo struct {
-	name                     string
-	namespace                string
-	clusterIP                net.IP
-	port                     int
-	protocol                 string
-	nodePort                 int
-	sessionAffinity          bool
-	directServerReturn       bool
-	scheduler                string
-	directServerReturnMethod string
-	hairpin                  bool
-	skipLbIps                bool
-	externalIPs              []string
-	loadBalancerIPs          []string
-	local                    bool
-	flags                    schedFlags
+	name                      string
+	namespace                 string
+	clusterIP                 net.IP
+	port                      int
+	protocol                  string
+	nodePort                  int
+	sessionAffinity           bool
+	directServerReturn        bool
+	scheduler                 string
+	directServerReturnMethod  string
+	gracefulTerminationPeriod time.Duration
+	hairpin                   bool
+	skipLbIps                 bool
+	externalIPs               []string
+	loadBalancerIPs           []string
+	local                     bool
+	flags                     schedFlags
 }
 
 // IPVS scheduler flags
@@ -268,7 +270,7 @@ type endpointsInfoMap map[string][]endpointsInfo
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // stops graceful manager when NSC exits
-	go nsc.gracefulHandler.Run(ctx)
+	go nsc.gracefulController.Run(ctx)
 
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
@@ -927,7 +929,14 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				if !validEp {
 					glog.V(1).Infof("Found a destination %s in service %s which is no longer needed so cleaning up",
 						ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					err := nsc.gracefulHandler.Delete(ipvsSvc, dst)
+					var gracefulTerminationPeriod time.Duration
+					for _, svc := range serviceInfoMap {
+						if svc.clusterIP.Equal(ipvsSvc.Address) {
+							gracefulTerminationPeriod = svc.gracefulTerminationPeriod
+							break
+						}
+					}
+					err := nsc.gracefulController.Delete(ipvsSvc, dst, gracefulTerminationPeriod)
 					if err != nil {
 						glog.Errorf("Failed to delete destination %s from ipvs service %s",
 							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
@@ -1176,6 +1185,22 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			flags, ok := svc.ObjectMeta.Annotations[svcSchedFlagsAnnotation]
 			if ok && svcInfo.scheduler == IPVS_MAGLEV_HASHING {
 				svcInfo.flags = parseSchedFlags(flags)
+			}
+
+			gracefulTerminationPeriodString, ok := svc.ObjectMeta.Annotations[gracefulTerminationAnnotation]
+			if ok {
+				gracefulTerminationPeriod, err := time.ParseDuration(gracefulTerminationPeriodString)
+				if err != nil {
+					glog.Errorf("Service %s/%s failed to parse annotation %s: %s as duration: %s, will use default value",
+						svc.ObjectMeta.Namespace,
+						svc.ObjectMeta.Name,
+						gracefulTerminationAnnotation,
+						gracefulTerminationPeriodString,
+						err.Error(),
+					)
+				} else {
+					svcInfo.gracefulTerminationPeriod = gracefulTerminationPeriod
+				}
 			}
 
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
@@ -2111,8 +2136,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 
 	nsc := NetworkServicesController{
-		ln:              ln,
-		gracefulHandler: gm,
+		ln:                 ln,
+		gracefulController: gm,
 	}
 
 	if config.MetricsEnabled {
