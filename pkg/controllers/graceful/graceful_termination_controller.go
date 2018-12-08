@@ -99,10 +99,10 @@ func (gh *TerminationController) flushConntrackUDP(dest gracefulRequest) error {
 	out, err := exec.Command("conntrack", "-D", "--orig-dst", dest.ipvsSvc.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(dest.ipvsSvc.Port))).CombinedOutput()
 	if err != nil {
 		if matched := re.MatchString(string(out)); !matched {
-			return fmt.Errorf("Failed to delete conntrack entry for endpoint: " + dest.ipvsSvc.Address.String() + ":" + strconv.Itoa(int(dest.ipvsSvc.Port)) + " due to " + err.Error())
+			return fmt.Errorf("Failed to delete conntrack entry for endpoint: %s:%d due to %s", dest.ipvsSvc.Address.String(), dest.ipvsSvc.Port, err.Error())
 		}
 	}
-	glog.V(1).Infof("Deleted conntrack entry for endpoint: " + dest.ipvsSvc.Address.String() + ":" + strconv.Itoa(int(dest.ipvsSvc.Port)))
+	glog.V(1).Infof("Deleted conntrack entry for endpoint: %s:%d", dest.ipvsSvc.Address.String(), dest.ipvsSvc.Port)
 	return nil
 }
 
