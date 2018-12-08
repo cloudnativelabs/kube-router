@@ -60,15 +60,14 @@ func (gh *TerminationController) Delete(svc *ipvs.Service, dst *ipvs.Destination
 	return nil
 }
 
-// cleanup does the lifting of removing destinationsn and cleaning conntrack records
+// cleanup does the lifting of removing destinations and cleaning conntrack records
 func (gh *TerminationController) cleanup() {
 	var newQueue []gracefulRequest
 	for _, dest := range gh.jobQueue {
 		// Check if our destination is old enough to consider
 		if time.Since(dest.deletionTime) > gh.config.IpvsGracefulPeriod {
 			glog.V(2).Infof("Deleting IPVS destination: %v", dest.ipvsDst)
-			err := gh.ipvsHandle.DelDestination(dest.ipvsSvc, dest.ipvsDst)
-			if err != nil {
+			if err := gh.ipvsHandle.DelDestination(dest.ipvsSvc, dest.ipvsDst); err != nil {
 				glog.Errorf("Failed to delete IPVS destination: %v, %s", dest.ipvsDst, err.Error())
 			}
 			// flush conntrack when endpoint for a UDP service changes
@@ -112,8 +111,7 @@ func (gh *TerminationController) handleReq(req gracefulRequest) error {
 	}
 	if !found {
 		// Set the destination weight to 0
-		err := gh.ipvsHandle.UpdateDestination(req.ipvsSvc, req.ipvsDst)
-		if err != nil {
+		if err := gh.ipvsHandle.UpdateDestination(req.ipvsSvc, req.ipvsDst); err != nil {
 			return fmt.Errorf("Unable to update IPVS destination svc: %v dst: %v due to: %s", *req.ipvsSvc, *req.ipvsDst, err.Error())
 		}
 		gh.jobQueue = append(gh.jobQueue, req)
@@ -133,8 +131,7 @@ func (gh *TerminationController) Run(ctx context.Context) {
 		// Receive graceful termination requests as well as de-duplicate them
 		case req := <-gh.queueChan:
 			glog.V(2).Infof("Got deletion request for svc: %v dst: %v", *req.ipvsSvc, *req.ipvsDst)
-			err := gh.handleReq(req)
-			if err != nil {
+			if err := gh.handleReq(req); err != nil {
 				glog.Error(err.Error())
 			}
 
@@ -158,17 +155,18 @@ func NewTerminationController(config *options.KubeRouterConfig) (*TerminationCon
 	//Our incoming queue to serialize requests
 	queue := make(chan gracefulRequest, gracefulQueueSize)
 
-	// Get our own IPVS handle to talk to the kernel over
+	// Get our own IPVS handle to talk to the kernel
 	ipvsHandle, err := ipvs.New("")
 	if err != nil {
 		return nil, err
 	}
 
+	// Register our metrics
 	if config.MetricsEnabled {
 		prometheus.MustRegister(metrics.ControllerGracefulTerminationQueueSize)
 	}
 
-	// Return a new GrafefulHandler
+	// Return a new graceful termination controller
 	return &TerminationController{
 		ipvsHandle: ipvsHandle,
 		queueChan:  queue,
