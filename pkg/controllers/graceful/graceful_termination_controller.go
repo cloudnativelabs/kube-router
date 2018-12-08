@@ -11,10 +11,9 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
+	"github.com/docker/libnetwork/ipvs"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/docker/libnetwork/ipvs"
 )
 
 // Static size for now, don't know if we will ever have to raise it
