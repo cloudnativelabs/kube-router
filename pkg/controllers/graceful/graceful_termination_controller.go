@@ -69,29 +69,12 @@ func (gh *TerminationController) Delete(svc *ipvs.Service, dst *ipvs.Destination
 	return nil
 }
 
-func (gh *TerminationController) getDestinationStats(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) (*ipvs.Destination, error) {
-	ipvsDsts, err := gh.ipvsHandle.GetDestinations(ipvsSvc)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to list IPVS destinations: %v %s", ipvsSvc, err.Error())
-	}
-	for _, dest := range ipvsDsts {
-		if dest.Address.String() == ipvsDst.Address.String() && dest.Port == ipvsDst.Port {
-			return dest, nil
-		}
-	}
-	return &ipvs.Destination{}, fmt.Errorf("Not found %v", ipvsSvc)
-}
-
 // cleanup does the lifting of removing destinations and cleaning conntrack records
 func (gh *TerminationController) cleanup() {
 	var newQueue []gracefulRequest
 	for _, dest := range gh.jobQueue {
-		destStats, err := gh.getDestinationStats(dest.ipvsSvc, dest.ipvsDst)
-		if err != nil {
-			glog.Errorf("Failed to get IPVS destinations for service %v", dest.ipvsSvc)
-		}
-		// Check if our destination is old enough to consider or has no active connections
-		if time.Since(dest.deletionTime) > dest.gracefulTerminationPeriod || (destStats.ActiveConnections == 0 && destStats.InactiveConnections == 0) {
+		// Check if our destination is old enough to consider
+		if time.Since(dest.deletionTime) > dest.gracefulTerminationPeriod {
 			glog.V(2).Infof("Deleting IPVS destination: %v", dest.ipvsDst)
 			if err := gh.ipvsHandle.DelDestination(dest.ipvsSvc, dest.ipvsDst); err != nil {
 				glog.Errorf("Failed to delete IPVS destination: %v, %s", dest.ipvsDst, err.Error())
