@@ -134,6 +134,39 @@ and if you want to move back to kube-proxy then clean up config done by kube-rou
 and run kube-proxy with the configuration you have.
 - [General Setup](/README.md#getting-started)
 
+
+## Advertising IPs
+
+kube-router can advertise Cluster, External and LoadBalancer IPs to BGP peers.
+It does this by:
+* locally adding the advertised IPs to the nodes' `kube-dummy-if` network interface
+* advertising the IPs to its BGP peers
+
+To set the default for all services use the `--advertise-cluster-ip`,
+`--advertise-external-ip` and `--advertise-loadbalancer-ip` flags.
+
+To selectively enable or disable this feature per-service use the
+`kube-router.io/service.advertise.cluster`, `kube-router.io/service.advertise.external`
+and `kube-router.io/service.advertise.loadbalancer` annotations.
+
+e.g.:
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.cluster=true"`
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.external=true"`
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.loadbalancer=true"`
+
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.cluster=false"`
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.external=false"`
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.loadbalancer=false"`
+
+By combining the flags with the per-service annotations you can choose either
+a opt-in or opt-out strategy for advertising IPs.
+
+Advertising LoadBalancer IPs works by inspecting the services
+`status.loadBalancer.ingress` IPs that are set by external LoadBalancers like
+for example MetalLb. This has been successfully tested together with
+[MetalLB](https://github.com/google/metallb) in ARP mode.
+
+
 ## Hairpin Mode
 
 Communication from a Pod that is behind a Service to its own ClusterIP:Port is
@@ -215,25 +248,6 @@ kubectl annotate service my-service "kube-router.io/service.scheduler=sh"
 For destination hashing scheduling use:
 kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
 ```
-
-## LoadBalancer IPs
-
-If you want to also advertise loadbalancer set IPs
-(`status.loadBalancer.ingress` IPs), e.g. when using it with MetalLb,
-add the `--advertise-loadbalancer-ip` flag (`false` by default).
-
-To selectively disable this behaviour per-service, you can use
-the `kube-router.io/service.skiplbips` annotation as e.g.:
-`$ kubectl annotate service my-external-service "kube-router.io/service.skiplbips=true"`
-
-In concrete, unless the Service is annotated as per above, the
-`--advertise-loadbalancer-ip` flag will make Service's Ingress IP(s)
-set by the LoadBalancer to:
-* be locally added to nodes' `kube-dummy-if` network interface
-* be advertised to BGP peers
-
-FYI Above has been successfully tested together with
-[MetalLB](https://github.com/google/metallb) in ARP mode.
 
 ## HostPort support
 
