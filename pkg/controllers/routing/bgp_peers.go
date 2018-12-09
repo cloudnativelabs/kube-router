@@ -123,6 +123,17 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 						},
 					},
 				},
+				{
+					Config: config.AfiSafiConfig{
+						AfiSafiName: config.AFI_SAFI_TYPE_IPV6_UNICAST,
+						Enabled:     true,
+					},
+					MpGracefulRestart: config.MpGracefulRestart{
+						Config: config.MpGracefulRestartConfig{
+							Enabled: true,
+						},
+					},
+				},
 			}
 		}
 
@@ -199,6 +210,17 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.
 				{
 					Config: config.AfiSafiConfig{
 						AfiSafiName: config.AFI_SAFI_TYPE_IPV4_UNICAST,
+						Enabled:     true,
+					},
+					MpGracefulRestart: config.MpGracefulRestart{
+						Config: config.MpGracefulRestartConfig{
+							Enabled: true,
+						},
+					},
+				},
+				{
+					Config: config.AfiSafiConfig{
+						AfiSafiName: config.AFI_SAFI_TYPE_IPV6_UNICAST,
 						Enabled:     true,
 					},
 					MpGracefulRestart: config.MpGracefulRestart{
