@@ -146,17 +146,17 @@ To set the default for all services use the `--advertise-cluster-ip`,
 `--advertise-external-ip` and `--advertise-loadbalancer-ip` flags.
 
 To selectively enable or disable this feature per-service use the
-`kube-router.io/service.advertise.cluster`, `kube-router.io/service.advertise.external`
-and `kube-router.io/service.advertise.loadbalancer` annotations.
+`kube-router.io/service.advertise.clusterip`, `kube-router.io/service.advertise.externalip`
+and `kube-router.io/service.advertise.loadbalancerip` annotations.
 
 e.g.:
-`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.cluster=true"`
-`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.external=true"`
-`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.loadbalancer=true"`
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.clusterip=true"`
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.externalip=true"`
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.loadbalancerip=true"`
 
-`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.cluster=false"`
-`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.external=false"`
-`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.loadbalancer=false"`
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.clusterip=false"`
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.externalip=false"`
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.loadbalancerip=false"`
 
 By combining the flags with the per-service annotations you can choose either
 a opt-in or opt-out strategy for advertising IPs.
