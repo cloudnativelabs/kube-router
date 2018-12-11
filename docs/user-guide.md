@@ -287,13 +287,16 @@ For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-al
 
 ## IPVS Graceful termination support
 
-As of 0.2.4 we support graceful termination of IPVS destinations. The default period is 5 minutes and can be set using `--ipvs-graceful-period` cli-opt 
+As of 0.2.4 we support graceful termination of IPVS destinations. The default period is 5 minutes and can be set using `--ipvs-graceful-period` cli-opt
+
+graceful termination works in such a way that when kube-router receives a delete endpoint notification for a service it's weight is adjusted to 0 before getting deleted after the termination grace period has passed.
 
 The timeout can be overriden per service by setting the annotation `kube-router.io/service.gracefulterminationperiod` to a duration string
 
 example:
 
-    kube-router.io/service.gracefulterminationperiod: 30s
+    annotations:
+      kube-router.io/service.gracefulterminationperiod: 30s
 
 If the duration string is invalid the default period set by `--ipvs-graceful-period` will be used
 
