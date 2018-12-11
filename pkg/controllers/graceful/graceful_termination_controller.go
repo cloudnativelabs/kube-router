@@ -69,12 +69,44 @@ func (gh *TerminationController) Delete(svc *ipvs.Service, dst *ipvs.Destination
 	return nil
 }
 
+// getConnStats returns the number of active & inactive connections for the IPVS destination
+func (gh *TerminationController) getConnStats(ipvsSvc *ipvs.Service, dest *ipvs.Destination) (int, int, error) {
+	destStats, err := gh.ipvsHandle.GetDestinations(ipvsSvc)
+	if err != nil {
+		return 0, 0, fmt.Errorf("Failed to get IPVS destinations for %v : %s", ipvsSvc, err.Error())
+	}
+
+	for _, destStat := range destStats {
+		if destStat.Address.Equal(dest.Address) && destStat.Port == ipvsSvc.Port {
+			return destStat.ActiveConnections, destStat.InactiveConnections, nil
+		}
+	}
+	return 0, 0, fmt.Errorf("Destination not found on IPVS service svc: %v dst: %v", ipvsSvc, dest)
+}
+
 // cleanup does the lifting of removing destinations and cleaning conntrack records
 func (gh *TerminationController) cleanup() {
 	var newQueue []gracefulRequest
 	for _, dest := range gh.jobQueue {
-		// Check if our destination is old enough to consider
+		var deleteEndpoint bool
+
+		// Get active and inactive connections for the destination
+		aConn, iConn, err := gh.getConnStats(dest.ipvsSvc, dest.ipvsDst)
+		if err != nil {
+			glog.Errorf("Could not get connection stats: %s", err.Error())
+		}
+
+		// Do we have active or inactive connections to this destination
+		if aConn == 0 && iConn == 0 {
+			deleteEndpoint = true
+		}
+
+		// Check if our destinations graceful termination period has passed
 		if time.Since(dest.deletionTime) > dest.gracefulTerminationPeriod {
+			deleteEndpoint = true
+		}
+
+		if deleteEndpoint {
 			glog.V(2).Infof("Deleting IPVS destination: %v", dest.ipvsDst)
 			if err := gh.ipvsHandle.DelDestination(dest.ipvsSvc, dest.ipvsDst); err != nil {
 				glog.Errorf("Failed to delete IPVS destination: %v, %s", dest.ipvsDst, err.Error())
@@ -87,6 +119,8 @@ func (gh *TerminationController) cleanup() {
 			}
 			continue
 		}
+		// There were no active connections to the destination or it's graceful termination period
+		// had not expired so push it back to the queue for re-evaluation later
 		newQueue = append(newQueue, dest)
 	}
 	gh.jobQueue = newQueue
@@ -109,9 +143,10 @@ func (gh *TerminationController) flushConntrackUDP(dest gracefulRequest) error {
 // handleReq is the function that processes incoming messages on the job queue
 func (gh *TerminationController) handleReq(req gracefulRequest) error {
 	var found bool
+	// This for loop is to check if the destination already is queued for deletion. If not, set it's weight to 0 so no new connections comes in
 	for _, dst := range gh.jobQueue {
-		if req.ipvsSvc.Address.String() == dst.ipvsSvc.Address.String() && req.ipvsSvc.Port == dst.ipvsSvc.Port && req.ipvsSvc.Protocol == dst.ipvsSvc.Protocol {
-			if req.ipvsDst.Address.String() == dst.ipvsDst.Address.String() && req.ipvsDst.Port == dst.ipvsDst.Port {
+		if req.ipvsSvc.Address.Equal(dst.ipvsSvc.Address) && req.ipvsSvc.Port == dst.ipvsSvc.Port && req.ipvsSvc.Protocol == dst.ipvsSvc.Protocol {
+			if req.ipvsDst.Address.Equal(dst.ipvsDst.Address) && req.ipvsDst.Port == dst.ipvsDst.Port {
 				glog.V(2).Infof("Deletion request exists for svc: %v dst: %v", *req.ipvsSvc, *req.ipvsDst)
 				found = true
 				break
@@ -119,7 +154,9 @@ func (gh *TerminationController) handleReq(req gracefulRequest) error {
 		}
 	}
 	if !found {
-		// Set the destination weight to 0
+		// Set the destination weight to 0 so no new connections will come in
+		// but old are allowed to gracefully finnish while backend is shutting down
+		// if the backend has support for it
 		if err := gh.ipvsHandle.UpdateDestination(req.ipvsSvc, req.ipvsDst); err != nil {
 			return fmt.Errorf("Unable to update IPVS destination svc: %v dst: %v due to: %s", *req.ipvsSvc, *req.ipvsDst, err.Error())
 		}
