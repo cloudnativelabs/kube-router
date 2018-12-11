@@ -46,20 +46,11 @@ func (gh *TerminationController) Delete(svc *ipvs.Service, dst *ipvs.Destination
 		gracefulPeriod = gtp
 	}
 
-	newDest := &ipvs.Destination{
-		Address:         dst.Address,
-		Port:            dst.Port,
-		Weight:          0,
-		ConnectionFlags: dst.ConnectionFlags,
-		AddressFamily:   dst.AddressFamily,
-		UpperThreshold:  dst.UpperThreshold,
-		LowerThreshold:  dst.LowerThreshold,
-	}
 	deletionTime := time.Now()
 
 	req := gracefulRequest{
 		ipvsSvc:                   svc,
-		ipvsDst:                   newDest,
+		ipvsDst:                   dst,
 		deletionTime:              deletionTime,
 		gracefulTerminationPeriod: gracefulPeriod,
 	}
@@ -153,13 +144,19 @@ func (gh *TerminationController) handleReq(req gracefulRequest) error {
 			}
 		}
 	}
+
 	if !found {
 		// Set the destination weight to 0 so no new connections will come in
 		// but old are allowed to gracefully finnish while backend is shutting down
 		// if the backend has support for it
+
+		req.ipvsDst.Weight = 0
+
 		if err := gh.ipvsHandle.UpdateDestination(req.ipvsSvc, req.ipvsDst); err != nil {
 			return fmt.Errorf("Unable to update IPVS destination svc: %v dst: %v due to: %s", *req.ipvsSvc, *req.ipvsDst, err.Error())
 		}
+
+		//add the request to the queue
 		gh.jobQueue = append(gh.jobQueue, req)
 	}
 	return nil
@@ -173,7 +170,6 @@ func (gh *TerminationController) Run(ctx context.Context) {
 
 	for {
 		select {
-
 		// Receive graceful termination requests as well as de-duplicate them
 		case req := <-gh.queueChan:
 			glog.V(2).Infof("Got deletion request for svc: %v dst: %v", *req.ipvsSvc, *req.ipvsDst)
