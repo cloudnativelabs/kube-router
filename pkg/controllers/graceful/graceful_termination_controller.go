@@ -88,6 +88,7 @@ func (gh *TerminationController) cleanup() {
 		}
 
 		// Do we have active or inactive connections to this destination
+		// if we don't, proceed and delete the destination ahead of graceful period
 		if aConn == 0 && iConn == 0 {
 			deleteEndpoint = true
 		}
@@ -97,6 +98,7 @@ func (gh *TerminationController) cleanup() {
 			deleteEndpoint = true
 		}
 
+		//Destination has has one or more conditions for deletion
 		if deleteEndpoint {
 			glog.V(2).Infof("Deleting IPVS destination: %v", dest.ipvsDst)
 			if err := gh.ipvsHandle.DelDestination(dest.ipvsSvc, dest.ipvsDst); err != nil {
@@ -110,8 +112,9 @@ func (gh *TerminationController) cleanup() {
 			}
 			continue
 		}
-		// There were no active connections to the destination or it's graceful termination period
-		// had not expired so push it back to the queue for re-evaluation later
+
+		// There were active connections to the destination or it's graceful termination period
+		// had not expired so push it back to the queue for re-evaluation at next cycle
 		newQueue = append(newQueue, dest)
 	}
 	gh.jobQueue = newQueue
@@ -121,6 +124,8 @@ func (gh *TerminationController) cleanup() {
 func (gh *TerminationController) flushConntrackUDP(dest gracefulRequest) error {
 	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to check output and don't Error when matching
 	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
+
+	// Shell out and flush conntrack records
 	out, err := exec.Command("conntrack", "-D", "--orig-dst", dest.ipvsSvc.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(dest.ipvsSvc.Port))).CombinedOutput()
 	if err != nil {
 		if matched := re.MatchString(string(out)); !matched {
@@ -134,7 +139,7 @@ func (gh *TerminationController) flushConntrackUDP(dest gracefulRequest) error {
 // handleReq is the function that processes incoming messages on the job queue
 func (gh *TerminationController) handleReq(req gracefulRequest) error {
 	var found bool
-	// This for loop is to check if the destination already is queued for deletion. If not, set it's weight to 0 so no new connections comes in
+	// This for loop is to check if the destination already is queued for deletion
 	for _, dst := range gh.jobQueue {
 		if req.ipvsSvc.Address.Equal(dst.ipvsSvc.Address) && req.ipvsSvc.Port == dst.ipvsSvc.Port && req.ipvsSvc.Protocol == dst.ipvsSvc.Protocol {
 			if req.ipvsDst.Address.Equal(dst.ipvsDst.Address) && req.ipvsDst.Port == dst.ipvsDst.Port {
@@ -149,7 +154,6 @@ func (gh *TerminationController) handleReq(req gracefulRequest) error {
 		// Set the destination weight to 0 so no new connections will come in
 		// but old are allowed to gracefully finnish while backend is shutting down
 		// if the backend has support for it
-
 		req.ipvsDst.Weight = 0
 
 		if err := gh.ipvsHandle.UpdateDestination(req.ipvsSvc, req.ipvsDst); err != nil {
