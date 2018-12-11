@@ -151,9 +151,8 @@ func (gh *TerminationController) handleReq(req gracefulRequest) error {
 	}
 
 	if !found {
-		// Set the destination weight to 0 so no new connections will come in
-		// but old are allowed to gracefully finnish while backend is shutting down
-		// if the backend has support for it
+		// Set the destination weight to 0 so no new connections will come in, while old are allowed
+		// to gracefully finnish while backend is shutting down if the backend has support for it
 		req.ipvsDst.Weight = 0
 
 		if err := gh.ipvsHandle.UpdateDestination(req.ipvsSvc, req.ipvsDst); err != nil {
