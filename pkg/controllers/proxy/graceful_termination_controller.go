@@ -1,4 +1,4 @@
-package graceful
+package proxy
 
 import (
 	"context"

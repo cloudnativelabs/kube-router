@@ -17,7 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/pkg/controllers/graceful"
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
@@ -222,7 +221,7 @@ type NetworkServicesController struct {
 	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
 
-	gracefulController *graceful.TerminationController
+	gracefulController *TerminationController
 }
 
 // internal representation of kubernetes service
@@ -2125,7 +2124,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	var err error
 
-	gm, err := graceful.NewTerminationController(config)
+	gm, err := NewTerminationController(config)
 	if err != nil {
 		return nil, err
 	}
