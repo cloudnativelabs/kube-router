@@ -64,7 +64,7 @@ func (gh *TerminationController) Delete(svc *ipvs.Service, dst *ipvs.Destination
 func (gh *TerminationController) getConnStats(ipvsSvc *ipvs.Service, dest *ipvs.Destination) (int, int, error) {
 	destStats, err := gh.ipvsHandle.GetDestinations(ipvsSvc)
 	if err != nil {
-		return 0, 0, fmt.Errorf("Failed to get IPVS destinations for %v : %s", ipvsSvc, err.Error())
+		return 0, 0, fmt.Errorf("failed to get IPVS destinations for service : %v : %s", ipvsSvc, err.Error())
 	}
 
 	for _, destStat := range destStats {
@@ -72,7 +72,7 @@ func (gh *TerminationController) getConnStats(ipvsSvc *ipvs.Service, dest *ipvs.
 			return destStat.ActiveConnections, destStat.InactiveConnections, nil
 		}
 	}
-	return 0, 0, fmt.Errorf("Destination not found on IPVS service svc: %v dst: %v", ipvsSvc, dest)
+	return 0, 0, fmt.Errorf("destination %v found on IPVS service %v ", dest, ipvsSvc)
 }
 
 // cleanup does the lifting of removing destinations and cleaning conntrack records
@@ -84,7 +84,7 @@ func (gh *TerminationController) cleanup() {
 		// Get active and inactive connections for the destination
 		aConn, iConn, err := gh.getConnStats(dest.ipvsSvc, dest.ipvsDst)
 		if err != nil {
-			glog.Errorf("Could not get connection stats: %s", err.Error())
+			glog.V(1).Infof("Could not get connection stats: %s", err.Error())
 		}
 
 		// Do we have active or inactive connections to this destination
