@@ -605,7 +605,7 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
-		err := iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
+		err := iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
@@ -618,7 +618,7 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
-		err = iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
+		err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
@@ -631,7 +631,7 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
-		err = iptablesCmdHandler.AppendUnique("filter", "FORWARD", args...)
+		err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
