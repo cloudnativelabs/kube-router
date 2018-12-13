@@ -56,6 +56,7 @@ const (
 	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
+	svcIpSetName                      = "KUBE-SVC-ALL"
 )
 
 var (
@@ -365,6 +366,60 @@ func (nsc *NetworkServicesController) sync() error {
 	if nsc.MetricsEnabled {
 		nsc.publishMetrics(nsc.serviceMap)
 	}
+	return nil
+}
+
+func (nsc *NetworkServicesController) setupIpvsFirewall() error {
+	// Add ipset containg all SVCs
+	ipSetHandler, err := utils.NewIPSet(false)
+	if err != nil {
+		return err
+	}
+
+	svcIpSet, err := ipSetHandler.Create(svcIpSetName, utils.TypeHashIPPort, utils.OptionTimeout, "0")
+	if err != nil {
+		return fmt.Errorf("failed to create ipset: %s", err.Error())
+	}
+
+	ipvsSvcs, err := nsc.ln.ipvsGetServices()
+	if err != nil {
+		return errors.New("Failed to list IPVS services: " + err.Error())
+	}
+
+	svcSets := make([]string, 0, len(ipvsSvcs))
+	for _, ipvsSvc := range ipvsSvcs {
+		protocol := "udp"
+		if ipvsSvc.Protocol == syscall.IPPROTO_TCP {
+			protocol = "tcp"
+		}
+		set := fmt.Sprintf("%s,%s:%d", ipvsSvc.Address.String(), protocol, ipvsSvc.Port)
+		svcSets = append(svcSets, set)
+	}
+
+	err = svcIpSet.Refresh(svcSets, utils.OptionTimeout, "0")
+	if err != nil {
+		return fmt.Errorf("failed to sync ipset: %s", err.Error())
+	}
+
+	// Add iptables rule to allow input traffic to ipvs services
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed to initialize iptables executor" + err.Error())
+	}
+
+	comment := "allow input traffic to ipvs services"
+	args := []string{"-m", "comment", "--comment", comment, "-m", "set", "--match-set", svcIpSetName, "dst,dst", "-j", "ACCEPT"}
+	exists, err := iptablesCmdHandler.Exists("filter", "INPUT", args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err := iptablesCmdHandler.Insert("filter", "INPUT", 1, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
 	return nil
 }
 
@@ -890,6 +945,12 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			}
 		}
 	}
+
+	err = nsc.setupIpvsFirewall()
+	if err != nil {
+		glog.Errorf("Error syncing ipvs svc iptable rules: %s", err.Error())
+	}
+
 	glog.V(1).Info("IPVS servers and services are synced to desired state")
 	return nil
 }
