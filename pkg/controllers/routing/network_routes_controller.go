@@ -205,7 +205,13 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		glog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may not work: %s", err.Error())
 	}
 	if err = ioutil.WriteFile("/proc/sys/net/bridge/bridge-nf-call-iptables", []byte(strconv.Itoa(1)), 0640); err != nil {
-		glog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may not work: %s", err.Error())
+		glog.Errorf("Failed to enable iptables for bridge. Network policies and service proxy may not work: %s", err.Error())
+	}
+	if nrc.isIpv6 {
+		if err = ioutil.WriteFile("/proc/sys/net/bridge/bridge-nf-call-ip6tables", []byte(strconv.Itoa(1)), 0640); err != nil {
+			glog.Errorf("Failed to enable ip6tables for bridge. Network policies and service proxy may not work: %s", err.Error())
+		}
+
 	}
 
 	t := time.NewTicker(nrc.syncPeriod)
