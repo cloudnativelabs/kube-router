@@ -647,7 +647,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		// create IPVS service for the service to be exposed through the cluster ip
-		ipvsClusterVipSvc, err := nsc.ln.ipvsAddService(ipvsSvcs, svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler, svc.flags)
+		ipvsClusterVipSvc, err := nsc.gracefulController.AddService(ipvsSvcs, svc.clusterIP, protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler, svc.flags)
 		if err != nil {
 			glog.Errorf("Failed to create ipvs service for cluster ip: %s", err.Error())
 			continue
@@ -679,7 +679,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				nodeServiceIds = make([]string, len(addrs))
 
 				for i, addr := range addrs {
-					ipvsNodeportSvcs[i], err = nsc.ln.ipvsAddService(ipvsSvcs, addr.IP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler, svc.flags)
+					ipvsNodeportSvcs[i], err = nsc.gracefulController.AddService(ipvsSvcs, addr.IP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler, svc.flags)
 					if err != nil {
 						glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
 						continue
@@ -690,7 +690,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 			} else {
 				ipvsNodeportSvcs = make([]*ipvs.Service, 1)
-				ipvsNodeportSvcs[0], err = nsc.ln.ipvsAddService(ipvsSvcs, nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler, svc.flags)
+				ipvsNodeportSvcs[0], err = nsc.gracefulController.AddService(ipvsSvcs, nsc.nodeIP, protocol, uint16(svc.nodePort), svc.sessionAffinity, svc.scheduler, svc.flags)
 				if err != nil {
 					glog.Errorf("Failed to create ipvs service for node port due to: %s", err.Error())
 					continue
@@ -750,7 +750,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 
 				// create IPVS service for the service to be exposed through the external ip
-				ipvsExternalIPSvc, err := nsc.ln.ipvsAddService(ipvsSvcs, net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler, svc.flags)
+				ipvsExternalIPSvc, err := nsc.gracefulController.AddService(ipvsSvcs, net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.scheduler, svc.flags)
 				if err != nil {
 					glog.Errorf("Failed to create ipvs service for external ip: %s due to %s", externalIP, err.Error())
 					continue
@@ -785,7 +785,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			}
 
 			if !svc.local || (svc.local && endpoint.isLocal) {
-				err := nsc.ln.ipvsAddServer(ipvsClusterVipSvc, &dst)
+				err := nsc.gracefulController.AddDestination(ipvsClusterVipSvc, &dst)
 				if err != nil {
 					glog.Errorf(err.Error())
 				} else {
@@ -796,7 +796,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			if svc.nodePort != 0 {
 				for i := 0; i < len(ipvsNodeportSvcs); i++ {
 					if !svc.local || (svc.local && endpoint.isLocal) {
-						err := nsc.ln.ipvsAddServer(ipvsNodeportSvcs[i], &dst)
+						err := nsc.gracefulController.AddDestination(ipvsNodeportSvcs[i], &dst)
 						if err != nil {
 							glog.Errorf(err.Error())
 						} else {
@@ -816,7 +816,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				}
 
 				// add server to IPVS service
-				err := nsc.ln.ipvsAddServer(externalIpService.ipvsSvc, &dst)
+				err := nsc.gracefulController.AddDestination(externalIpService.ipvsSvc, &dst)
 				if err != nil {
 					glog.Errorf(err.Error())
 				}
@@ -888,6 +888,13 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	}
 	var protocol string
 	for _, ipvsSvc := range ipvsSvcs {
+		var gracefulTerminationPeriod time.Duration
+		for _, svc := range serviceInfoMap {
+			if svc.clusterIP.Equal(ipvsSvc.Address) {
+				gracefulTerminationPeriod = svc.gracefulTerminationPeriod
+				break
+			}
+		}
 		if ipvsSvc.Protocol == syscall.IPPROTO_TCP {
 			protocol = "tcp"
 		} else {
@@ -903,10 +910,10 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		endpoints, ok := activeServiceEndpointMap[key]
-		if !ok || len(endpoints) == 0 {
+		if !ok {
 			glog.V(1).Infof("Found a IPVS service %s which is no longer needed so cleaning up",
 				ipvsServiceString(ipvsSvc))
-			err := nsc.ln.ipvsDelService(ipvsSvc)
+			err := nsc.gracefulController.DeleteService(ipvsSvc, gracefulTerminationPeriod)
 			if err != nil {
 				glog.Errorf("Failed to delete stale IPVS service %s due to: %s",
 					ipvsServiceString(ipvsSvc), err.Error())
@@ -928,14 +935,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				if !validEp {
 					glog.V(1).Infof("Found a destination %s in service %s which is no longer needed so cleaning up",
 						ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					var gracefulTerminationPeriod time.Duration
-					for _, svc := range serviceInfoMap {
-						if svc.clusterIP.Equal(ipvsSvc.Address) {
-							gracefulTerminationPeriod = svc.gracefulTerminationPeriod
-							break
-						}
-					}
-					err := nsc.gracefulController.Delete(ipvsSvc, dst, gracefulTerminationPeriod)
+					err := nsc.gracefulController.DeleteDestination(ipvsSvc, dst, gracefulTerminationPeriod)
 					if err != nil {
 						glog.Errorf("Failed to delete destination %s from ipvs service %s",
 							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
@@ -1624,7 +1624,6 @@ func changedIpvsSchedFlags(svc *ipvs.Service, s schedFlags) bool {
 }
 
 func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
-
 	var err error
 	for _, svc := range svcs {
 		if vip.Equal(svc.Address) && protocol == svc.Protocol && port == svc.Port {
