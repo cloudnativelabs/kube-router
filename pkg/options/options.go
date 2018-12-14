@@ -63,7 +63,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 	return &KubeRouterConfig{
 		CacheSyncTimeout:   1 * time.Minute,
 		IpvsSyncPeriod:     5 * time.Minute,
-		IpvsGracefulPeriod: 5 * time.Minute,
+		IpvsGracefulPeriod: 1 * time.Minute,
 		IPTablesSyncPeriod: 5 * time.Minute,
 		RoutesSyncPeriod:   5 * time.Minute,
 		EnableOverlay:      true,

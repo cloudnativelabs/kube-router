@@ -197,7 +197,7 @@ func (gh *TerminationController) AddService(svcs []*ipvs.Service, vip net.IP, pr
 func (gh *TerminationController) getIpvsDestinationConnStats(ipvsSvc *ipvs.Service, dest *ipvs.Destination) (int, int, error) {
 	destStats, err := gh.ipvsHandle.GetDestinations(ipvsSvc)
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get IPVS destinations for service : %v : %s", ipvsSvc, err.Error())
+		return 0, 0, fmt.Errorf("failed to get IPVS destinations for service : %s : %s", ipvsServiceString(ipvsSvc), err.Error())
 	}
 
 	for _, destStat := range destStats {
@@ -205,7 +205,7 @@ func (gh *TerminationController) getIpvsDestinationConnStats(ipvsSvc *ipvs.Servi
 			return destStat.ActiveConnections, destStat.InactiveConnections, nil
 		}
 	}
-	return 0, 0, fmt.Errorf("destination %v not found on IPVS service %v ", dest, ipvsSvc)
+	return 0, 0, fmt.Errorf("destination %s not found on IPVS service %s ", ipvsDestinationString(dest), ipvsServiceString(ipvsSvc))
 }
 
 // cleanupipvsDeleteService i called from the periodic cleanup to evaluate if a service should
@@ -244,12 +244,12 @@ func (gh *TerminationController) cleanupIpvsDeleteEndpoint(req gracefulRequest) 
 	aConn, iConn, err := gh.getIpvsDestinationConnStats(req.ipvsSvc, req.ipvsDst)
 	if err != nil {
 		glog.V(1).Infof("Could not get connection stats: %s", err.Error())
-	}
-
-	// Do we have active or inactive connections to this destination
-	// if we don't, proceed and delete the destination ahead of graceful period
-	if aConn == 0 && iConn == 0 {
-		deleteEndpoint = true
+	} else {
+		// Do we have active or inactive connections to this destination
+		// if we don't, proceed and delete the destination ahead of graceful period
+		if aConn == 0 && iConn == 0 {
+			deleteEndpoint = true
+		}
 	}
 
 	// Check if our destinations graceful termination period has passed
@@ -421,22 +421,18 @@ func (gh *TerminationController) handleipvsServiceAdd(req gracefulRequest) error
 // handleReq is the function that processes incoming messages on the job queue
 func (gh *TerminationController) handleReq(req gracefulRequest) error {
 	switch req.gracefulRequestType {
-
 	case ipvsDestinationDelete:
 		if err := gh.handleIpvsDestinationDelete(req); err != nil {
 			return err
 		}
-
 	case ipvsDestinationAdd:
 		if err := gh.handleipvsDestinationAdd(req); err != nil {
 			return err
 		}
-
 	case ipvsServiceDelete:
 		if err := gh.handleipvsServiceDelete(req); err != nil {
 			return err
 		}
-
 	case ipvsServiceAdd:
 		if err := gh.handleipvsServiceAdd(req); err != nil {
 			return err
@@ -456,7 +452,7 @@ func (gh *TerminationController) Run(ctx context.Context) {
 		// Receive jobs as well as de-duplicate them
 		case req := <-gh.queueChan:
 			if err := gh.handleReq(req); err != nil {
-				glog.Error(err.Error())
+				glog.Errorf("Error handling request: %s", err.Error())
 			}
 
 		// Perform periodic cleanup
