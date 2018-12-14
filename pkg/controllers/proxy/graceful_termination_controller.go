@@ -201,7 +201,7 @@ func (gh *TerminationController) getIpvsDestinationConnStats(ipvsSvc *ipvs.Servi
 	}
 
 	for _, destStat := range destStats {
-		if destStat.Address.Equal(dest.Address) && destStat.Port == ipvsSvc.Port {
+		if destStat.Address.Equal(dest.Address) && destStat.Port == dest.Port {
 			return destStat.ActiveConnections, destStat.InactiveConnections, nil
 		}
 	}
@@ -324,7 +324,7 @@ func (gh *TerminationController) ipvsAddDestination(req gracefulRequest) error {
 			return fmt.Errorf("Failed to update ipvs destination %s to the ipvs service %s due to : %s",
 				ipvsDestinationString(req.ipvsDst), ipvsServiceString(req.ipvsSvc), err.Error())
 		}
-		glog.V(2).Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
+		glog.V(4).Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
 			ipvsDestinationString(req.ipvsDst), ipvsServiceString(req.ipvsSvc))
 	} else {
 		return fmt.Errorf("Failed to add ipvs destination %s to the ipvs service %s due to : %s",
