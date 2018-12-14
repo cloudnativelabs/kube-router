@@ -30,6 +30,11 @@ const (
 	ipvsServiceAdd
 )
 
+type lookupReq struct {
+	ipaddr   net.IP
+	callback chan bool
+}
+
 // gracefulRequest Holds our request to gracefully remove the backend
 type gracefulRequest struct {
 	ipvsSvc                   *ipvs.Service
@@ -44,8 +49,20 @@ type gracefulRequest struct {
 type TerminationController struct {
 	ipvsHandle *ipvs.Handle
 	queueChan  chan gracefulRequest
+	lookupChan chan lookupReq
 	jobQueue   []gracefulRequest
 	config     *options.KubeRouterConfig
+}
+
+//IsGracefulInProgress checks if there is any graceful operations pending for the IPVS service
+func (gh *TerminationController) IsGracefulInProgress(ipaddr net.IP) bool {
+	callbackChan := make(chan bool)
+	lookupReq := lookupReq{
+		ipaddr:   ipaddr,
+		callback: callbackChan,
+	}
+	gh.lookupChan <- lookupReq
+	return <-lookupReq.callback
 }
 
 // DeleteDestination removes a service destination gracefully
@@ -417,6 +434,19 @@ func (gh *TerminationController) handleipvsServiceAdd(req gracefulRequest) error
 	}
 	return nil
 }
+func (gh *TerminationController) handleLookup(lookup lookupReq) error {
+	var found bool
+	for _, jobQitem := range gh.jobQueue {
+		if jobQitem.gracefulRequestType == ipvsServiceDelete || jobQitem.gracefulRequestType == ipvsDestinationDelete {
+			if jobQitem.ipvsSvc.Address.Equal(lookup.ipaddr) {
+				found = true
+				break
+			}
+		}
+	}
+	lookup.callback <- found
+	return nil
+}
 
 // handleReq is the function that processes incoming messages on the job queue
 func (gh *TerminationController) handleReq(req gracefulRequest) error {
@@ -443,6 +473,9 @@ func (gh *TerminationController) handleReq(req gracefulRequest) error {
 
 // Run starts the graceful handler
 func (gh *TerminationController) Run(ctx context.Context) {
+	defer close(gh.queueChan)
+	defer close(gh.lookupChan)
+
 	glog.Info("Starting IPVS graceful termination controller")
 
 	ticker := time.NewTicker(10 * time.Second)
@@ -453,6 +486,13 @@ func (gh *TerminationController) Run(ctx context.Context) {
 		case req := <-gh.queueChan:
 			if err := gh.handleReq(req); err != nil {
 				glog.Errorf("Error handling request: %s", err.Error())
+			}
+
+		// Handle lookup requests to check if there are pending deletions that should prevent
+		// the service VIP from being deleted from kube-dummy-if
+		case lookup := <-gh.lookupChan:
+			if err := gh.handleLookup(lookup); err != nil {
+				glog.Errorf("Error handling lookup request: %s", err.Error())
 			}
 
 		// Perform periodic cleanup
@@ -475,6 +515,9 @@ func NewTerminationController(config *options.KubeRouterConfig) (*TerminationCon
 	//Our incoming queue to serialize requests
 	queue := make(chan gracefulRequest, gracefulQueueSize)
 
+	//Out incoming channel for lookups
+	lookupChan := make(chan lookupReq)
+
 	// Get our own IPVS handle to talk to the kernel
 	ipvsHandle, err := ipvs.New("")
 	if err != nil {
@@ -490,6 +533,7 @@ func NewTerminationController(config *options.KubeRouterConfig) (*TerminationCon
 	return &TerminationController{
 		ipvsHandle: ipvsHandle,
 		queueChan:  queue,
+		lookupChan: lookupChan,
 		config:     config,
 	}, nil
 }
