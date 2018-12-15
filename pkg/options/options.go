@@ -2,9 +2,8 @@ package options
 
 import (
 	"net"
-	"time"
-
 	"strconv"
+	"time"
 
 	"github.com/spf13/pflag"
 )
