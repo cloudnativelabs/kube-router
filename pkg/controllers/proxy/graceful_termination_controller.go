@@ -66,6 +66,7 @@ func (gh *TerminationController) IsGracefulInProgress(ipaddr net.IP) bool {
 
 // DeleteDestination removes a service destination gracefully
 func (gh *TerminationController) DeleteDestination(svc *ipvs.Service, dst *ipvs.Destination, gtp time.Duration) error {
+	// If we failed to lookup a gracefultermination time from annotation or TerminationGracePeriodSeconds from pod use the default value
 	var gracefulPeriod time.Duration
 	if gtp == 0 {
 		gracefulPeriod = gh.config.IpvsGracefulPeriod
@@ -106,6 +107,7 @@ func (gh *TerminationController) AddDestination(service *ipvs.Service, dest *ipv
 
 // DeleteService removes a service gracefully by witing until any gracefull destination terminations has finnished
 func (gh *TerminationController) DeleteService(svc *ipvs.Service, gtp time.Duration) error {
+	// If we failed to lookup a gracefultermination time from annotation use config default
 	var gracefulPeriod time.Duration
 	if gtp == 0 {
 		gracefulPeriod = gh.config.IpvsGracefulPeriod
@@ -265,9 +267,9 @@ func (gh *TerminationController) cleanupIpvsDeleteEndpoint(req gracefulRequest) 
 
 	//Destination has has one or more conditions for deletion
 	if deleteEndpoint {
-		glog.V(2).Infof("Deleting IPVS destination: %v", ipvsDestinationString(req.ipvsDst))
+		glog.V(2).Infof("Deleting IPVS destination: %s", ipvsDestinationString(req.ipvsDst))
 		if err := gh.ipvsHandle.DelDestination(req.ipvsSvc, req.ipvsDst); err != nil {
-			glog.Errorf("Failed to delete IPVS destination: %v, %s", req.ipvsDst, err.Error())
+			glog.Errorf("Failed to delete IPVS destination: %s, %s", ipvsDestinationString(req.ipvsDst), err.Error())
 		}
 		// flush conntrack when endpoint for a UDP service changes
 		if req.ipvsSvc.Protocol == syscall.IPPROTO_UDP {
@@ -352,7 +354,7 @@ func (gh *TerminationController) handleIpvsDestinationDelete(req gracefulRequest
 		}
 	}
 	if !inQ {
-		glog.V(2).Infof("Got deletion request for svc: %s dst: %v", ipvsServiceString(req.ipvsSvc), ipvsDestinationString(req.ipvsDst))
+		glog.V(2).Infof("Got deletion request for svc: %s dst: %s gtp: %s", ipvsServiceString(req.ipvsSvc), ipvsDestinationString(req.ipvsDst), req.gracefulTerminationPeriod)
 		// Set the destination weight to 0 so no new connections will come in, while old are allowed
 		// to gracefully finnish while backend is shutting down if the backend has support for it
 		req.ipvsDst.Weight = 0
@@ -373,7 +375,7 @@ func (gh *TerminationController) handleipvsDestinationAdd(req gracefulRequest) e
 		if jobQitem.gracefulRequestType == ipvsDestinationDelete {
 			if req.ipvsSvc.Address.Equal(jobQitem.ipvsSvc.Address) && req.ipvsSvc.Port == jobQitem.ipvsSvc.Port && req.ipvsSvc.Protocol == jobQitem.ipvsSvc.Protocol {
 				if req.ipvsDst.Address.Equal(jobQitem.ipvsDst.Address) && req.ipvsDst.Port == jobQitem.ipvsDst.Port {
-					glog.V(2).Infof("Removing deletion request for svc: %s dst: %v due to destination being re-added", ipvsServiceString(req.ipvsSvc), ipvsDestinationString(req.ipvsDst))
+					glog.V(2).Infof("Removing deletion request for svc: %s dst: %s due to destination being re-added", ipvsServiceString(req.ipvsSvc), ipvsDestinationString(req.ipvsDst))
 					continue
 				}
 			}
@@ -395,6 +397,7 @@ func (gh *TerminationController) handleipvsServiceDelete(req gracefulRequest) er
 		}
 	}
 	if !inQ {
+		glog.V(2).Infof("Got deletion request for svc: %s gtp: %s", ipvsServiceString(req.ipvsSvc), req.gracefulTerminationPeriod)
 		gh.jobQueue = append(gh.jobQueue, req)
 	} else {
 		glog.V(2).Infof("Duplicate IPVS service delete request svc: %s, dropping it", ipvsServiceString(req.ipvsSvc))

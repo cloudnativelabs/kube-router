@@ -926,7 +926,18 @@ func (nsc *NetworkServicesController) cleanupStaleIpvsServices(serviceInfoMap se
 				if !validEp {
 					glog.V(1).Infof("Found a destination %s in service %s which is no longer needed so cleaning up",
 						ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					err := nsc.gracefulController.DeleteDestination(ipvsSvc, dst, gracefulTerminationPeriod)
+
+					//If we have no value from annotation, try to lookup the endpoint from pods
+					var podGracefulTerminationPeriod time.Duration
+
+					podObj, err := nsc.getPodObjectForEndpoint(dst.Address.String())
+					if err != nil {
+						glog.Errorf("Failed to find endpoint with ip: %s", dst.Address.String())
+					} else {
+						podGracefulTerminationPeriod = time.Duration(float64(*podObj.Spec.TerminationGracePeriodSeconds) * float64(time.Second))
+					}
+
+					err = nsc.gracefulController.DeleteDestination(ipvsSvc, dst, podGracefulTerminationPeriod)
 					if err != nil {
 						glog.Errorf("Failed to delete destination %s from ipvs service %s",
 							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
