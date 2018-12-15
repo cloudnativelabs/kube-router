@@ -42,7 +42,6 @@ type gracefulRequest struct {
 	deletionTime              time.Time
 	gracefulTerminationPeriod time.Duration
 	gracefulRequestType       gracefulRequestType
-	callback                  chan error
 }
 
 // TerminationController handles gracefully removing backends
@@ -98,15 +97,10 @@ func (gh *TerminationController) AddDestination(service *ipvs.Service, dest *ipv
 		ipvsSvc:             service,
 		ipvsDst:             dest,
 		gracefulRequestType: ipvsDestinationAdd,
-		callback:            respChan,
 	}
 
 	// Push it to the queue and wait for the result
 	gh.queueChan <- req
-	err := <-respChan
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -197,13 +191,8 @@ func (gh *TerminationController) AddService(svcs []*ipvs.Service, vip net.IP, pr
 	req := gracefulRequest{
 		ipvsSvc:             svc,
 		gracefulRequestType: ipvsServiceAdd,
-		callback:            respChan,
 	}
 	gh.queueChan <- req
-	err = <-respChan
-	if err != nil {
-		return nil, err
-	}
 
 	glog.V(1).Infof("Successfully added service: %s", ipvsServiceString(svc))
 	return svc, nil
@@ -393,9 +382,7 @@ func (gh *TerminationController) handleipvsDestinationAdd(req gracefulRequest) e
 	}
 	gh.jobQueue = newQueue
 
-	err := gh.ipvsAddDestination(req)
-	req.callback <- err
-	return nil
+	return gh.ipvsAddDestination(req)
 }
 func (gh *TerminationController) handleipvsServiceDelete(req gracefulRequest) error {
 	inQ := false
@@ -422,15 +409,19 @@ func (gh *TerminationController) handleipvsServiceAdd(req gracefulRequest) error
 		if jobQitem.gracefulRequestType == ipvsServiceDelete {
 			if req.ipvsSvc.Address.Equal(jobQitem.ipvsSvc.Address) && req.ipvsSvc.Port == jobQitem.ipvsSvc.Port && req.ipvsSvc.Protocol == jobQitem.ipvsSvc.Protocol {
 				glog.V(2).Infof("Removing graceful termination request for svc: %s due to service being re-added", ipvsServiceString(req.ipvsSvc))
+				inQ = true
 				continue
 			}
 		}
 		newQueue = append(newQueue, jobQitem)
 	}
 	gh.jobQueue = newQueue
+
 	if !inQ {
 		err := gh.ipvsHandle.NewService(req.ipvsSvc)
-		req.callback <- err
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -515,7 +506,7 @@ func NewTerminationController(config *options.KubeRouterConfig) (*TerminationCon
 	//Our incoming queue to serialize requests
 	queue := make(chan gracefulRequest, gracefulQueueSize)
 
-	//Out incoming channel for lookups
+	//Our incoming channel for lookups
 	lookupChan := make(chan lookupReq)
 
 	// Get our own IPVS handle to talk to the kernel

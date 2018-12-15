@@ -850,20 +850,29 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 	}
 
-	// cleanup stale IPs on dummy interface
-	glog.V(1).Info("Cleaning up if any, old service IPs on dummy interface")
-	addrActive := make(map[string]bool)
-	for k, endpoints := range activeServiceEndpointMap {
-		// verify active and its a generateIpPortId() type service
-		if len(endpoints) > 0 && strings.Contains(k, "-") {
-			parts := strings.SplitN(k, "-", 3)
-			addrActive[parts[0]] = true
-		}
+	err = nsc.cleanupStaleIpvsServices(serviceInfoMap, activeServiceEndpointMap)
+	if err != nil {
+		glog.Errorf("Error cleaning up stale IPVS services: %s", err.Error())
 	}
 
+	err = nsc.cleanupStaleIPs(dummyVipInterface, activeServiceEndpointMap)
+	if err != nil {
+		glog.Errorf("Error cleaning up stale ip's: %s", err.Error())
+	}
+
+	err = nsc.setupIpvsFirewall()
+	if err != nil {
+		glog.Errorf("Error syncing ipvs svc iptable rules: %s", err.Error())
+	}
+
+	glog.V(1).Info("IPVS servers and services are synced to desired state")
+	return nil
+}
+
+func (nsc *NetworkServicesController) cleanupStaleIpvsServices(serviceInfoMap serviceInfoMap, activeServiceEndpointMap map[string][]string) error {
 	// cleanup stale ipvs service and servers
 	glog.V(1).Info("Cleaning up if any, old ipvs service and servers which are no longer needed")
-	ipvsSvcs, err = nsc.ln.ipvsGetServices()
+	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
@@ -926,12 +935,26 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			}
 		}
 	}
+	return nil
+}
+
+func (nsc *NetworkServicesController) cleanupStaleIPs(dummyVipInterface netlink.Link, activeServiceEndpointMap map[string][]string) error {
+	// cleanup stale IPs on dummy interface
+	glog.V(1).Info("Cleaning up if any, old service IPs on dummy interface")
+	addrActive := make(map[string]bool)
+	for k := range activeServiceEndpointMap {
+		if strings.Contains(k, "-") {
+			parts := strings.SplitN(k, "-", 3)
+			addrActive[parts[0]] = true
+		}
+	}
 
 	var addrs []netlink.Addr
-	addrs, err = netlink.AddrList(dummyVipInterface, netlink.FAMILY_V4)
+	addrs, err := netlink.AddrList(dummyVipInterface, netlink.FAMILY_V4)
 	if err != nil {
 		return errors.New("Failed to list dummy interface IPs: " + err.Error())
 	}
+
 	for _, addr := range addrs {
 		isActive := addrActive[addr.IP.String()]
 		if !isActive {
@@ -946,13 +969,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			}
 		}
 	}
-
-	err = nsc.setupIpvsFirewall()
-	if err != nil {
-		glog.Errorf("Error syncing ipvs svc iptable rules: %s", err.Error())
-	}
-
-	glog.V(1).Info("IPVS servers and services are synced to desired state")
 	return nil
 }
 
@@ -1412,7 +1428,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 				if err != nil {
 					glog.Errorf("Unable to delete hairpin rule \"%s\" from chain %s: %e", ruleFromNode, hairpinChain, err)
 				} else {
-					glog.V(1).Info("Deleted invalid/outdated hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
+					glog.V(1).Infof("Deleted invalid/outdated hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
 				}
 			} else {
 				// Ignore the chain creation rule
