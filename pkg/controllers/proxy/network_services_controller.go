@@ -56,7 +56,7 @@ const (
 	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
-	svcIpSetName                      = "KUBE-SVC-ALL"
+	svcIpSetName                      = "kube-router-svc-all"
 )
 
 var (
