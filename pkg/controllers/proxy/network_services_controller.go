@@ -56,7 +56,9 @@ const (
 	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
-	svcIpSetName                      = "KUBE-SVC-ALL"
+	ipvsServicesIPSetName             = "kube-router-ipvs-services"
+	serviceIPsIPSetName               = "kube-router-service-ips"
+	ipvsFirewallChainName             = "KUBE-ROUTER-SERVICES"
 )
 
 var (
@@ -214,6 +216,12 @@ type NetworkServicesController struct {
 	ln                  LinuxNetworking
 	readyForUpdates     bool
 
+	// Map of ipsets that we use.
+	ipsetMap map[string]*utils.Set
+
+	// The iptables rule used to send traffic into our custom chain.
+	ipvsFirewallInputChainRule []string
+
 	svcLister cache.Indexer
 	epLister  cache.Indexer
 	podLister cache.Indexer
@@ -318,6 +326,12 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New(sysctlErr.Error())
 	}
 
+	// https://github.com/cloudnativelabs/kube-router/issues/282
+	err = nsc.setupIpvsFirewall()
+	if err != nil {
+		return errors.New("Error setting up ipvs firewall: " + err.Error())
+	}
+
 	// loop forever unitl notified to stop on stopCh
 	for {
 		select {
@@ -370,36 +384,33 @@ func (nsc *NetworkServicesController) sync() error {
 }
 
 func (nsc *NetworkServicesController) setupIpvsFirewall() error {
-	// Add ipset containg all SVCs
+	/*
+	   - create ipsets
+	   - create firewall rules
+	*/
+
+	var err error
+	var ipset *utils.Set
+
 	ipSetHandler, err := utils.NewIPSet(false)
 	if err != nil {
 		return err
 	}
 
-	svcIpSet, err := ipSetHandler.Create(svcIpSetName, utils.TypeHashIPPort, utils.OptionTimeout, "0")
+	// Remember ipsets for use in syncIpvsFirewall
+	nsc.ipsetMap = make(map[string]*utils.Set)
+
+	ipset, err = ipSetHandler.Create(serviceIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 	if err != nil {
 		return fmt.Errorf("failed to create ipset: %s", err.Error())
 	}
+	nsc.ipsetMap[serviceIPsIPSetName] = ipset
 
-	ipvsSvcs, err := nsc.ln.ipvsGetServices()
+	ipset, err = ipSetHandler.Create(ipvsServicesIPSetName, utils.TypeHashIPPort, utils.OptionTimeout, "0")
 	if err != nil {
-		return errors.New("Failed to list IPVS services: " + err.Error())
+		return fmt.Errorf("failed to create ipset: %s", err.Error())
 	}
-
-	svcSets := make([]string, 0, len(ipvsSvcs))
-	for _, ipvsSvc := range ipvsSvcs {
-		protocol := "udp"
-		if ipvsSvc.Protocol == syscall.IPPROTO_TCP {
-			protocol = "tcp"
-		}
-		set := fmt.Sprintf("%s,%s:%d", ipvsSvc.Address.String(), protocol, ipvsSvc.Port)
-		svcSets = append(svcSets, set)
-	}
-
-	err = svcIpSet.Refresh(svcSets, utils.OptionTimeout, "0")
-	if err != nil {
-		return fmt.Errorf("failed to sync ipset: %s", err.Error())
-	}
+	nsc.ipsetMap[ipvsServicesIPSetName] = ipset
 
 	// Add iptables rule to allow input traffic to ipvs services
 	iptablesCmdHandler, err := iptables.New()
@@ -407,17 +418,142 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
 	}
 
-	comment := "allow input traffic to ipvs services"
-	args := []string{"-m", "comment", "--comment", comment, "-m", "set", "--match-set", svcIpSetName, "dst,dst", "-j", "ACCEPT"}
-	exists, err := iptablesCmdHandler.Exists("filter", "INPUT", args...)
+	// ClearChain either clears an existing chain or creates a new one.
+	err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	// Pass incomming traffic into our custom chain.
+	err = iptablesCmdHandler.AppendUnique("filter", "INPUT",
+		nsc.ipvsFirewallInputChainRule...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	var comment string
+	var args []string
+
+	comment = "allow input traffic to ipvs services"
+	args = []string{"-m", "comment", "--comment", comment,
+		"-m", "set", "--match-set", ipvsServicesIPSetName, "dst,dst",
+		"-j", "ACCEPT"}
+	exists, err := iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
-		err := iptablesCmdHandler.Insert("filter", "INPUT", 1, args...)
+		err := iptablesCmdHandler.Insert("filter", ipvsFirewallChainName, 1, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
+	}
+
+	comment = "allow icmp echo requests to service IPs"
+	args = []string{"-m", "comment", "--comment", comment,
+		"-p", "icmp", "--icmp-type", "echo-request",
+		"-j", "ACCEPT"}
+	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	comment = "reject all unexpected traffic to service IPs"
+	args = []string{"-m", "comment", "--comment", comment,
+		"-j", "REJECT", "--reject-with", "icmp-port-unreachable"}
+	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	return nil
+}
+
+func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
+	/*
+	   - delete firewall rules
+	   - delete ipsets
+	*/
+	var err error
+
+	// Clear iptables rules.
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		glog.Errorf("Failed to initialize iptables executor: %s", err.Error())
+	} else {
+		err = iptablesCmdHandler.Delete("filter", "INPUT", nsc.ipvsFirewallInputChainRule...)
+		if err != nil {
+			glog.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+
+		err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
+		if err != nil {
+			glog.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+
+		err = iptablesCmdHandler.DeleteChain("filter", ipvsFirewallChainName)
+		if err != nil {
+			glog.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	// Clear ipsets.
+	ipSetHandler, err := utils.NewIPSet(false)
+	if err != nil {
+		glog.Errorf("Failed to initialize ipset handler: %s", err.Error())
+	} else {
+		err = ipSetHandler.Destroy(serviceIPsIPSetName)
+		if err != nil {
+			glog.Errorf("failed to destroy ipset: %s", err.Error())
+		}
+
+		err = ipSetHandler.Destroy(ipvsServicesIPSetName)
+		if err != nil {
+			glog.Errorf("failed to destroy ipset: %s", err.Error())
+		}
+	}
+}
+
+func (nsc *NetworkServicesController) syncIpvsFirewall() error {
+	/*
+	   - update ipsets based on currently active IPVS services
+	*/
+	var err error
+
+	serviceIPsIPSet := nsc.ipsetMap[serviceIPsIPSetName]
+	ipvsServicesIPSet := nsc.ipsetMap[ipvsServicesIPSetName]
+
+	ipvsServices, err := nsc.ln.ipvsGetServices()
+	if err != nil {
+		return errors.New("Failed to list IPVS services: " + err.Error())
+	}
+
+	// Create 2 ipsets, one for 'ip' and one for 'ip,port'
+	serviceIPsSets := make([]string, 0, len(ipvsServices))
+	ipvsServicesSets := make([]string, 0, len(ipvsServices))
+
+	for _, ipvsService := range ipvsServices {
+		protocol := "udp"
+		if ipvsService.Protocol == syscall.IPPROTO_TCP {
+			protocol = "tcp"
+		}
+
+		serviceIPsSet := ipvsService.Address.String()
+		serviceIPsSets = append(serviceIPsSets, serviceIPsSet)
+
+		ipvsServicesSet := fmt.Sprintf("%s,%s:%d", ipvsService.Address.String(), protocol, ipvsService.Port)
+		ipvsServicesSets = append(ipvsServicesSets, ipvsServicesSet)
+
+	}
+
+	err = serviceIPsIPSet.Refresh(serviceIPsSets, utils.OptionTimeout, "0")
+	if err != nil {
+		return fmt.Errorf("failed to sync ipset: %s", err.Error())
+	}
+
+	err = ipvsServicesIPSet.Refresh(ipvsServicesSets, utils.OptionTimeout, "0")
+	if err != nil {
+		return fmt.Errorf("failed to sync ipset: %s", err.Error())
 	}
 
 	return nil
@@ -946,7 +1082,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 	}
 
-	err = nsc.setupIpvsFirewall()
+	err = nsc.syncIpvsFirewall()
 	if err != nil {
 		glog.Errorf("Error syncing ipvs svc iptable rules: %s", err.Error())
 	}
@@ -2055,6 +2191,8 @@ func (nsc *NetworkServicesController) Cleanup() {
 		return
 	}
 
+	nsc.cleanupIpvsFirewall()
+
 	// delete dummy interface used to assign cluster IP's
 	dummyVipInterface, err := netlink.LinkByName(KUBE_DUMMY_IF)
 	if err != nil {
@@ -2174,6 +2312,12 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.epLister = epInformer.GetIndexer()
 	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
+
+	// Create static iptables rule for use in {setup,cleanup}IpvsFirewall.
+	nsc.ipvsFirewallInputChainRule = []string{
+		"-m", "comment", "--comment", "handle traffic to IPVS service IPs in custom chain",
+		"-m", "set", "--match-set", serviceIPsIPSetName, "dst",
+		"-j", ipvsFirewallChainName}
 
 	rand.Seed(time.Now().UnixNano())
 
