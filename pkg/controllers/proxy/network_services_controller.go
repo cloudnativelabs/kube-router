@@ -219,9 +219,6 @@ type NetworkServicesController struct {
 	// Map of ipsets that we use.
 	ipsetMap map[string]*utils.Set
 
-	// The iptables rule used to send traffic into our custom chain.
-	ipvsFirewallInputChainRule []string
-
 	svcLister cache.Indexer
 	epLister  cache.Indexer
 	podLister cache.Indexer
@@ -383,6 +380,14 @@ func (nsc *NetworkServicesController) sync() error {
 	return nil
 }
 
+func getIpvsFirewallInputChainRule() []string {
+	// The iptables rule for use in {setup,cleanup}IpvsFirewall.
+	return []string{
+		"-m", "comment", "--comment", "handle traffic to IPVS service IPs in custom chain",
+		"-m", "set", "--match-set", serviceIPsIPSetName, "dst",
+		"-j", ipvsFirewallChainName}
+}
+
 func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	/*
 	   - create ipsets
@@ -425,8 +430,9 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	}
 
 	// Pass incomming traffic into our custom chain.
+	ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
 	err = iptablesCmdHandler.AppendUnique("filter", "INPUT",
-		nsc.ipvsFirewallInputChainRule...)
+		ipvsFirewallInputChainRule...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
@@ -481,7 +487,8 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 	if err != nil {
 		glog.Errorf("Failed to initialize iptables executor: %s", err.Error())
 	} else {
-		err = iptablesCmdHandler.Delete("filter", "INPUT", nsc.ipvsFirewallInputChainRule...)
+		ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
+		err = iptablesCmdHandler.Delete("filter", "INPUT", ipvsFirewallInputChainRule...)
 		if err != nil {
 			glog.Errorf("Failed to run iptables command: %s", err.Error())
 		}
@@ -2312,12 +2319,6 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.epLister = epInformer.GetIndexer()
 	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
-
-	// Create static iptables rule for use in {setup,cleanup}IpvsFirewall.
-	nsc.ipvsFirewallInputChainRule = []string{
-		"-m", "comment", "--comment", "handle traffic to IPVS service IPs in custom chain",
-		"-m", "set", "--match-set", serviceIPsIPSetName, "dst",
-		"-j", ipvsFirewallChainName}
 
 	rand.Seed(time.Now().UnixNano())
 
