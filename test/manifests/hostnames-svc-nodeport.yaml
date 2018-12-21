@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hostnames
+spec:
+  selector:
+    app: hostnames
+  type: NodePort
+  ports:
+  - name: default
+    protocol: TCP
+    port: 80
+    targetPort: 9376
+    nodePort: 30076
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: hostnames
+  labels:
+    app: hostnames
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hostnames
+  template:
+    metadata:
+      labels:
+        app: hostnames
+    spec:
+      containers:
+      - name: hostnames
+        image: k8s.gcr.io/serve_hostname
+        ports:
+        - containerPort: 9376

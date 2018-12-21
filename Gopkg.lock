@@ -34,6 +34,14 @@
   revision = "1fca145dffbcaa8fe914309b1ec0cfc67500fe61"
 
 [[projects]]
+  digest = "1:320e7ead93de9fd2b0e59b50fd92a4d50c1f8ab455d96bc2eb083267453a9709"
+  name = "github.com/asaskevich/govalidator"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ccb8e960c48f04d6935e72476ae4a51028f9e22f"
+  version = "v9"
+
+[[projects]]
   digest = "1:220c8689d516e36f763897aaee8db751f30cbc7f2b87536e44555019796ef191"
   name = "github.com/aws/aws-sdk-go"
   packages = [
@@ -325,6 +333,18 @@
   revision = "24818f796faf91cd76ec7bddd72458fbced7a6c1"
 
 [[projects]]
+  digest = "1:aebccac5eae98c77bbdf314428fb06ec1c1b4bee91589c3624d7facba176b8a6"
+  name = "github.com/google/gops"
+  packages = [
+    "agent",
+    "internal",
+    "signal",
+  ]
+  pruneopts = "UT"
+  revision = "89672dbe3c4ba97d53af7e839e8097e1ccbb4977"
+  version = "v0.3.5"
+
+[[projects]]
   digest = "1:5e031a35b76ee001fa9ca9d598298054a123d080e00d13a8dafcfc5e3ecd5b58"
   name = "github.com/googleapis/gnostic"
   packages = [
@@ -435,6 +455,22 @@
   pruneopts = "UT"
   revision = "59fac5042749a5afb9af70e813da1dd5474f0167"
   version = "1.0.1"
+
+[[projects]]
+  branch = "master"
+  digest = "1:caf6db28595425c0e0f2301a00257d11712f65c1878e12cffc42f6b9a9cf3f23"
+  name = "github.com/kardianos/osext"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ae77be60afb1dcacde03767a8c37337fad28ac14"
+
+[[projects]]
+  digest = "1:ae5f4d0779a45e2cb3075d8b3ece6c623e171407f4aac83521392ff06d188871"
+  name = "github.com/kevinburke/ssh_config"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "81db2a75821ed34e682567d48be488a1c3121088"
+  version = "0.5"
 
 [[projects]]
   digest = "1:5149009cc36718234a9ad2896b04b04716808b8d72143b5687c0a15b53132b27"
@@ -574,6 +610,14 @@
   ]
   pruneopts = "UT"
   revision = "v1.33"
+
+[[projects]]
+  digest = "1:b2ee62e09bec113cf086d2ce0769efcc7bf79481aba8373fd8f7884e94df3462"
+  name = "github.com/pelletier/go-buffruneio"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "c37440a7cf42ac63b919c752ca73a85067e05992"
+  version = "v0.2.0"
 
 [[projects]]
   digest = "1:7231124c9669dfb54b82ef8b89f2735cf5d5d2529a23c6ac93a8c4b8bbb28b28"
@@ -739,9 +783,18 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:3f3a05ae0b95893d90b9b3b5afdb79a9b3d96e4e36e099d841ae602e4aca0da8"
+  digest = "1:f8c6a973949021b83add1b043d7ebea58f3bb5a8bacac56af87439771f6a64ce"
   name = "golang.org/x/crypto"
-  packages = ["ssh/terminal"]
+  packages = [
+    "curve25519",
+    "ed25519",
+    "ed25519/internal/edwards25519",
+    "internal/chacha20",
+    "poly1305",
+    "ssh",
+    "ssh/agent",
+    "ssh/terminal",
+  ]
   pruneopts = "UT"
   revision = "d6449816ce06963d9d136eee5a56fca5b0616e7e"
 
@@ -962,7 +1015,7 @@
 
 [[projects]]
   branch = "release-5.0"
-  digest = "1:591d0813c53cf297e808a2eabcd8bac67da8f92a4a2d1341812397f909618f65"
+  digest = "1:7811ddce6b832db019c1a74cc566e17bdfd3ef0670e8e14289fadea0c9b733ea"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
@@ -1077,6 +1130,7 @@
     "rest",
     "rest/watch",
     "testing",
+    "third_party/forked/golang/template",
     "tools/auth",
     "tools/cache",
     "tools/clientcmd",
@@ -1091,6 +1145,7 @@
     "util/flowcontrol",
     "util/homedir",
     "util/integer",
+    "util/jsonpath",
   ]
   pruneopts = "UT"
   revision = "45cf21002ef6b0320709b00606e38d89ed750fab"
@@ -1107,6 +1162,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/asaskevich/govalidator",
     "github.com/aws/aws-sdk-go/aws",
     "github.com/aws/aws-sdk-go/aws/awserr",
     "github.com/aws/aws-sdk-go/aws/ec2metadata",
@@ -1118,8 +1174,14 @@
     "github.com/docker/docker/client",
     "github.com/docker/libnetwork/ipvs",
     "github.com/golang/glog",
+    "github.com/google/gops/agent",
+    "github.com/kevinburke/ssh_config",
     "github.com/onsi/ginkgo",
+    "github.com/onsi/ginkgo/config",
+    "github.com/onsi/ginkgo/types",
     "github.com/onsi/gomega",
+    "github.com/onsi/gomega/format",
+    "github.com/onsi/gomega/types",
     "github.com/osrg/gobgp/api",
     "github.com/osrg/gobgp/config",
     "github.com/osrg/gobgp/gobgp",
@@ -1128,9 +1190,12 @@
     "github.com/osrg/gobgp/table",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",
+    "github.com/sirupsen/logrus",
     "github.com/spf13/pflag",
     "github.com/vishvananda/netlink",
     "github.com/vishvananda/netns",
+    "golang.org/x/crypto/ssh",
+    "golang.org/x/crypto/ssh/agent",
     "golang.org/x/net/context",
     "k8s.io/api/core/v1",
     "k8s.io/api/extensions/v1beta1",
@@ -1145,6 +1210,7 @@
     "k8s.io/client-go/rest",
     "k8s.io/client-go/tools/cache",
     "k8s.io/client-go/tools/clientcmd",
+    "k8s.io/client-go/util/jsonpath",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
