@@ -350,6 +350,12 @@ func (nsc *NetworkServicesController) sync() error {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
+	// enable masquerad rule
+	err = ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
+	if err != nil {
+		glog.Errorf("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s", err.Error())
+	}
+
 	nsc.serviceMap = nsc.buildServicesInfo()
 	nsc.endpointsMap = nsc.buildEndpointsInfo()
 	err = nsc.syncHairpinIptablesRules()
@@ -1287,7 +1293,7 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 			return errors.New("Failed to run iptables command" + err.Error())
 		}
 	}
-	glog.V(1).Info("Successfully added iptables masquerad rule")
+	glog.V(2).Info("Successfully synced iptables masquerad rule")
 	return nil
 }
 
