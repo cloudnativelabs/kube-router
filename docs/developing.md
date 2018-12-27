@@ -157,3 +157,7 @@ Example:
 ```console
 $  make release IMG_FQDN=quay.io IMG_NAMESPACE=bzub GITHUB_TOKEN=b1ahbl1ahb1ahba1hahb1ah
 ```
+
+## Dependency Management
+
+kube-router uses `dep` for managing dependencies. Instructions on installing and using dep can be found [here](https://golang.github.io/dep/docs/introduction.html). 
