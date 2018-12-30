@@ -429,14 +429,6 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 
-	// Pass incomming traffic into our custom chain.
-	ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
-	err = iptablesCmdHandler.AppendUnique("filter", "INPUT",
-		ipvsFirewallInputChainRule...)
-	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-	}
-
 	var comment string
 	var args []string
 
@@ -470,6 +462,19 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	// Pass incomming traffic into our custom chain.
+	ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
+	exists, err := iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err := iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
 	}
 
 	return nil
