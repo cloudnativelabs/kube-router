@@ -466,7 +466,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 
 	// Pass incomming traffic into our custom chain.
 	ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
-	exists, err := iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
+	exists, err = iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
