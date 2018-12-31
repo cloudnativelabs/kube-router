@@ -471,7 +471,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
-		err := iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
+		err = iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
