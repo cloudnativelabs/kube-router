@@ -56,6 +56,7 @@ const (
 	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
+	localIPsIPSetName                 = "kube-router-local-ips"
 	ipvsServicesIPSetName             = "kube-router-ipvs-services"
 	serviceIPsIPSetName               = "kube-router-service-ips"
 	ipvsFirewallChainName             = "KUBE-ROUTER-SERVICES"
@@ -405,6 +406,14 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	// Remember ipsets for use in syncIpvsFirewall
 	nsc.ipsetMap = make(map[string]*utils.Set)
 
+	// Create ipset for local addresses.
+	ipset, err = ipSetHandler.Create(localIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+	if err != nil {
+		return fmt.Errorf("failed to create ipset: %s", err.Error())
+	}
+	nsc.ipsetMap[localIPsIPSetName] = ipset
+
+	// Create 2 ipsets for services. One for 'ip' and one for 'ip,port'
 	ipset, err = ipSetHandler.Create(serviceIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 	if err != nil {
 		return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -417,7 +426,8 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	}
 	nsc.ipsetMap[ipvsServicesIPSetName] = ipset
 
-	// Add iptables rule to allow input traffic to ipvs services
+	// Setup a custom iptables chain to explicitly allow input traffic to
+	// ipvs services only.
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
@@ -456,8 +466,11 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 
+	// We exclude the local addresses here as that would otherwise block all
+	// traffic to local addresses if any NodePort service exists.
 	comment = "reject all unexpected traffic to service IPs"
 	args = []string{"-m", "comment", "--comment", comment,
+		"-m", "set", "!", "--match-set", localIPsIPSetName, "dst",
 		"-j", "REJECT", "--reject-with", "icmp-port-unreachable"}
 	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 	if err != nil {
@@ -514,6 +527,11 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 	if err != nil {
 		glog.Errorf("Failed to initialize ipset handler: %s", err.Error())
 	} else {
+		err = ipSetHandler.Destroy(localIPsIPSetName)
+		if err != nil {
+			glog.Errorf("failed to destroy ipset: %s", err.Error())
+		}
+
 		err = ipSetHandler.Destroy(serviceIPsIPSetName)
 		if err != nil {
 			glog.Errorf("failed to destroy ipset: %s", err.Error())
@@ -532,15 +550,25 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	*/
 	var err error
 
-	serviceIPsIPSet := nsc.ipsetMap[serviceIPsIPSetName]
-	ipvsServicesIPSet := nsc.ipsetMap[ipvsServicesIPSetName]
+	localIPsIPSet := nsc.ipsetMap[localIPsIPSetName]
 
+	// Populate local addresses ipset.
+	addrs, err := getAllLocalIPs()
+	localIPsSets := make([]string, 0, len(addrs))
+	for i, addr := range addrs {
+		localIPsSets = append(localIPsSets, addr.IP.String())
+	}
+	err = localIPsIPSet.Refresh(serviceIPsSets, utils.OptionTimeout, "0")
+	if err != nil {
+		return fmt.Errorf("failed to sync ipset: %s", err.Error())
+	}
+
+	// Populate service ipsets.
 	ipvsServices, err := nsc.ln.ipvsGetServices()
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
 
-	// Create 2 ipsets, one for 'ip' and one for 'ip,port'
 	serviceIPsSets := make([]string, 0, len(ipvsServices))
 	ipvsServicesSets := make([]string, 0, len(ipvsServices))
 
@@ -558,11 +586,13 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 
 	}
 
+	serviceIPsIPSet := nsc.ipsetMap[serviceIPsIPSetName]
 	err = serviceIPsIPSet.Refresh(serviceIPsSets, utils.OptionTimeout, "0")
 	if err != nil {
 		return fmt.Errorf("failed to sync ipset: %s", err.Error())
 	}
 
+	ipvsServicesIPSet := nsc.ipsetMap[ipvsServicesIPSetName]
 	err = ipvsServicesIPSet.Refresh(ipvsServicesSets, utils.OptionTimeout, "0")
 	if err != nil {
 		return fmt.Errorf("failed to sync ipset: %s", err.Error())
