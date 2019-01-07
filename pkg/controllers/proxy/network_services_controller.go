@@ -555,10 +555,10 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	// Populate local addresses ipset.
 	addrs, err := getAllLocalIPs()
 	localIPsSets := make([]string, 0, len(addrs))
-	for i, addr := range addrs {
+	for _, addr := range addrs {
 		localIPsSets = append(localIPsSets, addr.IP.String())
 	}
-	err = localIPsIPSet.Refresh(serviceIPsSets, utils.OptionTimeout, "0")
+	err = localIPsIPSet.Refresh(localIPsSets, utils.OptionTimeout, "0")
 	if err != nil {
 		return fmt.Errorf("failed to sync ipset: %s", err.Error())
 	}
