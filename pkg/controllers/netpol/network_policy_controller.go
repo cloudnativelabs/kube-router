@@ -1140,23 +1140,20 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 				ingressRule.matchAllSource = true
 			} else {
 				ingressRule.matchAllSource = false
-				var matchingPods []*api.Pod
 				for _, peer := range specIngressRule.From {
-					peerPods, err := npc.evalPodPeer(policy, peer)
-					matchingPods = append(matchingPods, peerPods...)
-					ingressRule.srcIPBlocks = append(ingressRule.srcIPBlocks, npc.evalIPBlockPeer(peer)...)
-					if err == nil {
-						for _, matchingPod := range matchingPods {
-							if matchingPod.Status.PodIP == "" {
+					if peerPods, err := npc.evalPodPeer(policy, peer); err == nil {
+						for _, peerPod := range peerPods {
+							if peerPod.Status.PodIP == "" {
 								continue
 							}
 							ingressRule.srcPods = append(ingressRule.srcPods,
-								podInfo{ip: matchingPod.Status.PodIP,
-									name:      matchingPod.ObjectMeta.Name,
-									namespace: matchingPod.ObjectMeta.Namespace,
-									labels:    matchingPod.ObjectMeta.Labels})
+								podInfo{ip: peerPod.Status.PodIP,
+									name:      peerPod.ObjectMeta.Name,
+									namespace: peerPod.ObjectMeta.Namespace,
+									labels:    peerPod.ObjectMeta.Labels})
 						}
 					}
+					ingressRule.srcIPBlocks = append(ingressRule.srcIPBlocks, npc.evalIPBlockPeer(peer)...)
 				}
 			}
 
@@ -1187,20 +1184,20 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 				egressRule.matchAllDestinations = true
 			} else {
 				egressRule.matchAllDestinations = false
-				var matchingPods []*api.Pod
 				for _, peer := range specEgressRule.To {
-					peerPods, err := npc.evalPodPeer(policy, peer)
-					matchingPods = append(matchingPods, peerPods...)
-					egressRule.dstIPBlocks = append(egressRule.dstIPBlocks, npc.evalIPBlockPeer(peer)...)
-					if err == nil {
-						for _, matchingPod := range matchingPods {
+					if peerPods, err := npc.evalPodPeer(policy, peer); err == nil {
+						for _, peerPod := range peerPods {
+							if peerPod.Status.PodIP == "" {
+								continue
+							}
 							egressRule.dstPods = append(egressRule.dstPods,
-								podInfo{ip: matchingPod.Status.PodIP,
-									name:      matchingPod.ObjectMeta.Name,
-									namespace: matchingPod.ObjectMeta.Namespace,
-									labels:    matchingPod.ObjectMeta.Labels})
+								podInfo{ip: peerPod.Status.PodIP,
+									name:      peerPod.ObjectMeta.Name,
+									namespace: peerPod.ObjectMeta.Namespace,
+									labels:    peerPod.ObjectMeta.Labels})
 						}
 					}
+					egressRule.dstIPBlocks = append(egressRule.dstIPBlocks, npc.evalIPBlockPeer(peer)...)
 				}
 			}
 
