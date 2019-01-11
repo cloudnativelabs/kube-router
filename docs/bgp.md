@@ -74,7 +74,7 @@ more than one peer router by specifying a slice of BGP peers.
 For example:
 ```
 --peer-router-ips="192.168.1.99,192.168.1.100"
---peer-router-asns="65000,65000"
+--peer-router-asns=65000,65000
 ```
 
 ### Node Specific External BGP Peers
