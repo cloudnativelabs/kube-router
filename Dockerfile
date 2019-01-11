@@ -2,6 +2,7 @@ FROM alpine:3.7
 
 RUN apk add --no-cache \
       iptables \
+      ip6tables \
       ipset \
       iproute2 \
       ipvsadm \
