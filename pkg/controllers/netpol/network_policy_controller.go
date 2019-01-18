@@ -5,6 +5,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"net"
 	"regexp"
 	"strconv"
@@ -119,6 +120,16 @@ type egressRule struct {
 type protocolAndPort struct {
 	protocol string
 	port     string
+}
+
+func newProtocolAndPort(protocol string, port *intstr.IntOrString) protocolAndPort {
+	strPort := ""
+
+	if port != nil {
+		strPort = port.String()
+	}
+
+	return protocolAndPort{protocol: protocol, port: strPort}
 }
 
 // Run runs forver till we receive notification on stopCh
@@ -371,16 +382,21 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 			if len(ingressRule.ports) != 0 {
 				// case where 'ports' details and 'from' details specified in the ingress rule
-				// so match on specified source and destination ip's and specified port and protocol
+				// so match on specified source and destination ip's and specified port (if any) and protocol
 				for _, portProtocol := range ingressRule.ports {
 					comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 						policy.name + " namespace " + policy.namespace
 					args := []string{"-m", "comment", "--comment", comment,
 						"-m", "set", "--set", srcPodIpSetName, "src",
 						"-m", "set", "--set", targetDestPodIpSetName, "dst",
-						"-p", portProtocol.protocol,
-						"--dport", portProtocol.port,
-						"-j", "ACCEPT"}
+						"-p", portProtocol.protocol}
+
+					if portProtocol.port != "" {
+						args = append(args, "--dport", portProtocol.port)
+					}
+
+					args = append(args, "-j", "ACCEPT")
+
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
 						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
@@ -403,16 +419,21 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 		}
 
 		// case where only 'ports' details specified but no 'from' details in the ingress rule
-		// so match on all sources, with specified port and protocol
+		// so match on all sources, with specified port (if any) and protocol
 		if ingressRule.matchAllSource && !ingressRule.matchAllPorts {
 			for _, portProtocol := range ingressRule.ports {
 				comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
 					"-m", "set", "--set", targetDestPodIpSetName, "dst",
-					"-p", portProtocol.protocol,
-					"--dport", portProtocol.port,
-					"-j", "ACCEPT"}
+					"-p", portProtocol.protocol}
+
+				if portProtocol.port != "" {
+					args = append(args, "--dport", portProtocol.port)
+				}
+
+				args = append(args, "-j", "ACCEPT")
+
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
 					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
@@ -452,9 +473,14 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 					args := []string{"-m", "comment", "--comment", comment,
 						"-m", "set", "--set", srcIpBlockIpSetName, "src",
 						"-m", "set", "--set", targetDestPodIpSetName, "dst",
-						"-p", portProtocol.protocol,
-						"--dport", portProtocol.port,
-						"-j", "ACCEPT"}
+						"-p", portProtocol.protocol}
+
+					if portProtocol.port != "" {
+						args = append(args, "--dport", portProtocol.port)
+					}
+
+					args = append(args, "-j", "ACCEPT")
+
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
 						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
@@ -516,16 +542,21 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 
 			if len(egressRule.ports) != 0 {
 				// case where 'ports' details and 'from' details specified in the egress rule
-				// so match on specified source and destination ip's and specified port and protocol
+				// so match on specified source and destination ip's and specified port (if any) and protocol
 				for _, portProtocol := range egressRule.ports {
 					comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 						policy.name + " namespace " + policy.namespace
 					args := []string{"-m", "comment", "--comment", comment,
 						"-m", "set", "--set", targetSourcePodIpSetName, "src",
 						"-m", "set", "--set", dstPodIpSetName, "dst",
-						"-p", portProtocol.protocol,
-						"--dport", portProtocol.port,
-						"-j", "ACCEPT"}
+						"-p", portProtocol.protocol}
+
+					if portProtocol.port != "" {
+						args = append(args, "--dport", portProtocol.port)
+					}
+
+					args = append(args, "-j", "ACCEPT")
+
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
 						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
@@ -548,16 +579,21 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 		}
 
 		// case where only 'ports' details specified but no 'to' details in the egress rule
-		// so match on all sources, with specified port and protocol
+		// so match on all sources, with specified port (if any) and protocol
 		if egressRule.matchAllDestinations && !egressRule.matchAllPorts {
 			for _, portProtocol := range egressRule.ports {
 				comment := "rule to ACCEPT traffic from source pods to all destinations selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				args := []string{"-m", "comment", "--comment", comment,
 					"-m", "set", "--set", targetSourcePodIpSetName, "src",
-					"-p", portProtocol.protocol,
-					"--dport", portProtocol.port,
-					"-j", "ACCEPT"}
+					"-p", portProtocol.protocol}
+
+				if portProtocol.port != "" {
+					args = append(args, "--dport", portProtocol.port)
+				}
+
+				args = append(args, "-j", "ACCEPT")
+
 				err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 				if err != nil {
 					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
@@ -596,9 +632,14 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 					args := []string{"-m", "comment", "--comment", comment,
 						"-m", "set", "--set", targetSourcePodIpSetName, "src",
 						"-m", "set", "--set", dstIpBlockIpSetName, "dst",
-						"-p", portProtocol.protocol,
-						"--dport", portProtocol.port,
-						"-j", "ACCEPT"}
+						"-p", portProtocol.protocol}
+
+					if portProtocol.port != "" {
+						args = append(args, "--dport", portProtocol.port)
+					}
+
+					args = append(args, "-j", "ACCEPT")
+
 					err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
 					if err != nil {
 						return fmt.Errorf("Failed to run iptables command: %s", err.Error())
@@ -1127,7 +1168,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 			} else {
 				ingressRule.matchAllPorts = false
 				for _, port := range specIngressRule.Ports {
-					protocolAndPort := protocolAndPort{protocol: string(*port.Protocol), port: port.Port.String()}
+					protocolAndPort := newProtocolAndPort(string(*port.Protocol), port.Port)
 					ingressRule.ports = append(ingressRule.ports, protocolAndPort)
 				}
 			}
@@ -1174,7 +1215,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 			} else {
 				egressRule.matchAllPorts = false
 				for _, port := range specEgressRule.Ports {
-					protocolAndPort := protocolAndPort{protocol: string(*port.Protocol), port: port.Port.String()}
+					protocolAndPort := newProtocolAndPort(string(*port.Protocol), port.Port)
 					egressRule.ports = append(egressRule.ports, protocolAndPort)
 				}
 			}
@@ -1311,7 +1352,7 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 
 			ingressRule.ports = make([]protocolAndPort, 0)
 			for _, port := range specIngressRule.Ports {
-				protocolAndPort := protocolAndPort{protocol: string(*port.Protocol), port: port.Port.String()}
+				protocolAndPort := newProtocolAndPort(string(*port.Protocol), port.Port)
 				ingressRule.ports = append(ingressRule.ports, protocolAndPort)
 			}
 
