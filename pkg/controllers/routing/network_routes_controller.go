@@ -26,6 +26,7 @@ import (
 	"github.com/osrg/gobgp/table"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -427,6 +428,22 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 		if !nrc.enableOverlays {
 			glog.Infof("Found node: " + nexthop.String() + " to be in different subnet but overlays are " +
 				"disabled so not creating any tunnel and injecting route for the node's pod CIDR.")
+
+			glog.Infof("Cleaning up old routes if there are any")
+			routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
+				Dst: dst, Protocol: 0x11,
+			}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
+			if err != nil {
+				glog.Errorf("Failed to get routes from netlink")
+			}
+			for i, r := range routes {
+				glog.V(2).Infof("Found route to remove: %s", r.String())
+				err := netlink.RouteDel(&routes[i])
+				if err != nil {
+					glog.Errorf("Failed to remove route due to " + err.Error())
+				}
+			}
+
 			glog.Infof("Cleaning up if there is any existing tunnel interface for the node")
 			link, err := netlink.LinkByName(tunnelName)
 			if err != nil {
