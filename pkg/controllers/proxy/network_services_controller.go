@@ -387,6 +387,19 @@ func (nsc *NetworkServicesController) sync() error {
 	return nil
 }
 
+// Lookup service ip, protocol, port by given fwmark value (reverse of generateFwmark)
+func (nsc *NetworkServicesController) lookupServiceByFWMark(FWMark uint32) (string, string, int) {
+	for _, svc := range nsc.serviceMap {
+		for _, externalIP := range svc.externalIPs {
+			gfwmark := generateFwmark(externalIP, svc.protocol, fmt.Sprint(svc.port))
+			if FWMark == gfwmark {
+				return externalIP, svc.protocol, svc.port
+			}
+		}
+	}
+	return "", "", 0
+}
+
 func getIpvsFirewallInputChainRule() []string {
 	// The iptables rule for use in {setup,cleanup}IpvsFirewall.
 	return []string{
@@ -579,15 +592,27 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	ipvsServicesSets := make([]string, 0, len(ipvsServices))
 
 	for _, ipvsService := range ipvsServices {
-		protocol := "udp"
-		if ipvsService.Protocol == syscall.IPPROTO_TCP {
-			protocol = "tcp"
+		var address, protocol string
+		var port int
+		if ipvsService.Address != nil {
+			address = ipvsService.Address.String()
+			if ipvsService.Protocol == syscall.IPPROTO_TCP {
+				protocol = "tcp"
+			} else {
+				protocol = "udp"
+			}
+			port = int(ipvsService.Port)
+		} else if ipvsService.FWMark != 0 {
+			address, protocol, port = nsc.lookupServiceByFWMark(ipvsService.FWMark)
+			if address == "" {
+				continue
+			}
 		}
 
-		serviceIPsSet := ipvsService.Address.String()
+		serviceIPsSet := address
 		serviceIPsSets = append(serviceIPsSets, serviceIPsSet)
 
-		ipvsServicesSet := fmt.Sprintf("%s,%s:%d", ipvsService.Address.String(), protocol, ipvsService.Port)
+		ipvsServicesSet := fmt.Sprintf("%s,%s:%d", address, protocol, port)
 		ipvsServicesSets = append(ipvsServicesSets, ipvsServicesSet)
 
 	}
