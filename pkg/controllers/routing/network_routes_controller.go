@@ -730,7 +730,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	nrc.bgpServer = gobgp.NewBgpServer()
 	go nrc.bgpServer.Serve()
 
-	g := bgpapi.NewGrpcServer(nrc.bgpServer, ":50051")
+	g := bgpapi.NewGrpcServer(nrc.bgpServer, nrc.nodeIP.String()+":50051"+","+"127.0.0.1:50051")
 	go g.Serve()
 
 	var localAddressList []string
