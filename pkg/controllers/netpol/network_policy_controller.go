@@ -1086,6 +1086,15 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(nodeIp str
 	return &nodePods, nil
 }
 
+func (npc *NetworkPolicyController) checkForNamedPorts(ports *[]networking.NetworkPolicyPort) error {
+	for _, npProtocolPort := range *ports {
+		if npProtocolPort.Port != nil && npProtocolPort.Port.Type == intstr.String {
+			return fmt.Errorf("named port %s in network policy", npProtocolPort.Port.String())
+		}
+	}
+	return nil
+}
+
 func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
@@ -1157,6 +1166,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 			newPolicy.egressRules = make([]egressRule, 0)
 		}
 
+		var skipPolicy bool
 		for _, specIngressRule := range policy.Spec.Ingress {
 			ingressRule := ingressRule{}
 
@@ -1167,6 +1177,11 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 				ingressRule.matchAllPorts = true
 			} else {
 				ingressRule.matchAllPorts = false
+				if npc.checkForNamedPorts(&specIngressRule.Ports) != nil {
+					glog.Errorf("Found a network policy: %s/%s with named port. Skipping processing network policy as its unspported yet.", policy.Namespace, policy.Name)
+					skipPolicy = true
+					continue
+				}
 				for _, port := range specIngressRule.Ports {
 					protocolAndPort := newProtocolAndPort(string(*port.Protocol), port.Port)
 					ingressRule.ports = append(ingressRule.ports, protocolAndPort)
@@ -1211,6 +1226,11 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 				egressRule.matchAllPorts = true
 			} else {
 				egressRule.matchAllPorts = false
+				if npc.checkForNamedPorts(&specEgressRule.Ports) != nil {
+					glog.Errorf("Found a network policy: %s/%s with named port. Skipping processing network policy as its unspported yet.", policy.Namespace, policy.Name)
+					skipPolicy = true
+					continue
+				}
 				for _, port := range specEgressRule.Ports {
 					protocolAndPort := newProtocolAndPort(string(*port.Protocol), port.Port)
 					egressRule.ports = append(egressRule.ports, protocolAndPort)
@@ -1244,7 +1264,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 
 			newPolicy.egressRules = append(newPolicy.egressRules, egressRule)
 		}
-		NetworkPolicies = append(NetworkPolicies, newPolicy)
+		if !skipPolicy {
+			NetworkPolicies = append(NetworkPolicies, newPolicy)
+		}
 	}
 
 	return &NetworkPolicies, nil
