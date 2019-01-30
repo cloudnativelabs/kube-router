@@ -48,9 +48,9 @@ type NetworkPolicyController struct {
 	v1NetworkPolicy bool
 	readyForUpdates bool
 
-	// list of all active network policies expressed as networkPolicyInfo
-	networkPoliciesInfo *[]networkPolicyInfo
-	ipSetHandler        *utils.IPSet
+	// list of all active network policies expressed as NetworkPolicyInfo
+	networkPoliciesInfo *[]NetworkPolicyInfo
+	handler             PolicyHandler
 
 	podLister cache.Indexer
 	npLister  cache.Indexer
@@ -62,63 +62,60 @@ type NetworkPolicyController struct {
 }
 
 // internal structure to represent a network policy
-type networkPolicyInfo struct {
-	name      string
-	namespace string
+type NetworkPolicyInfo struct {
+	Name      string
+	Namespace string
 	labels    map[string]string
 
 	// set of pods matching network policy spec podselector label selector
-	targetPods map[string]podInfo
+	TargetPods map[string]PodInfo
 
 	// whitelist ingress rules from the network policy spec
-	ingressRules []ingressRule
+	IngressRules []IngressRule
 
 	// whitelist egress rules from the network policy spec
-	egressRules []egressRule
+	EgressRules []EgressRule
 
 	// policy type "ingress" or "egress" or "both" as defined by PolicyType in the spec
 	policyType string
 }
 
 // internal structure to represent Pod
-type podInfo struct {
-	ip        string
-	name      string
-	namespace string
-	labels    map[string]string
+type PodInfo struct {
+	IP        string
+	Name      string
+	Namespace string
+	Labels    map[string]string
+	Policies  []NetworkPolicyInfo
 }
 
 // internal stucture to represent NetworkPolicyIngressRule in the spec
-type ingressRule struct {
-	matchAllPorts  bool
-	ports          []protocolAndPort
-	matchAllSource bool
-	srcPods        []podInfo
-	srcIPBlocks    [][]string
+type IngressRule struct {
+	MatchAllPorts  bool
+	Ports          []ProtocolAndPort
+	MatchAllSource bool
+	SrcPods        []PodInfo
+	SrcIPBlocks    []*networking.IPBlock
 }
 
 // internal structure to represent NetworkPolicyEgressRule in the spec
-type egressRule struct {
-	matchAllPorts        bool
-	ports                []protocolAndPort
-	matchAllDestinations bool
-	dstPods              []podInfo
-	dstIPBlocks          [][]string
+type EgressRule struct {
+	MatchAllPorts        bool
+	Ports                []ProtocolAndPort
+	MatchAllDestinations bool
+	DstPods              []PodInfo
+	DstIPBlocks          []*networking.IPBlock
 }
 
-type protocolAndPort struct {
-	protocol string
-	port     string
+type ProtocolAndPort struct {
+	Protocol string
+	Port     string
 }
 
-func newProtocolAndPort(protocol string, port *intstr.IntOrString) protocolAndPort {
-	strPort := ""
-
-	if port != nil {
-		strPort = port.String()
-	}
-
-	return protocolAndPort{protocol: protocol, port: strPort}
+type PolicyHandler interface {
+	Sync(networkPoliciesInfo *[]NetworkPolicyInfo, ingressPods, egressPods *map[string]PodInfo) error
+	Cleanup()
+	Shutdown()
 }
 
 // Run runs forver till we receive notification on stopCh
@@ -134,11 +131,12 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 		select {
 		case <-stopCh:
 			glog.Info("Shutting down network policies controller")
+			npc.handler.Shutdown()
 			return
 		default:
 		}
 
-		glog.V(1).Info("Performing periodic sync of iptables to reflect network policies")
+		glog.V(1).Info("Performing periodic sync to reflect network policies")
 		err := npc.Sync()
 		if err != nil {
 			glog.Errorf("Error during periodic sync of network policies in network policy controller. Error: " + err.Error())
@@ -211,16 +209,15 @@ func (npc *NetworkPolicyController) Sync() error {
 	defer npc.mu.Unlock()
 
 	start := time.Now()
-	syncVersion := strconv.FormatInt(start.UnixNano(), 10)
 	defer func() {
 		endTime := time.Since(start)
 		if npc.MetricsEnabled {
 			metrics.ControllerIptablesSyncTime.Observe(endTime.Seconds())
 		}
-		glog.V(1).Infof("sync iptables took %v", endTime)
+		glog.V(1).Infof("sync network policies took %v", endTime)
 	}()
 
-	glog.V(1).Infof("Starting sync of iptables with version: %s", syncVersion)
+	glog.V(1).Infof("Starting sync of network policies")
 	if npc.v1NetworkPolicy {
 		npc.networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 		if err != nil {
@@ -234,13 +231,31 @@ func (npc *NetworkPolicyController) Sync() error {
 		}
 	}
 
-	//TODO: Should be possible to select nftables
-	return npc.SyncIPTables(syncVersion)
+	ingressPods, err := npc.getIngressNetworkPolicyEnabledPods(npc.nodeIP.String())
+	if err != nil {
+		return errors.New("Aborting sync. Failed to get ingress pods: " + err.Error())
+	}
+	egressPods, err := npc.getEgressNetworkPolicyEnabledPods(npc.nodeIP.String())
+	if err != nil {
+		return errors.New("Aborting sync. Failed to build egress pods: " + err.Error())
+	}
+
+	// delegate actual sync to the handler
+	return npc.handler.Sync(npc.networkPoliciesInfo, ingressPods, egressPods)
 }
 
+func (npc *NetworkPolicyController) Cleanup() {
+	// delegate cleanup to the handler
+	npc.handler.Cleanup()
+}
 
-func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(nodeIp string) (*map[string]podInfo, error) {
-	nodePods := make(map[string]podInfo)
+func (policy NetworkPolicyInfo) Matches(pod PodInfo) bool {
+	_, ok := policy.TargetPods[pod.IP]
+	return ok
+}
+
+func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(nodeIp string) (*map[string]PodInfo, error) {
+	nodePods := make(map[string]PodInfo)
 
 	for _, obj := range npc.podLister.List() {
 		pod := obj.(*api.Pod)
@@ -248,17 +263,20 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(nodeIp st
 		if strings.Compare(pod.Status.HostIP, nodeIp) != 0 {
 			continue
 		}
+		podInfo := PodInfo{IP: pod.Status.PodIP,
+			Name:      pod.ObjectMeta.Name,
+			Namespace: pod.ObjectMeta.Namespace,
+			Labels:    pod.ObjectMeta.Labels}
+
 		for _, policy := range *npc.networkPoliciesInfo {
-			if policy.namespace != pod.ObjectMeta.Namespace {
+			if policy.Namespace != pod.ObjectMeta.Namespace {
 				continue
 			}
-			_, ok := policy.targetPods[pod.Status.PodIP]
+			_, ok := policy.TargetPods[pod.Status.PodIP]
 			if ok && (policy.policyType == "both" || policy.policyType == "ingress") {
 				glog.V(2).Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
-				nodePods[pod.Status.PodIP] = podInfo{ip: pod.Status.PodIP,
-					name:      pod.ObjectMeta.Name,
-					namespace: pod.ObjectMeta.Namespace,
-					labels:    pod.ObjectMeta.Labels}
+				podInfo.Policies = append(podInfo.Policies, policy)
+				nodePods[pod.Status.PodIP] = podInfo
 				break
 			}
 		}
@@ -267,9 +285,9 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(nodeIp st
 
 }
 
-func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(nodeIp string) (*map[string]podInfo, error) {
+func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(nodeIp string) (*map[string]PodInfo, error) {
 
-	nodePods := make(map[string]podInfo)
+	nodePods := make(map[string]PodInfo)
 
 	for _, obj := range npc.podLister.List() {
 		pod := obj.(*api.Pod)
@@ -277,17 +295,20 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(nodeIp str
 		if strings.Compare(pod.Status.HostIP, nodeIp) != 0 {
 			continue
 		}
+		podInfo := PodInfo{IP: pod.Status.PodIP,
+			Name:      pod.ObjectMeta.Name,
+			Namespace: pod.ObjectMeta.Namespace,
+			Labels:    pod.ObjectMeta.Labels}
+
 		for _, policy := range *npc.networkPoliciesInfo {
-			if policy.namespace != pod.ObjectMeta.Namespace {
+			if policy.Namespace != pod.ObjectMeta.Namespace {
 				continue
 			}
-			_, ok := policy.targetPods[pod.Status.PodIP]
+			_, ok := policy.TargetPods[pod.Status.PodIP]
 			if ok && (policy.policyType == "both" || policy.policyType == "egress") {
 				glog.V(2).Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
-				nodePods[pod.Status.PodIP] = podInfo{ip: pod.Status.PodIP,
-					name:      pod.ObjectMeta.Name,
-					namespace: pod.ObjectMeta.Namespace,
-					labels:    pod.ObjectMeta.Labels}
+				podInfo.Policies = append(podInfo.Policies, policy)
+				nodePods[pod.Status.PodIP] = podInfo
 				break
 			}
 		}
@@ -304,9 +325,9 @@ func (npc *NetworkPolicyController) checkForNamedPorts(ports *[]networking.Netwo
 	return nil
 }
 
-func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
+func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicyInfo, error) {
 
-	NetworkPolicies := make([]networkPolicyInfo, 0)
+	NetworkPolicies := make([]NetworkPolicyInfo, 0)
 
 	for _, policyObj := range npc.npLister.List() {
 
@@ -314,9 +335,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 		if !ok {
 			return nil, fmt.Errorf("Failed to convert")
 		}
-		newPolicy := networkPolicyInfo{
-			name:       policy.Name,
-			namespace:  policy.Namespace,
+		newPolicy := NetworkPolicyInfo{
+			Name:       policy.Name,
+			Namespace:  policy.Namespace,
 			labels:     policy.Spec.PodSelector.MatchLabels,
 			policyType: "ingress",
 		}
@@ -350,128 +371,132 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 		}
 
 		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, policy.Spec.PodSelector.MatchLabels)
-		newPolicy.targetPods = make(map[string]podInfo)
+		newPolicy.TargetPods = make(map[string]PodInfo)
 		if err == nil {
 			for _, matchingPod := range matchingPods {
 				if matchingPod.Status.PodIP == "" {
 					continue
 				}
-				newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ip: matchingPod.Status.PodIP,
-					name:      matchingPod.ObjectMeta.Name,
-					namespace: matchingPod.ObjectMeta.Namespace,
-					labels:    matchingPod.ObjectMeta.Labels}
+				newPolicy.TargetPods[matchingPod.Status.PodIP] = PodInfo{IP: matchingPod.Status.PodIP,
+					Name:      matchingPod.ObjectMeta.Name,
+					Namespace: matchingPod.ObjectMeta.Namespace,
+					Labels:    matchingPod.ObjectMeta.Labels}
 			}
 		}
 
 		if policy.Spec.Ingress == nil {
-			newPolicy.ingressRules = nil
+			newPolicy.IngressRules = nil
 		} else {
-			newPolicy.ingressRules = make([]ingressRule, 0)
+			newPolicy.IngressRules = make([]IngressRule, 0)
 		}
 
 		if policy.Spec.Egress == nil {
-			newPolicy.egressRules = nil
+			newPolicy.EgressRules = nil
 		} else {
-			newPolicy.egressRules = make([]egressRule, 0)
+			newPolicy.EgressRules = make([]EgressRule, 0)
 		}
 
 		var skipPolicy bool
 		for _, specIngressRule := range policy.Spec.Ingress {
-			ingressRule := ingressRule{}
+			ingressRule := IngressRule{}
 
-			ingressRule.ports = make([]protocolAndPort, 0)
+			ingressRule.Ports = make([]ProtocolAndPort, 0)
 
-			// If this field is empty or missing in the spec, this rule matches all ports
+			// If this field is empty or missing in the spec, this rule matches all Ports
 			if len(specIngressRule.Ports) == 0 {
-				ingressRule.matchAllPorts = true
+				ingressRule.MatchAllPorts = true
 			} else {
-				ingressRule.matchAllPorts = false
+				ingressRule.MatchAllPorts = false
 				if npc.checkForNamedPorts(&specIngressRule.Ports) != nil {
 					glog.Errorf("Found a network policy: %s/%s with named port. Skipping processing network policy as its unspported yet.", policy.Namespace, policy.Name)
 					skipPolicy = true
 					continue
 				}
 				for _, port := range specIngressRule.Ports {
-					protocolAndPort := newProtocolAndPort(string(*port.Protocol), port.Port)
-					ingressRule.ports = append(ingressRule.ports, protocolAndPort)
+					protocolAndPort := NewProtocolAndPort(string(*port.Protocol), port.Port)
+					ingressRule.Ports = append(ingressRule.Ports, protocolAndPort)
 				}
 			}
 
-			ingressRule.srcPods = make([]podInfo, 0)
-			ingressRule.srcIPBlocks = make([][]string, 0)
+			ingressRule.SrcPods = make([]PodInfo, 0)
+			ingressRule.SrcIPBlocks = make([]*networking.IPBlock, 0)
 
 			// If this field is empty or missing in the spec, this rule matches all sources
 			if len(specIngressRule.From) == 0 {
-				ingressRule.matchAllSource = true
+				ingressRule.MatchAllSource = true
 			} else {
-				ingressRule.matchAllSource = false
+				ingressRule.MatchAllSource = false
 				for _, peer := range specIngressRule.From {
-					if peerPods, err := npc.evalPodPeer(policy, peer); err == nil {
+					peerPods, err := npc.evalPodPeer(policy, peer)
+					matchingPods = append(matchingPods, peerPods...)
+					ingressRule.SrcIPBlocks = append(ingressRule.SrcIPBlocks, npc.evalIPBlockPeer(peer))
+					if err == nil {
 						for _, peerPod := range peerPods {
 							if peerPod.Status.PodIP == "" {
 								continue
 							}
-							ingressRule.srcPods = append(ingressRule.srcPods,
-								podInfo{ip: peerPod.Status.PodIP,
-									name:      peerPod.ObjectMeta.Name,
-									namespace: peerPod.ObjectMeta.Namespace,
-									labels:    peerPod.ObjectMeta.Labels})
+							ingressRule.SrcPods = append(ingressRule.SrcPods,
+								PodInfo{IP: peerPod.Status.PodIP,
+									Name:      peerPod.ObjectMeta.Name,
+									Namespace: peerPod.ObjectMeta.Namespace,
+									Labels:    peerPod.ObjectMeta.Labels})
 						}
 					}
-					ingressRule.srcIPBlocks = append(ingressRule.srcIPBlocks, npc.evalIPBlockPeer(peer)...)
 				}
 			}
 
-			newPolicy.ingressRules = append(newPolicy.ingressRules, ingressRule)
+			newPolicy.IngressRules = append(newPolicy.IngressRules, ingressRule)
 		}
 
 		for _, specEgressRule := range policy.Spec.Egress {
-			egressRule := egressRule{}
+			egressRule := EgressRule{}
 
-			egressRule.ports = make([]protocolAndPort, 0)
+			egressRule.Ports = make([]ProtocolAndPort, 0)
 
-			// If this field is empty or missing in the spec, this rule matches all ports
+			// If this field is empty or missing in the spec, this rule matches all Ports
 			if len(specEgressRule.Ports) == 0 {
-				egressRule.matchAllPorts = true
+				egressRule.MatchAllPorts = true
 			} else {
-				egressRule.matchAllPorts = false
+				egressRule.MatchAllPorts = false
 				if npc.checkForNamedPorts(&specEgressRule.Ports) != nil {
 					glog.Errorf("Found a network policy: %s/%s with named port. Skipping processing network policy as its unspported yet.", policy.Namespace, policy.Name)
 					skipPolicy = true
 					continue
 				}
 				for _, port := range specEgressRule.Ports {
-					protocolAndPort := newProtocolAndPort(string(*port.Protocol), port.Port)
-					egressRule.ports = append(egressRule.ports, protocolAndPort)
+					protocolAndPort := NewProtocolAndPort(string(*port.Protocol), port.Port)
+					egressRule.Ports = append(egressRule.Ports, protocolAndPort)
 				}
 			}
 
-			egressRule.dstPods = make([]podInfo, 0)
-			egressRule.dstIPBlocks = make([][]string, 0)
+			egressRule.DstPods = make([]PodInfo, 0)
+			egressRule.DstIPBlocks = make([]*networking.IPBlock, 0)
 
 			// If this field is empty or missing in the spec, this rule matches all sources
 			if len(specEgressRule.To) == 0 {
-				egressRule.matchAllDestinations = true
+				egressRule.MatchAllDestinations = true
 			} else {
-				egressRule.matchAllDestinations = false
+				egressRule.MatchAllDestinations = false
 				for _, peer := range specEgressRule.To {
-					if peerPods, err := npc.evalPodPeer(policy, peer); err == nil {
+					peerPods, err := npc.evalPodPeer(policy, peer)
+					matchingPods = append(matchingPods, peerPods...)
+					egressRule.DstIPBlocks = append(egressRule.DstIPBlocks, npc.evalIPBlockPeer(peer))
+					if err == nil {
 						for _, peerPod := range peerPods {
 							if peerPod.Status.PodIP == "" {
 								continue
 							}
-							egressRule.dstPods = append(egressRule.dstPods,
-								podInfo{ip: peerPod.Status.PodIP,
-									name:      peerPod.ObjectMeta.Name,
-									namespace: peerPod.ObjectMeta.Namespace,
-									labels:    peerPod.ObjectMeta.Labels})
+							egressRule.DstPods = append(egressRule.DstPods,
+								PodInfo{IP: peerPod.Status.PodIP,
+									Name:      peerPod.ObjectMeta.Name,
+									Namespace: peerPod.ObjectMeta.Namespace,
+									Labels:    peerPod.ObjectMeta.Labels})
 						}
 					}
-					egressRule.dstIPBlocks = append(egressRule.dstIPBlocks, npc.evalIPBlockPeer(peer)...)
 				}
 			}
 
-			newPolicy.egressRules = append(newPolicy.egressRules, egressRule)
+			newPolicy.EgressRules = append(newPolicy.EgressRules, egressRule)
 		}
 		if !skipPolicy {
 			NetworkPolicies = append(NetworkPolicies, newPolicy)
@@ -529,62 +554,50 @@ func (npc *NetworkPolicyController) ListNamespaceByLabels(set labels.Set) ([]*ap
 	return matchedNamespaces, nil
 }
 
-func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolicyPeer) [][]string {
-	ipBlock := make([][]string, 0)
+func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolicyPeer) *networking.IPBlock {
 	if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
-		if cidr := peer.IPBlock.CIDR; strings.HasSuffix(cidr, "/0") {
-			ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0"}, []string{"128.0.0.0/1", utils.OptionTimeout, "0"})
-		} else {
-			ipBlock = append(ipBlock, []string{cidr, utils.OptionTimeout, "0"})
-		}
-		for _, except := range peer.IPBlock.Except {
-			if strings.HasSuffix(except, "/0") {
-				ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch}, []string{"128.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch})
-			} else {
-				ipBlock = append(ipBlock, []string{except, utils.OptionTimeout, "0", utils.OptionNoMatch})
-			}
-		}
+		return peer.IPBlock
 	}
-	return ipBlock
+	return nil
 }
 
-func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
+func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]NetworkPolicyInfo, error) {
 
-	NetworkPolicies := make([]networkPolicyInfo, 0)
+	NetworkPolicies := make([]NetworkPolicyInfo, 0)
 
 	for _, policyObj := range npc.npLister.List() {
 
 		policy, _ := policyObj.(*apiextensions.NetworkPolicy)
-		newPolicy := networkPolicyInfo{
-			name:      policy.Name,
-			namespace: policy.Namespace,
+		newPolicy := NetworkPolicyInfo{
+			Name:      policy.Name,
+			Namespace: policy.Namespace,
 			labels:    policy.Spec.PodSelector.MatchLabels,
 		}
 		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, policy.Spec.PodSelector.MatchLabels)
-		newPolicy.targetPods = make(map[string]podInfo)
-		newPolicy.ingressRules = make([]ingressRule, 0)
+		newPolicy.TargetPods = make(map[string]PodInfo)
+		newPolicy.IngressRules = make([]IngressRule, 0)
 		if err == nil {
 			for _, matchingPod := range matchingPods {
 				if matchingPod.Status.PodIP == "" {
 					continue
 				}
-				newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ip: matchingPod.Status.PodIP,
-					name:      matchingPod.ObjectMeta.Name,
-					namespace: matchingPod.ObjectMeta.Namespace,
-					labels:    matchingPod.ObjectMeta.Labels}
+				newPolicy.TargetPods[matchingPod.Status.PodIP] = PodInfo{IP: matchingPod.Status.PodIP,
+					Name:      matchingPod.ObjectMeta.Name,
+					Namespace: matchingPod.ObjectMeta.Namespace,
+					Labels:    matchingPod.ObjectMeta.Labels}
 			}
 		}
 
 		for _, specIngressRule := range policy.Spec.Ingress {
-			ingressRule := ingressRule{}
+			ingressRule := IngressRule{}
 
-			ingressRule.ports = make([]protocolAndPort, 0)
+			ingressRule.Ports = make([]ProtocolAndPort, 0)
 			for _, port := range specIngressRule.Ports {
-				protocolAndPort := newProtocolAndPort(string(*port.Protocol), port.Port)
-				ingressRule.ports = append(ingressRule.ports, protocolAndPort)
+				protocolAndPort := NewProtocolAndPort(string(*port.Protocol), port.Port)
+				ingressRule.Ports = append(ingressRule.Ports, protocolAndPort)
 			}
 
-			ingressRule.srcPods = make([]podInfo, 0)
+			ingressRule.SrcPods = make([]PodInfo, 0)
 			for _, peer := range specIngressRule.From {
 				matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, peer.PodSelector.MatchLabels)
 				if err == nil {
@@ -592,15 +605,15 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 						if matchingPod.Status.PodIP == "" {
 							continue
 						}
-						ingressRule.srcPods = append(ingressRule.srcPods,
-							podInfo{ip: matchingPod.Status.PodIP,
-								name:      matchingPod.ObjectMeta.Name,
-								namespace: matchingPod.ObjectMeta.Namespace,
-								labels:    matchingPod.ObjectMeta.Labels})
+						ingressRule.SrcPods = append(ingressRule.SrcPods,
+							PodInfo{IP: matchingPod.Status.PodIP,
+								Name:      matchingPod.ObjectMeta.Name,
+								Namespace: matchingPod.ObjectMeta.Namespace,
+								Labels:    matchingPod.ObjectMeta.Labels})
 					}
 				}
 			}
-			newPolicy.ingressRules = append(newPolicy.ingressRules, ingressRule)
+			newPolicy.IngressRules = append(newPolicy.IngressRules, ingressRule)
 		}
 		NetworkPolicies = append(NetworkPolicies, newPolicy)
 	}
@@ -698,16 +711,6 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 	npc.nodeIP = nodeIP
 
-	ipset, err := utils.NewIPSet(false)
-	if err != nil {
-		return nil, err
-	}
-	err = ipset.Save()
-	if err != nil {
-		return nil, err
-	}
-	npc.ipSetHandler = ipset
-
 	npc.podLister = podInformer.GetIndexer()
 	npc.PodEventHandler = npc.newPodEventHandler()
 
@@ -716,6 +719,18 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	npc.npLister = npInformer.GetIndexer()
 	npc.NetworkPolicyEventHandler = npc.newNetworkPolicyEventHandler()
+
+	if config.NetworkPolicyHandler == "nftables" {
+		npc.handler, err = NewNFTablesHandler()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		npc.handler, err = NewIPTablesHandler()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return &npc, nil
 }

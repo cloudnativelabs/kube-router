@@ -56,6 +56,7 @@ Usage of kube-router:
       --health-port uint16               Health check port, 0 = Disabled (default 20244)
   -h, --help                             Print usage information.
       --hostname-override string         Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
+      --network-policy-handler string    Determines which implementation should be used as network policy handler, either of: "iptables", "nftables". (default "iptables")
       --iptables-sync-period duration    The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
       --ipvs-sync-period duration        The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --kubeconfig string                Path to kubeconfig file with authorization information (the master location is set by the master flag).

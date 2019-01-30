@@ -32,6 +32,7 @@ type KubeRouterConfig struct {
 	HealthPort              uint16
 	HelpRequested           bool
 	HostnameOverride        string
+	NetworkPolicyHandler	string
 	IPTablesSyncPeriod      time.Duration
 	IpvsSyncPeriod          time.Duration
 	Kubeconfig              string
@@ -92,6 +93,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.")
 	fs.BoolVar(&s.EnablePodEgress, "enable-pod-egress", true,
 		"SNAT traffic from Pods to destinations outside the cluster.")
+	fs.StringVar(&s.NetworkPolicyHandler, "network-policy-handler", "iptables",
+		"Determines which implementation should be used as network policy handler, either of: \"iptables\", \"nftables\".")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
 		"The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod,
