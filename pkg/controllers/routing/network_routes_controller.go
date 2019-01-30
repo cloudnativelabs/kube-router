@@ -380,14 +380,6 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 			// For ipv6 what should be next-hop value? According to	 this https://www.noction.com/blog/bgp-next-hop
 			// using the link-local	 address may be more appropriate.
 			bgp.NewPathAttributeMpReachNLRI(nrc.nodeIP.String(), prefixes),
-			&bgp.PathAttributeNextHop{
-				PathAttribute: bgp.PathAttribute{
-					Flags:  bgp.PathAttrFlags[bgp.BGP_ATTR_TYPE_NEXT_HOP],
-					Type:   bgp.BGP_ATTR_TYPE_NEXT_HOP,
-					Length: 16,
-				},
-				Value: nrc.nodeIP,
-			},
 		}
 
 		glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers using attribute: %+q", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String(), attrs)
