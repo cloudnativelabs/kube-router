@@ -841,7 +841,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 		endpoints := endpointsInfoMap[k]
 
-		if svc.local && !hasActiveEndpoints(svc, endpoints) {
+		if !hasActiveEndpoints(svc, endpoints) {
 			glog.V(1).Infof("Skipping service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
 			continue
 		}
@@ -860,7 +860,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 		var clusterServiceId = generateIpPortId(svc.clusterIP.String(), svc.protocol, strconv.Itoa(svc.port))
 		activeServiceEndpointMap[clusterServiceId] = make([]string, 0)
-
 		// create IPVS service for the service to be exposed through the nodeport
 		var ipvsNodeportSvcs []*ipvs.Service
 
