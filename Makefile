@@ -151,8 +151,13 @@ gomoqs: ./pkg/controllers/proxy/network_services_controller_moq.go
 # file_moq.go file is generated from file.go "//go:generate moq ..." in-file
 # annotation, as it needs to know which interfaces to create mock stubs for
 %_moq.go: %.go
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+			sh -c 'apk add --no-cache git build-base && go get github.com/matryer/moq && go generate -v $(*).go'
+else
 	@test -x $(GOPATH)/bin/moq && exit 0; echo "ERROR: 'moq' tool is needed to update mock test files, install it with: \ngo get github.com/matryer/moq\n"; exit 1
 	go generate -v $(*).go
+endif
 
 gopath: ## Warns about issues building from a directory that does not match upstream.
 	@echo 'Checking project path for import issues...'
