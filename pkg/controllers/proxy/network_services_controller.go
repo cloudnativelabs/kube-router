@@ -1479,12 +1479,24 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
 	}
-	var args []string
+	var args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"}
 	if masqueradeAll {
-		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"}
 		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
-			return errors.New("Failed to run iptables command" + err.Error())
+			return errors.New("Failed to create iptables rule to masquerade all outbound IPVS traffic" + err.Error())
+		}
+	} else {
+		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
+		if err != nil {
+			return errors.New("Failed to lookup iptables rule to masquerade all outbound IPVS traffic: " + err.Error())
+		}
+		if exists {
+			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
+			if err != nil {
+				return errors.New("Failed to delete iptables rule to masquerade all outbound IPVS traffic: " +
+					err.Error() + ". Masquerade might still work...")
+			}
+			glog.Infof("Deleted iptables rule to masquerade all outbound IVPS traffic.")
 		}
 	}
 	if len(podCidr) > 0 {
