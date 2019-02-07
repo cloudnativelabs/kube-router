@@ -7,7 +7,7 @@ import (
 	"github.com/golang/glog"
 )
 
-// set up MASQUERADE rule so that egress traffic from the pods gets masquraded to node's IP
+// set up MASQUERADE rule so that egress traffic from the pods gets masqueraded to node's IP
 
 var (
 	podEgressArgs4 = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
@@ -38,12 +38,12 @@ func (nrc *NetworkRoutingController) createPodEgressRule() error {
 	}
 	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", podEgressArgs...)
 	if err != nil {
-		return errors.New("Failed to add iptable rule to masqurade outbound traffic from pods: " +
+		return errors.New("Failed to add iptables rule to masquerade outbound traffic from pods: " +
 			err.Error() + "External connectivity will not work.")
 
 	}
 
-	glog.V(1).Infof("Added iptables rule to masqurade outbound traffic from pods.")
+	glog.V(1).Infof("Added iptables rule to masquerade outbound traffic from pods.")
 	return nil
 }
 
@@ -59,16 +59,16 @@ func (nrc *NetworkRoutingController) deletePodEgressRule() error {
 	}
 	exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", podEgressArgs...)
 	if err != nil {
-		return errors.New("Failed to lookup iptable rule to masqurade outbound traffic from pods: " + err.Error())
+		return errors.New("Failed to lookup iptables rule to masquerade outbound traffic from pods: " + err.Error())
 	}
 
 	if exists {
 		err = iptablesCmdHandler.Delete("nat", "POSTROUTING", podEgressArgs...)
 		if err != nil {
-			return errors.New("Failed to delete iptable rule to masqurade outbound traffic from pods: " +
+			return errors.New("Failed to delete iptables rule to masquerade outbound traffic from pods: " +
 				err.Error() + ". Pod egress might still work...")
 		}
-		glog.Infof("Deleted iptables rule to masqurade outbound traffic from pods.")
+		glog.Infof("Deleted iptables rule to masquerade outbound traffic from pods.")
 	}
 
 	return nil
@@ -92,12 +92,12 @@ func (nrc *NetworkRoutingController) deleteBadPodEgressRules() error {
 		if exists {
 			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
 			if err != nil {
-				return fmt.Errorf("Failed to delete old/bad iptable rule to "+
-					"masqurade outbound traffic from pods: %s.\n"+
+				return fmt.Errorf("Failed to delete old/bad iptables rule to "+
+					"masquerade outbound traffic from pods: %s.\n"+
 					"Pod egress might still work, or bugs may persist after upgrade...",
 					err)
 			}
-			glog.Infof("Deleted old/bad iptables rule to masqurade outbound traffic from pods.")
+			glog.Infof("Deleted old/bad iptables rule to masquerade outbound traffic from pods.")
 		}
 	}
 

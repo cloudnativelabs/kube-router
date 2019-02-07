@@ -517,12 +517,12 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	// Pod egress cleanup
 	err := nrc.deletePodEgressRule()
 	if err != nil {
-		glog.Warningf("Error deleting Pod egress iptable rule: %s", err.Error())
+		glog.Warningf("Error deleting Pod egress iptables rule: %s", err.Error())
 	}
 
 	err = nrc.deleteBadPodEgressRules()
 	if err != nil {
-		glog.Warningf("Error deleting Pod egress iptable rule: %s", err.Error())
+		glog.Warningf("Error deleting Pod egress iptables rule: %s", err.Error())
 	}
 
 	// delete all ipsets created by kube-router
@@ -607,7 +607,7 @@ func (nrc *NetworkRoutingController) newIptablesCmdHandler() (*iptables.IPTables
 }
 
 // ensure there is rule in filter table and FORWARD chain to permit in/out traffic from pods
-// this rules will be appended so that any iptable rules for network policies will take
+// this rules will be appended so that any iptables rules for network policies will take
 // precedence
 func (nrc *NetworkRoutingController) enableForwarding() error {
 
