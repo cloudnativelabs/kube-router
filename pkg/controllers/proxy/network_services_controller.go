@@ -283,8 +283,14 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 
 	glog.Infof("Starting network services controller")
 
+	glog.V(1).Info("Performing cleanup of depreciated masquerade iptables rules (if needed).")
+	err := nsc.deleteBadMasqueradeIptablesRules()
+	if err != nil {
+		glog.Errorf("Error cleaning up old/bad masquerade rules: %s", err.Error())
+	}
+
 	// enable masquerade rule
-	err := nsc.ensureMasqueradeIptablesRule()
+	err = nsc.ensureMasqueradeIptablesRule()
 	if err != nil {
 		glog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
 	}
@@ -1179,6 +1185,39 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 		}
 	}
 	glog.V(2).Info("Successfully synced iptables masquerade rule")
+	return nil
+}
+
+// Delete old/bad iptables rules to masquerade outbound IPVS traffic.
+func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed create iptables handler:" + err.Error())
+	}
+
+	var argsBad = [][]string{
+		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"},
+		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "MASQUERADE"},
+	}
+
+	for _, args := range argsBad {
+		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
+		if err != nil {
+			return fmt.Errorf("Failed to lookup iptables rule: %s", err.Error())
+		}
+
+		if exists {
+			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
+			if err != nil {
+				return fmt.Errorf("Failed to delete old/bad iptables rule to "+
+					"masquerade outbound IVPS traffic: %s.\n"+
+					"Masquerade all might still work, or bugs may persist after upgrade...",
+					err)
+			}
+			glog.Infof("Deleted old/bad iptables rule to masquerade outbound traffic.")
+		}
+	}
+
 	return nil
 }
 
