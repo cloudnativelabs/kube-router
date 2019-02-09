@@ -277,10 +277,10 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 
 	glog.Infof("Starting network services controller")
 
-	// enable masquerad rule
 	err := ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
+	// enable masquerade rule
 	if err != nil {
-		return errors.New("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s" + err.Error())
+		return errors.New("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s" + err.Error())
 	}
 	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
@@ -362,17 +362,17 @@ func (nsc *NetworkServicesController) sync() error {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
-	// enable masquerad rule
 	err = ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
+	// enable masquerade rule
 	if err != nil {
-		glog.Errorf("Failed to do add masquerad rule in POSTROUTING chain of nat table due to: %s", err.Error())
+		glog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
 	}
 
 	nsc.serviceMap = nsc.buildServicesInfo()
 	nsc.endpointsMap = nsc.buildEndpointsInfo()
 	err = nsc.syncHairpinIptablesRules()
 	if err != nil {
-		glog.Errorf("Error syncing hairpin iptable rules: %s", err.Error())
+		glog.Errorf("Error syncing hairpin iptables rules: %s", err.Error())
 	}
 
 	err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
@@ -931,7 +931,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				fwMark := generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port))
 				externalIpServiceId = fmt.Sprint(fwMark)
 
-				// ensure there is iptable mangle table rule to FWMARK the packet
+				// ensure there is iptables mangle table rule to FWMARK the packet
 				err = setupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), externalIpServiceId)
 				if err != nil {
 					glog.Errorf("Failed to setup mangle table rule to FMWARD the traffic to external IP")
@@ -964,7 +964,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				externalIpServices = append(externalIpServices, externalIPService{ipvsSvc: ipvsExternalIPSvc, externalIp: externalIP})
 				externalIpServiceId = generateIpPortId(externalIP, svc.protocol, strconv.Itoa(svc.port))
 
-				// ensure there is NO iptable mangle table rule to FWMARK the packet
+				// ensure there is NO iptables mangle table rule to FWMARK the packet
 				fwMark := fmt.Sprint(generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port)))
 				err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMark)
 				if err != nil {
@@ -1157,7 +1157,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	err = nsc.syncIpvsFirewall()
 	if err != nil {
-		glog.Errorf("Error syncing ipvs svc iptable rules: %s", err.Error())
+		glog.Errorf("Error syncing ipvs svc iptables rules: %s", err.Error())
 	}
 
 	glog.V(1).Info("IPVS servers and services are synced to desired state")
@@ -1471,7 +1471,7 @@ func (nsc *NetworkServicesController) buildEndpointsInfo() endpointsInfoMap {
 	return endpointsMap
 }
 
-// Add an iptable rule to masquerad outbound IPVS traffic. IPVS nat requires that reverse path traffic
+// Add an iptables rule to masquerade outbound IPVS traffic. IPVS nat requires that reverse path traffic
 // to go through the director for its functioning. So the masquerade rule ensures source IP is modifed
 // to node ip, so return traffic from real server (endpoint pods) hits the node/lvs director
 func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
@@ -1496,7 +1496,7 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 			return errors.New("Failed to run iptables command" + err.Error())
 		}
 	}
-	glog.V(2).Info("Successfully synced iptables masquerad rule")
+	glog.V(2).Info("Successfully synced iptables masquerade rule")
 	return nil
 }
 
@@ -1668,7 +1668,7 @@ func deleteHairpinIptablesRules() error {
 	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", hairpinChain}
 	hasHairpinJumpRule, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", jumpArgs...)
 	if err != nil {
-		return errors.New("Failed to search POSTROUTING iptable rules: " + err.Error())
+		return errors.New("Failed to search POSTROUTING iptables rules: " + err.Error())
 	}
 
 	// Delete the jump rule to the hairpin chain
@@ -1702,7 +1702,7 @@ func deleteMasqueradeIptablesRule() error {
 	}
 	postRoutingChainRules, err := iptablesCmdHandler.List("nat", "POSTROUTING")
 	if err != nil {
-		return errors.New("Failed to list iptable rules in POSTROUTING chain in nat table" + err.Error())
+		return errors.New("Failed to list iptables rules in POSTROUTING chain in nat table" + err.Error())
 	}
 	for i, rule := range postRoutingChainRules {
 		if strings.Contains(rule, "ipvs") && strings.Contains(rule, "MASQUERADE") {
@@ -2003,7 +2003,7 @@ const (
 	externalIPRouteTableName = "external_ip"
 )
 
-// setupMangleTableRule: setsup iptable rule to FWMARK the traffic to exteranl IP vip
+// setupMangleTableRule: setsup iptables rule to FWMARK the traffic to exteranl IP vip
 func setupMangleTableRule(ip string, protocol string, port string, fwmark string) error {
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
@@ -2250,17 +2250,17 @@ func (nsc *NetworkServicesController) Cleanup() {
 
 	handle.Close()
 
-	// cleanup iptable masquerad rule
+	// cleanup iptables masquerade rule
 	err = deleteMasqueradeIptablesRule()
 	if err != nil {
-		glog.Errorf("Failed to cleanup iptable masquerade rule due to: %s", err.Error())
+		glog.Errorf("Failed to cleanup iptablesmasquerade rule due to: %s", err.Error())
 		return
 	}
 
-	// cleanup iptable hairpin rules
+	// cleanup iptables hairpin rules
 	err = deleteHairpinIptablesRules()
 	if err != nil {
-		glog.Errorf("Failed to cleanup iptable hairpin rules: %s", err.Error())
+		glog.Errorf("Failed to cleanup iptables hairpin rules: %s", err.Error())
 		return
 	}
 

@@ -130,7 +130,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.HostnameOverride, "hostname-override", s.HostnameOverride,
 		"Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.")
 	fs.BoolVar(&s.GlobalHairpinMode, "hairpin-mode", false,
-		"Add iptable rules for every Service Endpoint to support hairpin traffic.")
+		"Add iptables rules for every Service Endpoint to support hairpin traffic.")
 	fs.BoolVar(&s.NodePortBindOnAllIp, "nodeport-bindon-all-ip", false,
 		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
 	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,

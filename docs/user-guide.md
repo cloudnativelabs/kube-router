@@ -52,7 +52,7 @@ Usage of kube-router:
       --enable-overlay                   When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
       --enable-pod-egress                SNAT traffic from Pods to destinations outside the cluster. (default true)
       --enable-pprof                     Enables pprof for debugging performance and memory leak issues.
-      --hairpin-mode                     Add iptable rules for every Service Endpoint to support hairpin traffic.
+      --hairpin-mode                     Add iptables rules for every Service Endpoint to support hairpin traffic.
       --health-port uint16               Health check port, 0 = Disabled (default 20244)
   -h, --help                             Print usage information.
       --hostname-override string         Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.

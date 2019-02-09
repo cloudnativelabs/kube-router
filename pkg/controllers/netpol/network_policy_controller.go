@@ -40,11 +40,11 @@ const (
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
 // policies. Two different types of iptables chains are used. Each pod running on the node which either
-// requires ingress or egress filtering gets a pod specific chains. Each network policy has a iptable chain, which
+// requires ingress or egress filtering gets a pod specific chains. Each network policy has a iptables chain, which
 // has rules expressed through ipsets matching source and destination pod ip's. In the FORWARD chain of the
 // filter table a rule is added to jump the traffic originating (in case of egress network policy) from the pod
-// or destined (in case of ingress network policy) to the pod specific iptable chain. Each
-// pod specific iptable chain has rules to jump to the network polices chains, that pod matches. So packet
+// or destined (in case of ingress network policy) to the pod specific iptables chain. Each
+// pod specific iptables chain has rules to jump to the network polices chains, that pod matches. So packet
 // originating/destined from/to pod goes through fitler table's, FORWARD chain, followed by pod specific chain,
 // followed by one or more network policy chains, till there is a match which will accept the packet, or gets
 // dropped by the rule in the pod chain, if there is no match.
@@ -257,13 +257,13 @@ func (npc *NetworkPolicyController) Sync() error {
 
 	err = cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIpSets)
 	if err != nil {
-		return errors.New("Aborting sync. Failed to cleanup stale iptable rules: " + err.Error())
+		return errors.New("Aborting sync. Failed to cleanup stale iptables rules: " + err.Error())
 	}
 
 	return nil
 }
 
-// Configure iptable rules representing each network policy. All pod's matched by
+// Configure iptables rules representing each network policy. All pod's matched by
 // network policy spec podselector labels are grouped together in one ipset which
 // is used for matching destination ip address. Each ingress rule in the network
 // policyspec is evaluated to set of matching pods, which are grouped in to a
@@ -358,7 +358,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 	policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
 
-	// run through all the ingress rules in the spec and create iptable rules
+	// run through all the ingress rules in the spec and create iptables rules
 	// in the chain for the network policy
 	for i, ingressRule := range policy.ingressRules {
 
@@ -521,7 +521,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 
 	policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
 
-	// run through all the egress rules in the spec and create iptable rules
+	// run through all the egress rules in the spec and create iptables rules
 	// in the chain for the network policy
 	for i, egressRule := range policy.egressRules {
 
@@ -1460,7 +1460,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	// delete jump rules in FORWARD chain to pod specific firewall chain
 	forwardChainRules, err := iptablesCmdHandler.List("filter", "FORWARD")
 	if err != nil {
-		glog.Errorf("Failed to delete iptable rules as part of cleanup")
+		glog.Errorf("Failed to delete iptables rules as part of cleanup")
 		return
 	}
 
@@ -1476,7 +1476,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	// delete jump rules in OUTPUT chain to pod specific firewall chain
 	forwardChainRules, err = iptablesCmdHandler.List("filter", "OUTPUT")
 	if err != nil {
-		glog.Errorf("Failed to delete iptable rules as part of cleanup")
+		glog.Errorf("Failed to delete iptables rules as part of cleanup")
 		return
 	}
 
@@ -1495,12 +1495,12 @@ func (npc *NetworkPolicyController) Cleanup() {
 		if strings.HasPrefix(chain, kubePodFirewallChainPrefix) {
 			err = iptablesCmdHandler.ClearChain("filter", chain)
 			if err != nil {
-				glog.Errorf("Failed to cleanup iptable rules: " + err.Error())
+				glog.Errorf("Failed to cleanup iptables rules: " + err.Error())
 				return
 			}
 			err = iptablesCmdHandler.DeleteChain("filter", chain)
 			if err != nil {
-				glog.Errorf("Failed to cleanup iptable rules: " + err.Error())
+				glog.Errorf("Failed to cleanup iptables rules: " + err.Error())
 				return
 			}
 		}
@@ -1512,12 +1512,12 @@ func (npc *NetworkPolicyController) Cleanup() {
 		if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
 			err = iptablesCmdHandler.ClearChain("filter", chain)
 			if err != nil {
-				glog.Errorf("Failed to cleanup iptable rules: " + err.Error())
+				glog.Errorf("Failed to cleanup iptables rules: " + err.Error())
 				return
 			}
 			err = iptablesCmdHandler.DeleteChain("filter", chain)
 			if err != nil {
-				glog.Errorf("Failed to cleanup iptable rules: " + err.Error())
+				glog.Errorf("Failed to cleanup iptables rules: " + err.Error())
 				return
 			}
 		}
