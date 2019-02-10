@@ -91,6 +91,7 @@ type NetworkRoutingController struct {
 	bgpGracefulRestart      bool
 	ipSetHandler            *utils.IPSet
 	enableOverlays          bool
+	fullOverlay             bool
 	peerMultihopTTL         uint8
 	MetricsEnabled          bool
 	bgpServerStarted        bool
@@ -410,50 +411,41 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	dst, _ := netlink.ParseIPNet(nlri.String())
 	var route *netlink.Route
 
-	// check if the neighbour is in same subnet. If node is not in same subnet and --override-nexthop=false
-	// only then create IPIP tunnels
-	if !nrc.nodeSubnet.Contains(nexthop) && !nrc.overrideNextHop {
-		tunnelName := generateTunnelName(nexthop.String())
-		glog.Infof("Found node: " + nexthop.String() + " to be in different subnet.")
+	tunnelName := generateTunnelName(nexthop.String())
+	sameSubnet := nrc.nodeSubnet.Contains(nexthop)
 
-		// if overlay is not enabled then skip creating tunnels and adding route
-		if !nrc.enableOverlays {
-			glog.Infof("Found node: " + nexthop.String() + " to be in different subnet but overlays are " +
-				"disabled so not creating any tunnel and injecting route for the node's pod CIDR.")
-
-			glog.Infof("Cleaning up old routes if there are any")
-			routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
-				Dst: dst, Protocol: 0x11,
-			}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
-			if err != nil {
-				glog.Errorf("Failed to get routes from netlink")
+	// cleanup route and tunnel if overlay is disabled or node is in same subnet and full overlay is disabled
+	if !nrc.enableOverlays || (sameSubnet && !nrc.fullOverlay) {
+		glog.Infof("Cleaning up old routes if there are any")
+		routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
+			Dst: dst, Protocol: 0x11,
+		}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
+		if err != nil {
+			glog.Errorf("Failed to get routes from netlink")
+		}
+		for i, r := range routes {
+			glog.V(2).Infof("Found route to remove: %s", r.String())
+			if err := netlink.RouteDel(&routes[i]); err != nil {
+				glog.Errorf("Failed to remove route due to " + err.Error())
 			}
-			for i, r := range routes {
-				glog.V(2).Infof("Found route to remove: %s", r.String())
-				err := netlink.RouteDel(&routes[i])
-				if err != nil {
-					glog.Errorf("Failed to remove route due to " + err.Error())
-				}
-			}
-
-			glog.Infof("Cleaning up if there is any existing tunnel interface for the node")
-			link, err := netlink.LinkByName(tunnelName)
-			if err != nil {
-				return nil
-			}
-			err = netlink.LinkDel(link)
-			if err != nil {
-				glog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
-			}
-			return nil
 		}
 
+		glog.Infof("Cleaning up if there is any existing tunnel interface for the node")
+		if link, err := netlink.LinkByName(tunnelName); err == nil {
+			if err = netlink.LinkDel(link); err != nil {
+				glog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
+			}
+		}
+	}
+
+	// create IPIP tunnels only when node is not in same subnet or full overlay is true
+	// prevent creation when --override-nexthop=true as well
+	if (!sameSubnet || nrc.fullOverlay) && !nrc.overrideNextHop {
 		// create ip-in-ip tunnel and inject route as overlay is enabled
 		var link netlink.Link
 		var err error
 		link, err = netlink.LinkByName(tunnelName)
 		if err != nil {
-			glog.Infof("Found node: " + nexthop.String() + " to be in different subnet. Creating tunnel: " + tunnelName)
 			out, err := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
 				"remote", nexthop.String(), "dev", nrc.nodeInterface).CombinedOutput()
 			if err != nil {
@@ -938,6 +930,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIp
 	nrc.advertisePodCidr = kubeRouterConfig.AdvertiseNodePodCidr
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
+	nrc.fullOverlay = kubeRouterConfig.FullOverlay
 
 	nrc.bgpPort = kubeRouterConfig.BGPPort
 

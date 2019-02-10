@@ -49,9 +49,10 @@ Usage of kube-router:
       --disable-source-dest-check        Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way. (default true)
       --enable-cni                       Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin. (default true)
       --enable-ibgp                      Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers (default true)
-      --enable-overlay                   When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
+      --enable-overlay                   When enable-overlay is set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastructure is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
       --enable-pod-egress                SNAT traffic from Pods to destinations outside the cluster. (default true)
       --enable-pprof                     Enables pprof for debugging performance and memory leak issues.
+      --full-overlay                     When full-overlay is set to true, it changes "--enable-overlay=true" default behavior so that IP-in-IP tunneling is used for pod-to-pod networking across nodes regardless of the subnet the nodes are in. When set to false, the default, default "--enable-overlay=true" behavior is used
       --hairpin-mode                     Add iptables rules for every Service Endpoint to support hairpin traffic.
       --health-port uint16               Health check port, 0 = Disabled (default 20244)
   -h, --help                             Print usage information.
