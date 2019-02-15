@@ -11,6 +11,7 @@ import (
 	"github.com/osrg/gobgp/table"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"strings"
 )
 
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
@@ -140,6 +141,8 @@ func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
 	if len(toWithdraw) > 0 {
 		nrc.withdrawVIPs(toWithdraw)
 	}
+
+	delete(nrc.advertisedExternalIPs, svc.UID)
 }
 
 func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEventHandler {
@@ -324,6 +327,10 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 	ipList := make([]string, 0)
 	var err error
 
+	if _, ok := nrc.advertisedExternalIPs[svc.UID]; !ok {
+		nrc.advertisedExternalIPs[svc.UID] = make([]string, 0)
+	}
+
 	nodeHasEndpoints := true
 	if onlyActiveEndpoints {
 		_, isLocal := svc.Annotations[svcLocalAnnotation]
@@ -342,8 +349,9 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 		}
 	}
 
+	var extIPs []string
 	if nrc.shouldAdvertiseService(svc, svcAdvertiseExternalAnnotation, nrc.advertiseExternalIP) {
-		ipList = append(ipList, nrc.getExternalIps(svc)...)
+		extIPs = nrc.getExternalIps(svc)
 	}
 
 	// Deprecated: Use service.advertise.loadbalancer=false instead of service.skiplbips.
@@ -354,10 +362,24 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 	}
 
 	if !nodeHasEndpoints {
-		return nil, ipList, nil
+		extIPs = nrc.advertisedExternalIPs[svc.UID]
+		nrc.advertisedExternalIPs[svc.UID] = make([]string, 0)
+		return nil, append(ipList, extIPs...), nil
 	}
 
-	return ipList, nil, nil
+	withdrawIPs := getDiffToWithdraw(nrc.advertisedExternalIPs[svc.UID], extIPs)
+	nrc.advertisedExternalIPs[svc.UID] = extIPs
+	return append(ipList, extIPs...), withdrawIPs, nil
+}
+
+func getDiffToWithdraw(old, new []string) (withdrawIPs []string) {
+	lookIn := " " + strings.Join(new, " ") + " "
+	for _, s := range old {
+		if !strings.Contains(lookIn, " "+s+" ") {
+			withdrawIPs = append(withdrawIPs, s)
+		}
+	}
+	return
 }
 
 func isEndpointsForLeaderElection(ep *v1core.Endpoints) bool {

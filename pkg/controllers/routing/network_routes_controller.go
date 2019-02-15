@@ -29,6 +29,7 @@ import (
 	"github.com/vishvananda/netlink/nl"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
@@ -107,6 +108,7 @@ type NetworkRoutingController struct {
 	pathPrepend             bool
 	localAddressList        []string
 	overrideNextHop         bool
+	advertisedExternalIPs   map[types.UID][]string
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -973,6 +975,8 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		return nil, errors.New("Failed find the subnet of the node IP and interface on" +
 			"which its configured: " + err.Error())
 	}
+
+	nrc.advertisedExternalIPs = make(map[types.UID][]string)
 
 	bgpLocalAddressListAnnotation, ok := node.ObjectMeta.Annotations[bgpLocalAddressAnnotation]
 	if !ok {

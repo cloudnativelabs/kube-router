@@ -14,6 +14,7 @@ import (
 
 	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
@@ -188,6 +189,8 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			testcase.nrc.advertiseExternalIP = false
 			testcase.nrc.advertiseLoadBalancerIP = false
 
+			testcase.nrc.advertisedExternalIPs = make(map[types.UID][]string)
+
 			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
 			testcase.nrc.advertiseVIPs(toAdvertise)
 			testcase.nrc.withdrawVIPs(toWithdraw)
@@ -217,12 +220,14 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		{
 			"add bgp path for service with external IPs",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -239,12 +244,14 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		{
 			"add bgp path for services with external IPs of type ClusterIP/NodePort/LoadBalancer",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -284,12 +291,14 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		{
 			"add bgp path for invalid service type",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -315,12 +324,14 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		{
 			"add bgp path for headless service",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -331,6 +342,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
+						UID:  "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -341,6 +353,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
+						UID:  "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -356,12 +369,14 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		{
 			"skip bgp path to loadbalancerIP for service without LoadBalancer IP",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:      "LoadBalancer",
@@ -383,12 +398,14 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		{
 			"add bgp path to loadbalancerIP for service with LoadBalancer IP",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:      "LoadBalancer",
@@ -416,12 +433,14 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		{
 			"no bgp path to nil loadbalancerIPs for service with LoadBalancer",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:      "LoadBalancer",
@@ -439,12 +458,14 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		{
 			"no bgp path to loadbalancerIPs for service with LoadBalancer and skiplbips annotation",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 						Annotations: map[string]string{
 							svcSkipLbIpsAnnotation: "true",
 						},
@@ -531,12 +552,14 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 		{
 			"add bgp paths for all service IPs",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -547,6 +570,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
+						UID:  "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "NodePort",
@@ -557,6 +581,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
+						UID:  "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:      "LoadBalancer",
@@ -593,12 +618,14 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 		{
 			"opt out to advertise any IPs via annotations",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 						Annotations: map[string]string{
 							svcAdvertiseClusterAnnotation:      "false",
 							svcAdvertiseExternalAnnotation:     "false",
@@ -688,12 +715,14 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 		{
 			"no bgp paths for any service IPs",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -704,6 +733,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
+						UID:  "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "NodePort",
@@ -714,6 +744,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
+						UID:  "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:      "LoadBalancer",
@@ -741,12 +772,14 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 		{
 			"opt in to advertise all IPs via annotations",
 			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
+				bgpServer:             gobgp.NewBgpServer(),
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 						Annotations: map[string]string{
 							svcAdvertiseClusterAnnotation:      "true",
 							svcAdvertiseExternalAnnotation:     "true",
@@ -762,6 +795,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
+						UID:  "svc-2",
 						Annotations: map[string]string{
 							svcAdvertiseClusterAnnotation:      "true",
 							svcAdvertiseExternalAnnotation:     "true",
@@ -777,6 +811,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
+						UID:  "svc-3",
 						Annotations: map[string]string{
 							svcAdvertiseClusterAnnotation:      "true",
 							svcAdvertiseExternalAnnotation:     "true",
@@ -878,12 +913,14 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 		{
 			"node has endpoints for service",
 			&NetworkRoutingController{
-				nodeName: "node-1",
+				nodeName:              "node-1",
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			&v1core.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "svc-1",
 					Namespace: "default",
+					UID:       "svc-1",
 				},
 				Spec: v1core.ServiceSpec{
 					Type:        "ClusterIP",
@@ -917,12 +954,14 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 		{
 			"node has no endpoints for service",
 			&NetworkRoutingController{
-				nodeName: "node-1",
+				nodeName:              "node-1",
+				advertisedExternalIPs: make(map[types.UID][]string),
 			},
 			&v1core.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "svc-1",
 					Namespace: "default",
+					UID:       "svc-1",
 				},
 				Spec: v1core.ServiceSpec{
 					Type:        "ClusterIP",
@@ -1497,13 +1536,14 @@ func Test_addExportPolicies(t *testing.T) {
 		{
 			"has nodes and services",
 			&NetworkRoutingController{
-				clientset:         fake.NewSimpleClientset(),
-				hostnameOverride:  "node-1",
-				bgpFullMeshMode:   false,
-				bgpEnableInternal: true,
-				bgpServer:         gobgp.NewBgpServer(),
-				activeNodes:       make(map[string]bool),
-				nodeAsnNumber:     100,
+				clientset:             fake.NewSimpleClientset(),
+				hostnameOverride:      "node-1",
+				bgpFullMeshMode:       false,
+				bgpEnableInternal:     true,
+				bgpServer:             gobgp.NewBgpServer(),
+				activeNodes:           make(map[string]bool),
+				advertisedExternalIPs: make(map[types.UID][]string),
+				nodeAsnNumber:         100,
 			},
 			[]*v1core.Node{
 				{
@@ -1530,6 +1570,7 @@ func Test_addExportPolicies(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -1598,12 +1639,13 @@ func Test_addExportPolicies(t *testing.T) {
 		{
 			"has nodes, services with external peers",
 			&NetworkRoutingController{
-				clientset:         fake.NewSimpleClientset(),
-				hostnameOverride:  "node-1",
-				bgpFullMeshMode:   false,
-				bgpEnableInternal: true,
-				bgpServer:         gobgp.NewBgpServer(),
-				activeNodes:       make(map[string]bool),
+				clientset:             fake.NewSimpleClientset(),
+				hostnameOverride:      "node-1",
+				bgpFullMeshMode:       false,
+				bgpEnableInternal:     true,
+				bgpServer:             gobgp.NewBgpServer(),
+				activeNodes:           make(map[string]bool),
+				advertisedExternalIPs: make(map[types.UID][]string),
 				globalPeerRouters: []*config.Neighbor{
 					{
 						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
@@ -1639,6 +1681,7 @@ func Test_addExportPolicies(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -1733,12 +1776,13 @@ func Test_addExportPolicies(t *testing.T) {
 		{
 			"has nodes, services with external peers and iBGP disabled",
 			&NetworkRoutingController{
-				clientset:         fake.NewSimpleClientset(),
-				hostnameOverride:  "node-1",
-				bgpFullMeshMode:   false,
-				bgpEnableInternal: false,
-				bgpServer:         gobgp.NewBgpServer(),
-				activeNodes:       make(map[string]bool),
+				clientset:             fake.NewSimpleClientset(),
+				hostnameOverride:      "node-1",
+				bgpFullMeshMode:       false,
+				bgpEnableInternal:     false,
+				bgpServer:             gobgp.NewBgpServer(),
+				activeNodes:           make(map[string]bool),
+				advertisedExternalIPs: make(map[types.UID][]string),
 				globalPeerRouters: []*config.Neighbor{
 					{
 						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
@@ -1774,6 +1818,7 @@ func Test_addExportPolicies(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -1852,15 +1897,16 @@ func Test_addExportPolicies(t *testing.T) {
 		{
 			"prepends AS with external peers",
 			&NetworkRoutingController{
-				clientset:         fake.NewSimpleClientset(),
-				hostnameOverride:  "node-1",
-				bgpEnableInternal: true,
-				bgpFullMeshMode:   false,
-				pathPrepend:       true,
-				pathPrependCount:  5,
-				pathPrependAS:     "65100",
-				bgpServer:         gobgp.NewBgpServer(),
-				activeNodes:       make(map[string]bool),
+				clientset:             fake.NewSimpleClientset(),
+				hostnameOverride:      "node-1",
+				bgpEnableInternal:     true,
+				bgpFullMeshMode:       false,
+				pathPrepend:           true,
+				pathPrependCount:      5,
+				pathPrependAS:         "65100",
+				bgpServer:             gobgp.NewBgpServer(),
+				activeNodes:           make(map[string]bool),
+				advertisedExternalIPs: make(map[types.UID][]string),
 				globalPeerRouters: []*config.Neighbor{
 					{
 						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
@@ -1896,6 +1942,7 @@ func Test_addExportPolicies(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
@@ -1996,14 +2043,15 @@ func Test_addExportPolicies(t *testing.T) {
 		{
 			"only prepends AS when both node annotations are present",
 			&NetworkRoutingController{
-				clientset:         fake.NewSimpleClientset(),
-				hostnameOverride:  "node-1",
-				bgpEnableInternal: true,
-				bgpFullMeshMode:   false,
-				pathPrepend:       false,
-				pathPrependAS:     "65100",
-				bgpServer:         gobgp.NewBgpServer(),
-				activeNodes:       make(map[string]bool),
+				clientset:             fake.NewSimpleClientset(),
+				hostnameOverride:      "node-1",
+				bgpEnableInternal:     true,
+				bgpFullMeshMode:       false,
+				pathPrepend:           false,
+				pathPrependAS:         "65100",
+				bgpServer:             gobgp.NewBgpServer(),
+				activeNodes:           make(map[string]bool),
+				advertisedExternalIPs: make(map[types.UID][]string),
 				globalPeerRouters: []*config.Neighbor{
 					{
 						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
@@ -2039,6 +2087,7 @@ func Test_addExportPolicies(t *testing.T) {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
+						UID:  "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",

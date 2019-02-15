@@ -5,6 +5,7 @@ import (
 
 	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -319,6 +320,7 @@ func Test_getVIPsForService(t *testing.T) {
 
 	for _, test := range tests {
 		nrc := NetworkRoutingController{}
+		nrc.advertisedExternalIPs = make(map[types.UID][]string)
 		t.Run(test.name, func(t *testing.T) {
 			nrc.advertiseClusterIP = test.advertiseSettings[0]
 			nrc.advertiseExternalIP = test.advertiseSettings[1]
@@ -331,6 +333,7 @@ func Test_getVIPsForService(t *testing.T) {
 					serviceAdvertisedIP.service.ObjectMeta.Annotations = serviceAdvertisedIP.annotations
 				}
 				svc, _ := clientset.CoreV1().Services("default").Create(serviceAdvertisedIP.service)
+				svc.UID = types.UID(serviceAdvertisedIP.service.Name)
 				advertisedIPs, _, _ := nrc.getVIPsForService(svc, false)
 				t.Logf("AdvertisedIPs: %v\n", advertisedIPs)
 				if !Equal(serviceAdvertisedIP.advertisedIPs, advertisedIPs) {
