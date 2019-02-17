@@ -90,7 +90,7 @@ A primary motivation for kube-router is performance. The combination of BGP for
 inter-node Pod networking and IPVS for load balanced proxy Services is a perfect
 recipe for high-performance cluster networking at scale. BGP ensures that the
 data path is dynamic and efficient, and IPVS provides in-kernel load balancing
-that has been thouroughly tested and optimized.
+that has been thoroughly tested and optimized.
 
 ## Getting Started
 
