@@ -62,7 +62,7 @@ func (nrc *NetworkRoutingController) withdrawVIPs(vips []string) {
 func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			nrc.OnServiceUpdate(obj)
+			nrc.OnServiceCreate(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			nrc.OnServiceUpdate(newObj)
@@ -73,15 +73,14 @@ func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEven
 	}
 }
 
-// OnServiceUpdate handles the service relates updates from the kubernetes API server
-func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
-	svc, ok := obj.(*v1core.Service)
-	if !ok {
+func getServiceObject(obj interface{}) (svc *v1core.Service) {
+	if svc, _ = obj.(*v1core.Service); svc == nil {
 		glog.Errorf("cache indexer returned obj that is not type *v1.Service")
-		return
 	}
+	return
+}
 
-	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
+func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 	if !nrc.bgpServerStarted {
 		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
 		return
@@ -99,47 +98,30 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
 		glog.Errorf("Error adding BGP export policies: %s", err.Error())
 	}
 
-	if len(toAdvertise) > 0 {
-		nrc.advertiseVIPs(toAdvertise)
-	}
+	nrc.advertiseVIPs(toAdvertise)
+	nrc.withdrawVIPs(toWithdraw)
+}
 
-	if len(toWithdraw) > 0 {
-		nrc.withdrawVIPs(toWithdraw)
+func (nrc *NetworkRoutingController) tryHandleServiceUpdate(obj interface{}, logMsgFormat string) {
+	if svc := getServiceObject(obj); svc != nil {
+		glog.V(1).Infof(logMsgFormat, svc.Namespace, svc.Name)
+		nrc.handleServiceUpdate(svc)
 	}
+}
+
+// OnServiceCreate handles new service create event from the kubernetes API server
+func (nrc *NetworkRoutingController) OnServiceCreate(obj interface{}) {
+	nrc.tryHandleServiceUpdate(obj, "Received new service: %s/%s from watch API")
+}
+
+// OnServiceUpdate handles the service relates updates from the kubernetes API server
+func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
+	nrc.tryHandleServiceUpdate(obj, "Received update on service: %s/%s from watch API")
 }
 
 // OnServiceDelete handles the service delete updates from the kubernetes API server
 func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
-	if !nrc.bgpServerStarted {
-		return
-	}
-
-	svc, ok := obj.(*v1core.Service)
-	if !ok {
-		glog.Errorf("cache indexer returned obj that is not type *v1.Service")
-		return
-	}
-
-	glog.V(1).Infof("Received event to delete service: %s/%s from watch API", svc.Namespace, svc.Name)
-	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
-	if err != nil {
-		glog.Errorf("failed to get clean up routes for deleted service: %s/%s", svc.Namespace, svc.Name)
-		return
-	}
-
-	// update export policies so that deleted VIP's gets removed from clusteripprefixsit
-	err = nrc.addExportPolicies()
-	if err != nil {
-		glog.Errorf("Error adding BGP export policies: %s", err.Error())
-	}
-
-	if len(toAdvertise) > 0 {
-		nrc.withdrawVIPs(toAdvertise)
-	}
-
-	if len(toWithdraw) > 0 {
-		nrc.withdrawVIPs(toWithdraw)
-	}
+	nrc.tryHandleServiceUpdate(obj, "Received event to delete service: %s/%s from watch API")
 }
 
 func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEventHandler {
@@ -201,22 +183,10 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 		return
 	}
 
-	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
-	if err != nil {
-		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
-		return
-	}
-
-	if len(toAdvertise) > 0 {
-		nrc.advertiseVIPs(toAdvertise)
-	}
-
-	if len(toWithdraw) > 0 {
-		nrc.withdrawVIPs(toWithdraw)
-	}
+	nrc.tryHandleServiceUpdate(svc, "Updating service %s/%s triggered by endpoint update event")
 }
 
-func (nrc *NetworkRoutingController) serviceForEndpoints(ep *v1core.Endpoints) (*v1core.Service, error) {
+func (nrc *NetworkRoutingController) serviceForEndpoints(ep *v1core.Endpoints) (interface{}, error) {
 	key, err := cache.MetaNamespaceKeyFunc(ep)
 	if err != nil {
 		return nil, err
@@ -231,12 +201,7 @@ func (nrc *NetworkRoutingController) serviceForEndpoints(ep *v1core.Endpoints) (
 		return nil, fmt.Errorf("service resource doesn't exist for endpoints: %q", ep.Name)
 	}
 
-	svc, ok := item.(*v1core.Service)
-	if !ok {
-		return nil, errors.New("type assertion failed for object in service indexer")
-	}
-
-	return svc, nil
+	return item, nil
 }
 
 func (nrc *NetworkRoutingController) getClusterIp(svc *v1core.Service) string {
