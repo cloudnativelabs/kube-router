@@ -11,6 +11,7 @@ import (
 	"github.com/osrg/gobgp/table"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"strings"
 )
 
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
@@ -65,7 +66,7 @@ func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEven
 			nrc.OnServiceCreate(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			nrc.OnServiceUpdate(newObj)
+			nrc.OnServiceUpdate(newObj, oldObj)
 		},
 		DeleteFunc: func(obj interface{}) {
 			nrc.OnServiceDelete(obj)
@@ -115,8 +116,27 @@ func (nrc *NetworkRoutingController) OnServiceCreate(obj interface{}) {
 }
 
 // OnServiceUpdate handles the service relates updates from the kubernetes API server
-func (nrc *NetworkRoutingController) OnServiceUpdate(obj interface{}) {
-	nrc.tryHandleServiceUpdate(obj, "Received update on service: %s/%s from watch API")
+func (nrc *NetworkRoutingController) OnServiceUpdate(objNew interface{}, objOld interface{}) {
+	nrc.tryHandleServiceUpdate(objNew, "Received update on service: %s/%s from watch API")
+
+	nrc.withdrawVIPs(nrc.getWithdraw(getServiceObject(objOld), getServiceObject(objNew)))
+}
+
+func (nrc *NetworkRoutingController) getWithdraw(svcOld, svcNew *v1core.Service) (out []string) {
+	if svcOld != nil && svcNew != nil {
+		out = getMissingPrevGen(nrc.getExternalIps(svcOld), nrc.getExternalIps(svcNew))
+	}
+	return
+}
+
+func getMissingPrevGen(old, new []string) (withdrawIPs []string) {
+	lookIn := " " + strings.Join(new, " ") + " "
+	for _, s := range old {
+		if !strings.Contains(lookIn, " "+s+" ") {
+			withdrawIPs = append(withdrawIPs, s)
+		}
+	}
+	return
 }
 
 // OnServiceDelete handles the service delete updates from the kubernetes API server
