@@ -775,16 +775,20 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npc.npLister = npInformer.GetIndexer()
 	npc.NetworkPolicyEventHandler = npc.newNetworkPolicyEventHandler()
 
+	iptables, err := NewIPTablesHandler()
+	if err != nil {
+		return nil, err
+	}
+	nftables, err := NewNFTablesHandler()
+	if err != nil {
+		return nil, err
+	}
 	if config.NetworkPolicyHandler == "nftables" {
-		npc.handler, err = NewNFTablesHandler()
-		if err != nil {
-			return nil, err
-		}
+		iptables.Cleanup()
+		npc.handler = nftables
 	} else {
-		npc.handler, err = NewIPTablesHandler()
-		if err != nil {
-			return nil, err
-		}
+		nftables.Cleanup()
+		npc.handler = iptables
 	}
 
 	return &npc, nil
