@@ -1393,7 +1393,7 @@ func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPort
 			if eps, ok := (*namedPort2eps)[name][protocol][containerPort]; !ok {
 				(*namedPort2eps)[name][protocol][containerPort] = &endPoints{
 					ips:             []string{pod.Status.PodIP},
-					protocolAndPort: protocolAndPort{port: containerPort, protocol: protocol,},
+					protocolAndPort: protocolAndPort{port: containerPort, protocol: protocol},
 				}
 			} else {
 				eps.ips = append(eps.ips, pod.Status.PodIP)
