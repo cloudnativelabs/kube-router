@@ -427,9 +427,10 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 			} else {
 				ingressRule.MatchAllSource = false
 				for _, peer := range specIngressRule.From {
+					if ipBlockPeer := npc.evalIPBlockPeer(peer); ipBlockPeer != nil {
+						ingressRule.SrcIPBlocks = append(ingressRule.SrcIPBlocks, ipBlockPeer)
+					}
 					peerPods, err := npc.evalPodPeer(policy, peer)
-					matchingPods = append(matchingPods, peerPods...)
-					ingressRule.SrcIPBlocks = append(ingressRule.SrcIPBlocks, npc.evalIPBlockPeer(peer))
 					if err == nil {
 						for _, peerPod := range peerPods {
 							if peerPod.Status.PodIP == "" {
@@ -441,6 +442,8 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 									Namespace: peerPod.ObjectMeta.Namespace,
 									Labels:    peerPod.ObjectMeta.Labels})
 						}
+					} else {
+						glog.Errorf("Error evaluating pod peers for ingress rule: %s", err.Error())
 					}
 				}
 			}
@@ -478,9 +481,10 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 			} else {
 				egressRule.MatchAllDestinations = false
 				for _, peer := range specEgressRule.To {
+					if ipBlockPeer := npc.evalIPBlockPeer(peer); ipBlockPeer != nil {
+						egressRule.DstIPBlocks = append(egressRule.DstIPBlocks, ipBlockPeer)
+					}
 					peerPods, err := npc.evalPodPeer(policy, peer)
-					matchingPods = append(matchingPods, peerPods...)
-					egressRule.DstIPBlocks = append(egressRule.DstIPBlocks, npc.evalIPBlockPeer(peer))
 					if err == nil {
 						for _, peerPod := range peerPods {
 							if peerPod.Status.PodIP == "" {
@@ -492,6 +496,8 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 									Namespace: peerPod.ObjectMeta.Namespace,
 									Labels:    peerPod.ObjectMeta.Labels})
 						}
+					} else {
+						glog.Errorf("Error evaluating pod peers for egress rule: %s", err.Error())
 					}
 				}
 			}

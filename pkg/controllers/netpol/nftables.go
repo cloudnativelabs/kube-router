@@ -86,10 +86,10 @@ const (
 		{{range .IngressRules}}
 			{{with $r := .}}
 			{{if .MatchAllPorts}}
-				ip daddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllSource}}{{template "sources" .}}{{end}} accept
+				ip daddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllSource}}{{genIPSetFromIngressRule $r}}{{end}} accept
 			{{else}}
 				{{range .Ports}}
-					ip daddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllSource}}{{template "sources" $r}}{{end}} {{template "port" .}} accept
+					ip daddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllSource}}{{genIPSetFromIngressRule $r}}{{end}} {{template "port" .}} accept
 				{{end}}
 			{{end}}
 			{{end}}
@@ -99,10 +99,10 @@ const (
 		{{range .EgressRules}}
 			{{with $r := .}}
 			{{if .MatchAllPorts}}
-				ip saddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllDestinations}}{{template "destinations" .}}{{end}} accept
+				ip saddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllDestinations}}{{genIPSetFromEgressRule $r}}{{end}} accept
 			{{else}}
 				{{range .Ports}}
-					ip saddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllDestinations}}{{template "destinations" $r}}{{end}} {{template "port" .}} accept
+					ip saddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllDestinations}}{{genIPSetFromEgressRule $r}}{{end}} {{template "port" .}} accept
 				{{end}}
 			{{end}}
 			{{end}}
@@ -112,8 +112,6 @@ const (
 	{{end}}
 	{{end}}
 
-	{{define "sources"}}ip saddr { {{range .SrcPods}}{{.ip}},{{end}}{{range .SrcIPBlocks}}{{.CIDR}},{{end}} } ip saddr != { {{range .SrcIPBlocks}}{{range .Except}}{{.}},{{end}}{{end}} }{{end}}
-	{{define "destinations"}}ip daddr { {{range .DstPods}}{{.ip}},{{end}}{{range .DstIPBlocks}}{{.CIDR}},{{end}} } ip daddr != { {{range .SrcIPBlocks}}{{range .Except}}{{.}},{{end}}{{end}} }{{end}}
 	{{define "port"}}{{$proto := toLower .Protocol}}{{if .Port}}{{ $proto }} dport {{.Port}}{{else}}ip protocol {{ $proto }}{{end}}{{end}}
 	{{define "accept"}}
 		ip protocol icmp accept
@@ -139,6 +137,8 @@ type NFTables struct {
 func NewNFTablesHandler() (*NFTables, error) {
 	t, err := template.New("table").Funcs(template.FuncMap{
 		"toLower": strings.ToLower,
+		"genIPSetFromIngressRule" : genIPSetFromIngressRule,
+		"genIPSetFromEgressRule" : genIPSetFromEgressRule,
 	}).Parse(NFTABLES_TEMPLATE)
 	if err != nil {
 		return nil, err
@@ -232,4 +232,59 @@ func getLocalAddrs() (*[]string, *[]string, error) {
 	}
 
 	return &ip4, &ip6, nil
+}
+
+func genIPSetFromIngressRule(rule IngressRule) string {
+	var (
+		positive []string
+		negative []string
+	)
+
+	for _, p := range rule.SrcPods {
+		positive = append(positive, p.IP)
+	}
+	for _, b := range rule.SrcIPBlocks {
+		positive = append(positive, b.CIDR)
+		negative = append(negative, b.Except...)
+	}
+
+	return genIpSet(positive, negative, "saddr")
+}
+
+func genIPSetFromEgressRule(rule EgressRule) string {
+	var (
+		positive []string
+		negative []string
+	)
+
+	for _, p := range rule.DstPods {
+		positive = append(positive, p.IP)
+	}
+	for _, b := range rule.DstIPBlocks {
+		positive = append(positive, b.CIDR)
+		negative = append(negative, b.Except...)
+	}
+
+	return genIpSet(positive, negative, "daddr")
+}
+
+func genIpSet(positive []string, negative []string, matches string) string {
+	var builder strings.Builder
+
+	if len(positive) > 0 {
+		builder.WriteString("ip ")
+		builder.WriteString(matches)
+		builder.WriteString(" { ")
+		builder.WriteString(strings.Join(positive, ","))
+		builder.WriteString(" }")
+	}
+	if len(negative) > 0 {
+		builder.WriteString("ip ")
+		builder.WriteString(matches)
+		builder.WriteString(" != { ")
+		builder.WriteString(strings.Join(negative, ","))
+		builder.WriteString(" }")
+	}
+
+	return builder.String()
 }
