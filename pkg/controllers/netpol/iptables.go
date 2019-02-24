@@ -42,6 +42,10 @@ func NewIPTablesHandler() (*IPTables, error) {
 	}, nil
 }
 
+func (nft *IPTables) Init() {
+	// no-op
+}
+
 func (ipt *IPTables) Sync(networkPoliciesInfo *[]NetworkPolicyInfo, ingressPods, egressPods *map[string]PodInfo) error {
 
 	start := time.Now()

@@ -125,6 +125,7 @@ type ProtocolToEndpoints map[string]NumericPortToEndpoints
 type NamedPortToEndpoints map[string]ProtocolToEndpoints
 
 type PolicyHandler interface {
+	Init()
 	Sync(networkPoliciesInfo *[]NetworkPolicyInfo, ingressPods, egressPods *map[string]PodInfo) error
 	Cleanup()
 	Shutdown()
@@ -796,6 +797,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		nftables.Cleanup()
 		npc.handler = iptables
 	}
+	npc.handler.Init()
 
 	return &npc, nil
 }

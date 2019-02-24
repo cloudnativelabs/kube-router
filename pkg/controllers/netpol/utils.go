@@ -68,10 +68,12 @@ func Ports(ports ...ProtocolAndPort) []ProtocolAndPort {
 	return ports
 }
 
-func IpBlocks(blocks ...string) [][]string {
-	out := make([][]string, 0)
+func IpBlocks(blocks ...string) []*v1.IPBlock {
+	out := make([]*v1.IPBlock, 0)
 	for _, b := range blocks {
-		out = append(out, []string{b})
+		out = append(out, &v1.IPBlock{
+			CIDR: b,
+		})
 	}
 	return out
 }
@@ -105,11 +107,9 @@ func NewUDPPort(port int) ProtocolAndPort {
 }
 
 func NewProtocolAndPort(protocol string, port *intstr.IntOrString) ProtocolAndPort {
-	strPort := ""
-
 	if port != nil {
-		strPort = port.String()
+		return ProtocolAndPort{Protocol: protocol, Port: port.String()}
+	} else {
+		return ProtocolAndPort{Protocol: protocol}
 	}
-
-	return ProtocolAndPort{Protocol: protocol, Port: strPort}
 }
