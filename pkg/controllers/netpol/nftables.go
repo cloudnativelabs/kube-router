@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	NFTABLES_FILE = "/tmp/kube-router.nft"
+	NFTABLES_FILE       = "/tmp/kube-router.nft"
 	NFTABLES_TABLE_NAME = "kube-router"
-	KUBE_BRIDGE_IF = "kube-bridge"
-	NFTABLES_TEMPLATE = `
+	KUBE_BRIDGE_IF      = "kube-bridge"
+	NFTABLES_TEMPLATE   = `
 	delete table {{.TableName}}
 	create table {{.TableName}}
 
@@ -86,10 +86,10 @@ const (
 		{{range .IngressRules}}
 			{{with $r := .}}
 			{{if .MatchAllPorts}}
-				ip daddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllSource}}{{genIPSetFromIngressRule $r}}{{end}} accept
+				ip daddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} }{{if not $r.MatchAllSource}}{{genIPSetFromIngressRule $r}}{{end}} accept
 			{{else}}
 				{{range .Ports}}
-					ip daddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllSource}}{{genIPSetFromIngressRule $r}}{{end}} {{template "port" .}} accept
+					ip daddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} }{{if not $r.MatchAllSource}}{{genIPSetFromIngressRule $r}}{{end}} {{template "port" .}} accept
 				{{end}}
 			{{end}}
 			{{end}}
@@ -99,10 +99,10 @@ const (
 		{{range .EgressRules}}
 			{{with $r := .}}
 			{{if .MatchAllPorts}}
-				ip saddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllDestinations}}{{genIPSetFromEgressRule $r}}{{end}} accept
+				ip saddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} }{{if not $r.MatchAllDestinations}}{{genIPSetFromEgressRule $r}}{{end}} accept
 			{{else}}
 				{{range .Ports}}
-					ip saddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} } {{if not $r.MatchAllDestinations}}{{genIPSetFromEgressRule $r}}{{end}} {{template "port" .}} accept
+					ip saddr { {{ range $p.TargetPods }}{{ .IP }},{{end}} }{{if not $r.MatchAllDestinations}}{{genIPSetFromEgressRule $r}}{{end}} {{template "port" .}} accept
 				{{end}}
 			{{end}}
 			{{end}}
@@ -120,25 +120,25 @@ const (
 `
 )
 
-type nftablesInfo struct {
-	IngressPods *map[string]PodInfo
-	EgressPods  *map[string]PodInfo
-	Policies    *[]NetworkPolicyInfo
-	LocalIp4    *[]string
-	LocalIp6    *[]string
+type NFTablesInfo struct {
+	IngressPods map[string]PodInfo
+	EgressPods  map[string]PodInfo
+	Policies    []NetworkPolicyInfo
+	LocalIp4    []string
+	LocalIp6    []string
 	TableName   string
 }
 
 type NFTables struct {
 	template *template.Template
-	dead	 bool
+	dead     bool
 }
 
 func NewNFTablesHandler() (*NFTables, error) {
 	t, err := template.New("table").Funcs(template.FuncMap{
-		"toLower": strings.ToLower,
-		"genIPSetFromIngressRule" : genIPSetFromIngressRule,
-		"genIPSetFromEgressRule" : genIPSetFromEgressRule,
+		"toLower":                 strings.ToLower,
+		"genIPSetFromIngressRule": genIPSetFromIngressRule,
+		"genIPSetFromEgressRule":  genIPSetFromEgressRule,
 	}).Parse(NFTABLES_TEMPLATE)
 	if err != nil {
 		return nil, err
@@ -146,13 +146,16 @@ func NewNFTablesHandler() (*NFTables, error) {
 
 	nft := &NFTables{
 		template: t,
-		dead: false,
+		dead:     false,
 	}
 
+	return nft, nil
+}
+
+func (nft *NFTables) Init() {
 	//TODO: Check for nftables binary in path, perhaps kernel version?
 
 	nft.execNftablesCmd("create", "table", NFTABLES_TABLE_NAME)
-	return nft, nil
 }
 
 func (nft *NFTables) Sync(networkPoliciesInfo *[]NetworkPolicyInfo, ingressPods, egressPods *map[string]PodInfo) error {
@@ -170,13 +173,13 @@ func (nft *NFTables) Sync(networkPoliciesInfo *[]NetworkPolicyInfo, ingressPods,
 	file, _ := os.Create(NFTABLES_FILE)
 	defer file.Close()
 	writer := bufio.NewWriter(file)
-	err = nft.template.Execute(writer, nftablesInfo{
-		IngressPods: ingressPods,
-		EgressPods:  egressPods,
-		Policies:    networkPoliciesInfo,
-		LocalIp4:    ip4,
-		LocalIp6:    ip6,
-		TableName: NFTABLES_TABLE_NAME,
+	err = nft.Generate(writer, &NFTablesInfo{
+		IngressPods: *ingressPods,
+		EgressPods:  *egressPods,
+		Policies:    *networkPoliciesInfo,
+		LocalIp4:    *ip4,
+		LocalIp6:    *ip6,
+		TableName:   NFTABLES_TABLE_NAME,
 	})
 	if err != nil {
 		return err
@@ -184,6 +187,10 @@ func (nft *NFTables) Sync(networkPoliciesInfo *[]NetworkPolicyInfo, ingressPods,
 	writer.Flush()
 
 	return nft.execNftablesCmd("-f", NFTABLES_FILE)
+}
+
+func (nft *NFTables) Generate(writer *bufio.Writer, info *NFTablesInfo) error {
+	return nft.template.Execute(writer, info)
 }
 
 func (nft *NFTables) execNftablesCmd(args ...string) error {
@@ -272,14 +279,14 @@ func genIpSet(positive []string, negative []string, matches string) string {
 	var builder strings.Builder
 
 	if len(positive) > 0 {
-		builder.WriteString("ip ")
+		builder.WriteString(" ip ")
 		builder.WriteString(matches)
 		builder.WriteString(" { ")
 		builder.WriteString(strings.Join(positive, ","))
 		builder.WriteString(" }")
 	}
 	if len(negative) > 0 {
-		builder.WriteString("ip ")
+		builder.WriteString(" ip ")
 		builder.WriteString(matches)
 		builder.WriteString(" != { ")
 		builder.WriteString(strings.Join(negative, ","))
