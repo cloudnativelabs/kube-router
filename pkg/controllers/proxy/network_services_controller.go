@@ -2026,6 +2026,10 @@ func setupMangleTableRule(ip string, protocol string, port string, fwmark string
 	if err != nil {
 		return errors.New("Failed to run iptables command to set up FWMARK due to " + err.Error())
 	}
+	err = iptablesCmdHandler.AppendUnique("mangle", "OUTPUT", args...)
+	if err != nil {
+		return errors.New("Failed to run iptables command to set up FWMARK due to " + err.Error())
+	}
 	return nil
 }
 
@@ -2041,6 +2045,16 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 	}
 	if exists {
 		err = iptablesCmdHandler.Delete("mangle", "PREROUTING", args...)
+		if err != nil {
+			return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
+		}
+	}
+	exists, err = iptablesCmdHandler.Exists("mangle", "OUTPUT", args...)
+	if err != nil {
+		return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
+	}
+	if exists {
+		err = iptablesCmdHandler.Delete("mangle", "OUTPUT", args...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
 		}
