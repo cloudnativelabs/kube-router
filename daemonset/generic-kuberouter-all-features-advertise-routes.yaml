@@ -9,13 +9,19 @@ metadata:
 data:
   cni-conf.json: |
     {
-      "name":"kubernetes",
-      "type":"bridge",
-      "bridge":"kube-bridge",
-      "isDefaultGateway":true,
-      "ipam": {
-        "type":"host-local"
-      }
+       "cniVersion":"0.6.0",
+       "name":"mynet",
+       "plugins":[
+          {
+             "name":"kubernetes",
+             "type":"bridge",
+             "bridge":"kube-bridge",
+             "isDefaultGateway":true,
+             "ipam":{
+                "type":"host-local"
+             }
+          }
+       ]
     }
   kubeconfig: |
     apiVersion: v1
@@ -74,6 +80,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: KUBE_ROUTER_CNI_CONF_FILE
+          value: /etc/cni/net.d/10-kuberouter.conflist
         livenessProbe:
           httpGet:
             path: /healthz
@@ -103,11 +111,11 @@ spec:
         - /bin/sh
         - -c
         - set -e -x;
-          if [ ! -f /etc/cni/net.d/10-kuberouter.conf ]; then
+          if [ ! -f /etc/cni/net.d/10-kuberouter.conflist ]; then
             TMP=/etc/cni/net.d/.tmp-kuberouter-cfg;
             cp /etc/kube-router/cni-conf.json ${TMP};
-            mv ${TMP} /etc/cni/net.d/10-kuberouter.conf;
-          fi;
+            mv ${TMP} /etc/cni/net.d/10-kuberouter.conflist;
+          fi
           if [ ! -f /var/lib/kube-router/kubeconfig ]; then
             TMP=/var/lib/kube-router/.tmp-kubeconfig;
             cp /etc/kube-router/kubeconfig ${TMP};

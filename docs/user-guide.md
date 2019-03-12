@@ -224,41 +224,6 @@ set by the LoadBalancer to:
 FYI Above has been successfully tested together with
 [MetalLB](https://github.com/google/metallb) in ARP mode.
 
-## HostPort support
-
-If you would like to use `HostPort` functionality below changes are required in the manifest.
-
-- By default kube-router assumes CNI conf file to be `/etc/cni/net.d/10-kuberouter.conf`. Add an environment variable `KUBE_ROUTER_CNI_CONF_FILE` to kube-router manifest and set it to `/etc/cni/net.d/10-kuberouter.conflist`
-- Modify `kube-router-cfg` ConfigMap with CNI config that supports `portmap` as additional plug-in
-```
-    {
-       "cniVersion":"0.3.0",
-       "name":"mynet",
-       "plugins":[
-          {
-             "name":"kubernetes",
-             "type":"bridge",
-             "bridge":"kube-bridge",
-             "isDefaultGateway":true,
-             "ipam":{
-                "type":"host-local"
-             }
-          },
-          {
-             "type":"portmap",
-             "capabilities":{
-                "snat":true,
-                "portMappings":true
-             }
-          }
-       ]
-    }
-```
-- Update init container command to create `/etc/cni/net.d/10-kuberouter.conflist` file
-- Restart the container runtime
-
-For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-hostport.yaml) with necessary changes required for `HostPort` functionality.
-
 ## BGP configuration
 
 [Configuring BGP Peers](bgp.md)
