@@ -16,6 +16,16 @@ Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/maste
 ### generic
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/generic.md) to deploy kube-router on manually installed clusters
 
+### Amazon specific notes
+When running in an AWS environment that requires an explicit proxy you need to inject the proxy server as a [environment variable](https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/) in your kube-router deployment
+
+Example:
+
+    env:
+    - name: HTTP_PROXY
+      value: "http://proxy.example.com:80"
+
+
 ## deployment
 
 Depending on what functionality of kube-router you want to use, multiple deployment options are possible. You can use the flags `--run-firewall`, `--run-router`, `--run-service-proxy` to selectively enable only required functionality of kube-router.
@@ -42,7 +52,7 @@ Usage of kube-router:
       --enable-overlay                   When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
       --enable-pod-egress                SNAT traffic from Pods to destinations outside the cluster. (default true)
       --enable-pprof                     Enables pprof for debugging performance and memory leak issues.
-      --hairpin-mode                     Add iptable rules for every Service Endpoint to support hairpin traffic.
+      --hairpin-mode                     Add iptables rules for every Service Endpoint to support hairpin traffic.
       --health-port uint16               Health check port, 0 = Disabled (default 20244)
   -h, --help                             Print usage information.
       --hostname-override string         Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
@@ -61,6 +71,7 @@ Usage of kube-router:
       --peer-router-multihop-ttl uint8   Enable eBGP multihop supports -- sets multihop-ttl. (Relevant only if ttl >= 2)
       --peer-router-passwords strings    Password for authenticating against the BGP peer defined with "--peer-router-ips".
       --peer-router-ports uints          The remote port of the external BGP to which all nodes will peer. If not set, default BGP port (179) will be used. (default [])
+      --router-id string                 BGP router-id. Must be specified in a ipv6 only cluster.
       --routes-sync-period duration      The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --run-firewall                     Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-router                       Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
@@ -122,6 +133,39 @@ and if you want to move back to kube-proxy then clean up config done by kube-rou
 ```
 and run kube-proxy with the configuration you have.
 - [General Setup](/README.md#getting-started)
+
+
+## Advertising IPs
+
+kube-router can advertise Cluster, External and LoadBalancer IPs to BGP peers.
+It does this by:
+* locally adding the advertised IPs to the nodes' `kube-dummy-if` network interface
+* advertising the IPs to its BGP peers
+
+To set the default for all services use the `--advertise-cluster-ip`,
+`--advertise-external-ip` and `--advertise-loadbalancer-ip` flags.
+
+To selectively enable or disable this feature per-service use the
+`kube-router.io/service.advertise.clusterip`, `kube-router.io/service.advertise.externalip`
+and `kube-router.io/service.advertise.loadbalancerip` annotations.
+
+e.g.:
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.clusterip=true"`
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.externalip=true"`
+`$ kubectl annotate service my-advertised-service "kube-router.io/service.advertise.loadbalancerip=true"`
+
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.clusterip=false"`
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.externalip=false"`
+`$ kubectl annotate service my-non-advertised-service "kube-router.io/service.advertise.loadbalancerip=false"`
+
+By combining the flags with the per-service annotations you can choose either
+a opt-in or opt-out strategy for advertising IPs.
+
+Advertising LoadBalancer IPs works by inspecting the services
+`status.loadBalancer.ingress` IPs that are set by external LoadBalancers like
+for example MetalLb. This has been successfully tested together with
+[MetalLB](https://github.com/google/metallb) in ARP mode.
+
 
 ## Hairpin Mode
 
@@ -204,25 +248,6 @@ kubectl annotate service my-service "kube-router.io/service.scheduler=sh"
 For destination hashing scheduling use:
 kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
 ```
-
-## LoadBalancer IPs
-
-If you want to also advertise loadbalancer set IPs
-(`status.loadBalancer.ingress` IPs), e.g. when using it with MetalLb,
-add the `--advertise-loadbalancer-ip` flag (`false` by default).
-
-To selectively disable this behaviour per-service, you can use
-the `kube-router.io/service.skiplbips` annotation as e.g.:
-`$ kubectl annotate service my-external-service "kube-router.io/service.skiplbips=true"`
-
-In concrete, unless the Service is annotated as per above, the
-`--advertise-loadbalancer-ip` flag will make Service's Ingress IP(s)
-set by the LoadBalancer to:
-* be locally added to nodes' `kube-dummy-if` network interface
-* be advertised to BGP peers
-
-FYI Above has been successfully tested together with
-[MetalLB](https://github.com/google/metallb) in ARP mode.
 
 ## BGP configuration
 
