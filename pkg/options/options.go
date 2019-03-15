@@ -29,7 +29,7 @@ type KubeRouterConfig struct {
 	EnablePodEgress         bool
 	EnablePprof             bool
 	FullMeshMode            bool
-	FullOverlay             bool
+	OverlayType             string
 	GlobalHairpinMode       bool
 	HealthPort              uint16
 	HelpRequested           bool
@@ -66,6 +66,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IPTablesSyncPeriod: 5 * time.Minute,
 		RoutesSyncPeriod:   5 * time.Minute,
 		EnableOverlay:      true,
+		OverlayType:        "subnet",
 	}
 }
 
@@ -138,9 +139,10 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,
 		"When enable-overlay is set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. "+
 			"When set to false no tunneling is used and routing infrastructure is expected to route traffic for pod-to-pod networking across nodes in different subnets")
-	fs.BoolVar(&s.FullOverlay, "full-overlay", false,
-		"When full-overlay is set to true, it changes \"--enable-overlay=true\" default behavior so that IP-in-IP tunneling is used for pod-to-pod networking across nodes regardless of the subnet the nodes are in. "+
-			"When set to false, the default, default \"--enable-overlay=true\" behavior is used")
+	fs.StringVar(&s.OverlayType, "overlay-type", s.OverlayType,
+		"Possible values: subnet,full - "+
+			"When set to \"subnet\", the default, default \"--enable-overlay=true\" behavior is used. "+
+			"When set to \"full\", it changes \"--enable-overlay=true\" default behavior so that IP-in-IP tunneling is used for pod-to-pod networking across nodes regardless of the subnet the nodes are in.")
 	fs.StringSliceVar(&s.PeerPasswords, "peer-router-passwords", s.PeerPasswords,
 		"Password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
 	fs.BoolVar(&s.EnablePprof, "enable-pprof", false,

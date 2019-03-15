@@ -91,7 +91,7 @@ type NetworkRoutingController struct {
 	bgpGracefulRestart      bool
 	ipSetHandler            *utils.IPSet
 	enableOverlays          bool
-	fullOverlay             bool
+	overlayType             string
 	peerMultihopTTL         uint8
 	MetricsEnabled          bool
 	bgpServerStarted        bool
@@ -414,8 +414,8 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 	tunnelName := generateTunnelName(nexthop.String())
 	sameSubnet := nrc.nodeSubnet.Contains(nexthop)
 
-	// cleanup route and tunnel if overlay is disabled or node is in same subnet and full overlay is disabled
-	if !nrc.enableOverlays || (sameSubnet && !nrc.fullOverlay) {
+	// cleanup route and tunnel if overlay is disabled or node is in same subnet and overlay-type is set to 'subnet'
+	if !nrc.enableOverlays || (sameSubnet && nrc.overlayType == "subnet") {
 		glog.Infof("Cleaning up old routes if there are any")
 		routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
 			Dst: dst, Protocol: 0x11,
@@ -438,9 +438,9 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 		}
 	}
 
-	// create IPIP tunnels only when node is not in same subnet or full overlay is true
+	// create IPIP tunnels only when node is not in same subnet or overlay-type is set to 'full'
 	// prevent creation when --override-nexthop=true as well
-	if (!sameSubnet || nrc.fullOverlay) && !nrc.overrideNextHop {
+	if (!sameSubnet || nrc.overlayType == "full") && !nrc.overrideNextHop {
 		// create ip-in-ip tunnel and inject route as overlay is enabled
 		var link netlink.Link
 		var err error
@@ -930,7 +930,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIp
 	nrc.advertisePodCidr = kubeRouterConfig.AdvertiseNodePodCidr
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
-	nrc.fullOverlay = kubeRouterConfig.FullOverlay
+	nrc.overlayType = kubeRouterConfig.OverlayType
 
 	nrc.bgpPort = kubeRouterConfig.BGPPort
 
