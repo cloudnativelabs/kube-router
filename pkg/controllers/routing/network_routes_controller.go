@@ -639,8 +639,8 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		}
 	}
 
-	comment = "allow outbound node port traffic on node interface with which node ip is associated"
-	args = []string{"-m", "comment", "--comment", comment, "-o", nrc.nodeInterface, "-j", "ACCEPT"}
+	comment = "allow outbound node port traffic"
+	args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
 	exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
