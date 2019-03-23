@@ -49,7 +49,7 @@ Usage of kube-router:
       --disable-source-dest-check        Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way. (default true)
       --enable-cni                       Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin. (default true)
       --enable-ibgp                      Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers (default true)
-      --enable-overlay                   When enable-overlay set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastrcture is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
+      --enable-overlay                   When enable-overlay is set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastructure is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
       --enable-pod-egress                SNAT traffic from Pods to destinations outside the cluster. (default true)
       --enable-pprof                     Enables pprof for debugging performance and memory leak issues.
       --hairpin-mode                     Add iptables rules for every Service Endpoint to support hairpin traffic.
@@ -65,6 +65,7 @@ Usage of kube-router:
       --metrics-port uint16              Prometheus metrics port, (Default 0, Disabled)
       --nodeport-bindon-all-ip           For service of NodePort type create IPVS service that listens on all IP's of the node.
       --nodes-full-mesh                  Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
+      --overlay-type string              Possible values: subnet,full - When set to "subnet", the default, default "--enable-overlay=true" behavior is used. When set to "full", it changes "--enable-overlay=true" default behavior so that IP-in-IP tunneling is used for pod-to-pod networking across nodes regardless of the subnet the nodes are in. (default "subnet")
       --override-nexthop                 Override the next-hop in bgp routes sent to peers with the local ip.
       --peer-router-asns uints           ASN numbers of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr. (default [])
       --peer-router-ips ipSlice          The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's. (default [])
