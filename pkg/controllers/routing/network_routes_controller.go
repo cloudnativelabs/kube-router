@@ -969,10 +969,10 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 
 	bgpLocalAddressListAnnotation, ok := node.ObjectMeta.Annotations[bgpLocalAddressAnnotation]
 	if !ok {
-		glog.Infof("Could not find annotaion `kube-router.io/bgp-local-addresses` on node object so BGP will listen on node IP: %s address.", nrc.nodeIP.String())
+		glog.Infof("Could not find annotation `kube-router.io/bgp-local-addresses` on node object so BGP will listen on node IP: %s address.", nrc.nodeIP.String())
 		nrc.localAddressList = append(nrc.localAddressList, nrc.nodeIP.String())
 	} else {
-		glog.Infof("Found annotaion `kube-router.io/bgp-local-addresses` on node object so BGP will listen on local IP's: %s", bgpLocalAddressListAnnotation)
+		glog.Infof("Found annotation `kube-router.io/bgp-local-addresses` on node object so BGP will listen on local IP's: %s", bgpLocalAddressListAnnotation)
 		localAddresses := stringToSlice(bgpLocalAddressListAnnotation, ",")
 		for _, addr := range localAddresses {
 			ip := net.ParseIP(addr)
