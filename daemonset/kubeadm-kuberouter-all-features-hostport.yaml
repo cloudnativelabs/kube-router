@@ -96,6 +96,9 @@ spec:
         - -c
         - set -e -x;
           if [ ! -f /etc/cni/net.d/10-kuberouter.conflist ]; then
+            if [ -f /etc/cni/net.d/*.conf ]; then
+              rm -f /etc/cni/net.d/*.conf;
+            fi;
             TMP=/etc/cni/net.d/.tmp-kuberouter-cfg;
             cp /etc/kube-router/cni-conf.json ${TMP};
             mv ${TMP} /etc/cni/net.d/10-kuberouter.conflist;
