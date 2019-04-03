@@ -782,11 +782,17 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npc.npLister = npInformer.GetIndexer()
 	npc.NetworkPolicyEventHandler = npc.newNetworkPolicyEventHandler()
 
-	iptables, err := NewIPTablesHandler()
+	podCidr, err := utils.GetPodCidrFromNodeSpec(clientset, config.HostnameOverride)
 	if err != nil {
 		return nil, err
 	}
-	nftables, err := NewNFTablesHandler()
+	defaultDeny := config.NetworkPolicyDefault == "deny"
+
+	iptables, err := NewIPTablesHandler(podCidr, defaultDeny)
+	if err != nil {
+		return nil, err
+	}
+	nftables, err := NewNFTablesHandler(podCidr, defaultDeny)
 	if err != nil {
 		return nil, err
 	}

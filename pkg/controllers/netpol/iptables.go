@@ -27,7 +27,7 @@ type IPTables struct {
 	ipSetHandler *utils.IPSet
 }
 
-func NewIPTablesHandler() (*IPTables, error) {
+func NewIPTablesHandler(podCIDR string, defaultDeny bool) (*IPTables, error) {
 	ipset, err := utils.NewIPSet(false)
 	if err != nil {
 		return nil, err

@@ -28,6 +28,7 @@ const (
 			{{range .EgressPods}}
 				ip saddr {{.IP}} jump {{.Namespace}}-{{.Name}}-egress-fw
 			{{end}}
+			{{if defaultDeny}}ip saddr { {{podCIDR}} } drop{{end}}
 		}
 
 		chain ingress-forward {
@@ -38,6 +39,7 @@ const (
 			{{range .IngressPods}}
 				ip daddr {{.IP}} jump {{.Namespace}}-{{.Name}}-ingress-fw
 			{{end}}
+			{{if defaultDeny}}ip daddr { {{podCIDR}} } drop{{end}}
 		}
 
 		chain ingress-output {
@@ -48,6 +50,7 @@ const (
 			{{range .IngressPods}}
 				ip daddr {{.IP}} jump {{.Namespace}}-{{.Name}}-ingress-fw
 			{{end}}
+			{{if defaultDeny}}ip daddr { {{podCIDR}} } drop{{end}}
 		}
 
 		{{$policies := .Policies}}
@@ -134,11 +137,17 @@ type NFTables struct {
 	dead     bool
 }
 
-func NewNFTablesHandler() (*NFTables, error) {
+func NewNFTablesHandler(podCIDR string, defaultDeny bool) (*NFTables, error) {
 	t, err := template.New("table").Funcs(template.FuncMap{
 		"toLower":                 strings.ToLower,
 		"genIPSetFromIngressRule": genIPSetFromIngressRule,
 		"genIPSetFromEgressRule":  genIPSetFromEgressRule,
+		"defaultDeny": func() bool {
+			return defaultDeny
+		},
+		"podCIDR": func() string {
+			return podCIDR
+		},
 	}).Parse(NFTABLES_TEMPLATE)
 	if err != nil {
 		return nil, err

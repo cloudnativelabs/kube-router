@@ -36,6 +36,7 @@ type KubeRouterConfig struct {
 	HelpRequested                  bool
 	HostnameOverride               string
 	NetworkPolicyHandler           string
+	NetworkPolicyDefault           string
 	IPTablesSyncPeriod             time.Duration
 	IpvsSyncPeriod                 time.Duration
 	IpvsGracefulPeriod             time.Duration
@@ -104,6 +105,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"SNAT traffic from Pods to destinations outside the cluster.")
 	fs.StringVar(&s.NetworkPolicyHandler, "network-policy-handler", "iptables",
 		"Determines which implementation should be used as network policy handler, either of: \"iptables\", \"nftables\".")
+	fs.StringVar(&s.NetworkPolicyDefault, "network-policy-default-action", "allow",
+		"Decides the default action to apply when no network policies apply to a pod, either of: \"allow\", \"deny\".")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
 		"The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod,
