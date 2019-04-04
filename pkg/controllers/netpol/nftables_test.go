@@ -30,7 +30,7 @@ func TestNFTablesSimpleIngress(t *testing.T) {
 	iPods[pod1.IP] = *pod1
 	ePods[pod2.IP] = *pod2
 
-	nft, err := NewNFTablesHandler()
+	nft, err := NewNFTablesHandler("192.168.7.0/23", false)
 	if err != nil {
 		t.Error(err.Error())
 	}
