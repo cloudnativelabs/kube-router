@@ -68,7 +68,7 @@ The CNI configuration is also updated with ipv6 addresses;
 This means that pod's gets assigned ipv6 addresses.
 
 The announcement of the pod CIDRs does not work yet. So pods on other
-nodes than the own can not be reached.
+nodes than the own cannot be reached.
 
 To get this working the routes must be inserted in the RIB for
 `gobgp`. Checking the ipv4 rib gives an error;

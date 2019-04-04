@@ -21,7 +21,7 @@ import (
 func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
-		glog.Errorf("Failed to list nodes from API server due to: %s. Can not perform BGP peer sync", err.Error())
+		glog.Errorf("Failed to list nodes from API server due to: %s. Cannot perform BGP peer sync", err.Error())
 		return
 	}
 
