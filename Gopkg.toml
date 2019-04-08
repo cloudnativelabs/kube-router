@@ -69,7 +69,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 
 [[override]]
   name = "github.com/vishvananda/netlink"
-  version = "1.0.0"
+  revision = "f504738125a57f35f87fc30fb69b8df75237ccde"
 
 [[constraint]]
   branch = "master"

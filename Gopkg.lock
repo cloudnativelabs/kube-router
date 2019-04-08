@@ -719,15 +719,14 @@
   revision = "8dc2790b029dc41e2b8ff772c63c26adbb1db70d"
 
 [[projects]]
-  digest = "1:2d9d06cb9d46dacfdbb45f8575b39fc0126d083841a29d4fbf8d97708f43107e"
+  digest = "1:7a2aba84d53fb903d985b8a1ae09fb3fa4aca20e305828c18b678e576a0005bf"
   name = "github.com/vishvananda/netlink"
   packages = [
     ".",
     "nl",
   ]
   pruneopts = "UT"
-  revision = "a2ad57a690f3caf3015351d2d6e1c0b95c349752"
-  version = "v1.0.0"
+  revision = "f504738125a57f35f87fc30fb69b8df75237ccde"
 
 [[projects]]
   branch = "master"
@@ -1130,6 +1129,7 @@
     "github.com/prometheus/client_golang/prometheus/promhttp",
     "github.com/spf13/pflag",
     "github.com/vishvananda/netlink",
+    "github.com/vishvananda/netlink/nl",
     "github.com/vishvananda/netns",
     "golang.org/x/net/context",
     "k8s.io/api/core/v1",
@@ -1137,6 +1137,7 @@
     "k8s.io/api/networking/v1",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/labels",
+    "k8s.io/apimachinery/pkg/util/intstr",
     "k8s.io/apimachinery/pkg/util/sets",
     "k8s.io/client-go/informers",
     "k8s.io/client-go/kubernetes",
