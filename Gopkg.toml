@@ -89,7 +89,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 
 [[constraint]]
   name = "github.com/docker/libnetwork"
-  revision = "14aa49f99093e1a22e65155b641103762911db8d"
+  revision = "1a06131fb8a047d919f7deaf02a4c414d7884b83"
 
 [[override]]
   revision = "1e2f10eb65743fed02f573d31a4587de09afb20e"
