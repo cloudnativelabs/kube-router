@@ -11,6 +11,7 @@ import (
 
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -68,6 +69,13 @@ type Destination struct {
 // DstStats defines IPVS destination (real server) statistics
 type DstStats SvcStats
 
+// Config defines IPVS timeout configuration
+type Config struct {
+	TimeoutTCP    time.Duration
+	TimeoutTCPFin time.Duration
+	TimeoutUDP    time.Duration
+}
+
 // Handle provides a namespace specific ipvs handle to program ipvs
 // rules.
 type Handle struct {
@@ -96,11 +104,12 @@ func New(path string) (*Handle, error) {
 		return nil, err
 	}
 	// Add operation timeout to avoid deadlocks
-	tv := syscall.NsecToTimeval(netlinkSendSocketTimeout.Nanoseconds())
+	tv := unix.NsecToTimeval(netlinkSendSocketTimeout.Nanoseconds())
+
 	if err := sock.SetSendTimeout(&tv); err != nil {
 		return nil, err
 	}
-	tv = syscall.NsecToTimeval(netlinkRecvSocketsTimeout.Nanoseconds())
+	tv = unix.NsecToTimeval(netlinkRecvSocketsTimeout.Nanoseconds())
 	if err := sock.SetReceiveTimeout(&tv); err != nil {
 		return nil, err
 	}
@@ -187,4 +196,14 @@ func (i *Handle) GetService(s *Service) (*Service, error) {
 	}
 
 	return res[0], nil
+}
+
+// GetConfig returns the current timeout configuration
+func (i *Handle) GetConfig() (*Config, error) {
+	return i.doGetConfigCmd()
+}
+
+// SetConfig set the current timeout configuration. 0: no change
+func (i *Handle) SetConfig(c *Config) error {
+	return i.doSetConfigCmd(c)
 }
