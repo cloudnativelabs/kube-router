@@ -28,18 +28,18 @@ const (
 			{{range .EgressPods}}
 				ip saddr {{.IP}} jump {{.Namespace}}-{{.Name}}-egress-fw
 			{{end}}
-			{{if defaultDeny}}ip saddr { {{podCIDR}} } drop{{end}}
+			{{if defaultDeny}}ip saddr { {{podCIDR}} } {{template "drop"}}{{end}}
 		}
 
 		chain ingress-forward {
 			type filter hook forward priority 0; policy accept
 			{{template "accept" .}}
-			meta mark 32760 reject
+			meta mark 32760 {{template "reject"}}
 
 			{{range .IngressPods}}
 				ip daddr {{.IP}} jump {{.Namespace}}-{{.Name}}-ingress-fw
 			{{end}}
-			{{if defaultDeny}}ip daddr { {{podCIDR}} } drop{{end}}
+			{{if defaultDeny}}ip daddr { {{podCIDR}} } {{template "drop"}}{{end}}
 		}
 
 		chain ingress-output {
@@ -50,30 +50,30 @@ const (
 			{{range .IngressPods}}
 				ip daddr {{.IP}} jump {{.Namespace}}-{{.Name}}-ingress-fw
 			{{end}}
-			{{if defaultDeny}}ip daddr { {{podCIDR}} } drop{{end}}
+			{{if defaultDeny}}ip daddr { {{podCIDR}} } {{template "drop"}}{{end}}
 		}
 
 		{{$policies := .Policies}}
 		{{range .IngressPods}}
 		chain {{.Namespace}}-{{.Name}}-ingress-fw {
 			ct state established,related accept
-			ct state invalid drop
+			ct state invalid {{template "drop"}}
 			{{with $pod := .}}
 			{{range $policies}}
 				{{if .Matches $pod}}jump {{.Namespace}}-{{.Name}}-netpol-ingress{{end}}{{end}}
 			{{end}}
-			reject
+			{{template "reject"}}
 		}
 		{{end}}
 		{{range .EgressPods}}
 		chain {{.Namespace}}-{{.Name}}-egress-fw {
 			ct state established,related accept
-			ct state invalid drop
+			ct state invalid {{template "drop"}}
 			{{with $pod := .}}
 			{{range $policies}}
 				{{if .Matches $pod}}jump {{.Namespace}}-{{.Name}}-netpol-egress{{end}}{{end}}
 			{{end}}
-			mark set 32760
+			{{template "markforreject"}}
 		}
 		{{end}}
 
@@ -120,6 +120,10 @@ const (
 		ip protocol icmp accept
 		{{if .LocalIp4}}ip saddr { {{range .LocalIp4}}{{.}},{{end}} } accept{{end}}
 	{{end}}
+	{{define "markforreject"}}nftrace set 1 mark set 32760{{end}}
+	{{define "reject"}}nftrace set 1 reject{{end}}
+	{{define "drop"}}nftrace set 1 drop{{end}}
+
 `
 )
 
