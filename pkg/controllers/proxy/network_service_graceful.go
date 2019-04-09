@@ -51,6 +51,12 @@ func (nsc *NetworkServicesController) ipvsDeleteDestination(svc *ipvs.Service, d
 			return err
 		}
 	}
+	// flush conntrack when Destination for a UDP service changes
+	if svc.Protocol == syscall.IPPROTO_UDP {
+		if err := nsc.flushConntrackUDP(svc); err != nil {
+			glog.Errorf("Failed to flush conntrack: %s", err.Error())
+		}
+	}
 	return nil
 }
 
@@ -120,12 +126,6 @@ func (nsc *NetworkServicesController) gracefulDeleteIpvsDestination(req graceful
 		if err := nsc.ln.ipvsDelDestination(req.ipvsSvc, req.ipvsDst); err != nil {
 			glog.Errorf("Failed to delete IPVS destination: %s, %s", ipvsDestinationString(req.ipvsDst), err.Error())
 		}
-		// flush conntrack when Destination for a UDP service changes
-		if req.ipvsSvc.Protocol == syscall.IPPROTO_UDP {
-			if err := nsc.flushConntrackUDP(req); err != nil {
-				glog.Errorf("Failed to flush conntrack: %s", err.Error())
-			}
-		}
 	}
 	return deleteDestination
 }
@@ -146,17 +146,17 @@ func (nsc *NetworkServicesController) getIpvsDestinationConnStats(ipvsSvc *ipvs.
 }
 
 // flushConntrackUDP flushes UDP conntrack records for the given service destination
-func (nsc *NetworkServicesController) flushConntrackUDP(dest gracefulRequest) error {
+func (nsc *NetworkServicesController) flushConntrackUDP(svc *ipvs.Service) error {
 	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to check output and don't Error when matching
 	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
 
 	// Shell out and flush conntrack records
-	out, err := exec.Command("conntrack", "-D", "--orig-dst", dest.ipvsSvc.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(dest.ipvsSvc.Port))).CombinedOutput()
+	out, err := exec.Command("conntrack", "-D", "--orig-dst", svc.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(svc.Port))).CombinedOutput()
 	if err != nil {
 		if matched := re.MatchString(string(out)); !matched {
-			return fmt.Errorf("Failed to delete conntrack entry for endpoint: %s:%d due to %s", dest.ipvsSvc.Address.String(), dest.ipvsSvc.Port, err.Error())
+			return fmt.Errorf("Failed to delete conntrack entry for endpoint: %s:%d due to %s", svc.Address.String(), svc.Port, err.Error())
 		}
 	}
-	glog.V(1).Infof("Deleted conntrack entry for endpoint: %s:%d", dest.ipvsSvc.Address.String(), dest.ipvsSvc.Port)
+	glog.V(1).Infof("Deleted conntrack entry for endpoint: %s:%d", svc.Address.String(), svc.Port)
 	return nil
 }
