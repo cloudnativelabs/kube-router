@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -226,6 +225,10 @@ type NetworkServicesController struct {
 
 	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
+
+	gracefulPeriod      time.Duration
+	gracefulQueue       gracefulQueue
+	gracefulTermination bool
 }
 
 // internal representation of kubernetes service
@@ -328,6 +331,24 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	err = nsc.setupIpvsFirewall()
 	if err != nil {
 		return errors.New("Error setting up ipvs firewall: " + err.Error())
+	}
+
+	if nsc.gracefulTermination {
+		go func() {
+			gracefulTicker := time.NewTicker(5 * time.Second)
+			defer gracefulTicker.Stop()
+			for {
+				select {
+				case <-stopCh:
+					glog.Info("Shutting down graceful termination sync loop")
+					return
+				case <-gracefulTicker.C:
+					if nsc.readyForUpdates {
+						nsc.gracefulSync()
+					}
+				}
+			}
+		}()
 	}
 
 	// loop forever unitl notified to stop on stopCh
@@ -786,9 +807,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 	var ipvsSvcs []*ipvs.Service
 
-	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to check output and don't Error when matching
-	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
-
 	start := time.Now()
 
 	defer func() {
@@ -1059,9 +1077,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	// cleanup stale IPs on dummy interface
 	glog.V(1).Info("Cleaning up if any, old service IPs on dummy interface")
 	addrActive := make(map[string]bool)
-	for k, endpoints := range activeServiceEndpointMap {
+	for k := range activeServiceEndpointMap {
 		// verify active and its a generateIpPortId() type service
-		if len(endpoints) > 0 && strings.Contains(k, "-") {
+		if strings.Contains(k, "-") {
 			parts := strings.SplitN(k, "-", 3)
 			addrActive[parts[0]] = true
 		}
@@ -1109,7 +1127,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		endpoints, ok := activeServiceEndpointMap[key]
-		if !ok || len(endpoints) == 0 {
+		// Only delete the service if it's not there anymore to prevent flapping
+		// old: if !ok || len(endpoints) == 0 {
+		if !ok {
 			glog.V(1).Infof("Found a IPVS service %s which is no longer needed so cleaning up",
 				ipvsServiceString(ipvsSvc))
 			err := nsc.ln.ipvsDelService(ipvsSvc)
@@ -1134,21 +1154,10 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				if !validEp {
 					glog.V(1).Infof("Found a destination %s in service %s which is no longer needed so cleaning up",
 						ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					err := nsc.ln.ipvsDelDestination(ipvsSvc, dst)
+					err = nsc.ipvsDeleteDestination(ipvsSvc, dst)
 					if err != nil {
 						glog.Errorf("Failed to delete destination %s from ipvs service %s",
 							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					}
-
-					// flush conntrack when endpoint for a UDP service changes
-					if ipvsSvc.Protocol == syscall.IPPROTO_UDP {
-						out, err := exec.Command("conntrack", "-D", "--orig-dst", dst.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(dst.Port))).CombinedOutput()
-						if err != nil {
-							if matched := re.MatchString(string(out)); !matched {
-								glog.Error("Failed to delete conntrack entry for endpoint: " + dst.Address.String() + ":" + strconv.Itoa(int(dst.Port)) + " due to " + err.Error())
-							}
-						}
-						glog.V(1).Infof("Deleted conntrack entry for endpoint: " + dst.Address.String() + ":" + strconv.Itoa(int(dst.Port)))
 					}
 				}
 			}
@@ -2369,6 +2378,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 
 	nsc.syncPeriod = config.IpvsSyncPeriod
+	nsc.gracefulPeriod = config.IpvsGracefulPeriod
+	nsc.gracefulTermination = config.IpvsGracefulTermination
 	nsc.globalHairpin = config.GlobalHairpinMode
 
 	nsc.serviceMap = make(serviceInfoMap)
