@@ -59,6 +59,8 @@ const (
 	ipvsServicesIPSetName             = "kube-router-ipvs-services"
 	serviceIPsIPSetName               = "kube-router-service-ips"
 	ipvsFirewallChainName             = "KUBE-ROUTER-SERVICES"
+	synctypeAll                       = iota
+	synctypeIpvs
 )
 
 var (
@@ -229,6 +231,7 @@ type NetworkServicesController struct {
 	gracefulPeriod      time.Duration
 	gracefulQueue       gracefulQueue
 	gracefulTermination bool
+	syncChan            chan int
 }
 
 // internal representation of kubernetes service
@@ -273,10 +276,10 @@ type endpointsInfoMap map[string][]endpointsInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
+	defer close(nsc.syncChan)
 
 	glog.Infof("Starting network services controller")
 
@@ -333,52 +336,74 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New("Error setting up ipvs firewall: " + err.Error())
 	}
 
-	if nsc.gracefulTermination {
-		go func() {
-			gracefulTicker := time.NewTicker(5 * time.Second)
-			defer gracefulTicker.Stop()
-			for {
-				select {
-				case <-stopCh:
-					glog.Info("Shutting down graceful termination sync loop")
-					return
-				case <-gracefulTicker.C:
-					if nsc.readyForUpdates {
-						nsc.gracefulSync()
-					}
-				}
-			}
-		}()
+	gracefulTicker := time.NewTicker(5 * time.Second)
+	defer gracefulTicker.Stop()
+
+	select {
+	case <-stopCh:
+		glog.Info("Shutting down network services controller")
+		return nil
+	default:
+		err := nsc.doSync()
+		if err != nil {
+			glog.Fatalf("Failed to perform initial full sync %s", err.Error())
+		}
+		nsc.readyForUpdates = true
 	}
 
-	// loop forever unitl notified to stop on stopCh
+	// loop forever until notified to stop on stopCh
 	for {
 		select {
 		case <-stopCh:
 			glog.Info("Shutting down network services controller")
 			return nil
-		default:
-		}
 
-		glog.V(1).Info("Performing periodic sync of ipvs services")
-		err := nsc.sync()
-		if err != nil {
-			glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
-			glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
-		} else {
-			healthcheck.SendHeartBeat(healthChan, "NSC")
-		}
-		nsc.readyForUpdates = true
-		select {
-		case <-stopCh:
-			glog.Info("Shutting down network services controller")
-			return nil
+		case <-gracefulTicker.C:
+			if nsc.readyForUpdates && nsc.gracefulTermination {
+				glog.V(3).Info("Performing periodic graceful destination cleanup")
+				nsc.gracefulSync()
+			}
+
+		case perform := <-nsc.syncChan:
+			switch perform {
+			case synctypeAll:
+				glog.V(1).Info("Performing requested full sync of services")
+				err := nsc.doSync()
+				if err != nil {
+					glog.Errorf("Error during full sync in network service controller. Error: " + err.Error())
+				}
+			case synctypeIpvs:
+				glog.V(1).Info("Performing requested sync of ipvs services")
+				nsc.mu.Lock()
+				err := nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+				nsc.mu.Unlock()
+				if err != nil {
+					glog.Errorf("Error during ipvs sync in network service controller. Error: " + err.Error())
+				}
+			}
+
 		case <-t.C:
+			glog.V(1).Info("Performing periodic sync of ipvs services")
+			err := nsc.doSync()
+			if err != nil {
+				glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
+				glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
+			} else {
+				healthcheck.SendHeartBeat(healthChan, "NSC")
+			}
 		}
 	}
 }
 
-func (nsc *NetworkServicesController) sync() error {
+func (nsc *NetworkServicesController) sync(syncType int) {
+	select {
+	case nsc.syncChan <- syncType:
+	default:
+		glog.V(2).Infof("Already pending sync, dropping request for type %d", syncType)
+	}
+}
+
+func (nsc *NetworkServicesController) doSync() error {
 	var err error
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
@@ -751,7 +776,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
 		glog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
-		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		nsc.sync(synctypeIpvs)
 	} else {
 		glog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", ep.Namespace, ep.Name)
 	}
@@ -781,7 +806,7 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
 		glog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
-		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		nsc.sync(synctypeIpvs)
 	} else {
 		glog.V(1).Infof("Skipping syncing IPVS services for update to service: %s/%s as nothing changed", svc.Namespace, svc.Name)
 	}
@@ -804,9 +829,7 @@ func hasActiveEndpoints(svc *serviceInfo, endpoints []endpointsInfo) bool {
 // sync the ipvs service and server details configured to reflect the desired state of services and endpoint
 // as learned from services and endpoints information from the api server
 func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap) error {
-
 	var ipvsSvcs []*ipvs.Service
-
 	start := time.Now()
 
 	defer func() {
@@ -2358,6 +2381,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	if err != nil {
 		return nil, err
 	}
+
 	nsc := NetworkServicesController{ln: ln}
 
 	if config.MetricsEnabled {
@@ -2378,6 +2402,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 
 	nsc.syncPeriod = config.IpvsSyncPeriod
+	nsc.syncChan = make(chan int, 2)
 	nsc.gracefulPeriod = config.IpvsGracefulPeriod
 	nsc.gracefulTermination = config.IpvsGracefulTermination
 	nsc.globalHairpin = config.GlobalHairpinMode
