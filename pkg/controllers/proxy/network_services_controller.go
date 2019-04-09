@@ -1648,7 +1648,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 				if err != nil {
 					glog.Errorf("Unable to delete hairpin rule \"%s\" from chain %s: %e", ruleFromNode, hairpinChain, err)
 				} else {
-					glog.V(1).Info("Deleted invalid/outdated hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
+					glog.V(1).Infof("Deleted invalid/outdated hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
 				}
 			} else {
 				// Ignore the chain creation rule
