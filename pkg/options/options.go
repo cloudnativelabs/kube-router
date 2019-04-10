@@ -36,6 +36,8 @@ type KubeRouterConfig struct {
 	HostnameOverride        string
 	IPTablesSyncPeriod      time.Duration
 	IpvsSyncPeriod          time.Duration
+	IpvsGracefulPeriod      time.Duration
+	IpvsGracefulTermination bool
 	Kubeconfig              string
 	MasqueradeAll           bool
 	Master                  string
@@ -64,6 +66,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		CacheSyncTimeout:   1 * time.Minute,
 		IpvsSyncPeriod:     5 * time.Minute,
 		IPTablesSyncPeriod: 5 * time.Minute,
+		IpvsGracefulPeriod: 30 * time.Second,
 		RoutesSyncPeriod:   5 * time.Minute,
 		EnableOverlay:      true,
 		OverlayType:        "subnet",
@@ -99,6 +102,10 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod,
 		"The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
+	fs.DurationVar(&s.IpvsGracefulPeriod, "ipvs-graceful-period", s.IpvsGracefulPeriod,
+		"The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
+	fs.BoolVar(&s.IpvsGracefulTermination, "ipvs-graceful-termination", false,
+		"Enables the experimental IPVS graceful terminaton capability")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,

@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -60,6 +59,8 @@ const (
 	ipvsServicesIPSetName             = "kube-router-ipvs-services"
 	serviceIPsIPSetName               = "kube-router-service-ips"
 	ipvsFirewallChainName             = "KUBE-ROUTER-SERVICES"
+	synctypeAll                       = iota
+	synctypeIpvs
 )
 
 var (
@@ -226,6 +227,11 @@ type NetworkServicesController struct {
 
 	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
+
+	gracefulPeriod      time.Duration
+	gracefulQueue       gracefulQueue
+	gracefulTermination bool
+	syncChan            chan int
 }
 
 // internal representation of kubernetes service
@@ -270,10 +276,10 @@ type endpointsInfoMap map[string][]endpointsInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
-
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
+	defer close(nsc.syncChan)
 
 	glog.Infof("Starting network services controller")
 
@@ -330,34 +336,74 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return errors.New("Error setting up ipvs firewall: " + err.Error())
 	}
 
-	// loop forever unitl notified to stop on stopCh
+	gracefulTicker := time.NewTicker(5 * time.Second)
+	defer gracefulTicker.Stop()
+
+	select {
+	case <-stopCh:
+		glog.Info("Shutting down network services controller")
+		return nil
+	default:
+		err := nsc.doSync()
+		if err != nil {
+			glog.Fatalf("Failed to perform initial full sync %s", err.Error())
+		}
+		nsc.readyForUpdates = true
+	}
+
+	// loop forever until notified to stop on stopCh
 	for {
 		select {
 		case <-stopCh:
 			glog.Info("Shutting down network services controller")
 			return nil
-		default:
-		}
 
-		glog.V(1).Info("Performing periodic sync of ipvs services")
-		err := nsc.sync()
-		if err != nil {
-			glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
-			glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
-		} else {
-			healthcheck.SendHeartBeat(healthChan, "NSC")
-		}
-		nsc.readyForUpdates = true
-		select {
-		case <-stopCh:
-			glog.Info("Shutting down network services controller")
-			return nil
+		case <-gracefulTicker.C:
+			if nsc.readyForUpdates && nsc.gracefulTermination {
+				glog.V(3).Info("Performing periodic graceful destination cleanup")
+				nsc.gracefulSync()
+			}
+
+		case perform := <-nsc.syncChan:
+			switch perform {
+			case synctypeAll:
+				glog.V(1).Info("Performing requested full sync of services")
+				err := nsc.doSync()
+				if err != nil {
+					glog.Errorf("Error during full sync in network service controller. Error: " + err.Error())
+				}
+			case synctypeIpvs:
+				glog.V(1).Info("Performing requested sync of ipvs services")
+				nsc.mu.Lock()
+				err := nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+				nsc.mu.Unlock()
+				if err != nil {
+					glog.Errorf("Error during ipvs sync in network service controller. Error: " + err.Error())
+				}
+			}
+
 		case <-t.C:
+			glog.V(1).Info("Performing periodic sync of ipvs services")
+			err := nsc.doSync()
+			if err != nil {
+				glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
+				glog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
+			} else {
+				healthcheck.SendHeartBeat(healthChan, "NSC")
+			}
 		}
 	}
 }
 
-func (nsc *NetworkServicesController) sync() error {
+func (nsc *NetworkServicesController) sync(syncType int) {
+	select {
+	case nsc.syncChan <- syncType:
+	default:
+		glog.V(2).Infof("Already pending sync, dropping request for type %d", syncType)
+	}
+}
+
+func (nsc *NetworkServicesController) doSync() error {
 	var err error
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
@@ -730,7 +776,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
 		glog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
-		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		nsc.sync(synctypeIpvs)
 	} else {
 		glog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", ep.Namespace, ep.Name)
 	}
@@ -760,7 +806,7 @@ func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
 		glog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
-		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+		nsc.sync(synctypeIpvs)
 	} else {
 		glog.V(1).Infof("Skipping syncing IPVS services for update to service: %s/%s as nothing changed", svc.Namespace, svc.Name)
 	}
@@ -783,12 +829,7 @@ func hasActiveEndpoints(svc *serviceInfo, endpoints []endpointsInfo) bool {
 // sync the ipvs service and server details configured to reflect the desired state of services and endpoint
 // as learned from services and endpoints information from the api server
 func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointsInfoMap) error {
-
 	var ipvsSvcs []*ipvs.Service
-
-	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to check output and don't Error when matching
-	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
-
 	start := time.Now()
 
 	defer func() {
@@ -1059,9 +1100,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	// cleanup stale IPs on dummy interface
 	glog.V(1).Info("Cleaning up if any, old service IPs on dummy interface")
 	addrActive := make(map[string]bool)
-	for k, endpoints := range activeServiceEndpointMap {
+	for k := range activeServiceEndpointMap {
 		// verify active and its a generateIpPortId() type service
-		if len(endpoints) > 0 && strings.Contains(k, "-") {
+		if strings.Contains(k, "-") {
 			parts := strings.SplitN(k, "-", 3)
 			addrActive[parts[0]] = true
 		}
@@ -1109,7 +1150,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 
 		endpoints, ok := activeServiceEndpointMap[key]
-		if !ok || len(endpoints) == 0 {
+		// Only delete the service if it's not there anymore to prevent flapping
+		// old: if !ok || len(endpoints) == 0 {
+		if !ok {
 			glog.V(1).Infof("Found a IPVS service %s which is no longer needed so cleaning up",
 				ipvsServiceString(ipvsSvc))
 			err := nsc.ln.ipvsDelService(ipvsSvc)
@@ -1134,21 +1177,10 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				if !validEp {
 					glog.V(1).Infof("Found a destination %s in service %s which is no longer needed so cleaning up",
 						ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					err := nsc.ln.ipvsDelDestination(ipvsSvc, dst)
+					err = nsc.ipvsDeleteDestination(ipvsSvc, dst)
 					if err != nil {
 						glog.Errorf("Failed to delete destination %s from ipvs service %s",
 							ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))
-					}
-
-					// flush conntrack when endpoint for a UDP service changes
-					if ipvsSvc.Protocol == syscall.IPPROTO_UDP {
-						out, err := exec.Command("conntrack", "-D", "--orig-dst", dst.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(dst.Port))).CombinedOutput()
-						if err != nil {
-							if matched := re.MatchString(string(out)); !matched {
-								glog.Error("Failed to delete conntrack entry for endpoint: " + dst.Address.String() + ":" + strconv.Itoa(int(dst.Port)) + " due to " + err.Error())
-							}
-						}
-						glog.V(1).Infof("Deleted conntrack entry for endpoint: " + dst.Address.String() + ":" + strconv.Itoa(int(dst.Port)))
 					}
 				}
 			}
@@ -1616,7 +1648,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 				if err != nil {
 					glog.Errorf("Unable to delete hairpin rule \"%s\" from chain %s: %e", ruleFromNode, hairpinChain, err)
 				} else {
-					glog.V(1).Info("Deleted invalid/outdated hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
+					glog.V(1).Infof("Deleted invalid/outdated hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
 				}
 			} else {
 				// Ignore the chain creation rule
@@ -2349,6 +2381,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	if err != nil {
 		return nil, err
 	}
+
 	nsc := NetworkServicesController{ln: ln}
 
 	if config.MetricsEnabled {
@@ -2369,6 +2402,9 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 
 	nsc.syncPeriod = config.IpvsSyncPeriod
+	nsc.syncChan = make(chan int, 2)
+	nsc.gracefulPeriod = config.IpvsGracefulPeriod
+	nsc.gracefulTermination = config.IpvsGracefulTermination
 	nsc.globalHairpin = config.GlobalHairpinMode
 
 	nsc.serviceMap = make(serviceInfoMap)

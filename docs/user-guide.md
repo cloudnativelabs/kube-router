@@ -57,6 +57,8 @@ Usage of kube-router:
   -h, --help                             Print usage information.
       --hostname-override string         Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
       --iptables-sync-period duration    The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
+      --ipvs-graceful-period duration    The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 30s)
+      --ipvs-graceful-termination        Enables the experimental IPVS graceful terminaton capability
       --ipvs-sync-period duration        The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --kubeconfig string                Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --masquerade-all                   SNAT all traffic to cluster IP/node port.
@@ -284,6 +286,13 @@ If you would like to use `HostPort` functionality below changes are required in 
 - Restart the container runtime
 
 For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-hostport.yaml) with necessary changes required for `HostPort` functionality.
+
+## IPVS Graceful termination support
+
+As of 0.2.6 we support experimental graceful termination of IPVS destinations. When possible the pods's TerminationGracePeriodSeconds is used, if it cannot be retrived for some reason
+the fallback period is 30 seconds and can be adjusted with `--ipvs-graceful-period` cli-opt
+
+graceful termination works in such a way that when kube-router receives a delete endpoint notification for a service it's weight is adjusted to 0 before getting deleted after he termination grace period has passed or the Active & Inactive connections goes down to 0.
 
 ## BGP configuration
 

@@ -137,4 +137,3 @@ Testing and development by [ShopGun](https://shopgun.com/about)
 <p align="left">
   <img height="90" src="docs/img/shopgun_logo.png"> </image>
 </p>
-
