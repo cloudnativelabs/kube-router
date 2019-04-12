@@ -24,6 +24,7 @@ type KubeRouterConfig struct {
 	ClusterAsn                     uint
 	ClusterCIDR                    string
 	DisableSrcDstCheck             bool
+	EgressIPAnnotation             string
 	EnableCNI                      bool
 	EnableiBGP                     bool
 	EnableOverlay                  bool
@@ -167,4 +168,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.OverrideNextHop, "override-nexthop", false, "Override the next-hop in bgp routes sent to peers with the local ip.")
 	fs.BoolVar(&s.DisableSrcDstCheck, "disable-source-dest-check", true,
 		"Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way.")
+	fs.StringVar(&s.EgressIPAnnotation, "pod-egress-ip-annotation", "kube-router.io/pod.egress.ip",
+		"Node annotation to determine the ip to use for pod egress. "+
+			"If no annotation is found on the node, the pod source ip will be masqueraded to the node ip if pod egress is enabled.")
 }

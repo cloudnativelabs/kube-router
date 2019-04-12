@@ -3,6 +3,7 @@ package utils
 import (
 	"errors"
 	"fmt"
+	"github.com/golang/glog"
 	"net"
 	"os"
 
@@ -57,4 +58,21 @@ func GetNodeIP(node *apiv1.Node) (net.IP, error) {
 		return net.ParseIP(addresses[0].Address), nil
 	}
 	return nil, errors.New("host IP unknown")
+}
+
+//GetNodeEgressIP returns the node's egress ip or nil if no ip address was specified for the node
+func GetNodeEgressIP(node *apiv1.Node, egressIPAnnotation string) net.IP {
+	var egressIP net.IP
+
+	if egressIPString, found := node.ObjectMeta.Annotations[egressIPAnnotation]; found {
+		egressIP = net.ParseIP(egressIPString)
+		if egressIP == nil {
+			glog.Warningf("Egress IP annotation '%s' for node '%s' has invalid value '%s'. Using node ip for egress.",
+				egressIPAnnotation, node.Name, egressIPString)
+		}
+	} else {
+		glog.V(1).Infof("Egress IP annotation '%s' not found on node '%s'. Using node ip for egress.", egressIPAnnotation, node.Name)
+	}
+
+	return egressIP
 }

@@ -109,6 +109,7 @@ type NetworkRoutingController struct {
 	pathPrepend                    bool
 	localAddressList               []string
 	overrideNextHop                bool
+	egressIP                       net.IP
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -171,14 +172,14 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	if nrc.enablePodEgress {
 		glog.V(1).Infoln("Enabling Pod egress.")
 
-		err = nrc.createPodEgressRule()
+		err = nrc.createPodEgressRules()
 		if err != nil {
 			glog.Errorf("Error enabling Pod egress: %s", err.Error())
 		}
 	} else {
 		glog.V(1).Infoln("Disabling Pod egress.")
 
-		err = nrc.deletePodEgressRule()
+		err = nrc.deletePodEgressRules()
 		if err != nil {
 			glog.Warningf("Error cleaning up Pod Egress related networking: %s", err)
 		}
@@ -280,6 +281,12 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		glog.V(1).Infof("Performing periodic sync of service VIP routes")
 		nrc.advertiseVIPs(toAdvertise)
 		nrc.withdrawVIPs(toWithdraw)
+
+		//advertise external egress IP if there is one configured
+		if nrc.egressIP != nil {
+			glog.V(1).Infof("Performing periodic sync of pod egress IP")
+			nrc.bgpAdvertiseVIP(nrc.egressIP.String())
+		}
 
 		glog.V(1).Info("Performing periodic sync of pod CIDR routes")
 		err = nrc.advertisePodRoute()
@@ -511,7 +518,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 // Cleanup performs the cleanup of configurations done
 func (nrc *NetworkRoutingController) Cleanup() {
 	// Pod egress cleanup
-	err := nrc.deletePodEgressRule()
+	err := nrc.deletePodEgressRules()
 	if err != nil {
 		glog.Warningf("Error deleting Pod egress iptables rule: %s", err.Error())
 	}
@@ -926,6 +933,8 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 
 	if kubeRouterConfig.EnablePodEgress || len(nrc.clusterCIDR) != 0 {
 		nrc.enablePodEgress = true
+		nrc.egressIP = utils.GetNodeEgressIP(node, kubeRouterConfig.EgressIPAnnotation)
+		nrc.preparePodEgress(node, kubeRouterConfig)
 	}
 
 	if kubeRouterConfig.ClusterAsn != 0 {
