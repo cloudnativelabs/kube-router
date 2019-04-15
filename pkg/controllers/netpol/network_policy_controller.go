@@ -169,7 +169,19 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 
 // OnPodUpdate handles updates to pods from the Kubernetes api server
 func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
-	pod := obj.(*api.Pod)
+	pod, isPod := obj.(*api.Pod)
+	if !isPod {
+		deletedState, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			glog.Errorf("Received unexpected object: %v", obj)
+			return
+		}
+		pod, ok = deletedState.Obj.(*api.Pod)
+		if !ok {
+			glog.Errorf("DeletedFinalStateUnknown contained non-Pod object: %v", deletedState.Obj)
+			return
+		}
+	}
 	glog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
 
 	if !npc.readyForUpdates {
