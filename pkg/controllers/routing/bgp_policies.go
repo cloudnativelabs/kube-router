@@ -10,7 +10,7 @@ import (
 	v1core "k8s.io/api/core/v1"
 )
 
-// BGP export policies are added so that following conditions are met
+// BGP export policies are added so that following conditions are met:
 //
 // - by default export of all routes from the RIB to the neighbour's is denied, and explicity statements are added i
 //   to permit the desired routes to be exported
@@ -24,7 +24,10 @@ import (
 // - each node is NOT allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) to
 //   iBGP peers
 // - an option to allow overriding the next-hop-address with the outgoing ip for external bgp peers
-func (nrc *NetworkRoutingController) addExportPolicies() error {
+//
+// BGP import policies are added so that the following conditions are met:
+// - do not import Service VIPs at all, instead traffic to service VIPs should be set to the gateway and ECMPed from there
+func (nrc *NetworkRoutingController) addPolicies() error {
 
 	// we are rr server do not add export policies
 	if nrc.bgpRRServer {
@@ -51,18 +54,18 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	}
 
 	// creates prefix set to represent all the advertisable IP associated with the services
-	advIpPrefixList := make([]config.Prefix, 0)
+	advIPPrefixList := make([]config.Prefix, 0)
 	advIps, _, _ := nrc.getAllVIPs()
 	for _, ip := range advIps {
-		advIpPrefixList = append(advIpPrefixList, config.Prefix{IpPrefix: ip + "/32"})
+		advIPPrefixList = append(advIPPrefixList, config.Prefix{IpPrefix: ip + "/32"})
 	}
-	clusterIpPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
+	clusterIPPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
 		PrefixSetName: "clusteripprefixset",
-		PrefixList:    advIpPrefixList,
+		PrefixList:    advIPPrefixList,
 	})
-	err = nrc.bgpServer.ReplaceDefinedSet(clusterIpPrefixSet)
+	err = nrc.bgpServer.ReplaceDefinedSet(clusterIPPrefixSet)
 	if err != nil {
-		nrc.bgpServer.AddDefinedSet(clusterIpPrefixSet)
+		nrc.bgpServer.AddDefinedSet(clusterIPPrefixSet)
 	}
 
 	statements := make([]config.Statement, 0)
