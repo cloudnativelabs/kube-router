@@ -1482,7 +1482,7 @@ func Test_OnNodeUpdate(t *testing.T) {
 }
 */
 
-func Test_addExportPolicies(t *testing.T) {
+func Test_AddPolicies(t *testing.T) {
 	testcases := []struct {
 		name                   string
 		nrc                    *NetworkRoutingController
@@ -2167,7 +2167,7 @@ func Test_addExportPolicies(t *testing.T) {
 			informerFactory := informers.NewSharedInformerFactory(testcase.nrc.clientset, 0)
 			nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 			testcase.nrc.nodeLister = nodeInformer.GetIndexer()
-			err = testcase.nrc.addPolicies()
+			err = testcase.nrc.AddPolicies()
 			if !reflect.DeepEqual(err, testcase.err) {
 				t.Logf("expected err %v", testcase.err)
 				t.Logf("actual err %v", err)

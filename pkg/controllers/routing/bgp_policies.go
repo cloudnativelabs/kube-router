@@ -10,25 +10,9 @@ import (
 	v1core "k8s.io/api/core/v1"
 )
 
-// BGP export policies are added so that following conditions are met:
-//
-// - by default export of all routes from the RIB to the neighbour's is denied, and explicity statements are added i
-//   to permit the desired routes to be exported
-// - each node is allowed to advertise its assigned pod CIDR's to all of its iBGP peer neighbours with same ASN if --enable-ibgp=true
-// - each node is allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
-//   only if --advertise-pod-cidr flag is set to true
-// - each node is NOT allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
-//   only if --advertise-pod-cidr flag is set to false
-// - each node is allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) ONLY to external
-//   BGP peers
-// - each node is NOT allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) to
-//   iBGP peers
-// - an option to allow overriding the next-hop-address with the outgoing ip for external bgp peers
-//
-// BGP import policies are added so that the following conditions are met:
-// - do not import Service VIPs at all, instead traffic to service VIPs should be set to the gateway and ECMPed from there
-func (nrc *NetworkRoutingController) addPolicies() error {
-
+// First create all prefix and neighbor sets
+// Then apply export policies
+func (nrc *NetworkRoutingController) AddPolicies() error {
 	// we are rr server do not add export policies
 	if nrc.bgpRRServer {
 		return nil
@@ -68,18 +52,6 @@ func (nrc *NetworkRoutingController) addPolicies() error {
 		nrc.bgpServer.AddDefinedSet(clusterIPPrefixSet)
 	}
 
-	statements := make([]config.Statement, 0)
-
-	var bgpActions config.BgpActions
-	if nrc.pathPrepend {
-		bgpActions = config.BgpActions{
-			SetAsPathPrepend: config.SetAsPathPrepend{
-				As:      nrc.pathPrependAS,
-				RepeatN: nrc.pathPrependCount,
-			},
-		}
-	}
-
 	if nrc.bgpEnableInternal {
 		// Get the current list of the nodes from the local cache
 		nodes := nrc.nodeLister.List()
@@ -96,10 +68,70 @@ func (nrc *NetworkRoutingController) addPolicies() error {
 			NeighborSetName:  "iBGPpeerset",
 			NeighborInfoList: iBGPPeers,
 		})
-		err = nrc.bgpServer.ReplaceDefinedSet(iBGPPeerNS)
+		err := nrc.bgpServer.ReplaceDefinedSet(iBGPPeerNS)
 		if err != nil {
 			nrc.bgpServer.AddDefinedSet(iBGPPeerNS)
 		}
+	}
+
+	externalBgpPeers := make([]string, 0)
+	if len(nrc.globalPeerRouters) > 0 {
+		for _, peer := range nrc.globalPeerRouters {
+			externalBgpPeers = append(externalBgpPeers, peer.Config.NeighborAddress)
+		}
+	}
+	if len(nrc.nodePeerRouters) > 0 {
+		for _, peer := range nrc.nodePeerRouters {
+			externalBgpPeers = append(externalBgpPeers, peer)
+		}
+	}
+	if len(externalBgpPeers) > 0 {
+		ns, _ := table.NewNeighborSet(config.NeighborSet{
+			NeighborSetName:  "externalpeerset",
+			NeighborInfoList: externalBgpPeers,
+		})
+		err := nrc.bgpServer.ReplaceDefinedSet(ns)
+		if err != nil {
+			nrc.bgpServer.AddDefinedSet(ns)
+		}
+	}
+
+	err = nrc.addExportPolicies()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// BGP export policies are added so that following conditions are met:
+//
+// - by default export of all routes from the RIB to the neighbour's is denied, and explicity statements are added i
+//   to permit the desired routes to be exported
+// - each node is allowed to advertise its assigned pod CIDR's to all of its iBGP peer neighbours with same ASN if --enable-ibgp=true
+// - each node is allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
+//   only if --advertise-pod-cidr flag is set to true
+// - each node is NOT allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
+//   only if --advertise-pod-cidr flag is set to false
+// - each node is allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) ONLY to external
+//   BGP peers
+// - each node is NOT allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) to
+//   iBGP peers
+// - an option to allow overriding the next-hop-address with the outgoing ip for external bgp peers
+func (nrc *NetworkRoutingController) addExportPolicies() error {
+	statements := make([]config.Statement, 0)
+
+	var bgpActions config.BgpActions
+	if nrc.pathPrepend {
+		bgpActions = config.BgpActions{
+			SetAsPathPrepend: config.SetAsPathPrepend{
+				As:      nrc.pathPrependAS,
+				RepeatN: nrc.pathPrependCount,
+			},
+		}
+	}
+
+	if nrc.bgpEnableInternal {
 		actions := config.Actions{
 			RouteDisposition: config.ROUTE_DISPOSITION_ACCEPT_ROUTE,
 		}
@@ -121,26 +153,7 @@ func (nrc *NetworkRoutingController) addPolicies() error {
 			})
 	}
 
-	externalBgpPeers := make([]string, 0)
-	if len(nrc.globalPeerRouters) != 0 {
-		for _, peer := range nrc.globalPeerRouters {
-			externalBgpPeers = append(externalBgpPeers, peer.Config.NeighborAddress)
-		}
-	}
-	if len(nrc.nodePeerRouters) != 0 {
-		for _, peer := range nrc.nodePeerRouters {
-			externalBgpPeers = append(externalBgpPeers, peer)
-		}
-	}
-	if len(externalBgpPeers) > 0 {
-		ns, _ := table.NewNeighborSet(config.NeighborSet{
-			NeighborSetName:  "externalpeerset",
-			NeighborInfoList: externalBgpPeers,
-		})
-		err = nrc.bgpServer.ReplaceDefinedSet(ns)
-		if err != nil {
-			nrc.bgpServer.AddDefinedSet(ns)
-		}
+	if len(nrc.globalPeerRouters) > 0 || len(nrc.nodePeerRouters) > 0 {
 		if nrc.overrideNextHop {
 			bgpActions.SetNextHop = "self"
 		}
