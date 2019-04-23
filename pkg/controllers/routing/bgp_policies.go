@@ -12,6 +12,7 @@ import (
 
 // First create all prefix and neighbor sets
 // Then apply export policies
+// Then apply import policies
 func (nrc *NetworkRoutingController) AddPolicies() error {
 	// we are rr server do not add export policies
 	if nrc.bgpRRServer {
@@ -97,6 +98,11 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 	}
 
 	err = nrc.addExportPolicies()
+	if err != nil {
+		return err
+	}
+
+	err = nrc.addImportPolicies()
 	if err != nil {
 		return err
 	}
@@ -195,7 +201,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	}
 
 	definition := config.PolicyDefinition{
-		Name:       "kube_router",
+		Name:       "kube_router_export",
 		Statements: statements,
 	}
 
@@ -207,7 +213,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	policyAlreadyExists := false
 	policyList := nrc.bgpServer.GetPolicy()
 	for _, existingPolicy := range policyList {
-		if existingPolicy.Name == "kube_router" {
+		if existingPolicy.Name == "kube_router_export" {
 			policyAlreadyExists = true
 		}
 	}
@@ -223,7 +229,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	_, existingPolicyAssignments, err := nrc.bgpServer.GetPolicyAssignment("", table.POLICY_DIRECTION_EXPORT)
 	if err == nil {
 		for _, existingPolicyAssignment := range existingPolicyAssignments {
-			if existingPolicyAssignment.Name == "kube_router" {
+			if existingPolicyAssignment.Name == "kube_router_export" {
 				policyAssignmentExists = true
 			}
 		}
@@ -243,6 +249,79 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			table.POLICY_DIRECTION_EXPORT,
 			[]*config.PolicyDefinition{&definition},
 			table.ROUTE_TYPE_REJECT)
+		if err != nil {
+			return errors.New("Failed to replace policy assignment: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+// BGP import policies are added so that the following conditions are met:
+// - do not import Service VIPs at all, instead traffic to service VIPs should be sent to the gateway and ECMPed from there
+func (nrc *NetworkRoutingController) addImportPolicies() error {
+	statements := make([]config.Statement, 0)
+
+	statements = append(statements, config.Statement{
+		Conditions: config.Conditions{
+			MatchPrefixSet: config.MatchPrefixSet{
+				PrefixSet: "clusteripprefixset",
+			},
+		},
+		Actions: config.Actions{
+			RouteDisposition: config.ROUTE_DISPOSITION_REJECT_ROUTE,
+		},
+	})
+
+	definition := config.PolicyDefinition{
+		Name:       "kube_router_import",
+		Statements: statements,
+	}
+
+	policy, err := table.NewPolicy(definition)
+	if err != nil {
+		return errors.New("Failed to create new policy: " + err.Error())
+	}
+
+	policyAlreadyExists := false
+	policyList := nrc.bgpServer.GetPolicy()
+	for _, existingPolicy := range policyList {
+		if existingPolicy.Name == "kube_router_import" {
+			policyAlreadyExists = true
+		}
+	}
+
+	if !policyAlreadyExists {
+		err = nrc.bgpServer.AddPolicy(policy, false)
+		if err != nil {
+			return errors.New("Failed to add policy: " + err.Error())
+		}
+	}
+
+	policyAssignmentExists := false
+	_, existingPolicyAssignments, err := nrc.bgpServer.GetPolicyAssignment("", table.POLICY_DIRECTION_IMPORT)
+	if err == nil {
+		for _, existingPolicyAssignment := range existingPolicyAssignments {
+			if existingPolicyAssignment.Name == "kube_router_import" {
+				policyAssignmentExists = true
+			}
+		}
+	}
+
+	// Default policy is to accept
+	if !policyAssignmentExists {
+		err = nrc.bgpServer.AddPolicyAssignment("",
+			table.POLICY_DIRECTION_IMPORT,
+			[]*config.PolicyDefinition{&definition},
+			table.ROUTE_TYPE_ACCEPT)
+		if err != nil {
+			return errors.New("Failed to add policy assignment: " + err.Error())
+		}
+	} else {
+		err = nrc.bgpServer.ReplacePolicyAssignment("",
+			table.POLICY_DIRECTION_IMPORT,
+			[]*config.PolicyDefinition{&definition},
+			table.ROUTE_TYPE_ACCEPT)
 		if err != nil {
 			return errors.New("Failed to replace policy assignment: " + err.Error())
 		}

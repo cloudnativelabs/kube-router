@@ -1577,7 +1577,7 @@ func Test_AddPolicies(t *testing.T) {
 			&config.DefinedSets{},
 			[]*config.Statement{
 				{
-					Name: "kube_router_stmt0",
+					Name: "kube_router_export_stmt0",
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "podcidrprefixset",
@@ -1696,7 +1696,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			[]*config.Statement{
 				{
-					Name: "kube_router_stmt0",
+					Name: "kube_router_export_stmt0",
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "podcidrprefixset",
@@ -1712,7 +1712,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 				},
 				{
-					Name: "kube_router_stmt1",
+					Name: "kube_router_export_stmt1",
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
@@ -1831,7 +1831,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			[]*config.Statement{
 				{
-					Name: "kube_router_stmt0",
+					Name: "kube_router_export_stmt0",
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
@@ -1953,7 +1953,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			[]*config.Statement{
 				{
-					Name: "kube_router_stmt0",
+					Name: "kube_router_export_stmt0",
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "podcidrprefixset",
@@ -1969,7 +1969,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 				},
 				{
-					Name: "kube_router_stmt1",
+					Name: "kube_router_export_stmt1",
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
@@ -2096,7 +2096,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			[]*config.Statement{
 				{
-					Name: "kube_router_stmt0",
+					Name: "kube_router_export_stmt0",
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "podcidrprefixset",
@@ -2112,7 +2112,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 				},
 				{
-					Name: "kube_router_stmt1",
+					Name: "kube_router_export_stmt1",
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
@@ -2210,13 +2210,13 @@ func Test_AddPolicies(t *testing.T) {
 			policies := testcase.nrc.bgpServer.GetPolicy()
 			policyExists := false
 			for _, policy := range policies {
-				if policy.Name == "kube_router" {
+				if policy.Name == "kube_router_export" {
 					policyExists = true
 					break
 				}
 			}
 			if !policyExists {
-				t.Errorf("policy 'kube_router' was not added")
+				t.Errorf("policy 'kube_router_export' was not added")
 			}
 
 			routeType, policyAssignments, err := testcase.nrc.bgpServer.GetPolicyAssignment("", table.POLICY_DIRECTION_EXPORT)
@@ -2229,13 +2229,13 @@ func Test_AddPolicies(t *testing.T) {
 
 			policyAssignmentExists := false
 			for _, policyAssignment := range policyAssignments {
-				if policyAssignment.Name == "kube_router" {
+				if policyAssignment.Name == "kube_router_export" {
 					policyAssignmentExists = true
 				}
 			}
 
 			if !policyAssignmentExists {
-				t.Error("export policy assignment 'kube_router' was not added")
+				t.Error("export policy assignment 'kube_router_export' was not added")
 			}
 
 			statements := testcase.nrc.bgpServer.GetStatement()
