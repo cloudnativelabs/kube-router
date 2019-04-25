@@ -549,7 +549,15 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	currentPodCidrs := make([]string, 0)
 	currentNodeIPs := make([]string, 0)
 	for _, node := range nodes.Items {
-		currentPodCidrs = append(currentPodCidrs, node.Spec.PodCIDR)
+		podCIDR := node.GetAnnotations()["kube-router.io/pod-cidr"]
+		if podCIDR == "" {
+			podCIDR = node.Spec.PodCIDR
+		}
+		if podCIDR == "" {
+			glog.Warningf("Couldn't determine PodCIDR of the %v node", node.Name)
+			continue
+		}
+		currentPodCidrs = append(currentPodCidrs, podCIDR)
 		nodeIP, err := utils.GetNodeIP(&node)
 		if err != nil {
 			return fmt.Errorf("Failed to find a node IP: %s", err)
