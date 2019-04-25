@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/sirupsen/logrus"
@@ -100,7 +101,7 @@ func fillService(s *Service) nl.NetlinkRequestData {
 	return cmdAttr
 }
 
-func fillDestinaton(d *Destination) nl.NetlinkRequestData {
+func fillDestination(d *Destination) nl.NetlinkRequestData {
 	cmdAttr := nl.NewRtAttr(ipvsCmdAttrDest, nil)
 
 	nl.NewRtAttrChild(cmdAttr, ipvsDestAttrAddress, rawIPData(d.Address))
@@ -134,7 +135,7 @@ func (i *Handle) doCmdwithResponse(s *Service, d *Destination, cmd uint8) ([][]b
 		}
 
 	} else {
-		req.AddData(fillDestinaton(d))
+		req.AddData(fillDestination(d))
 	}
 
 	res, err := execute(i.sock, req, 0)
@@ -203,10 +204,6 @@ func newGenlRequest(familyID int, cmd uint8) *nl.NetlinkRequest {
 }
 
 func execute(s *nl.NetlinkSocket, req *nl.NetlinkRequest, resType uint16) ([][]byte, error) {
-	var (
-		err error
-	)
-
 	if err := s.Send(req); err != nil {
 		return nil, err
 	}
@@ -222,6 +219,13 @@ done:
 	for {
 		msgs, err := s.Receive()
 		if err != nil {
+			if s.GetFd() == -1 {
+				return nil, fmt.Errorf("Socket got closed on receive")
+			}
+			if err == syscall.EAGAIN {
+				// timeout fired
+				continue
+			}
 			return nil, err
 		}
 		for _, m := range msgs {
@@ -436,6 +440,16 @@ func assembleDestination(attrs []syscall.NetlinkRouteAttr) (*Destination, error)
 			d.LowerThreshold = native.Uint32(attr.Value)
 		case ipvsDestAttrAddressFamily:
 			d.AddressFamily = native.Uint16(attr.Value)
+		case ipvsDestAttrActiveConnections:
+			d.ActiveConnections = int(native.Uint16(attr.Value))
+		case ipvsDestAttrInactiveConnections:
+			d.InactiveConnections = int(native.Uint16(attr.Value))
+		case ipvsSvcAttrStats:
+			stats, err := assembleStats(attr.Value)
+			if err != nil {
+				return nil, err
+			}
+			d.Stats = DstStats(stats)
 		}
 	}
 	return &d, nil
@@ -488,6 +502,60 @@ func (i *Handle) doGetDestinationsCmd(s *Service, d *Destination) ([]*Destinatio
 		res = append(res, dest)
 	}
 	return res, nil
+}
+
+// parseConfig given a ipvs netlink response this function will respond with a valid config entry, an error otherwise
+func (i *Handle) parseConfig(msg []byte) (*Config, error) {
+	var c Config
+
+	//Remove General header for this message
+	hdr := deserializeGenlMsg(msg)
+	attrs, err := nl.ParseRouteAttr(msg[hdr.Len():])
+	if err != nil {
+		return nil, err
+	}
+
+	for _, attr := range attrs {
+		attrType := int(attr.Attr.Type)
+		switch attrType {
+		case ipvsCmdAttrTimeoutTCP:
+			c.TimeoutTCP = time.Duration(native.Uint32(attr.Value)) * time.Second
+		case ipvsCmdAttrTimeoutTCPFin:
+			c.TimeoutTCPFin = time.Duration(native.Uint32(attr.Value)) * time.Second
+		case ipvsCmdAttrTimeoutUDP:
+			c.TimeoutUDP = time.Duration(native.Uint32(attr.Value)) * time.Second
+		}
+	}
+
+	return &c, nil
+}
+
+// doGetConfigCmd a wrapper function to be used by GetConfig
+func (i *Handle) doGetConfigCmd() (*Config, error) {
+	msg, err := i.doCmdWithoutAttr(ipvsCmdGetConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := i.parseConfig(msg[0])
+	if err != nil {
+		return res, err
+	}
+	return res, nil
+}
+
+// doSetConfigCmd a wrapper function to be used by SetConfig
+func (i *Handle) doSetConfigCmd(c *Config) error {
+	req := newIPVSRequest(ipvsCmdSetConfig)
+	req.Seq = atomic.AddUint32(&i.seq, 1)
+
+	req.AddData(nl.NewRtAttr(ipvsCmdAttrTimeoutTCP, nl.Uint32Attr(uint32(c.TimeoutTCP.Seconds()))))
+	req.AddData(nl.NewRtAttr(ipvsCmdAttrTimeoutTCPFin, nl.Uint32Attr(uint32(c.TimeoutTCPFin.Seconds()))))
+	req.AddData(nl.NewRtAttr(ipvsCmdAttrTimeoutUDP, nl.Uint32Attr(uint32(c.TimeoutUDP.Seconds()))))
+
+	_, err := execute(i.sock, req, 0)
+
+	return err
 }
 
 // IPVS related netlink message format explained

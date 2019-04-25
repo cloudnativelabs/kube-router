@@ -4,10 +4,11 @@
 package proxy
 
 import (
-	"github.com/docker/libnetwork/ipvs"
-	"github.com/vishvananda/netlink"
 	"net"
 	"sync"
+
+	"github.com/docker/libnetwork/ipvs"
+	"github.com/vishvananda/netlink"
 )
 
 var (
@@ -31,6 +32,10 @@ var (
 	lockLinuxNetworkingMocksetupRoutesForExternalIPForDSR sync.RWMutex
 )
 
+// Ensure, that LinuxNetworkingMock does implement LinuxNetworking.
+// If this is not the case, regenerate this file with moq.
+var _ LinuxNetworking = &LinuxNetworkingMock{}
+
 // LinuxNetworkingMock is a mock implementation of LinuxNetworking.
 //
 //     func TestSomethingThatUsesLinuxNetworking(t *testing.T) {
@@ -38,63 +43,63 @@ var (
 //         // make and configure a mocked LinuxNetworking
 //         mockedLinuxNetworking := &LinuxNetworkingMock{
 //             cleanupMangleTableRuleFunc: func(ip string, protocol string, port string, fwmark string) error {
-// 	               panic("TODO: mock out the cleanupMangleTableRule method")
+// 	               panic("mock out the cleanupMangleTableRule method")
 //             },
 //             getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
-// 	               panic("TODO: mock out the getKubeDummyInterface method")
+// 	               panic("mock out the getKubeDummyInterface method")
 //             },
 //             ipAddrAddFunc: func(iface netlink.Link, ip string, addRoute bool) error {
-// 	               panic("TODO: mock out the ipAddrAdd method")
+// 	               panic("mock out the ipAddrAdd method")
 //             },
 //             ipAddrDelFunc: func(iface netlink.Link, ip string) error {
-// 	               panic("TODO: mock out the ipAddrDel method")
+// 	               panic("mock out the ipAddrDel method")
 //             },
 //             ipvsAddFWMarkServiceFunc: func(vip net.IP, protocol uint16, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
-// 	               panic("TODO: mock out the ipvsAddFWMarkService method")
+// 	               panic("mock out the ipvsAddFWMarkService method")
 //             },
 //             ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-// 	               panic("TODO: mock out the ipvsAddServer method")
+// 	               panic("mock out the ipvsAddServer method")
 //             },
 //             ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
-// 	               panic("TODO: mock out the ipvsAddService method")
+// 	               panic("mock out the ipvsAddService method")
 //             },
 //             ipvsDelDestinationFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-// 	               panic("TODO: mock out the ipvsDelDestination method")
+// 	               panic("mock out the ipvsDelDestination method")
 //             },
 //             ipvsDelServiceFunc: func(ipvsSvc *ipvs.Service) error {
-// 	               panic("TODO: mock out the ipvsDelService method")
+// 	               panic("mock out the ipvsDelService method")
 //             },
 //             ipvsGetDestinationsFunc: func(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
-// 	               panic("TODO: mock out the ipvsGetDestinations method")
+// 	               panic("mock out the ipvsGetDestinations method")
 //             },
 //             ipvsGetServicesFunc: func() ([]*ipvs.Service, error) {
-// 	               panic("TODO: mock out the ipvsGetServices method")
+// 	               panic("mock out the ipvsGetServices method")
 //             },
 //             ipvsNewDestinationFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-// 	               panic("TODO: mock out the ipvsNewDestination method")
+// 	               panic("mock out the ipvsNewDestination method")
 //             },
 //             ipvsNewServiceFunc: func(ipvsSvc *ipvs.Service) error {
-// 	               panic("TODO: mock out the ipvsNewService method")
+// 	               panic("mock out the ipvsNewService method")
 //             },
 //             ipvsUpdateDestinationFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-// 	               panic("TODO: mock out the ipvsUpdateDestination method")
+// 	               panic("mock out the ipvsUpdateDestination method")
 //             },
 //             ipvsUpdateServiceFunc: func(ipvsSvc *ipvs.Service) error {
-// 	               panic("TODO: mock out the ipvsUpdateService method")
+// 	               panic("mock out the ipvsUpdateService method")
 //             },
 //             prepareEndpointForDsrFunc: func(containerId string, endpointIP string, vip string) error {
-// 	               panic("TODO: mock out the prepareEndpointForDsr method")
+// 	               panic("mock out the prepareEndpointForDsr method")
 //             },
 //             setupPolicyRoutingForDSRFunc: func() error {
-// 	               panic("TODO: mock out the setupPolicyRoutingForDSR method")
+// 	               panic("mock out the setupPolicyRoutingForDSR method")
 //             },
 //             setupRoutesForExternalIPForDSRFunc: func(in1 serviceInfoMap) error {
-// 	               panic("TODO: mock out the setupRoutesForExternalIPForDSR method")
+// 	               panic("mock out the setupRoutesForExternalIPForDSR method")
 //             },
 //         }
 //
-//         // TODO: use mockedLinuxNetworking in code that requires LinuxNetworking
-//         //       and then make assertions.
+//         // use mockedLinuxNetworking in code that requires LinuxNetworking
+//         // and then make assertions.
 //
 //     }
 type LinuxNetworkingMock struct {

@@ -69,7 +69,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 
 [[override]]
   name = "github.com/vishvananda/netlink"
-  version = "1.0.0"
+  revision = "f504738125a57f35f87fc30fb69b8df75237ccde"
 
 [[constraint]]
   branch = "master"
@@ -89,7 +89,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 
 [[constraint]]
   name = "github.com/docker/libnetwork"
-  revision = "14aa49f99093e1a22e65155b641103762911db8d"
+  revision = "48f846327bbe6a0dce0c556e8dc9f5bb939d5c16"
 
 [[override]]
   revision = "1e2f10eb65743fed02f573d31a4587de09afb20e"
