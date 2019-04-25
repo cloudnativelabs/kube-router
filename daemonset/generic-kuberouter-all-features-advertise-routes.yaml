@@ -70,6 +70,7 @@ spec:
         - "--run-router=true"
         - "--run-firewall=true"
         - "--run-service-proxy=true"
+        - "--nodeport-bindon-all-ip"
         - "--kubeconfig=/var/lib/kube-router/kubeconfig"
         - "--peer-router-ips=10.1.201.254"
         - "--peer-router-asns=64512"

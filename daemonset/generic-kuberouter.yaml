@@ -49,6 +49,7 @@ spec:
         imagePullPolicy: Always
         args:
         - "--run-router=true"
+        - "--nodeport-bindon-all-ip"
         - "--run-firewall=true"
         - "--run-service-proxy=false"
         env:
