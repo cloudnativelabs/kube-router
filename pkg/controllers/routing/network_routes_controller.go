@@ -440,7 +440,8 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 
 	// create IPIP tunnels only when node is not in same subnet or overlay-type is set to 'full'
 	// prevent creation when --override-nexthop=true as well
-	if (!sameSubnet || nrc.overlayType == "full") && !nrc.overrideNextHop {
+	// if the user has disabled overlays, don't create tunnels
+	if (!sameSubnet || nrc.overlayType == "full") && !nrc.overrideNextHop && nrc.enableOverlays {
 		// create ip-in-ip tunnel and inject route as overlay is enabled
 		var link netlink.Link
 		var err error
@@ -488,7 +489,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 			Dst:       dst,
 			Protocol:  0x11,
 		}
-	} else {
+	} else if sameSubnet {
 		route = &netlink.Route{
 			Dst:      dst,
 			Gw:       nexthop,
