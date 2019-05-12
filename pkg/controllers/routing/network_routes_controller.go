@@ -495,6 +495,8 @@ func (nrc *NetworkRoutingController) injectRoute(path *table.Path) error {
 			Gw:       nexthop,
 			Protocol: 0x11,
 		}
+	} else {
+		return nil
 	}
 
 	if path.IsWithdraw {
