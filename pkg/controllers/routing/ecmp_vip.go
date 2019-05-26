@@ -94,9 +94,9 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 	}
 
 	// update export policies so that new VIP's gets addedd to clusteripprefixsit and vip gets advertised to peers
-	err = nrc.addExportPolicies()
+	err = nrc.AddPolicies()
 	if err != nil {
-		glog.Errorf("Error adding BGP export policies: %s", err.Error())
+		glog.Errorf("Error adding BGP policies: %s", err.Error())
 	}
 
 	nrc.advertiseVIPs(toAdvertise)
@@ -162,7 +162,7 @@ func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEv
 
 // OnEndpointsAdd handles endpoint add events from apiserver
 // This method calls OnEndpointsUpdate with the addition of updating BGP export policies
-// Calling addExportPolicies here covers the edge case where addExportPolicies fails in
+// Calling AddPolicies here covers the edge case where AddPolicies fails in
 // OnServiceUpdate because the corresponding Endpoint resource for the
 // Service was not created yet.
 func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
@@ -171,9 +171,9 @@ func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
 		return
 	}
 
-	err := nrc.addExportPolicies()
+	err := nrc.AddPolicies()
 	if err != nil {
-		glog.Errorf("error adding BGP export policies: %s", err)
+		glog.Errorf("error adding BGP policies: %s", err)
 	}
 
 	nrc.OnEndpointsUpdate(obj)
