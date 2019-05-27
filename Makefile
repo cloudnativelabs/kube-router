@@ -208,8 +208,16 @@ else
 endif
 
 gobgp:
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	@echo Building gobgp
+	$(DOCKER) run -v $(PWD)/vendor:/go/src -w /go/src/github.com/osrg/gobgp/gobgp $(DOCKER_BUILD_IMAGE) \
+    sh -c 'GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o gobgp'
+	@echo Finished building gobgp.
+else
 	cd vendor/github.com/osrg/gobgp/gobgp && \
-	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go build -o $(MAKEFILE_DIR)/gobgp
+	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go build -o gobgp
+endif
+	cp -f vendor/github.com/osrg/gobgp/gobgp/gobgp gobgp
 
 multiarch-binverify:
 	@echo 'Verifying kube-router gobgp for ARCH=$(FILE_ARCH) ...'
