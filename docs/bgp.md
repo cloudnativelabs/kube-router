@@ -37,14 +37,19 @@ get peered.
 
 ### Route-Reflector setup  Without Full Mesh
 
-This model support the common scheme of using Route Reflector Server node to concentrate
-peering from Client Peer. This has the big advantage of not needing full mesh, and
-scale better. In this mode kube-router expects each node is configured either in
-Route Reflector server mode or in Route Reflector client mode. This is done
-with node `kube-router.io/rr.server=ClusterID`, `kube-router.io/rr.client=ClusterId`
-respectively. In this mode each Route Reflector Client will only peer with Route
-Reflector Servers. Each Route Reflector Server will peer other Route Reflector
-Server and with Route Reflector Clients enabling reflection.
+This model supports the common scheme of using Route Reflector Server node to concentrate
+peering from Client Peers. This has the big advantage of not needing full mesh, and
+scales better. kube-router expects that each node is configured either in Route Reflector server mode
+or in Route Reflector client mode. Each Route Reflector Client will only peer with Route
+Reflector Servers. Each Route Reflector Server will peer with other Route Reflector
+Servers and Route Reflector Clients with reflection enabled. This is achieved in one of 2 ways:
+
+1. Manual Mode
+
+If kube-router is started with `--route-reflector-mode=manual` which is the default,
+kube-router checks the Kubernetes node object for the annotations `kube-router.io/rr.server=ClusterID`
+and `kube-router.io/rr.client=ClusterId` to be configured in Route Reflector server mode or
+Route Reflector client mode respectively.
 
 Users can annotate node objects with the following command:
 
@@ -62,7 +67,19 @@ for Route Reflector client mode.
 
 Only nodes with the same ClusterID in client and server mode will peer together.
 
-When joining new nodes to the cluster, remember to annotate them with `kube-router.io/rr.client=42`, and then restart kube-router on the new nodes and the route reflector server nodes to let them successfully read the annotations and peer with each other.
+When joining new nodes to the cluster, remember to annotate them with `kube-router.io/rr.client=42`,
+and then restart kube-router on the new nodes and the route reflector server nodes to let them
+successfully read the annotations and peer with each other.
+
+
+2. Automatic Mode
+
+If kube-router is started with `--route-reflector-mode=auto`, kube-router checks the labels
+of the Kubernetes node object to determine if the node is a master node or worker node. Kubernetes
+master nodes are identified as master nodes if they have the label `node-role.kubernetes.io/master`.
+Master nodes are configured in Route Reflector server mode and worker nodes
+are configured in Route Reflector client mode automatically.
+
 
 ## Peering Outside The Cluster
 ### Global External BGP Peers
@@ -145,7 +162,7 @@ kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
 kubectl annotate node <kube-node> "kube-router.io/peer.passwords=U2VjdXJlUGFzc3dvcmQK,"
 ```
 
-## BGP listen address list 
+## BGP listen address list
 
 By default GoBGP server binds on the node IP address. However in case of nodes with multiple IP address it is desirable to bind GoBGP to multiple local adresses. Local IP address on which GoGBP should listen on an node can be configured with annotation `kube-router.io/bgp-local-addresses`.
 
@@ -156,5 +173,5 @@ kubectl annotate node ip-172-20-46-87.us-west-2.compute.internal "kube-router.io
 
 ## Overriding the next hop
 
-By default kube-router populates GoBGP RIB with node IP as next hop for the advertised pod CIDR's and service VIP. While this works for most cases, overriding the next hop for the advertised rotues is necessary when node has multiple interfaces over which external peers are reached. Next hop need to be as per the interface local IP over which external peer can be reached. `--override-nexthop` let you override the next hop for the advertised route. Setting `--override-nexthop` to true leverages BGP next-hop-self functionality implemented in GoBGP. Next hop will automatically selected appropriately when advertising routes irrespective of the next hop in the RIB. 
+By default kube-router populates GoBGP RIB with node IP as next hop for the advertised pod CIDR's and service VIP. While this works for most cases, overriding the next hop for the advertised rotues is necessary when node has multiple interfaces over which external peers are reached. Next hop need to be as per the interface local IP over which external peer can be reached. `--override-nexthop` let you override the next hop for the advertised route. Setting `--override-nexthop` to true leverages BGP next-hop-self functionality implemented in GoBGP. Next hop will automatically selected appropriately when advertising routes irrespective of the next hop in the RIB.
 

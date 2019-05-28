@@ -50,6 +50,7 @@ const (
 	peerPortAnnotation                 = "kube-router.io/peer.ports"
 	rrClientAnnotation                 = "kube-router.io/rr.client"
 	rrServerAnnotation                 = "kube-router.io/rr.server"
+	kubernetesMasterNodeLabel          = "node-role.kubernetes.io/master"
 	svcLocalAnnotation                 = "kube-router.io/service.local"
 	bgpLocalAddressAnnotation          = "kube-router.io/bgp-local-addresses"
 	svcAdvertiseClusterAnnotation      = "kube-router.io/service.advertise.clusterip"
@@ -99,6 +100,7 @@ type NetworkRoutingController struct {
 	bgpRRClient             bool
 	bgpRRServer             bool
 	bgpClusterID            uint32
+	bgpRouteReflectorMode   string
 	cniConfFile             string
 	disableSrcDstCheck      bool
 	initSrcDstCheckDone     bool
@@ -682,22 +684,25 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		nrc.nodeAsnNumber = nodeAsnNumber
 	}
 
-	if clusterid, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; ok {
-		glog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
-		clusterID, err := strconv.ParseUint(clusterid, 0, 32)
-		if err != nil {
-			return errors.New("Failed to parse rr.server clusterId number specified for the the node")
+	// if route-reflector mode is manual, determine route-reflector server and client from the node annotation
+	if nrc.bgpRouteReflectorMode == "manual" {
+		if clusterid, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; ok {
+			glog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
+			clusterID, err := strconv.ParseUint(clusterid, 0, 32)
+			if err != nil {
+				return errors.New("Failed to parse rr.server clusterId number specified for the the node")
+			}
+			nrc.bgpClusterID = uint32(clusterID)
+			nrc.bgpRRServer = true
+		} else if clusterid, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
+			glog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
+			clusterID, err := strconv.ParseUint(clusterid, 0, 32)
+			if err != nil {
+				return errors.New("Failed to parse rr.client clusterId number specified for the the node")
+			}
+			nrc.bgpClusterID = uint32(clusterID)
+			nrc.bgpRRClient = true
 		}
-		nrc.bgpClusterID = uint32(clusterID)
-		nrc.bgpRRServer = true
-	} else if clusterid, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
-		glog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
-		clusterID, err := strconv.ParseUint(clusterid, 0, 32)
-		if err != nil {
-			return errors.New("Failed to parse rr.client clusterId number specified for the the node")
-		}
-		nrc.bgpClusterID = uint32(clusterID)
-		nrc.bgpRRClient = true
 	}
 
 	if prependASN, okASN := node.ObjectMeta.Annotations[pathPrependASNAnnotation]; okASN {
@@ -864,6 +869,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.overrideNextHop = kubeRouterConfig.OverrideNextHop
 	nrc.clientset = clientset
 	nrc.activeNodes = make(map[string]bool)
+	nrc.bgpRouteReflectorMode = kubeRouterConfig.BGPRouteReflectorMode
 	nrc.bgpRRClient = false
 	nrc.bgpRRServer = false
 	nrc.bgpServerStarted = false
@@ -1001,6 +1007,25 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 
 	nrc.nodeLister = nodeInformer.GetIndexer()
 	nrc.NodeEventHandler = nrc.newNodeEventHandler()
+
+	if nrc.bgpRouteReflectorMode != "auto" && nrc.bgpRouteReflectorMode != "manual" {
+		return nil, errors.New("Invalid mode specified for --route-reflector-mode. Must be set to auto or manual")
+	}
+
+	glog.Infof("Running in %s route-reflector mode", nrc.bgpRouteReflectorMode)
+
+	// configure the node as a route-reflector server if it has the label "node-role.kubernetes.io/master", otherwise it will be a route-reflector client
+	if nrc.bgpRouteReflectorMode == "auto" {
+		if _, ok := node.ObjectMeta.Labels[kubernetesMasterNodeLabel]; ok {
+			glog.Infof("Found label `%s` on node object so this node will be a route-reflector server.", kubernetesMasterNodeLabel)
+			nrc.bgpRRServer = true
+		} else {
+			glog.Infof("Could not find label `%s` on node object so this node will be a route-reflector client.", kubernetesMasterNodeLabel)
+			nrc.bgpRRClient = true
+		}
+
+		nrc.bgpClusterID = uint32(64512) // this magic number is first of the private ASN range, use it as default
+	}
 
 	return &nrc, nil
 }

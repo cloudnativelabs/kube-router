@@ -57,8 +57,15 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		// we are rr-client peer only with rr-server
 		if nrc.bgpRRClient {
-			if _, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; !ok {
-				continue
+			switch {
+			case nrc.bgpRouteReflectorMode == "auto":
+				if _, ok := node.ObjectMeta.Labels[kubernetesMasterNodeLabel]; !ok {
+					continue
+				}
+			case nrc.bgpRouteReflectorMode == "manual":
+				if _, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; !ok {
+					continue
+				}
 			}
 		}
 
@@ -139,8 +146,20 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		// we are rr-server peer with other rr-client with reflection enabled
 		if nrc.bgpRRServer {
-			if _, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
-				//add rr options with clusterId
+			var rrClientReflectionEnabled bool
+
+			switch {
+			case nrc.bgpRouteReflectorMode == "auto":
+				if _, ok := node.ObjectMeta.Labels[kubernetesMasterNodeLabel]; !ok {
+					rrClientReflectionEnabled = true
+				}
+			case nrc.bgpRouteReflectorMode == "manual":
+				if _, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
+					rrClientReflectionEnabled = true
+				}
+			}
+
+			if rrClientReflectionEnabled {
 				n.RouteReflector = config.RouteReflector{
 					Config: config.RouteReflectorConfig{
 						RouteReflectorClient:    true,

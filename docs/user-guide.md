@@ -74,6 +74,7 @@ Usage of kube-router:
       --peer-router-multihop-ttl uint8   Enable eBGP multihop supports -- sets multihop-ttl. (Relevant only if ttl >= 2)
       --peer-router-passwords strings    Password for authenticating against the BGP peer defined with "--peer-router-ips".
       --peer-router-ports uints          The remote port of the external BGP to which all nodes will peer. If not set, default BGP port (179) will be used. (default [])
+      --route-reflector-mode string      Possible values: manual,auto - When set to "manual", the default, route-reflector is setup using annotations on the node. When set to "auto", Kubernetes master nodes are automatically configured as route-reflector servers and Kubernetes worker nodes as route-reflector clients. (default "manual")
       --router-id string                 BGP router-id. Must be specified in a ipv6 only cluster.
       --routes-sync-period duration      The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --run-firewall                     Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
@@ -212,7 +213,7 @@ Please read below blog on how to user DSR in combination with `--advertise-exter
 https://cloudnativelabs.github.io/post/2017-11-01-kube-high-available-ingress/
 
 You can enable DSR(Direct Server Return) functionality per service. When enabled service endpoint
-will directly respond to the client by passing the service proxy. When DSR is enabled Kube-router 
+will directly respond to the client by passing the service proxy. When DSR is enabled Kube-router
 will uses LVS's tunneling mode to achieve this.
 
 To enable DSR you need to annotate service with `kube-router.io/service.dsr=tunnel` annotation. For e.g.
@@ -228,14 +229,14 @@ kubectl annotate service my-service "kube-router.io/service.dsr=tunnel"
 You will need to enable `hostIPC: true` and `hostPID: true` in kube-router daemonset manifest.
 Also host path `/var/run/docker.sock` must be made a volumemount to kube-router.
 
-Above changes are required for kube-router to enter pod namespeace and create ipip tunnel in the pod and to 
-assign the external IP to the VIP. 
+Above changes are required for kube-router to enter pod namespeace and create ipip tunnel in the pod and to
+assign the external IP to the VIP.
 
 For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirements enabled.
 
 ## Load balancing Scheduling Algorithms
 
-Kube-router uses LVS for service proxy. LVS support rich set of [scheduling alogirthms](http://kb.linuxvirtualserver.org/wiki/IPVS#Job_Scheduling_Algorithms). You can annotate 
+Kube-router uses LVS for service proxy. LVS support rich set of [scheduling alogirthms](http://kb.linuxvirtualserver.org/wiki/IPVS#Job_Scheduling_Algorithms). You can annotate
 the service to choose one of the scheduling alogirthms. When a service is not annotated `round-robin` scheduler is selected by default
 
 ```

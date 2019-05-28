@@ -18,6 +18,7 @@ type KubeRouterConfig struct {
 	AdvertiseLoadBalancerIp bool
 	BGPGracefulRestart      bool
 	BGPPort                 uint16
+	BGPRouteReflectorMode   string
 	CacheSyncTimeout        time.Duration
 	CleanupConfig           bool
 	ClusterAsn              uint
@@ -63,13 +64,14 @@ type KubeRouterConfig struct {
 
 func NewKubeRouterConfig() *KubeRouterConfig {
 	return &KubeRouterConfig{
-		CacheSyncTimeout:   1 * time.Minute,
-		IpvsSyncPeriod:     5 * time.Minute,
-		IPTablesSyncPeriod: 5 * time.Minute,
-		IpvsGracefulPeriod: 30 * time.Second,
-		RoutesSyncPeriod:   5 * time.Minute,
-		EnableOverlay:      true,
-		OverlayType:        "subnet",
+		CacheSyncTimeout:      1 * time.Minute,
+		IpvsSyncPeriod:        5 * time.Minute,
+		IPTablesSyncPeriod:    5 * time.Minute,
+		IpvsGracefulPeriod:    30 * time.Second,
+		RoutesSyncPeriod:      5 * time.Minute,
+		EnableOverlay:         true,
+		OverlayType:           "subnet",
+		BGPRouteReflectorMode: "manual",
 	}
 }
 
@@ -150,6 +152,10 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Possible values: subnet,full - "+
 			"When set to \"subnet\", the default, default \"--enable-overlay=true\" behavior is used. "+
 			"When set to \"full\", it changes \"--enable-overlay=true\" default behavior so that IP-in-IP tunneling is used for pod-to-pod networking across nodes regardless of the subnet the nodes are in.")
+	fs.StringVar(&s.BGPRouteReflectorMode, "route-reflector-mode", s.BGPRouteReflectorMode,
+		"Possible values: manual,auto - "+
+			"When set to \"manual\", the default, route-reflector is setup using annotations on the node. "+
+			"When set to \"auto\", Kubernetes master nodes are automatically configured as route-reflector servers and Kubernetes worker nodes as route-reflector clients.")
 	fs.StringSliceVar(&s.PeerPasswords, "peer-router-passwords", s.PeerPasswords,
 		"Password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
 	fs.BoolVar(&s.EnablePprof, "enable-pprof", false,
