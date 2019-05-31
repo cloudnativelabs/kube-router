@@ -58,6 +58,7 @@ type NetworkPolicyController struct {
 	MetricsEnabled  bool
 	v1NetworkPolicy bool
 	readyForUpdates bool
+	healthChan      chan<- *healthcheck.ControllerHeartbeat
 
 	// list of all active network policies expressed as networkPolicyInfo
 	networkPoliciesInfo *[]networkPolicyInfo
@@ -140,6 +141,7 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	defer wg.Done()
 
 	glog.Info("Starting network policy controller")
+	npc.healthChan = healthChan
 
 	// loop forever till notified to stop on stopCh
 	for {
@@ -222,6 +224,7 @@ func (npc *NetworkPolicyController) Sync() error {
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
 
+	healthcheck.SendHeartBeat(npc.healthChan, "NPC")
 	start := time.Now()
 	syncVersion := strconv.FormatInt(start.UnixNano(), 10)
 	defer func() {
