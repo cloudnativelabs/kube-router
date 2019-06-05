@@ -53,9 +53,10 @@ type NetworkPolicyController struct {
 	networkPoliciesInfo *[]NetworkPolicyInfo
 	handler             PolicyHandler
 
-	podLister cache.Indexer
-	npLister  cache.Indexer
-	nsLister  cache.Indexer
+	podLister     cache.Indexer
+	serviceLister cache.Indexer
+	npLister      cache.Indexer
+	nsLister      cache.Indexer
 
 	PodEventHandler           cache.ResourceEventHandler
 	NamespaceEventHandler     cache.ResourceEventHandler
@@ -379,7 +380,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 
 		policy, ok := policyObj.(*networking.NetworkPolicy)
 		if !ok {
-			return nil, fmt.Errorf("Failed to convert")
+			return nil, fmt.Errorf("failed to convert")
 		}
 		newPolicy := NetworkPolicyInfo{
 			Name:       policy.Name,
@@ -504,6 +505,14 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 					if ipBlockPeer := npc.evalIPBlockPeer(peer); ipBlockPeer != nil {
 						egressRule.DstIPBlocks = append(egressRule.DstIPBlocks, ipBlockPeer)
 					}
+
+					if peer.NamespaceSelector != nil || peer.PodSelector != nil {
+						peerServices, err := npc.evalServicePeer(policy, peer)
+						if err == nil{
+							egressRule.DstPods = append(egressRule.DstPods, peerServices...)
+						}
+					}
+
 					peerPods, err := npc.evalPodPeer(policy, peer)
 					if err == nil {
 						for _, peerPod := range peerPods {
@@ -541,6 +550,82 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 	return &NetworkPolicies, nil
 }
 
+func (npc *NetworkPolicyController) evalServicePeer(policy *networking.NetworkPolicy, peer networking.NetworkPolicyPeer) ([]PodInfo, error) {
+	var namespaces []string
+	var err error
+	var podSelectorMatch map[string]string
+	targetIPs := make([]PodInfo, 0)
+
+	if peer.NamespaceSelector != nil {
+		glog.V(6).Infof("Matching namespaceSelector %q for services in policy %s/%s",
+			peer.NamespaceSelector, policy.Namespace, policy.Name)
+		namespaces, err = func(matchLabels labels.Set) ([]string, error) {
+			namespacesString := make([]string, 0)
+			namespaces, err := npc.ListNamespaceByLabels(peer.NamespaceSelector.MatchLabels)
+			if err == nil {
+				for _, namespace := range namespaces {
+					glog.V(6).Infof("Found namespace %s for policy %s/%s",
+						namespace.Name, policy.Namespace, policy.Name)
+					namespacesString = append(namespacesString, namespace.Name)
+				}
+				return namespacesString, nil
+			} else {
+				return nil, err
+			}
+		}(peer.NamespaceSelector.MatchLabels)
+
+		if err != nil {
+			return nil, errors.New("Failed to build network policies info due to " + err.Error())
+		}
+	} else {
+		namespaces = append(namespaces, policy.Namespace)
+	}
+
+	if peer.PodSelector != nil {
+		podSelectorMatch = peer.PodSelector.MatchLabels
+	} else {
+		podSelectorMatch = make(map[string]string, 0)
+	}
+
+	glog.V(6).Infof("Matching pods for services in namespaces %q for policy %s/%s",
+		namespaces, policy.Namespace, policy.Name)
+	for _, namespace := range namespaces {
+		namespaceServices, err := npc.ListServicesByNamespaceAndLabels(namespace, podSelectorMatch)
+		glog.V(6).Infof("Matched %d services for podSelector %q in namespace %s for policy %s/%s",
+			len(namespaceServices), podSelectorMatch, namespace, policy.Namespace, policy.Name)
+		if err != nil {
+			return nil, errors.New("Failed to build network policies info due to " + err.Error())
+		}
+		for _, peerService := range namespaceServices {
+			glog.V(6).Infof("Building IP list for policy %s/%s for service %s/%s",
+				policy.Namespace, policy.Name, namespace, peerService.Name)
+			if peerService.Spec.ClusterIP != "" && peerService.Spec.ClusterIP != "None" {
+				glog.V(6).Infof("Adding clusterIP %s to service %s for policy %s/%s",
+					peerService.Spec.ClusterIP, peerService.Name, policy.Namespace, policy.Name)
+				targetIPs = append(targetIPs,
+					PodInfo{IP: peerService.Spec.ClusterIP,
+						Name:      peerService.ObjectMeta.Name,
+						Namespace: peerService.ObjectMeta.Namespace,
+						Labels:    peerService.ObjectMeta.Labels})
+
+			}
+			for _, externalIP := range peerService.Spec.ExternalIPs {
+				if externalIP != "" && externalIP != "None" {
+					glog.V(6).Infof("Adding externalIP %s to service %s for policy %s/%s",
+						externalIP, peerService.Name, policy.Namespace, policy.Name)
+					targetIPs = append(targetIPs,
+						PodInfo{IP: externalIP,
+							Name:      peerService.ObjectMeta.Name,
+							Namespace: peerService.ObjectMeta.Namespace,
+							Labels:    peerService.ObjectMeta.Labels})
+				}
+			}
+		}
+	}
+
+	return targetIPs, nil
+}
+
 func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy, peer networking.NetworkPolicyPeer) ([]*api.Pod, error) {
 
 	var matchingPods []*api.Pod
@@ -557,6 +642,7 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 		if peer.PodSelector != nil {
 			podSelectorLabels = peer.PodSelector.MatchLabels
 		}
+
 		for _, namespace := range namespaces {
 			namespacePods, err := npc.ListPodsByNamespaceAndLabels(namespace.Name, podSelectorLabels)
 			if err != nil {
@@ -578,6 +664,15 @@ func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace strin
 		return nil, err
 	}
 	return allMatchedNameSpacePods, nil
+}
+
+func (npc *NetworkPolicyController) ListServicesByNamespaceAndLabels(namespace string, labelsToMatch labels.Set) (ret []*api.Service, err error) {
+	serviceLister := listers.NewServiceLister(npc.serviceLister)
+	allMatchedNameSpaceServices, err := serviceLister.Services(namespace).List(labelsToMatch.AsSelector())
+	if err != nil {
+		return nil, err
+	}
+	return allMatchedNameSpaceServices, nil
 }
 
 func (npc *NetworkPolicyController) ListNamespaceByLabels(set labels.Set) ([]*api.Namespace, error) {
@@ -738,8 +833,11 @@ func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.Resourc
 
 // NewNetworkPolicyController returns new NetworkPolicyController object
 func NewNetworkPolicyController(clientset kubernetes.Interface,
-	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
-	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) (*NetworkPolicyController, error) {
+	config *options.KubeRouterConfig,
+	podInformer cache.SharedIndexInformer,
+	serviceInformer cache.SharedIndexInformer,
+	npInformer cache.SharedIndexInformer,
+	nsInformer cache.SharedIndexInformer) (*NetworkPolicyController, error) {
 	npc := NetworkPolicyController{}
 
 	if config.MetricsEnabled {
@@ -775,6 +873,8 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	npc.podLister = podInformer.GetIndexer()
 	npc.PodEventHandler = npc.newPodEventHandler()
+
+	npc.serviceLister = serviceInformer.GetIndexer()
 
 	npc.nsLister = nsInformer.GetIndexer()
 	npc.NamespaceEventHandler = npc.newNamespaceEventHandler()
