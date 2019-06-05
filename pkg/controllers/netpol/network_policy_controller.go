@@ -59,6 +59,7 @@ type NetworkPolicyController struct {
 	nsLister      cache.Indexer
 
 	PodEventHandler           cache.ResourceEventHandler
+	ServiceEventHandler       cache.ResourceEventHandler
 	NamespaceEventHandler     cache.ResourceEventHandler
 	NetworkPolicyEventHandler cache.ResourceEventHandler
 }
@@ -198,6 +199,22 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
 	err := npc.Sync()
 	if err != nil {
 		glog.Errorf("Error syncing network policy for the update to network policy: %s/%s Error: %s", netpol.Namespace, netpol.Name, err)
+	}
+}
+
+// OnServiceUpdate handles updates to services from kubernetes api server
+func (npc *NetworkPolicyController) OnServiceUpdate(obj interface{}) {
+	service := obj.(*api.Service)
+	glog.V(2).Infof("Received update for service: %s", service.Name)
+
+	if !npc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", service.Namespace, service.Name)
+		return
+	}
+
+	err := npc.Sync()
+	if err != nil {
+		glog.Errorf("Error syncing on service update: %s", err)
 	}
 }
 
@@ -798,6 +815,23 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 	}
 }
 
+func (npc *NetworkPolicyController) newServiceEventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			npc.OnServiceUpdate(obj)
+
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			npc.OnServiceUpdate(newObj)
+
+		},
+		DeleteFunc: func(obj interface{}) {
+			npc.OnServiceUpdate(obj)
+
+		},
+	}
+}
+
 func (npc *NetworkPolicyController) newNamespaceEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -875,6 +909,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npc.PodEventHandler = npc.newPodEventHandler()
 
 	npc.serviceLister = serviceInformer.GetIndexer()
+	npc.ServiceEventHandler = npc.newServiceEventHandler()
 
 	npc.nsLister = nsInformer.GetIndexer()
 	npc.NamespaceEventHandler = npc.newNamespaceEventHandler()

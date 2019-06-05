@@ -136,6 +136,7 @@ func (kr *KubeRouter) Run() error {
 
 		podInformer.AddEventHandler(npc.PodEventHandler)
 		nsInformer.AddEventHandler(npc.NamespaceEventHandler)
+		svcInformer.AddEventHandler(npc.ServiceEventHandler)
 		npInformer.AddEventHandler(npc.NetworkPolicyEventHandler)
 
 		wg.Add(1)
