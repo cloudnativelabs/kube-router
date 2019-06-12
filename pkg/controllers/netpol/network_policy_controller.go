@@ -120,9 +120,9 @@ type EndPoints struct {
 	ProtocolAndPort
 }
 
-type numericPort2eps map[string]*EndPoints
-type protocol2eps map[string]numericPort2eps
-type namedPort2eps map[string]protocol2eps
+type NumericPortToEndpoints map[string]*EndPoints
+type ProtocolToEndpoints map[string]NumericPortToEndpoints
+type NamedPortToEndpoints map[string]ProtocolToEndpoints
 
 type PolicyHandler interface {
 	Sync(networkPoliciesInfo *[]NetworkPolicyInfo, ingressPods, egressPods *map[string]PodInfo) error
@@ -330,7 +330,7 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(nodeIp str
 	return &nodePods, nil
 }
 
-func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networking.NetworkPolicyPort, namedPort2eps namedPort2eps) (numericPorts []ProtocolAndPort, namedPorts []EndPoints) {
+func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networking.NetworkPolicyPort, namedPortToEndpoints NamedPortToEndpoints) (numericPorts []ProtocolAndPort, namedPorts []EndPoints) {
 	numericPorts, namedPorts = make([]ProtocolAndPort, 0), make([]EndPoints, 0)
 	for _, npPort := range npPorts {
 		if npPort.Port == nil {
@@ -338,9 +338,9 @@ func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networki
 		} else if npPort.Port.Type == intstr.Int {
 			numericPorts = append(numericPorts, ProtocolAndPort{Port: npPort.Port.String(), Protocol: string(*npPort.Protocol)})
 		} else {
-			if protocol2eps, ok := namedPort2eps[npPort.Port.String()]; ok {
-				if numericPort2eps, ok := protocol2eps[string(*npPort.Protocol)]; ok {
-					for _, eps := range numericPort2eps {
+			if protocolToEndpoints, ok := namedPortToEndpoints[npPort.Port.String()]; ok {
+				if numericPortToEndpoints, ok := protocolToEndpoints[string(*npPort.Protocol)]; ok {
+					for _, eps := range numericPortToEndpoints {
 						namedPorts = append(namedPorts, *eps)
 					}
 				}
@@ -350,7 +350,7 @@ func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networki
 	return
 }
 
-func (npc *NetworkPolicyController) processBetaNetworkPolicyPorts(npPorts []apiextensions.NetworkPolicyPort, namedPort2eps namedPort2eps) (numericPorts []ProtocolAndPort, namedPorts []EndPoints) {
+func (npc *NetworkPolicyController) processBetaNetworkPolicyPorts(npPorts []apiextensions.NetworkPolicyPort, namedPortToEndpoints NamedPortToEndpoints) (numericPorts []ProtocolAndPort, namedPorts []EndPoints) {
 	numericPorts, namedPorts = make([]ProtocolAndPort, 0), make([]EndPoints, 0)
 	for _, npPort := range npPorts {
 		if npPort.Port == nil {
@@ -358,9 +358,9 @@ func (npc *NetworkPolicyController) processBetaNetworkPolicyPorts(npPorts []apie
 		} else if npPort.Port.Type == intstr.Int {
 			numericPorts = append(numericPorts, ProtocolAndPort{Port: npPort.Port.String(), Protocol: string(*npPort.Protocol)})
 		} else {
-			if protocol2eps, ok := namedPort2eps[npPort.Port.String()]; ok {
-				if numericPort2eps, ok := protocol2eps[string(*npPort.Protocol)]; ok {
-					for _, eps := range numericPort2eps {
+			if protocolToEndpoints, ok := namedPortToEndpoints[npPort.Port.String()]; ok {
+				if numericPortToEndpoints, ok := protocolToEndpoints[string(*npPort.Protocol)]; ok {
+					for _, eps := range numericPortToEndpoints {
 						namedPorts = append(namedPorts, *eps)
 					}
 				}
@@ -417,7 +417,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 
 		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, policy.Spec.PodSelector.MatchLabels)
 		newPolicy.TargetPods = make(map[string]PodInfo)
-		namedPort2IngressEps := make(namedPort2eps)
+		namedPortToEndpoints := make(NamedPortToEndpoints)
 		if err == nil {
 			for _, matchingPod := range matchingPods {
 				if matchingPod.Status.PodIP == "" {
@@ -427,7 +427,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]NetworkPolicy
 					Name:      matchingPod.ObjectMeta.Name,
 					Namespace: matchingPod.ObjectMeta.Namespace,
 					Labels:    matchingPod.ObjectMeta.Labels}
-				npc.grabNamedPortFromPod(matchingPod, &namedPort2IngressEps)
+				npc.grabNamedPortFromPod(matchingPod, &namedPortToEndpoints)
 			}
 		}
 
@@ -589,8 +589,8 @@ func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolic
 	return nil
 }
 
-func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPort2eps *namedPort2eps) {
-	if pod == nil || namedPort2eps == nil {
+func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPortToEndpoints *NamedPortToEndpoints) {
+	if pod == nil || namedPortToEndpoints == nil {
 		return
 	}
 	for k := range pod.Spec.Containers {
@@ -599,14 +599,14 @@ func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPort
 			protocol := string(port.Protocol)
 			containerPort := strconv.Itoa(int(port.ContainerPort))
 
-			if (*namedPort2eps)[name] == nil {
-				(*namedPort2eps)[name] = make(protocol2eps)
+			if (*namedPortToEndpoints)[name] == nil {
+				(*namedPortToEndpoints)[name] = make(ProtocolToEndpoints)
 			}
-			if (*namedPort2eps)[name][protocol] == nil {
-				(*namedPort2eps)[name][protocol] = make(numericPort2eps)
+			if (*namedPortToEndpoints)[name][protocol] == nil {
+				(*namedPortToEndpoints)[name][protocol] = make(NumericPortToEndpoints)
 			}
-			if eps, ok := (*namedPort2eps)[name][protocol][containerPort]; !ok {
-				(*namedPort2eps)[name][protocol][containerPort] = &EndPoints{
+			if eps, ok := (*namedPortToEndpoints)[name][protocol][containerPort]; !ok {
+				(*namedPortToEndpoints)[name][protocol][containerPort] = &EndPoints{
 					ips:             []string{pod.Status.PodIP},
 					ProtocolAndPort: ProtocolAndPort{Port: containerPort, Protocol: protocol},
 				}
@@ -632,7 +632,7 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]NetworkPo
 		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, policy.Spec.PodSelector.MatchLabels)
 		newPolicy.TargetPods = make(map[string]PodInfo)
 		newPolicy.IngressRules = make([]IngressRule, 0)
-		namedPort2IngressEps := make(namedPort2eps)
+		namedPort2IngressEps := make(NamedPortToEndpoints)
 		if err == nil {
 			for _, matchingPod := range matchingPods {
 				if matchingPod.Status.PodIP == "" {
