@@ -54,6 +54,7 @@ spec:
         - --run-router=true
         - --run-firewall=true
         - --run-service-proxy=true
+        - --bgp-graceful-restart=true
         - --kubeconfig=/var/lib/kube-router/kubeconfig
         env:
         - name: NODE_NAME
