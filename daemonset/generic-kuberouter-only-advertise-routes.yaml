@@ -25,6 +25,7 @@ spec:
         - "--run-router=true"
         - "--run-firewall=false"
         - "--run-service-proxy=false"
+        - "--bgp-graceful-restart=true"
         - "--enable-cni=false"
         - "--enable-ibgp=false"
         - "--enable-overlay=false"

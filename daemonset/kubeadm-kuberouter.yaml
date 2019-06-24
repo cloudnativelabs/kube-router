@@ -51,6 +51,7 @@ spec:
         - --run-router=true
         - --run-firewall=true
         - --run-service-proxy=false
+        - --bgp-graceful-restart=true
         env:
         - name: NODE_NAME
           valueFrom:

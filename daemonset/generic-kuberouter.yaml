@@ -51,6 +51,7 @@ spec:
         - "--run-router=true"
         - "--run-firewall=true"
         - "--run-service-proxy=false"
+        - "--bgp-graceful-restart=true"
         env:
         - name: NODE_NAME
           valueFrom:
@@ -96,7 +97,7 @@ spec:
         - mountPath: /etc/cni/net.d
           name: cni-conf-dir
         - mountPath: /etc/kube-router
-          name: kube-router-cfg       
+          name: kube-router-cfg
       hostNetwork: true
       tolerations:
       - key: CriticalAddonsOnly

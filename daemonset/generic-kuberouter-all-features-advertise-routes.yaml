@@ -70,6 +70,7 @@ spec:
         - "--run-router=true"
         - "--run-firewall=true"
         - "--run-service-proxy=true"
+        - "--bgp-graceful-restart=true"
         - "--kubeconfig=/var/lib/kube-router/kubeconfig"
         - "--peer-router-ips=10.1.201.254"
         - "--peer-router-asns=64512"
@@ -130,7 +131,7 @@ spec:
         - mountPath: /etc/kube-router
           name: kube-router-cfg
         - name: kubeconfig
-          mountPath: /var/lib/kube-router          
+          mountPath: /var/lib/kube-router
       hostNetwork: true
       tolerations:
       - key: CriticalAddonsOnly
