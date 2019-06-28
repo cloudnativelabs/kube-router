@@ -163,6 +163,17 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		if nrc.overrideNextHop {
 			bgpActions.SetNextHop = "self"
 		}
+		
+		// set community for the routes advertised to external bgp peers if configured
+		if len(nrc.nodeGlobalCommunities) > 0 {
+			bgpActions.SetCommunity = config.SetCommunity{
+				Options: string(config.BGP_SET_COMMUNITY_OPTION_TYPE_ADD),
+				SetCommunityMethod: config.SetCommunityMethod{
+					CommunitiesList: nrc.nodeGlobalCommunities,
+				},
+			}
+		}
+		
 		// statement to represent the export policy to permit advertising cluster IP's
 		// only to the global BGP peer or node specific BGP peer
 		statements = append(statements, config.Statement{

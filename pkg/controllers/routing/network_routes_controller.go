@@ -42,6 +42,7 @@ const (
 	nodeAddrsIPSetName   = "kube-router-node-ips"
 
 	nodeASNAnnotation                  = "kube-router.io/node.asn"
+	nodeCommunitiesAnnotation          = "kube-router.io/node.communities"
 	pathPrependASNAnnotation           = "kube-router.io/path-prepend.as"
 	pathPrependRepeatNAnnotation       = "kube-router.io/path-prepend.repeat-n"
 	peerASNAnnotation                  = "kube-router.io/peer.asns"
@@ -83,6 +84,7 @@ type NetworkRoutingController struct {
 	advertisePodCidr        bool
 	defaultNodeAsnNumber    uint32
 	nodeAsnNumber           uint32
+	nodeGlobalCommunities   []string
 	globalPeerRouters       []*config.Neighbor
 	nodePeerRouters         []string
 	enableCNI               bool
@@ -729,7 +731,8 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	go g.Serve()
 
 	var localAddressList []string
-
+	var nodeCommunities []string
+	
 	if ipv4IsEnabled() {
 		localAddressList = append(localAddressList, nrc.localAddressList...)
 	}
@@ -809,7 +812,22 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 				return fmt.Errorf("Failed to parse node's Peer Passwords Annotation: %s", err)
 			}
 		}
-
+		
+		// Get Global Communities configs
+		nodeBgpNodeCommunitiesAnnotation, ok := node.ObjectMeta.Annotations[nodeCommunitiesAnnotation]
+		if !ok {
+			glog.Infof("Could not find BGP communities info in the node's annotations. Assuming no communities.")
+		} else {
+			communitiesStrings := stringToSlice(nodeBgpNodeCommunitiesAnnotation, ",")
+			nodeCommunities, err = stringSliceB64Decode(communitiesStrings)
+			if err != nil {
+				nrc.bgpServer.Stop()
+				return fmt.Errorf("Failed to parse node's Communities Annotation: %s", err)
+			}
+		}
+		nrc.nodeGlobalCommunities = nodeCommunities
+		
+		
 		// Create and set Global Peer Router complete configs
 		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerPorts, peerASNs, peerPasswords)
 		if err != nil {
