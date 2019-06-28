@@ -731,7 +731,6 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	go g.Serve()
 
 	var localAddressList []string
-	var nodeCommunities []string
 	
 	if ipv4IsEnabled() {
 		localAddressList = append(localAddressList, nrc.localAddressList...)
@@ -814,16 +813,12 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 		
 		// Get Global Communities configs
+		var nodeCommunities []string
 		nodeBgpNodeCommunitiesAnnotation, ok := node.ObjectMeta.Annotations[nodeCommunitiesAnnotation]
 		if !ok {
 			glog.Infof("Could not find BGP communities info in the node's annotations. Assuming no communities.")
 		} else {
-			communitiesStrings := stringToSlice(nodeBgpNodeCommunitiesAnnotation, ",")
-			nodeCommunities, err = stringSliceB64Decode(communitiesStrings)
-			if err != nil {
-				nrc.bgpServer.Stop()
-				return fmt.Errorf("Failed to parse node's Communities Annotation: %s", err)
-			}
+			nodeCommunities = stringToSlice(nodeBgpNodeCommunitiesAnnotation, ",")
 		}
 		nrc.nodeGlobalCommunities = nodeCommunities
 		
