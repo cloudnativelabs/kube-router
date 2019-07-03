@@ -84,7 +84,7 @@ type NetworkRoutingController struct {
 	advertisePodCidr        bool
 	defaultNodeAsnNumber    uint32
 	nodeAsnNumber           uint32
-	nodeGlobalCommunities   []string
+	nodeCommunities         []string
 	globalPeerRouters       []*config.Neighbor
 	nodePeerRouters         []string
 	enableCNI               bool
@@ -731,7 +731,6 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	go g.Serve()
 
 	var localAddressList []string
-	
 	if ipv4IsEnabled() {
 		localAddressList = append(localAddressList, nrc.localAddressList...)
 	}
@@ -812,15 +811,15 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			}
 		}
 		
-		// Get Global Communities configs
+		// Get Node Communities configs
 		var nodeCommunities []string
-		nodeBgpNodeCommunitiesAnnotation, ok := node.ObjectMeta.Annotations[nodeCommunitiesAnnotation]
+		nodeBgpCommunitiesAnnotation, ok := node.ObjectMeta.Annotations[nodeCommunitiesAnnotation]
 		if !ok {
 			glog.Infof("Could not find BGP communities info in the node's annotations. Assuming no communities.")
 		} else {
-			nodeCommunities = stringToSlice(nodeBgpNodeCommunitiesAnnotation, ",")
+			nodeCommunities = stringToSlice(nodeBgpCommunitiesAnnotation, ",")
 		}
-		nrc.nodeGlobalCommunities = nodeCommunities
+		nrc.nodeCommunities = nodeCommunities
 		
 		
 		// Create and set Global Peer Router complete configs

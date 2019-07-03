@@ -164,12 +164,12 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			bgpActions.SetNextHop = "self"
 		}
 		
-		// set community for the routes advertised to external bgp peers if configured
-		if len(nrc.nodeGlobalCommunities) > 0 {
+		// bgp action to set community for the routes advertised to external bgp peers
+		if len(nrc.nodeCommunities) > 0 {
 			bgpActions.SetCommunity = config.SetCommunity{
 				Options: string(config.BGP_SET_COMMUNITY_OPTION_TYPE_ADD),
 				SetCommunityMethod: config.SetCommunityMethod{
-					CommunitiesList: nrc.nodeGlobalCommunities,
+					CommunitiesList: nrc.nodeCommunities,
 				},
 			}
 		}
