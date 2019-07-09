@@ -307,23 +307,24 @@ func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service,
 }
 
 func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, onlyActiveEndpoints bool) ([]string, []string, error) {
-	ipList := make([]string, 0)
-	var err error
 
-	nodeHasEndpoints := true
-	if onlyActiveEndpoints {
-		_, isLocal := svc.Annotations[svcLocalAnnotation]
-		if isLocal || svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal {
-			nodeHasEndpoints, err = nrc.nodeHasEndpointsForService(svc)
-			if err != nil {
-				return nil, nil, err
-			}
+	advertise := true
+
+	_, hasLocalAnnotation := svc.Annotations[svcLocalAnnotation]
+	hasLocalTrafficPolicy := svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal
+	isLocal := hasLocalAnnotation || hasLocalTrafficPolicy
+
+	if onlyActiveEndpoints && isLocal {
+		var err error
+		advertise, err = nrc.nodeHasEndpointsForService(svc)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
 
-	ipList = nrc.getAllVIPsForService(svc)
+	ipList := nrc.getAllVIPsForService(svc)
 
-	if !nodeHasEndpoints {
+	if !advertise {
 		return nil, ipList, nil
 	}
 
