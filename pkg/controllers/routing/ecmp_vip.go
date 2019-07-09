@@ -322,6 +322,10 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 		}
 	}
 
+	if svcDeleted {
+		advertise = false
+	}
+
 	ipList := nrc.getAllVIPsForService(svc)
 
 	if !advertise {
