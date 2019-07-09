@@ -6,12 +6,13 @@ import (
 	"strconv"
 	"time"
 
+	"strings"
+
 	"github.com/golang/glog"
 	"github.com/osrg/gobgp/packet/bgp"
 	"github.com/osrg/gobgp/table"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"strings"
 )
 
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
@@ -320,10 +321,23 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 		}
 	}
 
+	ipList = nrc.getAllVIPsForService(svc)
+
+	if !nodeHasEndpoints {
+		return nil, ipList, nil
+	}
+
+	return ipList, nil, nil
+}
+
+func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) []string {
+
+	ipList := make([]string, 0)
+
 	if nrc.shouldAdvertiseService(svc, svcAdvertiseClusterAnnotation, nrc.advertiseClusterIP) {
-		clusterIp := nrc.getClusterIp(svc)
-		if clusterIp != "" {
-			ipList = append(ipList, clusterIp)
+		clusterIP := nrc.getClusterIp(svc)
+		if clusterIP != "" {
+			ipList = append(ipList, clusterIP)
 		}
 	}
 
@@ -338,11 +352,8 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, only
 		ipList = append(ipList, nrc.getLoadBalancerIps(svc)...)
 	}
 
-	if !nodeHasEndpoints {
-		return nil, ipList, nil
-	}
+	return ipList
 
-	return ipList, nil, nil
 }
 
 func isEndpointsForLeaderElection(ep *v1core.Endpoints) bool {
