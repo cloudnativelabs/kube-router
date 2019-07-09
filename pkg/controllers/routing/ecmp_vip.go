@@ -82,13 +82,13 @@ func getServiceObject(obj interface{}) (svc *v1core.Service) {
 	return
 }
 
-func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
+func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service, isDelete bool) {
 	if !nrc.bgpServerStarted {
 		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
 		return
 	}
 
-	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
+	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true, isDelete)
 	if err != nil {
 		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
 		return
@@ -104,21 +104,21 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 	nrc.withdrawVIPs(toWithdraw)
 }
 
-func (nrc *NetworkRoutingController) tryHandleServiceUpdate(obj interface{}, logMsgFormat string) {
+func (nrc *NetworkRoutingController) tryHandleServiceUpdate(obj interface{}, logMsgFormat string, isDelete bool) {
 	if svc := getServiceObject(obj); svc != nil {
 		glog.V(1).Infof(logMsgFormat, svc.Namespace, svc.Name)
-		nrc.handleServiceUpdate(svc)
+		nrc.handleServiceUpdate(svc, isDelete)
 	}
 }
 
 // OnServiceCreate handles new service create event from the kubernetes API server
 func (nrc *NetworkRoutingController) OnServiceCreate(obj interface{}) {
-	nrc.tryHandleServiceUpdate(obj, "Received new service: %s/%s from watch API")
+	nrc.tryHandleServiceUpdate(obj, "Received new service: %s/%s from watch API", false)
 }
 
 // OnServiceUpdate handles the service relates updates from the kubernetes API server
 func (nrc *NetworkRoutingController) OnServiceUpdate(objNew interface{}, objOld interface{}) {
-	nrc.tryHandleServiceUpdate(objNew, "Received update on service: %s/%s from watch API")
+	nrc.tryHandleServiceUpdate(objNew, "Received update on service: %s/%s from watch API", false)
 
 	nrc.withdrawVIPs(nrc.getWithdraw(getServiceObject(objOld), getServiceObject(objNew)))
 }
@@ -142,7 +142,7 @@ func getMissingPrevGen(old, new []string) (withdrawIPs []string) {
 
 // OnServiceDelete handles the service delete updates from the kubernetes API server
 func (nrc *NetworkRoutingController) OnServiceDelete(obj interface{}) {
-	nrc.tryHandleServiceUpdate(obj, "Received event to delete service: %s/%s from watch API")
+	nrc.tryHandleServiceUpdate(obj, "Received event to delete service: %s/%s from watch API", true)
 }
 
 func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEventHandler {
@@ -204,7 +204,7 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 		return
 	}
 
-	nrc.tryHandleServiceUpdate(svc, "Updating service %s/%s triggered by endpoint update event")
+	nrc.tryHandleServiceUpdate(svc, "Updating service %s/%s triggered by endpoint update event", false)
 }
 
 func (nrc *NetworkRoutingController) serviceForEndpoints(ep *v1core.Endpoints) (interface{}, error) {
@@ -279,7 +279,7 @@ func (nrc *NetworkRoutingController) getVIPs(onlyActiveEndpoints bool) ([]string
 	for _, obj := range nrc.svcLister.List() {
 		svc := obj.(*v1core.Service)
 
-		toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, onlyActiveEndpoints)
+		toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, onlyActiveEndpoints, false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -306,7 +306,7 @@ func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service,
 	return returnValue
 }
 
-func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, onlyActiveEndpoints bool) ([]string, []string, error) {
+func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, onlyActiveEndpoints bool, svcDeleted bool) ([]string, []string, error) {
 
 	advertise := true
 

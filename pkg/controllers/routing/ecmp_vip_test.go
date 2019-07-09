@@ -331,7 +331,7 @@ func Test_getVIPsForService(t *testing.T) {
 					serviceAdvertisedIP.service.ObjectMeta.Annotations = serviceAdvertisedIP.annotations
 				}
 				svc, _ := clientset.CoreV1().Services("default").Create(serviceAdvertisedIP.service)
-				advertisedIPs, _, _ := nrc.getVIPsForService(svc, false)
+				advertisedIPs, _, _ := nrc.getVIPsForService(svc, false, false)
 				t.Logf("AdvertisedIPs: %v\n", advertisedIPs)
 				if !Equal(serviceAdvertisedIP.advertisedIPs, advertisedIPs) {
 					t.Errorf("Advertised IPs are incorrect, got: %v, want: %v.", serviceAdvertisedIP.advertisedIPs, advertisedIPs)
