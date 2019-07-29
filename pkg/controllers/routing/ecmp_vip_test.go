@@ -89,13 +89,11 @@ func Test_getVIPsForService(t *testing.T) {
 		name string
 		// cluster, external, loadbalancer
 		advertiseSettings    [3]bool
-		svcDeleted           bool
 		serviceAdvertisedIPs []*ServiceAdvertisedIPs
 	}{
 		{
 			"advertise all IPs",
 			[3]bool{true, true, true},
-			false,
 			[]*ServiceAdvertisedIPs{
 				{
 					services["cluster"],
@@ -126,7 +124,6 @@ func Test_getVIPsForService(t *testing.T) {
 		{
 			"do not advertise any IPs",
 			[3]bool{false, false, false},
-			false,
 			[]*ServiceAdvertisedIPs{
 				{
 					services["cluster"],
@@ -150,37 +147,6 @@ func Test_getVIPsForService(t *testing.T) {
 					services["loadbalancer"],
 					[]string{},
 					[]string{},
-					nil,
-				},
-			},
-		},
-		{
-			"withdraw all IPs for deleted service",
-			[3]bool{true, true, true},
-			true,
-			[]*ServiceAdvertisedIPs{
-				{
-					services["cluster"],
-					[]string{},
-					[]string{"10.0.0.1"},
-					nil,
-				},
-				{
-					services["external"],
-					[]string{},
-					[]string{"10.0.0.1", "1.1.1.1"},
-					nil,
-				},
-				{
-					services["nodeport"],
-					[]string{},
-					[]string{"10.0.0.1", "1.1.1.1"},
-					nil,
-				},
-				{
-					services["loadbalancer"],
-					[]string{},
-					[]string{"10.0.0.1", "10.0.255.1", "10.0.255.2"},
 					nil,
 				},
 			},
@@ -188,7 +154,6 @@ func Test_getVIPsForService(t *testing.T) {
 		{
 			"advertise cluster IPs",
 			[3]bool{true, false, false},
-			false,
 			[]*ServiceAdvertisedIPs{
 				{
 					services["cluster"],
@@ -219,7 +184,6 @@ func Test_getVIPsForService(t *testing.T) {
 		{
 			"advertise external IPs",
 			[3]bool{false, true, false},
-			false,
 			[]*ServiceAdvertisedIPs{
 				{
 					services["cluster"],
@@ -250,7 +214,6 @@ func Test_getVIPsForService(t *testing.T) {
 		{
 			"advertise loadbalancer IPs",
 			[3]bool{false, false, true},
-			false,
 			[]*ServiceAdvertisedIPs{
 				{
 					services["cluster"],
@@ -281,7 +244,6 @@ func Test_getVIPsForService(t *testing.T) {
 		{
 			"opt in to advertise all IPs via annotations",
 			[3]bool{false, false, false},
-			false,
 			[]*ServiceAdvertisedIPs{
 				{
 					services["cluster"],
@@ -340,7 +302,6 @@ func Test_getVIPsForService(t *testing.T) {
 		{
 			"opt out to advertise any IPs via annotations",
 			[3]bool{true, true, true},
-			false,
 			[]*ServiceAdvertisedIPs{
 				{
 					services["cluster"],
@@ -400,7 +361,7 @@ func Test_getVIPsForService(t *testing.T) {
 					serviceAdvertisedIP.service.ObjectMeta.Annotations = serviceAdvertisedIP.annotations
 				}
 				svc, _ := clientset.CoreV1().Services("default").Create(serviceAdvertisedIP.service)
-				advertisedIPs, withdrawnIPs, _ := nrc.getVIPsForService(svc, false, test.svcDeleted)
+				advertisedIPs, withdrawnIPs, _ := nrc.getVIPsForService(svc, false)
 				t.Logf("AdvertisedIPs: %v\n", advertisedIPs)
 				t.Logf("WithdrawnIPs: %v\n", withdrawnIPs)
 				if !Equal(serviceAdvertisedIP.advertisedIPs, advertisedIPs) {
