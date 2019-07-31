@@ -384,6 +384,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 
 		case <-t.C:
 			glog.V(1).Info("Performing periodic sync of ipvs services")
+			healthcheck.SendHeartBeat(healthChan, "NSC")
 			err := nsc.doSync()
 			if err != nil {
 				glog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
