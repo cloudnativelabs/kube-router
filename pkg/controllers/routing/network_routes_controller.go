@@ -255,6 +255,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		default:
 		}
 
+		healthcheck.SendHeartBeat(healthChan, "NRC")
 		// Update ipset entries
 		if nrc.enablePodEgress || nrc.enableOverlays {
 			glog.V(1).Info("Syncing ipsets")
