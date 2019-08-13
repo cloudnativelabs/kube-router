@@ -2040,6 +2040,18 @@ func setupMangleTableRule(ip string, protocol string, port string, fwmark string
 	if err != nil {
 		return errors.New("Failed to run iptables command to set up FWMARK due to " + err.Error())
 	}
+
+	// setup iptables rule TCPMSS for DSR mode to fix mtu problem
+	mtuArgs := []string{"-d", ip, "-m", "tcp", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", "1440"}
+	err = iptablesCmdHandler.AppendUnique("mangle", "PREROUTING", mtuArgs...)
+	if err != nil {
+		return errors.New("Failed to run iptables command to set up TCPMSS due to " + err.Error())
+	}
+	mtuArgs[0] = "-s"
+	err = iptablesCmdHandler.AppendUnique("mangle", "POSTROUTING", mtuArgs...)
+	if err != nil {
+		return errors.New("Failed to run iptables command to set up TCPMSS due to " + err.Error())
+	}
 	return nil
 }
 
@@ -2067,6 +2079,30 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		err = iptablesCmdHandler.Delete("mangle", "OUTPUT", args...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
+		}
+	}
+
+	// cleanup iptables rule TCPMSS
+	mtuArgs := []string{"-d", ip, "-m", "tcp", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", "1440"}
+	exists, err = iptablesCmdHandler.Exists("mangle", "PREROUTING", mtuArgs...)
+	if err != nil {
+		return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
+	}
+	if exists {
+		err = iptablesCmdHandler.Delete("mangle", "PREROUTING", mtuArgs...)
+		if err != nil {
+			return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
+		}
+	}
+	mtuArgs[0] = "-s"
+	exists, err = iptablesCmdHandler.Exists("mangle", "POSTROUTING", mtuArgs...)
+	if err != nil {
+		return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
+	}
+	if exists {
+		err = iptablesCmdHandler.Delete("mangle", "POSTROUTING", mtuArgs...)
+		if err != nil {
+			return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
 		}
 	}
 
