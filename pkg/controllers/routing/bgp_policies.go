@@ -53,10 +53,10 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		nrc.bgpServer.AddDefinedSet(clusterIPPrefixSet)
 	}
 
+	iBGPPeers := make([]string, 0)
 	if nrc.bgpEnableInternal {
 		// Get the current list of the nodes from the local cache
 		nodes := nrc.nodeLister.List()
-		iBGPPeers := make([]string, 0)
 		for _, node := range nodes {
 			nodeObj := node.(*v1core.Node)
 			nodeIP, err := utils.GetNodeIP(nodeObj)
@@ -95,6 +95,17 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		if err != nil {
 			nrc.bgpServer.AddDefinedSet(ns)
 		}
+	}
+
+	// a slice of all peers is used as a match condition for reject statement of clusteripprefixset import polcy
+	allBgpPeers := append(externalBgpPeers, iBGPPeers...)
+	ns, _ := table.NewNeighborSet(config.NeighborSet{
+		NeighborSetName:  "allpeerset",
+		NeighborInfoList: allBgpPeers,
+	})
+	err = nrc.bgpServer.ReplaceDefinedSet(ns)
+	if err != nil {
+		nrc.bgpServer.AddDefinedSet(ns)
 	}
 
 	err = nrc.addExportPolicies()
@@ -258,7 +269,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 }
 
 // BGP import policies are added so that the following conditions are met:
-// - do not import Service VIPs at all, instead traffic to service VIPs should be sent to the gateway and ECMPed from there
+// - do not import Service VIPs advertised from any peers, instead each kube-router originates and injects Service VIPs into local rib.
 func (nrc *NetworkRoutingController) addImportPolicies() error {
 	statements := make([]config.Statement, 0)
 
@@ -266,6 +277,9 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 		Conditions: config.Conditions{
 			MatchPrefixSet: config.MatchPrefixSet{
 				PrefixSet: "clusteripprefixset",
+			},
+			MatchNeighborSet: config.MatchNeighborSet{
+				NeighborSet: "allpeerset",
 			},
 		},
 		Actions: config.Actions{
