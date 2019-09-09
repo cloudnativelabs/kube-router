@@ -1490,6 +1490,7 @@ type PolicyTestCase struct {
 	podDefinedSet          *config.DefinedSets
 	clusterIPDefinedSet    *config.DefinedSets
 	externalPeerDefinedSet *config.DefinedSets
+	allPeerDefinedSet      *config.DefinedSets
 	exportPolicyStatements []*config.Statement
 	importPolicyStatements []*config.Statement
 	err                    error
@@ -1578,6 +1579,17 @@ func Test_AddPolicies(t *testing.T) {
 				BgpDefinedSets: config.BgpDefinedSets{},
 			},
 			&config.DefinedSets{},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "allpeerset",
+						NeighborInfoList: []string{},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
 			[]*config.Statement{
 				{
 					Name: "kube_router_export_stmt0",
@@ -1602,6 +1614,10 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "allpeerset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 					},
@@ -1711,6 +1727,17 @@ func Test_AddPolicies(t *testing.T) {
 				TagSets:        []config.TagSet{},
 				BgpDefinedSets: config.BgpDefinedSets{},
 			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "allpeerset",
+						NeighborInfoList: []string{"10.10.0.1/32", "10.10.0.2/32"},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
 			[]*config.Statement{
 				{
 					Name: "kube_router_export_stmt0",
@@ -1751,6 +1778,10 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "allpeerset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 					},
@@ -1860,6 +1891,17 @@ func Test_AddPolicies(t *testing.T) {
 				TagSets:        []config.TagSet{},
 				BgpDefinedSets: config.BgpDefinedSets{},
 			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "allpeerset",
+						NeighborInfoList: []string{"10.10.0.1/32", "10.10.0.2/32"},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
 			[]*config.Statement{
 				{
 					Name: "kube_router_export_stmt0",
@@ -1884,6 +1926,10 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "allpeerset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 					},
@@ -1996,6 +2042,17 @@ func Test_AddPolicies(t *testing.T) {
 				TagSets:        []config.TagSet{},
 				BgpDefinedSets: config.BgpDefinedSets{},
 			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "allpeerset",
+						NeighborInfoList: []string{"10.10.0.1/32", "10.10.0.2/32"},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
 			[]*config.Statement{
 				{
 					Name: "kube_router_export_stmt0",
@@ -2042,6 +2099,10 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "allpeerset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 					},
@@ -2153,6 +2214,17 @@ func Test_AddPolicies(t *testing.T) {
 				TagSets:        []config.TagSet{},
 				BgpDefinedSets: config.BgpDefinedSets{},
 			},
+			&config.DefinedSets{
+				PrefixSets: []config.PrefixSet{},
+				NeighborSets: []config.NeighborSet{
+					{
+						NeighborSetName:  "allpeerset",
+						NeighborInfoList: []string{"10.10.0.1/32", "10.10.0.2/32"},
+					},
+				},
+				TagSets:        []config.TagSet{},
+				BgpDefinedSets: config.BgpDefinedSets{},
+			},
 			[]*config.Statement{
 				{
 					Name: "kube_router_export_stmt0",
@@ -2193,6 +2265,10 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: config.Conditions{
 						MatchPrefixSet: config.MatchPrefixSet{
 							PrefixSet:       "clusteripprefixset",
+							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
+						},
+						MatchNeighborSet: config.MatchNeighborSet{
+							NeighborSet:     "allpeerset",
 							MatchSetOptions: config.MATCH_SET_OPTIONS_RESTRICTED_TYPE_ANY,
 						},
 					},
@@ -2278,6 +2354,17 @@ func Test_AddPolicies(t *testing.T) {
 				t.Logf("expected external peer defined set: %+v", testcase.externalPeerDefinedSet.NeighborSets)
 				t.Logf("actual external peer defined set: %+v", externalPeerDefinedSet.NeighborSets)
 				t.Error("unexpected external peer defined set")
+			}
+
+			allPeerDefinedSet, err := testcase.nrc.bgpServer.GetDefinedSet(table.DEFINED_TYPE_NEIGHBOR, "allpeerset")
+			if err != nil {
+				t.Fatalf("error validating defined sets: %v", err)
+			}
+
+			if !allPeerDefinedSet.Equal(testcase.allPeerDefinedSet) {
+				t.Logf("expected all peer defined set: %+v", testcase.allPeerDefinedSet.NeighborSets)
+				t.Logf("actual all peer defined set: %+v", allPeerDefinedSet.NeighborSets)
+				t.Error("unexpected all peer defined set")
 			}
 
 			checkPolicies(t, testcase, table.POLICY_DIRECTION_EXPORT, table.ROUTE_TYPE_REJECT, testcase.exportPolicyStatements)
