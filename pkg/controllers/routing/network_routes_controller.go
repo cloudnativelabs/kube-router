@@ -666,9 +666,14 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 	// an error here indicates that the the tunnel didn't exist, so we need to create it, if it already exists there's
 	// nothing to do here
 	if err != nil {
-		out, err = exec.Command(
-			"ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(), "remote",
-			nextHop.String(), "dev", nrc.nodeInterface).CombinedOutput()
+		cmdArgs := []string{"tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(), "remote",
+			nextHop.String()}
+		// need to skip binding device if nrc.nodeInterface is loopback, otherwise packets never leave
+		// from egress interface to the tunnel peer.
+		if nrc.nodeInterface != "lo" {
+			cmdArgs = append(cmdArgs, []string{"dev", nrc.nodeInterface}...)
+		}
+		out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
 				"Failed to create tunnel interface %s. error: %s, output: %s",
