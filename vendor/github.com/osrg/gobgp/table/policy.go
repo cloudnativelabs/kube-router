@@ -3217,7 +3217,7 @@ func (r *RoutingPolicy) setDefaultPolicy(id string, dir PolicyDirection, typ Rou
 }
 
 /*
- * We can start exporinting the set/getDefaultPolicy calls. This is temporary. 
+ * We can start exporinting the set/getDefaultPolicy calls. This is temporary.
  */
 func (r *RoutingPolicy) SetDefaultPolicy(id string, dir PolicyDirection, typ RouteType) error {
         return r.setDefaultPolicy(id, dir, typ)
