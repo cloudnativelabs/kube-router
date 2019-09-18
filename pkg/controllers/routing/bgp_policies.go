@@ -256,13 +256,10 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		}
 	} else {
 		// configure default BGP export policy to reject
-		err = nrc.bgpServer.ReplacePolicyAssignment("",
-			table.POLICY_DIRECTION_EXPORT,
-			[]*config.PolicyDefinition{&definition},
-			table.ROUTE_TYPE_REJECT)
-		if err != nil {
-			return errors.New("Failed to replace policy assignment: " + err.Error())
-		}
+    err = nrc.bgpServer.SetDefaultPolicy("", table.POLICY_DIRECTION_EXPORT, table.ROUTE_TYPE_REJECT)
+    if err != nil {
+      return errors.New("Failed to set def export policy: " + err.Error())
+    }
 	}
 
 	return nil
@@ -332,13 +329,10 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 			return errors.New("Failed to add policy assignment: " + err.Error())
 		}
 	} else {
-		err = nrc.bgpServer.ReplacePolicyAssignment("",
-			table.POLICY_DIRECTION_IMPORT,
-			[]*config.PolicyDefinition{&definition},
-			table.ROUTE_TYPE_ACCEPT)
-		if err != nil {
-			return errors.New("Failed to replace policy assignment: " + err.Error())
-		}
+    err = nrc.bgpServer.SetDefaultPolicy("", table.POLICY_DIRECTION_IMPORT, table.ROUTE_TYPE_ACCEPT)
+    if err != nil {
+      return errors.New("Failed to set def import policy: " + err.Error())
+    }
 	}
 
 	return nil

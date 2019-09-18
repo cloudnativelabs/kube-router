@@ -3216,6 +3216,13 @@ func (r *RoutingPolicy) setDefaultPolicy(id string, dir PolicyDirection, typ Rou
 	return nil
 }
 
+/*
+ * We can start exporinting the set/getDefaultPolicy calls. This is temporary. 
+ */
+func (r *RoutingPolicy) SetDefaultPolicy(id string, dir PolicyDirection, typ RouteType) error {
+        return r.setDefaultPolicy(id, dir, typ)
+}
+
 func (r *RoutingPolicy) getAssignmentFromConfig(dir PolicyDirection, a config.ApplyPolicy) ([]*Policy, RouteType, error) {
 	var names []string
 	var cdef config.DefaultPolicyType

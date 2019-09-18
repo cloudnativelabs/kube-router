@@ -2558,6 +2558,16 @@ func (server *BgpServer) toPolicyInfo(name string, dir table.PolicyDirection) (s
 	}
 }
 
+func (s *BgpServer) SetDefaultPolicy(name string, dir table.PolicyDirection, def table.RouteType) error {
+        return s.mgmtOperation(func() error {
+                id, err := s.toPolicyInfo(name, dir)
+                if err != nil {
+                        return err
+                }
+                return s.policy.SetDefaultPolicy(id, dir, def)
+        }, false)
+}
+
 func (s *BgpServer) GetPolicyAssignment(name string, dir table.PolicyDirection) (rt table.RouteType, l []*config.PolicyDefinition, err error) {
 	err = s.mgmtOperation(func() error {
 		var id string
