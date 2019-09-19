@@ -24,6 +24,7 @@ func Equal(a, b []string) bool {
 type ServiceAdvertisedIPs struct {
 	service       *v1core.Service
 	advertisedIPs []string
+	withdrawnIPs  []string
 	annotations   map[string]string
 }
 
@@ -97,21 +98,25 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["cluster"],
 					[]string{"10.0.0.1"},
+					[]string{},
 					nil,
 				},
 				{
 					services["external"],
 					[]string{"10.0.0.1", "1.1.1.1"},
+					[]string{},
 					nil,
 				},
 				{
 					services["nodeport"],
 					[]string{"10.0.0.1", "1.1.1.1"},
+					[]string{},
 					nil,
 				},
 				{
 					services["loadbalancer"],
 					[]string{"10.0.0.1", "10.0.255.1", "10.0.255.2"},
+					[]string{},
 					nil,
 				},
 			},
@@ -123,20 +128,24 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["cluster"],
 					[]string{},
+					[]string{},
 					nil,
 				},
 				{
 					services["external"],
+					[]string{},
 					[]string{},
 					nil,
 				},
 				{
 					services["nodeport"],
 					[]string{},
+					[]string{},
 					nil,
 				},
 				{
 					services["loadbalancer"],
+					[]string{},
 					[]string{},
 					nil,
 				},
@@ -149,21 +158,25 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["cluster"],
 					[]string{"10.0.0.1"},
+					[]string{},
 					nil,
 				},
 				{
 					services["external"],
 					[]string{"10.0.0.1"},
+					[]string{},
 					nil,
 				},
 				{
 					services["nodeport"],
 					[]string{"10.0.0.1"},
+					[]string{},
 					nil,
 				},
 				{
 					services["loadbalancer"],
 					[]string{"10.0.0.1"},
+					[]string{},
 					nil,
 				},
 			},
@@ -175,20 +188,24 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["cluster"],
 					[]string{},
+					[]string{},
 					nil,
 				},
 				{
 					services["external"],
 					[]string{"1.1.1.1"},
+					[]string{},
 					nil,
 				},
 				{
 					services["nodeport"],
 					[]string{"1.1.1.1"},
+					[]string{},
 					nil,
 				},
 				{
 					services["loadbalancer"],
+					[]string{},
 					[]string{},
 					nil,
 				},
@@ -201,21 +218,25 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["cluster"],
 					[]string{},
+					[]string{},
 					nil,
 				},
 				{
 					services["external"],
+					[]string{},
 					[]string{},
 					nil,
 				},
 				{
 					services["nodeport"],
 					[]string{},
+					[]string{},
 					nil,
 				},
 				{
 					services["loadbalancer"],
 					[]string{"10.0.255.1", "10.0.255.2"},
+					[]string{},
 					nil,
 				},
 			},
@@ -227,6 +248,7 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["cluster"],
 					[]string{"10.0.0.1"},
+					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
@@ -236,6 +258,7 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["external"],
 					[]string{"10.0.0.1", "1.1.1.1"},
+					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
@@ -245,6 +268,7 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["nodeport"],
 					[]string{"10.0.0.1", "1.1.1.1"},
+					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
@@ -254,6 +278,7 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["loadbalancer"],
 					[]string{"10.0.0.1", "10.0.255.1", "10.0.255.2"},
+					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
@@ -264,6 +289,7 @@ func Test_getVIPsForService(t *testing.T) {
 					// Special case to test svcAdvertiseLoadBalancerAnnotation vs legacy svcSkipLbIpsAnnotation
 					services["loadbalancer"],
 					[]string{"10.0.0.1"},
+					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
@@ -280,6 +306,7 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["cluster"],
 					[]string{},
+					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "false",
 						svcAdvertiseExternalAnnotation:     "false",
@@ -288,6 +315,7 @@ func Test_getVIPsForService(t *testing.T) {
 				},
 				{
 					services["external"],
+					[]string{},
 					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "false",
@@ -298,6 +326,7 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					services["nodeport"],
 					[]string{},
+					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "false",
 						svcAdvertiseExternalAnnotation:     "false",
@@ -306,6 +335,7 @@ func Test_getVIPsForService(t *testing.T) {
 				},
 				{
 					services["loadbalancer"],
+					[]string{},
 					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "false",
@@ -331,10 +361,14 @@ func Test_getVIPsForService(t *testing.T) {
 					serviceAdvertisedIP.service.ObjectMeta.Annotations = serviceAdvertisedIP.annotations
 				}
 				svc, _ := clientset.CoreV1().Services("default").Create(serviceAdvertisedIP.service)
-				advertisedIPs, _, _ := nrc.getVIPsForService(svc, false)
+				advertisedIPs, withdrawnIPs, _ := nrc.getVIPsForService(svc, false)
 				t.Logf("AdvertisedIPs: %v\n", advertisedIPs)
+				t.Logf("WithdrawnIPs: %v\n", withdrawnIPs)
 				if !Equal(serviceAdvertisedIP.advertisedIPs, advertisedIPs) {
-					t.Errorf("Advertised IPs are incorrect, got: %v, want: %v.", serviceAdvertisedIP.advertisedIPs, advertisedIPs)
+					t.Errorf("Advertised IPs are incorrect, got: %v, want: %v.", advertisedIPs, serviceAdvertisedIP.advertisedIPs)
+				}
+				if !Equal(serviceAdvertisedIP.withdrawnIPs, withdrawnIPs) {
+					t.Errorf("Withdrawn IPs are incorrect, got: %v, want: %v.", withdrawnIPs, serviceAdvertisedIP.withdrawnIPs)
 				}
 			}
 		})
