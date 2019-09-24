@@ -99,7 +99,7 @@ type NetworkRoutingController struct {
 	bgpPort                        uint16
 	bgpRRClient                    bool
 	bgpRRServer                    bool
-	bgpClusterID                   uint32
+	bgpClusterID                   string
 	cniConfFile                    string
 	disableSrcDstCheck             bool
 	initSrcDstCheckDone            bool
@@ -672,19 +672,23 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 
 	if clusterid, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; ok {
 		glog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
-		clusterID, err := strconv.ParseUint(clusterid, 0, 32)
+		_, err := strconv.ParseUint(clusterid, 0, 32)
 		if err != nil {
-			return errors.New("Failed to parse rr.server clusterId number specified for the the node")
+			if ip := net.ParseIP(clusterid).To4(); ip == nil {
+				return errors.New("Failed to parse rr.server clusterId specified for the node")
+			}
 		}
-		nrc.bgpClusterID = uint32(clusterID)
+		nrc.bgpClusterID = clusterid
 		nrc.bgpRRServer = true
 	} else if clusterid, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
 		glog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
-		clusterID, err := strconv.ParseUint(clusterid, 0, 32)
+		_, err := strconv.ParseUint(clusterid, 0, 32)
 		if err != nil {
-			return errors.New("Failed to parse rr.client clusterId number specified for the the node")
+			if ip := net.ParseIP(clusterid).To4(); ip == nil {
+				return errors.New("Failed to parse rr.client clusterId specified for the node")
+			}
 		}
-		nrc.bgpClusterID = uint32(clusterID)
+		nrc.bgpClusterID = clusterid
 		nrc.bgpRRClient = true
 	}
 
