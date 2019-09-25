@@ -36,16 +36,18 @@ import (
 )
 
 const (
-	KUBE_DUMMY_IF       = "kube-dummy-if"
-	KUBE_TUNNEL_IF      = "kube-tunnel-if"
-	IFACE_NOT_FOUND     = "Link not found"
-	IFACE_HAS_ADDR      = "file exists"
-	IFACE_HAS_NO_ADDR   = "cannot assign requested address"
-	IPVS_SERVER_EXISTS  = "file exists"
-	IPVS_MAGLEV_HASHING = "mh"
-	IPVS_SVC_F_SCHED1   = "flag-1"
-	IPVS_SVC_F_SCHED2   = "flag-2"
-	IPVS_SVC_F_SCHED3   = "flag-3"
+	KUBE_DUMMY_IF                  = "kube-dummy-if"
+	KUBE_TUNNEL_IF                 = "kube-tunnel-if"
+	IFACE_NOT_FOUND                = "Link not found"
+	IFACE_HAS_ADDR                 = "file exists"
+	IFACE_HAS_NO_ADDR              = "cannot assign requested address"
+	IPVS_SERVER_EXISTS             = "file exists"
+	IPVS_MAGLEV_HASHING            = "mh"
+	IPVS_WEIGHTED_ROUND_ROBIN      = "wrr"
+	IPVS_WEIGHTED_LEAST_CONNECTION = "wlc"
+	IPVS_SVC_F_SCHED1              = "flag-1"
+	IPVS_SVC_F_SCHED2              = "flag-2"
+	IPVS_SVC_F_SCHED3              = "flag-3"
 
 	svcDSRAnnotation        = "kube-router.io/service.dsr"
 	svcSchedulerAnnotation  = "kube-router.io/service.scheduler"
