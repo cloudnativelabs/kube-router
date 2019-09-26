@@ -63,52 +63,52 @@ const (
 
 // NetworkRoutingController is struct to hold necessary information required by controller
 type NetworkRoutingController struct {
-	nodeIP                         net.IP
-	nodeName                       string
-	nodeSubnet                     net.IPNet
-	nodeInterface                  string
-	routerId                       string
-	isIpv6                         bool
-	activeNodes                    map[string]bool
-	mu                             sync.Mutex
-	clientset                      kubernetes.Interface
-	bgpServer                      *gobgp.BgpServer
-	syncPeriod                     time.Duration
-	clusterCIDR                    string
-	enablePodEgress                bool
-	hostnameOverride               string
-	advertiseClusterIP             bool
-	advertiseExternalIP            bool
-	advertiseLoadBalancerIP        bool
-	advertisePodCidr               bool
-	defaultNodeAsnNumber           uint32
-	nodeAsnNumber                  uint32
-	globalPeerRouters              []*config.Neighbor
-	nodePeerRouters                []string
-	enableCNI                      bool
-	bgpFullMeshMode                bool
-	bgpEnableInternal              bool
-	bgpGracefulRestart             bool
-	bgpGracefulRestartDeferralTime time.Duration
-	ipSetHandler                   *utils.IPSet
-	enableOverlays                 bool
-	overlayType                    string
-	peerMultihopTTL                uint8
-	MetricsEnabled                 bool
-	bgpServerStarted               bool
-	bgpPort                        uint16
-	bgpRRClient                    bool
-	bgpRRServer                    bool
-	bgpClusterID                   uint32
-	cniConfFile                    string
-	disableSrcDstCheck             bool
-	initSrcDstCheckDone            bool
-	ec2IamAuthorized               bool
-	pathPrependAS                  string
-	pathPrependCount               uint8
-	pathPrepend                    bool
-	localAddressList               []string
-	overrideNextHop                bool
+	nodeIP                  net.IP
+	nodeName                string
+	nodeSubnet              net.IPNet
+	nodeInterface           string
+	routerId                string
+	isIpv6                  bool
+	activeNodes             map[string]bool
+	mu                      sync.Mutex
+	clientset               kubernetes.Interface
+	bgpServer               *gobgp.BgpServer
+	syncPeriod              time.Duration
+	clusterCIDR             string
+	enablePodEgress         bool
+	hostnameOverride        string
+	advertiseClusterIP      bool
+	advertiseClusterSubnet	string
+	advertiseExternalIP     bool
+	advertiseLoadBalancerIP bool
+	advertisePodCidr        bool
+	defaultNodeAsnNumber    uint32
+	nodeAsnNumber           uint32
+	globalPeerRouters       []*config.Neighbor
+	nodePeerRouters         []string
+	enableCNI               bool
+	bgpFullMeshMode         bool
+	bgpEnableInternal       bool
+	bgpGracefulRestart      bool
+	ipSetHandler            *utils.IPSet
+	enableOverlays          bool
+	overlayType             string
+	peerMultihopTTL         uint8
+	MetricsEnabled          bool
+	bgpServerStarted        bool
+	bgpPort                 uint16
+	bgpRRClient             bool
+	bgpRRServer             bool
+	bgpClusterID            uint32
+	cniConfFile             string
+	disableSrcDstCheck      bool
+	initSrcDstCheckDone     bool
+	ec2IamAuthorized        bool
+	pathPrependAS           string
+	pathPrependCount        uint8
+	pathPrepend             bool
+	localAddressList        []string
+	overrideNextHop         bool
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -822,7 +822,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	if len(nrc.globalPeerRouters) != 0 {
-		err := connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart, nrc.bgpGracefulRestartDeferralTime, nrc.peerMultihopTTL)
+		err := connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart, nrc.peerMultihopTTL)
 		if err != nil {
 			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
@@ -859,7 +859,6 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.enableCNI = kubeRouterConfig.EnableCNI
 	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
-	nrc.bgpGracefulRestartDeferralTime = kubeRouterConfig.BGPGracefulRestartDeferralTime
 	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTtl
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
@@ -871,6 +870,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
+        nrc.advertiseClusterSubnet = kubeRouterConfig.AdvertiseClusterSubnet
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
 	node, err := utils.GetNodeObject(clientset, nrc.hostnameOverride)
