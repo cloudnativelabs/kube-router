@@ -12,66 +12,65 @@ import (
 const DEFAULT_BGP_PORT = 179
 
 type KubeRouterConfig struct {
-	AdvertiseClusterIp             bool
-	AdvertiseExternalIp            bool
-	AdvertiseNodePodCidr           bool
-	AdvertiseLoadBalancerIp        bool
-	BGPGracefulRestart             bool
-	BGPGracefulRestartDeferralTime time.Duration
-	BGPPort                        uint16
-	CacheSyncTimeout               time.Duration
-	CleanupConfig                  bool
-	ClusterAsn                     uint
-	ClusterCIDR                    string
-	DisableSrcDstCheck             bool
-	EnableCNI                      bool
-	EnableiBGP                     bool
-	EnableOverlay                  bool
-	EnablePodEgress                bool
-	EnablePprof                    bool
-	FullMeshMode                   bool
-	OverlayType                    string
-	GlobalHairpinMode              bool
-	HealthPort                     uint16
-	HelpRequested                  bool
-	HostnameOverride               string
-	IPTablesSyncPeriod             time.Duration
-	IpvsSyncPeriod                 time.Duration
-	IpvsGracefulPeriod             time.Duration
-	IpvsGracefulTermination        bool
-	Kubeconfig                     string
-	MasqueradeAll                  bool
-	Master                         string
-	MetricsEnabled                 bool
-	MetricsPath                    string
-	MetricsPort                    uint16
-	NodePortBindOnAllIp            bool
-	OverrideNextHop                bool
-	PeerASNs                       []uint
-	PeerMultihopTtl                uint8
-	PeerPasswords                  []string
-	PeerPorts                      []uint
-	PeerRouters                    []net.IP
-	RouterId                       string
-	RoutesSyncPeriod               time.Duration
-	RunFirewall                    bool
-	RunRouter                      bool
-	RunServiceProxy                bool
-	Version                        bool
-	VLevel                         string
+	AdvertiseClusterIp      bool
+	AdvertiseClusterSubnet  string
+	AdvertiseExternalIp     bool
+	AdvertiseNodePodCidr    bool
+	AdvertiseLoadBalancerIp bool
+	BGPGracefulRestart      bool
+	BGPPort                 uint16
+	CacheSyncTimeout        time.Duration
+	CleanupConfig           bool
+	ClusterAsn              uint
+	ClusterCIDR             string
+	DisableSrcDstCheck      bool
+	EnableCNI               bool
+	EnableiBGP              bool
+	EnableOverlay           bool
+	EnablePodEgress         bool
+	EnablePprof             bool
+	FullMeshMode            bool
+	OverlayType             string
+	GlobalHairpinMode       bool
+	HealthPort              uint16
+	HelpRequested           bool
+	HostnameOverride        string
+	IPTablesSyncPeriod      time.Duration
+	IpvsSyncPeriod          time.Duration
+	IpvsGracefulPeriod      time.Duration
+	IpvsGracefulTermination bool
+	Kubeconfig              string
+	MasqueradeAll           bool
+	Master                  string
+	MetricsEnabled          bool
+	MetricsPath             string
+	MetricsPort             uint16
+	NodePortBindOnAllIp     bool
+	OverrideNextHop         bool
+	PeerASNs                []uint
+	PeerMultihopTtl         uint8
+	PeerPasswords           []string
+	PeerPorts               []uint
+	PeerRouters             []net.IP
+	RouterId                string
+	RoutesSyncPeriod        time.Duration
+	RunFirewall             bool
+	RunRouter               bool
+	RunServiceProxy         bool
+	Version                 bool
+	VLevel                  string
 	// FullMeshPassword    string
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
 	return &KubeRouterConfig{
-		CacheSyncTimeout:               1 * time.Minute,
-		IpvsSyncPeriod:                 5 * time.Minute,
-		IPTablesSyncPeriod:             5 * time.Minute,
-		IpvsGracefulPeriod:             30 * time.Second,
-		RoutesSyncPeriod:               5 * time.Minute,
-		BGPGracefulRestartDeferralTime: 360 * time.Second,
-		EnableOverlay:                  true,
-		OverlayType:                    "subnet",
+		CacheSyncTimeout:   1 * time.Minute,
+		IpvsSyncPeriod:     5 * time.Minute,
+		IPTablesSyncPeriod: 5 * time.Minute,
+		IpvsGracefulPeriod: 30 * time.Second,
+		RoutesSyncPeriod:   5 * time.Minute,
+		EnableOverlay:      true,
+		OverlayType:        "subnet",
 	}
 }
 
@@ -112,6 +111,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
 		"Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.")
+	fs.StringVar(&s.AdvertiseClusterSubnet, "advertise-cluster-subnet", s.AdvertiseClusterSubnet,
+		"If this parameter is set, the cluster IP of service will not be put into RIB, but the value set by this parameter will be put into RIB. The main purpose of this parameter is to reduce the number of service routes sent by kube-router to the upper BGP network devices.")
 	fs.BoolVar(&s.AdvertiseExternalIp, "advertise-external-ip", false,
 		"Add External IP of service to the RIB so that it gets advertised to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseLoadBalancerIp, "advertise-loadbalancer-ip", false,
@@ -132,8 +133,6 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
-	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time", s.BGPGracefulRestartDeferralTime,
-		"BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h.")
 	fs.Uint16Var(&s.BGPPort, "bgp-port", DEFAULT_BGP_PORT,
 		"The port open for incoming BGP connections and to use for connecting with other BGP peers.")
 	fs.StringVar(&s.RouterId, "router-id", "", "BGP router-id. Must be specified in a ipv6 only cluster.")
