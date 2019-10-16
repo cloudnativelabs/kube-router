@@ -212,6 +212,7 @@ type NetworkServicesController struct {
 	podCidr             string
 	masqueradeAll       bool
 	globalHairpin       bool
+	ipvsAllowAllInput   bool
 	client              kubernetes.Interface
 	nodeportBindOnAllIp bool
 	MetricsEnabled      bool
@@ -507,19 +508,23 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 
 	var comment string
 	var args []string
+	var exists bool
 
-	comment = "allow input traffic to ipvs services"
-	args = []string{"-m", "comment", "--comment", comment,
-		"-m", "set", "--match-set", ipvsServicesIPSetName, "dst,dst",
-		"-j", "ACCEPT"}
-	exists, err := iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
-	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-	}
-	if !exists {
-		err := iptablesCmdHandler.Insert("filter", ipvsFirewallChainName, 1, args...)
+	// Conditional AllowAllInput on KUBE-ROUTER-SERVICES determined by flags.
+	if nsc.ipvsAllowAllInput {
+		comment = "allow input traffic to ipvs services"
+		args = []string{"-m", "comment", "--comment", comment,
+			"-m", "set", "--match-set", ipvsServicesIPSetName, "dst,dst",
+			"-j", "ACCEPT"}
+		exists, err := iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+		if !exists {
+			err := iptablesCmdHandler.Insert("filter", ipvsFirewallChainName, 1, args...)
+			if err != nil {
+				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
 		}
 	}
 
@@ -561,8 +566,8 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 
 func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 	/*
-	   - delete firewall rules
-	   - delete ipsets
+		- delete firewall rules
+		- delete ipsets
 	*/
 	var err error
 
@@ -2445,6 +2450,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.svcLister = svcInformer.GetIndexer()
 	nsc.ServiceEventHandler = nsc.newSvcEventHandler()
+
+	nsc.ipvsAllowAllInput = config.IpvsAllowAllInput
 
 	nsc.epLister = epInformer.GetIndexer()
 	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
