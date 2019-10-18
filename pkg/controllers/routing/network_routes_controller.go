@@ -1050,12 +1050,23 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		peerPorts = append(peerPorts, uint32(i))
 	}
 
-	// Decode base64 passwords
+	// PeerPasswords as cli params take precedence over password file
 	peerPasswords := make([]string, 0)
 	if len(kubeRouterConfig.PeerPasswords) != 0 {
 		peerPasswords, err = stringSliceB64Decode(kubeRouterConfig.PeerPasswords)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to parse CLI Peer Passwords flag: %s", err)
+		}
+	} else if len(kubeRouterConfig.PeerPasswordsFile) != 0 {
+		// Contents of the pw file should be in the same format as pw from CLI arg
+		pwfileBytes, err := ioutil.ReadFile(kubeRouterConfig.PeerPasswordsFile)
+		if err != nil {
+			return nil, fmt.Errorf("Error loading Peer Passwords File : %s", err)
+		}
+		pws := strings.Split(string(pwfileBytes), ",")
+		peerPasswords, err = stringSliceB64Decode(pws)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to decode CLI Peer Passwords file: %s", err)
 		}
 	}
 
