@@ -143,6 +143,13 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if kr.Config.BGPGracefulRestart {
+		if kr.Config.BGPGracefulRestartTime > time.Second*4095 {
+			return errors.New("BGPGracefuleRestartTime should be less than 4095 seconds")
+		}
+		if kr.Config.BGPGracefulRestartTime <= 0 {
+			return errors.New("BGPGracefuleRestartTime must be positive")
+		}
+
 		if kr.Config.BGPGracefulRestartDeferralTime > time.Hour*18 {
 			return errors.New("BGPGracefuleRestartDeferralTime should be less than 18 hours")
 		}

@@ -89,6 +89,7 @@ type NetworkRoutingController struct {
 	bgpFullMeshMode                bool
 	bgpEnableInternal              bool
 	bgpGracefulRestart             bool
+	bgpGracefulRestartTime         time.Duration
 	bgpGracefulRestartDeferralTime time.Duration
 	ipSetHandler                   *utils.IPSet
 	enableOverlays                 bool
@@ -822,7 +823,8 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	}
 
 	if len(nrc.globalPeerRouters) != 0 {
-		err := connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart, nrc.bgpGracefulRestartDeferralTime, nrc.peerMultihopTTL)
+		err := connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart,
+			nrc.bgpGracefulRestartDeferralTime, nrc.bgpGracefulRestartTime, nrc.peerMultihopTTL)
 		if err != nil {
 			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
@@ -860,6 +862,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
 	nrc.bgpGracefulRestartDeferralTime = kubeRouterConfig.BGPGracefulRestartDeferralTime
+	nrc.bgpGracefulRestartTime = kubeRouterConfig.BGPGracefulRestartTime
 	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTtl
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod

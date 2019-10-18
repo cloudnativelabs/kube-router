@@ -17,6 +17,7 @@ type KubeRouterConfig struct {
 	AdvertiseNodePodCidr           bool
 	AdvertiseLoadBalancerIp        bool
 	BGPGracefulRestart             bool
+	BGPGracefulRestartTime         time.Duration
 	BGPGracefulRestartDeferralTime time.Duration
 	BGPPort                        uint16
 	CacheSyncTimeout               time.Duration
@@ -69,6 +70,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IPTablesSyncPeriod:             5 * time.Minute,
 		IpvsGracefulPeriod:             30 * time.Second,
 		RoutesSyncPeriod:               5 * time.Minute,
+		BGPGracefulRestartTime:         90 * time.Second,
 		BGPGracefulRestartDeferralTime: 360 * time.Second,
 		EnableOverlay:                  true,
 		OverlayType:                    "subnet",
@@ -132,6 +134,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
+	fs.DurationVar(&s.BGPGracefulRestartTime, "bgp-graceful-restart-time", s.BGPGracefulRestartTime,
+		"BGP Graceful restart time according to RFC4724 3, maximum 4095s.")
 	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time", s.BGPGracefulRestartDeferralTime,
 		"BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h.")
 	fs.Uint16Var(&s.BGPPort, "bgp-port", DEFAULT_BGP_PORT,
