@@ -50,6 +50,7 @@ type KubeRouterConfig struct {
 	PeerASNs                       []uint
 	PeerMultihopTtl                uint8
 	PeerPasswords                  []string
+	PeerPasswordsFile              string
 	PeerPorts                      []uint
 	PeerRouters                    []net.IP
 	RouterId                       string
@@ -156,6 +157,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 			"When set to \"full\", it changes \"--enable-overlay=true\" default behavior so that IP-in-IP tunneling is used for pod-to-pod networking across nodes regardless of the subnet the nodes are in.")
 	fs.StringSliceVar(&s.PeerPasswords, "peer-router-passwords", s.PeerPasswords,
 		"Password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
+	fs.StringVar(&s.PeerPasswordsFile, "peer-router-passwords-file", s.PeerPasswordsFile,
+		"Path to file containing password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
 	fs.BoolVar(&s.EnablePprof, "enable-pprof", false,
 		"Enables pprof for debugging performance and memory leak issues.")
 	fs.Uint16Var(&s.MetricsPort, "metrics-port", 0, "Prometheus metrics port, (Default 0, Disabled)")
