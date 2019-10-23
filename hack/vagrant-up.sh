@@ -52,7 +52,7 @@ for i in ${HACK_MANIFEST_DIRS}
 do
   cp -f "${i}"/*.yaml "${BK_CLONE_DIR}/hack/custom-manifests" \
     || echo "INFO: No custom .yaml files found."
-  cp -f "${i}"/*.yml "${BK_CLONE_DIR}/hack/custom-manifests" \
+  cp -f "${i}"/*.yaml "${BK_CLONE_DIR}/hack/custom-manifests" \
     || echo "INFO: No custom .yml files found."
 
   if [ -f "${KR_MANIFEST_PATH}" ]; then
