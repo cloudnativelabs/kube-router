@@ -212,7 +212,7 @@ type NetworkServicesController struct {
 	podCidr             string
 	masqueradeAll       bool
 	globalHairpin       bool
-	ipvsAllowAllInput   bool
+	ipvsDenyAll         bool
 	client              kubernetes.Interface
 	nodeportBindOnAllIp bool
 	MetricsEnabled      bool
@@ -506,12 +506,12 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 
-	var comment string
-	var args []string
-	var exists bool
+	// config.IpvsDenyAll: true then prevent INPUT/KUBE-ROUTER-SERVICE Chain creation
+	if !nsc.ipvsDenyAll {
+		var comment string
+		var args []string
+		var exists bool
 
-	// Conditional AllowAllInput on KUBE-ROUTER-SERVICES determined by flags.
-	if nsc.ipvsAllowAllInput {
 		comment = "allow input traffic to ipvs services"
 		args = []string{"-m", "comment", "--comment", comment,
 			"-m", "set", "--match-set", ipvsServicesIPSetName, "dst,dst",
@@ -526,38 +526,38 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 		}
-	}
 
-	comment = "allow icmp echo requests to service IPs"
-	args = []string{"-m", "comment", "--comment", comment,
-		"-p", "icmp", "--icmp-type", "echo-request",
-		"-j", "ACCEPT"}
-	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
-	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-	}
-
-	// We exclude the local addresses here as that would otherwise block all
-	// traffic to local addresses if any NodePort service exists.
-	comment = "reject all unexpected traffic to service IPs"
-	args = []string{"-m", "comment", "--comment", comment,
-		"-m", "set", "!", "--match-set", localIPsIPSetName, "dst",
-		"-j", "REJECT", "--reject-with", "icmp-port-unreachable"}
-	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
-	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-	}
-
-	// Pass incomming traffic into our custom chain.
-	ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
-	exists, err = iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
-	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-	}
-	if !exists {
-		err = iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
+		comment = "allow icmp echo requests to service IPs"
+		args = []string{"-m", "comment", "--comment", comment,
+			"-p", "icmp", "--icmp-type", "echo-request",
+			"-j", "ACCEPT"}
+		err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+
+		// We exclude the local addresses here as that would otherwise block all
+		// traffic to local addresses if any NodePort service exists.
+		comment = "reject all unexpected traffic to service IPs"
+		args = []string{"-m", "comment", "--comment", comment,
+			"-m", "set", "!", "--match-set", localIPsIPSetName, "dst",
+			"-j", "REJECT", "--reject-with", "icmp-port-unreachable"}
+		err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+
+		// Pass incomming traffic into our custom chain.
+		ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
+		exists, err = iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+		if !exists {
+			err = iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
+			if err != nil {
+				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
 		}
 	}
 
@@ -2451,7 +2451,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.svcLister = svcInformer.GetIndexer()
 	nsc.ServiceEventHandler = nsc.newSvcEventHandler()
 
-	nsc.ipvsAllowAllInput = config.IpvsAllowAllInput
+	nsc.ipvsDenyAll = config.IpvsDenyAll
 
 	nsc.epLister = epInformer.GetIndexer()
 	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
