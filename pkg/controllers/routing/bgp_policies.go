@@ -21,7 +21,8 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 
 	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
-		return err
+		glog.Errorf("Error add policies: %s", err.Error())
+		return nil
 	}
 
 	// creates prefix set to represent the assigned node's pod CIDR
