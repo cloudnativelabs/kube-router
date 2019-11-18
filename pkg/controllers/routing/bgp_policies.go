@@ -8,6 +8,7 @@ import (
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/table"
 	v1core "k8s.io/api/core/v1"
+	"github.com/golang/glog"
 )
 
 // First create all prefix and neighbor sets
