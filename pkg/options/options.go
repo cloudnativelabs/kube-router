@@ -39,7 +39,7 @@ type KubeRouterConfig struct {
 	IpvsSyncPeriod                 time.Duration
 	IpvsGracefulPeriod             time.Duration
 	IpvsGracefulTermination        bool
-	IpvsDenyAll                    bool
+	IpvsPermitAll                  bool
 	Kubeconfig                     string
 	MasqueradeAll                  bool
 	Master                         string
@@ -109,7 +109,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.IpvsGracefulTermination, "ipvs-graceful-termination", false,
 		"Enables the experimental IPVS graceful terminaton capability")
-	fs.BoolVar(&s.IpvsDenyAll, "ipvs-deny-all", false,
+	fs.BoolVar(&s.IpvsPermitAll, "ipvs-permit-all", true,
 		"Enables rule to accept all incoming traffic on the node. Default: false.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
