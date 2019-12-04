@@ -110,7 +110,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.IpvsGracefulTermination, "ipvs-graceful-termination", false,
 		"Enables the experimental IPVS graceful terminaton capability")
 	fs.BoolVar(&s.IpvsPermitAll, "ipvs-permit-all", true,
-		"Enables rule to accept all incoming traffic on the node. Default: false.")
+		"Enables rule to accept all incoming traffic to service VIP's on the node.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
