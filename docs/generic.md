@@ -31,7 +31,7 @@ For example:
 
 ## Running kube-router with everything
 
-This runs kube-router with pod/service networking, the network policy firewall, and service proxy to replace kube-proxy. The example command uses `10.32.0.0/12` as the pod CIDR address range and `https://cluster01.int.domain.com:6443` as the [apiserver](https://kubernetes.io/docs/reference/generated/kube-apiserver/) address. Please change these to suit your cluster.
+This runs kube-router in Kubernetes v1.8+ with pod/service networking, the network policy firewall, and service proxy to replace kube-proxy. The example command uses `10.32.0.0/12` as the pod CIDR address range and `https://cluster01.int.domain.com:6443` as the [apiserver](https://kubernetes.io/docs/reference/generated/kube-apiserver/) address. Please change these to suit your cluster.
 
     CLUSTERCIDR=10.32.0.0/12 \
     APISERVER=https://cluster01.int.domain.com:6443 \
@@ -53,7 +53,7 @@ Any iptables rules kube-proxy left around will also need to be cleaned up. This 
 
 ## Running kube-router without the service proxy
 
-This runs kube-router with pod/service networking and the network policy firewall. The Services proxy is disabled.
+This runs kube-router in Kubernetes v1.8+ with pod/service networking and the network policy firewall. The Services proxy is disabled.
 
     kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml
 
