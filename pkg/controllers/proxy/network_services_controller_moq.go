@@ -4,11 +4,10 @@
 package proxy
 
 import (
-	"net"
-	"sync"
-
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/vishvananda/netlink"
+	"net"
+	"sync"
 )
 
 var (

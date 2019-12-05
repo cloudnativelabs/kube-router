@@ -212,6 +212,7 @@ type NetworkServicesController struct {
 	podCidr             string
 	masqueradeAll       bool
 	globalHairpin       bool
+	ipvsPermitAll       bool
 	client              kubernetes.Interface
 	nodeportBindOnAllIp bool
 	MetricsEnabled      bool
@@ -505,8 +506,14 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 
+	// config.IpvsPermitAll: true then create INPUT/KUBE-ROUTER-SERVICE Chain creation else return
+	if !config.ipvsPermitAll {
+		return nil
+	}
+
 	var comment string
 	var args []string
+	var exists bool
 
 	comment = "allow input traffic to ipvs services"
 	args = []string{"-m", "comment", "--comment", comment,
@@ -561,8 +568,8 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 
 func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 	/*
-	   - delete firewall rules
-	   - delete ipsets
+		- delete firewall rules
+		- delete ipsets
 	*/
 	var err error
 
@@ -2445,6 +2452,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.svcLister = svcInformer.GetIndexer()
 	nsc.ServiceEventHandler = nsc.newSvcEventHandler()
+
+	nsc.ipvsPermitAll = config.IpvsPermitAll
 
 	nsc.epLister = epInformer.GetIndexer()
 	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
