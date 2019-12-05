@@ -39,9 +39,8 @@ spec:
     metadata:
       labels:
         k8s-app: kube-router
-      annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
+      priorityClassName: system-node-critical
       containers:
       - name: kube-router
         image: docker.io/cloudnativelabs/kube-router
