@@ -891,11 +891,6 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 
 		endpoints := endpointsInfoMap[k]
 
-		if svc.local && !hasActiveEndpoints(svc, endpoints) {
-			glog.V(1).Infof("Skipping service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
-			continue
-		}
-
 		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
 		err := nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
 		if err != nil {
@@ -910,6 +905,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		}
 		var clusterServiceId = generateIpPortId(svc.clusterIP.String(), svc.protocol, strconv.Itoa(svc.port))
 		activeServiceEndpointMap[clusterServiceId] = make([]string, 0)
+
+		if svc.local && !hasActiveEndpoints(svc, endpoints) {
+			glog.V(1).Infof("Skipping NodePort/LoadBalancer service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
+			continue
+		}
 
 		// create IPVS service for the service to be exposed through the nodeport
 		var ipvsNodeportSvcs []*ipvs.Service
@@ -1040,13 +1040,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 				Weight:        1,
 			}
 
-			if !svc.local || (svc.local && endpoint.isLocal) {
-				err := nsc.ln.ipvsAddServer(ipvsClusterVipSvc, &dst)
-				if err != nil {
-					glog.Errorf(err.Error())
-				} else {
-					activeServiceEndpointMap[clusterServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
-				}
+			err := nsc.ln.ipvsAddServer(ipvsClusterVipSvc, &dst)
+			if err != nil {
+				glog.Errorf(err.Error())
+			} else {
+				activeServiceEndpointMap[clusterServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
 			}
 
 			if svc.nodePort != 0 {
