@@ -507,7 +507,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	}
 
 	// config.IpvsPermitAll: true then create INPUT/KUBE-ROUTER-SERVICE Chain creation else return
-	if !config.ipvsPermitAll {
+	if !nsc.ipvsPermitAll {
 		return nil
 	}
 
@@ -519,7 +519,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	args = []string{"-m", "comment", "--comment", comment,
 		"-m", "set", "--match-set", ipvsServicesIPSetName, "dst,dst",
 		"-j", "ACCEPT"}
-	exists, err := iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
+	exists, err = iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
