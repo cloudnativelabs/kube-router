@@ -748,6 +748,20 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			}
 		}
 
+		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
+		comment = "rule for stateful firewall for pod"
+		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
+		exists, err = iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+		if !exists {
+			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
+		}
+
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting routed (coming for other node pods)
 		comment = "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
@@ -803,20 +817,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
-
-		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
-		comment = "rule for stateful firewall for pod"
-		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
-		exists, err = iptablesCmdHandler.Exists("filter", podFwChainName, args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
-		}
 	}
 
 	// loop through the pods running on the node which egress network policies to be applied
@@ -859,12 +859,26 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			}
 		}
 
+		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
+		comment := "rule for stateful firewall for pod"
+		args := []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
+		exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+		if !exists {
+			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+			if err != nil {
+				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
+		}
+
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting routed (coming for other node pods)
-		comment := "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
+		comment = "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
 			" to chain " + podFwChainName
-		args := []string{"-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName}
-		exists, err := iptablesCmdHandler.Exists("filter", "FORWARD", args...)
+		args = []string{"-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName}
+		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
@@ -900,20 +914,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-
-		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
-		comment = "rule for stateful firewall for pod"
-		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
-		exists, err = iptablesCmdHandler.Exists("filter", podFwChainName, args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
 		}
 	}
 
