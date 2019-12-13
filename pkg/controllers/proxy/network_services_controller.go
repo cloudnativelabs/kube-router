@@ -276,7 +276,7 @@ type endpointsInfo struct {
 type endpointsInfoMap map[string][]endpointsInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
-func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
@@ -287,25 +287,25 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	err := ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
 	// enable masquerade rule
 	if err != nil {
-		return errors.New("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s" + err.Error())
+		glog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
 	}
 	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
 	sysctlErr := utils.SetSysctl("net/ipv4/vs/conntrack", 1)
 	if sysctlErr != nil {
-		return errors.New(sysctlErr.Error())
+		glog.Error(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
 	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
 	if sysctlErr != nil {
-		return errors.New(sysctlErr.Error())
+		glog.Error(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
 	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", 1)
 	if sysctlErr != nil {
-		return errors.New(sysctlErr.Error())
+		glog.Error(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/71114
@@ -314,27 +314,28 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		// Check if the error is fatal, on older kernels this option does not exist and the same behaviour is default
 		// if option is not found just log it
 		if sysctlErr.IsFatal() {
-			return errors.New(sysctlErr.Error())
+			glog.Fatal(sysctlErr.Error())
+		} else {
+			glog.Info(sysctlErr.Error())
 		}
-		glog.Info(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", 1)
 	if sysctlErr != nil {
-		return errors.New(sysctlErr.Error())
+		glog.Error(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_announce", 2)
 	if sysctlErr != nil {
-		return errors.New(sysctlErr.Error())
+		glog.Error(sysctlErr.Error())
 	}
 
 	// https://github.com/cloudnativelabs/kube-router/issues/282
 	err = nsc.setupIpvsFirewall()
 	if err != nil {
-		return errors.New("Error setting up ipvs firewall: " + err.Error())
+		glog.Error("Error setting up ipvs firewall: " + err.Error())
 	}
 
 	gracefulTicker := time.NewTicker(5 * time.Second)
@@ -343,7 +344,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	select {
 	case <-stopCh:
 		glog.Info("Shutting down network services controller")
-		return nil
+		return
 	default:
 		err := nsc.doSync()
 		if err != nil {
@@ -357,7 +358,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		select {
 		case <-stopCh:
 			glog.Info("Shutting down network services controller")
-			return nil
+			return
 
 		case <-gracefulTicker.C:
 			if nsc.readyForUpdates && nsc.gracefulTermination {
