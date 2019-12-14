@@ -18,17 +18,12 @@ func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 		return fmt.Errorf("Failed to update rt_tables file: %s", err)
 	}
 
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		return fmt.Errorf("Failed to get the pod CIDR allocated for the node: %s", err.Error())
-	}
-
 	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
 		return fmt.Errorf("Failed to verify if `ip rule` exists: %s", err.Error())
 	}
 
-	if !strings.Contains(string(out), cidr) {
+	if !strings.Contains(string(out), nrc.podCidr) {
 		err = exec.Command("ip", "rule", "add", "from", cidr, "lookup", customRouteTableID).Run()
 		if err != nil {
 			return fmt.Errorf("Failed to add ip rule due to: %s", err.Error())
@@ -44,19 +39,13 @@ func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
 		return fmt.Errorf("Failed to update rt_tables file: %s", err)
 	}
 
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		return fmt.Errorf("Failed to get the pod CIDR allocated for the node: %s",
-			err.Error())
-	}
-
 	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
 		return fmt.Errorf("Failed to verify if `ip rule` exists: %s",
 			err.Error())
 	}
 
-	if strings.Contains(string(out), cidr) {
+	if strings.Contains(string(out), nrc.podCidr) {
 		err = exec.Command("ip", "rule", "del", "from", cidr, "table", customRouteTableID).Run()
 		if err != nil {
 			return fmt.Errorf("Failed to delete ip rule: %s", err.Error())

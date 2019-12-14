@@ -8,7 +8,6 @@ import (
 	"github.com/osrg/gobgp/config"
 	"github.com/osrg/gobgp/table"
 	v1core "k8s.io/api/core/v1"
-	"github.com/golang/glog"
 )
 
 // First create all prefix and neighbor sets
@@ -20,18 +19,12 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		return nil
 	}
 
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		glog.Errorf("Error add policies: %s", err.Error())
-		return nil
-	}
-
 	// creates prefix set to represent the assigned node's pod CIDR
 	podCidrPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
 		PrefixSetName: "podcidrprefixset",
 		PrefixList: []config.Prefix{
 			{
-				IpPrefix: cidr,
+				IpPrefix: nrc.podCidr,
 			},
 		},
 	})
