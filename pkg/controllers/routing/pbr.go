@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/cloudnativelabs/kube-router/pkg/utils"
 )
 
 // setup a custom routing table that will be used for policy based routing to ensure traffic originating
@@ -24,7 +23,7 @@ func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 	}
 
 	if !strings.Contains(string(out), nrc.podCidr) {
-		err = exec.Command("ip", "rule", "add", "from", cidr, "lookup", customRouteTableID).Run()
+		err = exec.Command("ip", "rule", "add", "from", nrc.podCidr, "lookup", customRouteTableID).Run()
 		if err != nil {
 			return fmt.Errorf("Failed to add ip rule due to: %s", err.Error())
 		}
@@ -46,7 +45,7 @@ func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
 	}
 
 	if strings.Contains(string(out), nrc.podCidr) {
-		err = exec.Command("ip", "rule", "del", "from", cidr, "table", customRouteTableID).Run()
+		err = exec.Command("ip", "rule", "del", "from", nrc.podCidr, "table", customRouteTableID).Run()
 		if err != nil {
 			return fmt.Errorf("Failed to delete ip rule: %s", err.Error())
 		}
