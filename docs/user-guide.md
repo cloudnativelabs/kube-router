@@ -60,8 +60,8 @@ Usage of kube-router:
       --iptables-sync-period duration                 The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
       --ipvs-graceful-period duration                 The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 30s)
       --ipvs-graceful-termination                     Enables the experimental IPVS graceful terminaton capability
+      --ipvs-permit-all                               Enables rule to accept all incoming traffic to service VIP's on the node. (default true)
       --ipvs-sync-period duration                     The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
-      --ipvs-permit-all                               Permit all inbound traffic to the service VIP's
       --kubeconfig string                             Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --masquerade-all                                SNAT all traffic to cluster IP/node port.
       --master string                                 The address of the Kubernetes API server (overrides any value in kubeconfig).
