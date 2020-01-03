@@ -880,9 +880,12 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 
 	nrc.nodeName = node.Name
 
-	nodeIP, err := utils.GetNodeIP(node)
-	if err != nil {
-		return nil, errors.New("Failed getting IP address from node object: " + err.Error())
+	nodeIP := kubeRouterConfig.IPAddressOverride
+	if kubeRouterConfig.IPAddressOverride.IsUnspecified() {
+		nodeIP, err = utils.GetNodeIP(node)
+		if err != nil {
+			return nil, errors.New("Failed getting IP address from node object: " + err.Error())
+		}
 	}
 	nrc.nodeIP = nodeIP
 	nrc.isIpv6 = nodeIP.To4() == nil

@@ -2443,9 +2443,14 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 
 	nsc.nodeHostName = node.Name
-	NodeIP, err = utils.GetNodeIP(node)
-	if err != nil {
-		return nil, err
+
+	if !config.IPAddressOverride.IsUnspecified() {
+		NodeIP = config.IPAddressOverride
+	} else {
+		NodeIP, err = utils.GetNodeIP(node)
+		if err != nil {
+			return nil, err
+		}
 	}
 	nsc.nodeIP = NodeIP
 

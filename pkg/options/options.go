@@ -35,6 +35,7 @@ type KubeRouterConfig struct {
 	HealthPort                     uint16
 	HelpRequested                  bool
 	HostnameOverride               string
+	IPAddressOverride              net.IP
 	IPTablesSyncPeriod             time.Duration
 	IpvsSyncPeriod                 time.Duration
 	IpvsGracefulPeriod             time.Duration
@@ -146,6 +147,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers")
 	fs.StringVar(&s.HostnameOverride, "hostname-override", s.HostnameOverride,
 		"Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.")
+	fs.IPVar(&s.IPAddressOverride, "ip-address-override", s.IPAddressOverride,
+		"Overrides the IP address of the node. Set this if kube-router is unable to determine your node IP address automatically.")
 	fs.BoolVar(&s.GlobalHairpinMode, "hairpin-mode", false,
 		"Add iptables rules for every Service Endpoint to support hairpin traffic.")
 	fs.BoolVar(&s.NodePortBindOnAllIp, "nodeport-bindon-all-ip", false,
