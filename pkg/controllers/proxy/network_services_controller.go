@@ -209,6 +209,7 @@ type NetworkServicesController struct {
 	serviceMap          serviceInfoMap
 	endpointsMap        endpointsInfoMap
 	podCidr             string
+	excludedCidrs       []net.IPNet
 	masqueradeAll       bool
 	globalHairpin       bool
 	ipvsPermitAll       bool
@@ -2064,6 +2065,15 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 			return nil, fmt.Errorf("Failed to get pod CIDR details from Node.spec: %s", err.Error())
 		}
 		nsc.podCidr = cidr
+	}
+
+	nsc.excludedCidrs = make([]net.IPNet, len(config.ExcludedCidrs))
+	for i, excludedCidr := range config.ExcludedCidrs {
+		_, ipnet, err := net.ParseCIDR(excludedCidr)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to get excluded CIDR details: %s", err.Error())
+		}
+		nsc.excludedCidrs[i] = *ipnet
 	}
 
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)

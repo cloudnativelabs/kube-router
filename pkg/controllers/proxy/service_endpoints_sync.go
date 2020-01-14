@@ -489,6 +489,20 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 		// Only delete the service if it's not there anymore to prevent flapping
 		// old: if !ok || len(endpoints) == 0 {
 		if !ok {
+			excluded := false
+			for _, excludedCidr := range nsc.excludedCidrs {
+				if excludedCidr.Contains(ipvsSvc.Address) {
+					excluded = true
+					break
+				}
+			}
+
+			if excluded {
+				glog.V(1).Infof("Ignoring deletion of an IPVS service %s in an excluded cidr",
+					ipvsServiceString(ipvsSvc))
+				continue
+			}
+
 			glog.V(1).Infof("Found a IPVS service %s which is no longer needed so cleaning up",
 				ipvsServiceString(ipvsSvc))
 			err := nsc.ln.ipvsDelService(ipvsSvc)
