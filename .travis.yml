@@ -3,7 +3,7 @@ services:
 
 language: go
 go:
-  - 1.10.8
+  - 1.13.5
 
 branches:
   only:
