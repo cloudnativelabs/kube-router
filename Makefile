@@ -17,7 +17,8 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=false
-DOCKER_BUILD_IMAGE?=golang:1.13.5-alpine3.11
+DOCKER_BUILD_IMAGE?=golang:1.10.8-alpine3.9
+CONTAINER_DIR=/go/src/github.com/cloudnativelabs/kube-router/
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
@@ -41,7 +42,7 @@ all: test kube-router container ## Default target. Runs tests, builds binaries a
 kube-router:
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Starting kube-router binary build.
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+	$(DOCKER) run -v $(PWD):$(CONTAINER_DIR) -w $(CONTAINER_DIR) $(DOCKER_BUILD_IMAGE) \
 	    sh -c ' \
 	    GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
 		-ldflags "-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)" \
@@ -53,7 +54,7 @@ endif
 
 test: gofmt gomoqs ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+	$(DOCKER) run -v $(PWD):$(CONTAINER_DIR) -w $(CONTAINER_DIR) $(DOCKER_BUILD_IMAGE) \
 	    sh -c 'go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
 else
 		go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...
@@ -164,7 +165,7 @@ gomoqs: ./pkg/controllers/proxy/network_services_controller_moq.go
 # annotation, as it needs to know which interfaces to create mock stubs for
 %_moq.go: %.go
 ifeq "$(BUILD_IN_DOCKER)" "true"
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+	$(DOCKER) run -v $(PWD):$(CONTAINER_DIR) -w $(CONTAINER_DIR) $(DOCKER_BUILD_IMAGE) \
 			sh -c 'apk add --no-cache git build-base && go get github.com/matryer/moq && go generate -v $(*).go'
 else
 	@test -x $(lastword $(subst :, ,$(GOPATH)))/bin/moq && exit 0; echo "ERROR: 'moq' tool is needed to update mock test files, install it with: \ngo get github.com/matryer/moq\n"; exit 1
