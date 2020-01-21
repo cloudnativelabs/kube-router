@@ -4,3 +4,7 @@
 _output
 _cache
 Dockerfile.amd64.run
+Dockerfile.arm64.run
+Dockerfile.s390x.run
+Dockerfile.arm.run
+vendor/github.com/osrg/gobgp/gobgp/gobgp

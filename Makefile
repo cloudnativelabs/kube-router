@@ -148,8 +148,11 @@ release: push-release github-release ## Pushes a release to DockerHub and GitHub
 
 clean: ## Removes the kube-router binary and Docker images
 	rm -f kube-router
-	$(DOCKER) rmi $(REGISTRY_DEV)
-
+	rm -f gobgp
+	rm -f Dockerfile.$(GOARCH).run
+	if [ $(shell $(DOCKER) images -q $(REGISTRY_DEV):$(IMG_TAG) 2> /dev/null) ]; then \
+		 $(DOCKER) rmi $(REGISTRY_DEV):$(IMG_TAG); \
+	fi
 gofmt: ## Tells you what files need to be gofmt'd.
 	@build/verify-gofmt.sh
 
