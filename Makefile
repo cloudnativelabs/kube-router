@@ -16,7 +16,7 @@ IS_ROOT=$(filter 0,$(shell id -u))
 DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
-BUILD_IN_DOCKER?=false
+BUILD_IN_DOCKER?=true
 DOCKER_BUILD_IMAGE?=golang:1.10.8-alpine3.9
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
@@ -51,7 +51,7 @@ else
 	GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)' -o kube-router cmd/kube-router/kube-router.go
 endif
 
-test: gofmt gomoqs ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
+test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c 'go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
@@ -148,8 +148,11 @@ release: push-release github-release ## Pushes a release to DockerHub and GitHub
 
 clean: ## Removes the kube-router binary and Docker images
 	rm -f kube-router
-	$(DOCKER) rmi $(REGISTRY_DEV)
-
+	rm -f gobgp
+	rm -f Dockerfile.$(GOARCH).run
+	if [ $(shell $(DOCKER) images -q $(REGISTRY_DEV):$(IMG_TAG) 2> /dev/null) ]; then \
+		 $(DOCKER) rmi $(REGISTRY_DEV):$(IMG_TAG); \
+	fi
 gofmt: ## Tells you what files need to be gofmt'd.
 	@build/verify-gofmt.sh
 

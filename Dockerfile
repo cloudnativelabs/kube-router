@@ -19,8 +19,6 @@ ADD build/image-assets/profile /root/.profile
 ADD build/image-assets/vimrc /root/.vimrc
 ADD build/image-assets/motd-kube-router.sh /etc/motd-kube-router.sh
 ADD kube-router gobgp /usr/local/bin/
-RUN cd && \
-    /usr/local/bin/gobgp --gen-cmpl --bash-cmpl-file /var/lib/gobgp/gobgp-completion.bash
 
 WORKDIR "/root"
 ENTRYPOINT ["/usr/local/bin/kube-router"]

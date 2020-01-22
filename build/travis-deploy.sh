@@ -11,9 +11,13 @@ if [ "${TRAVIS_EVENT_TYPE}" = "pull_request" ]; then
     fi
     echo "Building/pushing PR$TRAVIS_PULL_REQUEST from $PR_USER"
     make push IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=amd64
+    make clean IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=amd64
     make push IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=arm64
+    make clean IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=arm64
     make push IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=arm
+    make clean IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=arm
     make push IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=s390x
+    make clean IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=s390x
     exit 0
 fi
 
@@ -21,10 +25,13 @@ fi
 if [ -n "$TRAVIS_TAG" ]; then
     echo "Running Release build on Travis"
     make push-release RELEASE_TAG="amd64-$TRAVIS_TAG" GOARCH=amd64
+    make clean RELEASE_TAG="amd64-$TRAVIS_TAG" GOARCH=amd64
     make push-release RELEASE_TAG="arm64-$TRAVIS_TAG" GOARCH=arm64
+    make clean RELEASE_TAG="arm64-$TRAVIS_TAG" GOARCH=arm64
     make push-release RELEASE_TAG="arm-$TRAVIS_TAG" GOARCH=arm
+    make clean RELEASE_TAG="arm-$TRAVIS_TAG" GOARCH=arm
     make push-release RELEASE_TAG="s390x-$TRAVIS_TAG" GOARCH=s390x
-
+    make clean RELEASE_TAG="s390x-$TRAVIS_TAG" GOARCH=s390x
     echo "Pushing manifest on Travis"
     make push-manifest RELEASE_TAG="$TRAVIS_TAG"
     exit 0
