@@ -54,7 +54,7 @@ endif
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-	    sh -c 'go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
+	    sh -c 'CGO_ENABLED=0 go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
 else
 		go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...
 endif
@@ -218,7 +218,7 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Finished building gobgp.
 else
 	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/gobgp
-	cp -f $(GOBIN)/gobgp gobgp
+	cp -f $(shell go env GOPATH)/bin/gobgp gobgp
 endif
 
 multiarch-binverify:
