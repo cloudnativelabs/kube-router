@@ -3,11 +3,9 @@
 package ipvs
 
 import (
-	"net"
-	"syscall"
-	"time"
-
 	"fmt"
+	"net"
+	"time"
 
 	"github.com/vishvananda/netlink/nl"
 	"github.com/vishvananda/netns"
@@ -99,13 +97,12 @@ func New(path string) (*Handle, error) {
 	}
 	defer n.Close()
 
-	sock, err := nl.GetNetlinkSocketAt(n, netns.None(), syscall.NETLINK_GENERIC)
+	sock, err := nl.GetNetlinkSocketAt(n, netns.None(), unix.NETLINK_GENERIC)
 	if err != nil {
 		return nil, err
 	}
 	// Add operation timeout to avoid deadlocks
 	tv := unix.NsecToTimeval(netlinkSendSocketTimeout.Nanoseconds())
-
 	if err := sock.SetSendTimeout(&tv); err != nil {
 		return nil, err
 	}

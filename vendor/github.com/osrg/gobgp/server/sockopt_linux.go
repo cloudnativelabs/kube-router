@@ -18,7 +18,6 @@ package server
 
 import (
 	"fmt"
-	unix "golang.org/x/sys/unix"
 	"net"
 	"os"
 	"syscall"
@@ -45,10 +44,10 @@ func buildTcpMD5Sig(address string, key string) (tcpmd5sig, error) {
 	t := tcpmd5sig{}
 	addr := net.ParseIP(address)
 	if addr.To4() != nil {
-		t.ss_family = unix.AF_INET
+		t.ss_family = syscall.AF_INET
 		copy(t.ss[2:], addr.To4())
 	} else {
-		t.ss_family = unix.AF_INET6
+		t.ss_family = syscall.AF_INET6
 		copy(t.ss[6:], addr.To16())
 	}
 
@@ -64,7 +63,7 @@ func setsockoptTcpMD5Sig(fd int, address string, key string) error {
 		return err
 	}
 	b := *(*[unsafe.Sizeof(t)]byte)(unsafe.Pointer(&t))
-	return os.NewSyscallError("setsockopt", unix.SetsockoptString(fd, unix.IPPROTO_TCP, TCP_MD5SIG, string(b[:])))
+	return os.NewSyscallError("setsockopt", syscall.SetsockoptString(fd, syscall.IPPROTO_TCP, TCP_MD5SIG, string(b[:])))
 }
 
 func SetTcpMD5SigSockopt(l *net.TCPListener, address string, key string) error {
@@ -78,13 +77,13 @@ func SetTcpMD5SigSockopt(l *net.TCPListener, address string, key string) error {
 }
 
 func setsockoptIpTtl(fd int, family int, value int) error {
-	level := unix.IPPROTO_IP
-	name := unix.IP_TTL
-	if family == unix.AF_INET6 {
-		level = unix.IPPROTO_IPV6
-		name = unix.IPV6_UNICAST_HOPS
+	level := syscall.IPPROTO_IP
+	name := syscall.IP_TTL
+	if family == syscall.AF_INET6 {
+		level = syscall.IPPROTO_IPV6
+		name = syscall.IPV6_UNICAST_HOPS
 	}
-	return os.NewSyscallError("setsockopt", unix.SetsockoptInt(fd, level, name, value))
+	return os.NewSyscallError("setsockopt", syscall.SetsockoptInt(fd, level, name, value))
 }
 
 func SetListenTcpTTLSockopt(l *net.TCPListener, ttl int) error {
@@ -108,13 +107,13 @@ func SetTcpTTLSockopt(conn *net.TCPConn, ttl int) error {
 }
 
 func setsockoptIpMinTtl(fd int, family int, value int) error {
-	level := unix.IPPROTO_IP
-	name := unix.IP_MINTTL
-	if family == unix.AF_INET6 {
-		level = unix.IPPROTO_IPV6
+	level := syscall.IPPROTO_IP
+	name := syscall.IP_MINTTL
+	if family == syscall.AF_INET6 {
+		level = syscall.IPPROTO_IPV6
 		name = IPV6_MINHOPCOUNT
 	}
-	return os.NewSyscallError("setsockopt", unix.SetsockoptInt(fd, level, name, value))
+	return os.NewSyscallError("setsockopt", syscall.SetsockoptInt(fd, level, name, value))
 }
 
 func SetTcpMinTTLSockopt(conn *net.TCPConn, ttl int) error {
@@ -142,7 +141,7 @@ type TCPDialer struct {
 
 func (d *TCPDialer) DialTCP(addr string, port int) (*net.TCPConn, error) {
 	var family int
-	var ra, la unix.Sockaddr
+	var ra, la syscall.Sockaddr
 
 	raddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(addr, fmt.Sprintf("%d", port)))
 	if err != nil {
@@ -153,16 +152,16 @@ func (d *TCPDialer) DialTCP(addr string, port int) (*net.TCPConn, error) {
 		return nil, fmt.Errorf("invalid local address: %s", err)
 	}
 	if raddr.IP.To4() != nil {
-		family = unix.AF_INET
-		rsockaddr := &unix.SockaddrInet4{Port: port}
+		family = syscall.AF_INET
+		rsockaddr := &syscall.SockaddrInet4{Port: port}
 		copy(rsockaddr.Addr[:], raddr.IP.To4())
 		ra = rsockaddr
-		lsockaddr := &unix.SockaddrInet4{}
+		lsockaddr := &syscall.SockaddrInet4{}
 		copy(lsockaddr.Addr[:], laddr.IP.To4())
 		la = lsockaddr
 	} else {
-		family = unix.AF_INET6
-		rsockaddr := &unix.SockaddrInet6{Port: port}
+		family = syscall.AF_INET6
+		rsockaddr := &syscall.SockaddrInet6{Port: port}
 		copy(rsockaddr.Addr[:], raddr.IP.To16())
 		ra = rsockaddr
 		var zone uint32
@@ -173,14 +172,14 @@ func (d *TCPDialer) DialTCP(addr string, port int) (*net.TCPConn, error) {
 				zone = uint32(intf.Index)
 			}
 		}
-		lsockaddr := &unix.SockaddrInet6{ZoneId: zone}
+		lsockaddr := &syscall.SockaddrInet6{ZoneId: zone}
 		copy(lsockaddr.Addr[:], laddr.IP.To16())
 		la = lsockaddr
 	}
 
-	sockType := unix.SOCK_STREAM | unix.SOCK_CLOEXEC | unix.SOCK_NONBLOCK
+	sockType := syscall.SOCK_STREAM | syscall.SOCK_CLOEXEC | syscall.SOCK_NONBLOCK
 	proto := 0
-	fd, err := unix.Socket(family, sockType, proto)
+	fd, err := syscall.Socket(family, sockType, proto)
 	if err != nil {
 		return nil, err
 	}
@@ -194,11 +193,11 @@ func (d *TCPDialer) DialTCP(addr string, port int) (*net.TCPConn, error) {
 	// Note that the above os.NewFile() doesn't play with the
 	// refcount.
 
-	if err = unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_BROADCAST, 1); err != nil {
+	if err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1); err != nil {
 		return nil, os.NewSyscallError("setsockopt", err)
 	}
 
-	if err = unix.SetsockoptInt(fd, unix.IPPROTO_TCP, unix.TCP_NODELAY, 1); err != nil {
+	if err = syscall.SetsockoptInt(fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1); err != nil {
 		return nil, os.NewSyscallError("setsockopt", err)
 	}
 
@@ -220,7 +219,7 @@ func (d *TCPDialer) DialTCP(addr string, port int) (*net.TCPConn, error) {
 		}
 	}
 
-	if err = unix.Bind(fd, la); err != nil {
+	if err = syscall.Bind(fd, la); err != nil {
 		return nil, os.NewSyscallError("bind", err)
 	}
 
@@ -232,46 +231,46 @@ func (d *TCPDialer) DialTCP(addr string, port int) (*net.TCPConn, error) {
 		}
 	}
 
-	err = unix.Connect(fd, ra)
+	err = syscall.Connect(fd, ra)
 	switch err {
-	case unix.EINPROGRESS, unix.EALREADY, unix.EINTR:
+	case syscall.EINPROGRESS, syscall.EALREADY, syscall.EINTR:
 		// do timeout handling
-	case nil, unix.EISCONN:
+	case nil, syscall.EISCONN:
 		return newTCPConn(fi)
 	default:
 		return nil, os.NewSyscallError("connect", err)
 	}
 
-	epfd, e := unix.EpollCreate1(unix.EPOLL_CLOEXEC)
+	epfd, e := syscall.EpollCreate1(syscall.EPOLL_CLOEXEC)
 	if e != nil {
 		return nil, e
 	}
-	defer unix.Close(epfd)
+	defer syscall.Close(epfd)
 
-	var event unix.EpollEvent
-	events := make([]unix.EpollEvent, 1)
+	var event syscall.EpollEvent
+	events := make([]syscall.EpollEvent, 1)
 
-	event.Events = unix.EPOLLIN | unix.EPOLLOUT | unix.EPOLLPRI
+	event.Events = syscall.EPOLLIN | syscall.EPOLLOUT | syscall.EPOLLPRI
 	event.Fd = int32(fd)
-	if e = unix.EpollCtl(epfd, unix.EPOLL_CTL_ADD, fd, &event); e != nil {
+	if e = syscall.EpollCtl(epfd, syscall.EPOLL_CTL_ADD, fd, &event); e != nil {
 		return nil, e
 	}
 
 	for {
-		nevents, e := unix.EpollWait(epfd, events, int(d.Timeout/1000000) /*msec*/)
+		nevents, e := syscall.EpollWait(epfd, events, int(d.Timeout/1000000) /*msec*/)
 		if e != nil {
 			return nil, e
 		}
 		if nevents == 0 {
 			return nil, fmt.Errorf("timeout")
 		} else if nevents == 1 && events[0].Fd == int32(fd) {
-			nerr, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_ERROR)
+			nerr, err := syscall.GetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_ERROR)
 			if err != nil {
 				return nil, os.NewSyscallError("getsockopt", err)
 			}
 			switch err := syscall.Errno(nerr); err {
-			case unix.EINPROGRESS, unix.EALREADY, unix.EINTR:
-			case syscall.Errno(0), unix.EISCONN:
+			case syscall.EINPROGRESS, syscall.EALREADY, syscall.EINTR:
+			case syscall.Errno(0), syscall.EISCONN:
 				return newTCPConn(fi)
 			default:
 				return nil, os.NewSyscallError("getsockopt", err)
