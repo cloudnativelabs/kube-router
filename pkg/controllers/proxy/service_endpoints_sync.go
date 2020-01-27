@@ -125,6 +125,15 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 				Port:          uint16(endpoint.port),
 				Weight:        1,
 			}
+			// Conditions on which to add an endpoint on this node:
+			// 1) Service is not a local service
+			// 2) Service is a local service, but has no active endpoints on this node
+			// 3) Service is a local service, has active endpoints on this node, and this endpoint is one of them
+			if svc.local {
+				if hasActiveEndpoints(svc, endpoints) && !endpoint.isLocal {
+					continue
+				}
+			}
 
 			err := nsc.ln.ipvsAddServer(ipvsClusterVipSvc, &dst)
 			if err != nil {
