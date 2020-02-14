@@ -139,7 +139,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 			if err != nil {
 				glog.Errorf(err.Error())
 			} else {
-				activeServiceEndpointMap[clusterServiceId] = append(activeServiceEndpointMap[clusterServiceId], endpoint.ip)
+				activeServiceEndpointMap[clusterServiceId] = append(activeServiceEndpointMap[clusterServiceId], generateEndpointId(endpoint.ip, strconv.Itoa(endpoint.port)))
 			}
 		}
 	}
@@ -231,7 +231,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 					if err != nil {
 						glog.Errorf(err.Error())
 					} else {
-						activeServiceEndpointMap[nodeServiceIds[i]] = append(activeServiceEndpointMap[nodeServiceIds[i]], endpoint.ip)
+						activeServiceEndpointMap[nodeServiceIds[i]] = append(activeServiceEndpointMap[nodeServiceIds[i]], generateEndpointId(endpoint.ip, strconv.Itoa(endpoint.port)))
 					}
 				}
 			}
@@ -341,7 +341,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 			activeServiceEndpointMap[externalIpServiceId] = make([]string, 0)
 			for _, endpoint := range endpoints {
 				if !svc.local || (svc.local && endpoint.isLocal) {
-					activeServiceEndpointMap[externalIpServiceId] = append(activeServiceEndpointMap[externalIpServiceId], endpoint.ip)
+					activeServiceEndpointMap[externalIpServiceId] = append(activeServiceEndpointMap[externalIpServiceId], generateEndpointId(endpoint.ip, strconv.Itoa(endpoint.port)))
 				}
 			}
 		}
@@ -485,9 +485,9 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 			continue
 		}
 
-		endpoints, ok := activeServiceEndpointMap[key]
+		endpointIds, ok := activeServiceEndpointMap[key]
 		// Only delete the service if it's not there anymore to prevent flapping
-		// old: if !ok || len(endpoints) == 0 {
+		// old: if !ok || len(endpointIds) == 0 {
 		if !ok {
 			glog.V(1).Infof("Found a IPVS service %s which is no longer needed so cleaning up",
 				ipvsServiceString(ipvsSvc))
@@ -504,8 +504,8 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 			}
 			for _, dst := range dsts {
 				validEp := false
-				for _, ep := range endpoints {
-					if ep == dst.Address.String() {
+				for _, epId := range endpointIds {
+					if epId == generateEndpointId(dst.Address.String(), strconv.Itoa(int(dst.Port))) {
 						validEp = true
 						break
 					}
