@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
 )
 
 // setup a custom routing table that will be used for policy based routing to ensure traffic originating
