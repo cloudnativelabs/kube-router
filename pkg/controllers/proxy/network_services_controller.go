@@ -283,8 +283,14 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 
 	glog.Infof("Starting network services controller")
 
-	err := ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
+	glog.V(1).Info("Performing cleanup of depreciated masquerade iptables rules (if needed).")
+	err := nsc.deleteBadMasqueradeIptablesRules()
+	if err != nil {
+		glog.Errorf("Error cleaning up old/bad masquerade rules: %s", err.Error())
+	}
+
 	// enable masquerade rule
+	err = nsc.ensureMasqueradeIptablesRule()
 	if err != nil {
 		glog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
 	}
@@ -410,8 +416,8 @@ func (nsc *NetworkServicesController) doSync() error {
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
-	err = ensureMasqueradeIptablesRule(nsc.masqueradeAll, nsc.podCidr)
 	// enable masquerade rule
+	err = nsc.ensureMasqueradeIptablesRule()
 	if err != nil {
 		glog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
 	}
@@ -1144,13 +1150,13 @@ func (nsc *NetworkServicesController) buildEndpointsInfo() endpointsInfoMap {
 // Add an iptables rule to masquerade outbound IPVS traffic. IPVS nat requires that reverse path traffic
 // to go through the director for its functioning. So the masquerade rule ensures source IP is modifed
 // to node ip, so return traffic from real server (endpoint pods) hits the node/lvs director
-func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
+func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
 	}
-	var args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"}
-	if masqueradeAll {
+	var args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
+	if nsc.masqueradeAll {
 		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to create iptables rule to masquerade all outbound IPVS traffic" + err.Error())
@@ -1169,16 +1175,49 @@ func ensureMasqueradeIptablesRule(masqueradeAll bool, podCidr string) error {
 			glog.Infof("Deleted iptables rule to masquerade all outbound IVPS traffic.")
 		}
 	}
-	if len(podCidr) > 0 {
+	if len(nsc.podCidr) > 0 {
 		//TODO: ipset should be used for destination podCidr(s) match after multiple podCidr(s) per node get supported
 		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
-			"!", "-s", podCidr, "!", "-d", podCidr, "-j", "MASQUERADE"}
+			"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
 		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to run iptables command" + err.Error())
 		}
 	}
 	glog.V(2).Info("Successfully synced iptables masquerade rule")
+	return nil
+}
+
+// Delete old/bad iptables rules to masquerade outbound IPVS traffic.
+func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		return errors.New("Failed create iptables handler:" + err.Error())
+	}
+
+	var argsBad = [][]string{
+		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"},
+		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "MASQUERADE"},
+	}
+
+	for _, args := range argsBad {
+		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
+		if err != nil {
+			return fmt.Errorf("Failed to lookup iptables rule: %s", err.Error())
+		}
+
+		if exists {
+			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
+			if err != nil {
+				return fmt.Errorf("Failed to delete old/bad iptables rule to "+
+					"masquerade outbound IVPS traffic: %s.\n"+
+					"Masquerade all might still work, or bugs may persist after upgrade...",
+					err)
+			}
+			glog.Infof("Deleted old/bad iptables rule to masquerade outbound traffic.")
+		}
+	}
+
 	return nil
 }
 
@@ -1387,7 +1426,7 @@ func deleteMasqueradeIptablesRule() error {
 		return errors.New("Failed to list iptables rules in POSTROUTING chain in nat table" + err.Error())
 	}
 	for i, rule := range postRoutingChainRules {
-		if strings.Contains(rule, "ipvs") && strings.Contains(rule, "MASQUERADE") {
+		if strings.Contains(rule, "ipvs") && strings.Contains(rule, "SNAT") {
 			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", strconv.Itoa(i))
 			if err != nil {
 				return errors.New("Failed to run iptables command" + err.Error())
