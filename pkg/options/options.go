@@ -29,6 +29,7 @@ type KubeRouterConfig struct {
 	EnableOverlay                  bool
 	EnablePodEgress                bool
 	EnablePprof                    bool
+	ExcludedCidrs                  []string
 	FullMeshMode                   bool
 	OverlayType                    string
 	GlobalHairpinMode              bool
@@ -99,6 +100,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"SNAT all traffic to cluster IP/node port.")
 	fs.StringVar(&s.ClusterCIDR, "cluster-cidr", s.ClusterCIDR,
 		"CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.")
+	fs.StringSliceVar(&s.ExcludedCidrs, "excluded-cidrs", s.ExcludedCidrs,
+		"Excluded CIDRs are used to exclude IPVS rules from deletion.")
 	fs.BoolVar(&s.EnablePodEgress, "enable-pod-egress", true,
 		"SNAT traffic from Pods to destinations outside the cluster.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
