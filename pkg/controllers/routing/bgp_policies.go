@@ -19,17 +19,12 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		return nil
 	}
 
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		return err
-	}
-
 	// creates prefix set to represent the assigned node's pod CIDR
 	podCidrPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
 		PrefixSetName: "podcidrprefixset",
 		PrefixList: []config.Prefix{
 			{
-				IpPrefix: cidr,
+				IpPrefix: nrc.podCidr,
 			},
 		},
 	})

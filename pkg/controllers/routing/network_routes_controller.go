@@ -109,6 +109,7 @@ type NetworkRoutingController struct {
 	pathPrepend                    bool
 	localAddressList               []string
 	overrideNextHop                bool
+	podCidr                        string
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -324,10 +325,7 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 	cidrlen, _ := cidr.Mask.Size()
 	oldCidr := cidr.IP.String() + "/" + strconv.Itoa(cidrlen)
 
-	currentCidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		glog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to allocate pod CIDR for the node or an annotation `kube-router.io/pod-cidr`. Error: %v", err)
-	}
+	currentCidr := nrc.podCidr
 
 	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
 		err = utils.InsertPodCidrInCniSpec(nrc.cniConfFile, currentCidr)
@@ -366,12 +364,8 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	if nrc.MetricsEnabled {
 		metrics.ControllerBGPadvertisementsSent.Inc()
 	}
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
-	if err != nil {
-		return err
-	}
 
-	cidrStr := strings.Split(cidr, "/")
+	cidrStr := strings.Split(nrc.podCidr, "/")
 	subnet := cidrStr[0]
 	cidrLen, _ := strconv.Atoi(cidrStr[1])
 	if nrc.isIpv6 {
@@ -908,6 +902,13 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 			return nil, errors.New("CNI conf file " + nrc.cniConfFile + " does not exist.")
 		}
 	}
+
+	cidr, err := utils.GetPodCidrFromNodeSpec(clientset, nrc.hostnameOverride)
+	if err != nil {
+		glog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to allocate pod CIDR for the node or an annotation `kube-router.io/pod-cidr`. Error: %v", err)
+		return nil, fmt.Errorf("Failed to get pod CIDR details from Node.spec: %s", err.Error())
+	}
+	nrc.podCidr = cidr
 
 	nrc.ipSetHandler, err = utils.NewIPSet(nrc.isIpv6)
 	if err != nil {
