@@ -30,6 +30,10 @@ else ifeq ($(GOARCH), s390x)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=IBM S/390
 DOCKERFILE_SED_EXPR?=
+else ifeq ($(GOARCH), ppc64le)
+ARCH_TAG_PREFIX=$(GOARCH)
+FILE_ARCH=64-bit PowerPC
+DOCKERFILE_SED_EXPR?=
 else
 ARCH_TAG_PREFIX=amd64
 DOCKERFILE_SED_EXPR?=
@@ -127,12 +131,12 @@ push-release: push
 push-manifest:
 	@echo Starting kube-router manifest push.
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
 		--template "$(REGISTRY):ARCH-${RELEASE_TAG}" \
 		--target "$(REGISTRY):$(RELEASE_TAG)"
 
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
 		--template "$(REGISTRY):ARCH-${RELEASE_TAG}" \
 		--target "$(REGISTRY):latest"
 
