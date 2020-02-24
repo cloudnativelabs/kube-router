@@ -18,6 +18,8 @@ if [ "${TRAVIS_EVENT_TYPE}" = "pull_request" ]; then
     make clean IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=arm
     make push IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=s390x
     make clean IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=s390x
+    make push IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=ppc64le
+    make clean IMG_TAG="PR$TRAVIS_PULL_REQUEST" GOARCH=ppc64le
     exit 0
 fi
 
@@ -32,6 +34,8 @@ if [ -n "$TRAVIS_TAG" ]; then
     make clean RELEASE_TAG="arm-$TRAVIS_TAG" GOARCH=arm
     make push-release RELEASE_TAG="s390x-$TRAVIS_TAG" GOARCH=s390x
     make clean RELEASE_TAG="s390x-$TRAVIS_TAG" GOARCH=s390x
+    make push-release RELEASE_TAG="ppc64le-$TRAVIS_TAG" GOARCH=ppc64le
+    make clean RELEASE_TAG="ppc64le-$TRAVIS_TAG" GOARCH=ppc64le
     echo "Pushing manifest on Travis"
     make push-manifest RELEASE_TAG="$TRAVIS_TAG"
     exit 0
