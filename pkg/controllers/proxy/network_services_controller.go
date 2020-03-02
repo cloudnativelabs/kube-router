@@ -241,6 +241,7 @@ type serviceInfo struct {
 	namespace                string
 	clusterIP                net.IP
 	port                     int
+	targetPort               string
 	protocol                 string
 	nodePort                 int
 	sessionAffinity          bool
@@ -1040,6 +1041,7 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			svcInfo := serviceInfo{
 				clusterIP:   net.ParseIP(svc.Spec.ClusterIP),
 				port:        int(port.Port),
+				targetPort:  port.TargetPort.String(),
 				protocol:    strings.ToLower(string(port.Protocol)),
 				nodePort:    int(port.NodePort),
 				name:        svc.ObjectMeta.Name,
@@ -1923,6 +1925,10 @@ func generateServiceId(namespace, svcName, port string) string {
 // unique identifier for a load-balanced service (namespace + name + portname)
 func generateIpPortId(ip, protocol, port string) string {
 	return ip + "-" + protocol + "-" + port
+}
+
+func generateEndpointId(ip, port string) string {
+	return ip + ":" + port
 }
 
 // returns all IP addresses found on any network address in the system, excluding dummy and docker interfaces
