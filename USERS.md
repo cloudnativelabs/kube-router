@@ -6,6 +6,9 @@ The following is a directory of users who are using kube-router in production.
 Users (Alphabetically)
 ----------------------
 
+     * Name: DigitalOcean
+       Description: DigitalOcean is using kube-router for production bare-metal Kubernetes clusters globally.
+       Usage: Pod Networking, IPVS Service Proxy, BGP
      * Name: EEN (Eagle Eye Networks, Inc.)
        Description: Eagle Eye Networks is using kube-router for production bare-metal Kubernetes clusters globally.
        Usage: Pod Networking, IPVS Service Proxy, Network Policy Controller
