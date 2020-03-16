@@ -765,12 +765,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
-func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
-	ep, ok := obj.(*api.Endpoints)
-	if !ok {
-		glog.Error("could not convert endpoints update object to *v1.Endpoints")
-		return
-	}
+func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 
 	if isEndpointsForLeaderElection(ep) {
 		return
@@ -799,13 +794,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(obj interface{}) {
 }
 
 // OnServiceUpdate handle change in service update from the API server
-func (nsc *NetworkServicesController) OnServiceUpdate(obj interface{}) {
-	svc, ok := obj.(*api.Service)
-	if !ok {
-		glog.Error("could not convert service update object to *v1.Service")
-		return
-	}
-
+func (nsc *NetworkServicesController) OnServiceUpdate(svc *api.Service) {
 	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
 	if !nsc.readyForUpdates {
 		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
@@ -2027,32 +2016,108 @@ func (nsc *NetworkServicesController) Cleanup() {
 func (nsc *NetworkServicesController) newEndpointsEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			nsc.OnEndpointsUpdate(obj)
+			nsc.handleEndpointsAdd(obj)
 
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			nsc.OnEndpointsUpdate(newObj)
+			nsc.handleEndpointsUpdate(oldObj, newObj)
 		},
 		DeleteFunc: func(obj interface{}) {
-			nsc.OnEndpointsUpdate(obj)
-
+			nsc.handleEndpointsDelete(obj)
 		},
 	}
+}
+
+func (nsc *NetworkServicesController) handleEndpointsAdd(obj interface{}) {
+	endpoints, ok := obj.(*api.Endpoints)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", obj)
+		return
+	}
+	nsc.OnEndpointsUpdate(endpoints)
+}
+
+func (nsc *NetworkServicesController) handleEndpointsUpdate(oldObj, newObj interface{}) {
+	_, ok := oldObj.(*api.Endpoints)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", oldObj)
+		return
+	}
+	newEndpoints, ok := newObj.(*api.Endpoints)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", newObj)
+		return
+	}
+	nsc.OnEndpointsUpdate(newEndpoints)
+}
+
+func (nsc *NetworkServicesController) handleEndpointsDelete(obj interface{}) {
+	endpoints, ok := obj.(*api.Endpoints)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+		if endpoints, ok = tombstone.Obj.(*api.Endpoints); !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+	}
+	nsc.OnEndpointsUpdate(endpoints)
 }
 
 func (nsc *NetworkServicesController) newSvcEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			nsc.OnServiceUpdate(obj)
+			nsc.handleServiceAdd(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			nsc.OnServiceUpdate(newObj)
+			nsc.handleServiceUpdate(oldObj, newObj)
 		},
 		DeleteFunc: func(obj interface{}) {
-			nsc.OnServiceUpdate(obj)
+			nsc.handleServiceDelete(obj)
 		},
 	}
+}
 
+func (nsc *NetworkServicesController) handleServiceAdd(obj interface{}) {
+	service, ok := obj.(*api.Service)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", obj)
+		return
+	}
+	nsc.OnServiceUpdate(service)
+}
+
+func (nsc *NetworkServicesController) handleServiceUpdate(oldObj, newObj interface{}) {
+	_, ok := oldObj.(*api.Service)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", oldObj)
+		return
+	}
+	newService, ok := newObj.(*api.Service)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", newObj)
+		return
+	}
+	nsc.OnServiceUpdate(newService)
+}
+
+func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
+	service, ok := obj.(*api.Service)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+		if service, ok = tombstone.Obj.(*api.Service); !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+	}
+	nsc.OnServiceUpdate(service)
 }
 
 // NewNetworkServicesController returns NetworkServicesController object

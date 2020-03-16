@@ -1631,7 +1631,7 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			npc.OnPodUpdate(obj)
+			npc.handlePodDelete(obj)
 		},
 	}
 }
@@ -1647,7 +1647,7 @@ func (npc *NetworkPolicyController) newNamespaceEventHandler() cache.ResourceEve
 
 		},
 		DeleteFunc: func(obj interface{}) {
-			npc.OnNamespaceUpdate(obj)
+			npc.handleNamespaceDelete(obj)
 
 		},
 	}
@@ -1663,9 +1663,85 @@ func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.Resourc
 			npc.OnNetworkPolicyUpdate(newObj)
 		},
 		DeleteFunc: func(obj interface{}) {
-			npc.OnNetworkPolicyUpdate(obj)
+			npc.handleNetworkPolicyDelete(obj)
 
 		},
+	}
+}
+
+func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
+	pod, ok := obj.(*api.Pod)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+		if pod, ok = tombstone.Obj.(*api.Pod); !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+	}
+	glog.V(2).Infof("Received pod: %s/%s delete event", pod.Namespace, pod.Name)
+	if !npc.readyForUpdates {
+		glog.V(3).Infof("Skipping pod: %s/%s delete event, controller still performing bootup full-sync", pod.Namespace, pod.Name)
+		return
+	}
+
+	err := npc.Sync()
+	if err != nil {
+		glog.Errorf("Error syncing network policy for pod: %s/%s delete event Error: %s", pod.Namespace, pod.Name, err)
+	}
+}
+
+func (npc *NetworkPolicyController) handleNamespaceDelete(obj interface{}) {
+	namespace, ok := obj.(*api.Namespace)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+		if namespace, ok = tombstone.Obj.(*api.Namespace); !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+	}
+	// namespace (and annotations on it) has no significance in GA ver of network policy
+	if npc.v1NetworkPolicy {
+		return
+	}
+	glog.V(2).Infof("Received namespace: %s delete event", namespace.Name)
+
+	err := npc.Sync()
+	if err != nil {
+		glog.Errorf("Error syncing network policies on namespace: %s delete event", err)
+	}
+}
+
+func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
+	netpol, ok := obj.(*networking.NetworkPolicy)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+		if netpol, ok = tombstone.Obj.(*networking.NetworkPolicy); !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+	}
+	glog.V(2).Infof("Received network policy: %s/%s delete event", netpol.Namespace, netpol.Name)
+
+	if !npc.readyForUpdates {
+		glog.V(3).Infof("Skipping network policy: %s/%s delete event as controller still performing bootup full-sync", netpol.Namespace, netpol.Name)
+		return
+	}
+
+	err := npc.Sync()
+	if err != nil {
+		glog.Errorf("Error syncing network policy for the network policy: %s/%s delete event, Error: %s", netpol.Namespace, netpol.Name, err)
 	}
 }
 
