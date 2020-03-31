@@ -43,6 +43,7 @@ type KubeRouterConfig struct {
 	IpvsPermitAll                  bool
 	Kubeconfig                     string
 	MasqueradeAll                  bool
+	MasqueradePodCIDRs             bool
 	Master                         string
 	MetricsEnabled                 bool
 	MetricsPath                    string
@@ -98,6 +99,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Cleanup iptables rules, ipvs, ipset configuration and exit.")
 	fs.BoolVar(&s.MasqueradeAll, "masquerade-all", false,
 		"SNAT all traffic to cluster IP/node port.")
+	fs.BoolVar(&s.MasqueradePodCIDRs, "masquerade-pod-cidrs", true,
+		"SNAT all traffic to pod CIDRs.")
 	fs.StringVar(&s.ClusterCIDR, "cluster-cidr", s.ClusterCIDR,
 		"CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.")
 	fs.StringSliceVar(&s.ExcludedCidrs, "excluded-cidrs", s.ExcludedCidrs,

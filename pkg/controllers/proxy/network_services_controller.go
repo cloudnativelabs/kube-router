@@ -211,6 +211,7 @@ type NetworkServicesController struct {
 	podCidr             string
 	excludedCidrs       []net.IPNet
 	masqueradeAll       bool
+	masqueradePodCidrs  string
 	globalHairpin       bool
 	ipvsPermitAll       bool
 	client              kubernetes.Interface
@@ -1178,7 +1179,7 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 			glog.Infof("Deleted iptables rule to masquerade all outbound IVPS traffic.")
 		}
 	}
-	if len(nsc.podCidr) > 0 {
+	if len(nsc.podCidr) > 0 && nsc.masqueradePodCidrs {
 		//TODO: ipset should be used for destination podCidr(s) match after multiple podCidr(s) per node get supported
 		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
 			"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
@@ -2098,6 +2099,11 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.masqueradeAll = false
 	if config.MasqueradeAll {
 		nsc.masqueradeAll = true
+	}
+
+	nsc.masqueradePodCIDRs = false
+	if config.MasqueradePodCIDRs {
+		nsc.masqueradePodCIDRs = true
 	}
 
 	if config.NodePortBindOnAllIp {
