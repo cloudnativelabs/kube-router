@@ -15,7 +15,6 @@ import (
 	"github.com/osrg/gobgp/config"
 	gobgp "github.com/osrg/gobgp/server"
 	v1core "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -37,18 +36,16 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	}()
 
 	// get the current list of the nodes from API server
-	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		glog.Errorf("Failed to list nodes from API server due to: %s. Cannot perform BGP peer sync", err.Error())
-		return
-	}
+	nodes := nrc.nodeLister.List()
+
 	if nrc.MetricsEnabled {
-		metrics.ControllerBPGpeers.Set(float64(len(nodes.Items)))
+		metrics.ControllerBPGpeers.Set(float64(len(nodes)))
 	}
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
-	for _, node := range nodes.Items {
-		nodeIP, _ := utils.GetNodeIP(&node)
+	for _, obj := range nodes {
+		node := obj.(*v1core.Node)
+		nodeIP, _ := utils.GetNodeIP(node)
 
 		// skip self
 		if nodeIP.String() == nrc.nodeIP.String() {
