@@ -28,7 +28,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
@@ -531,22 +531,21 @@ func (nrc *NetworkRoutingController) Cleanup() {
 }
 
 func (nrc *NetworkRoutingController) syncNodeIPSets() error {
+	var err error
 	start := time.Now()
 	defer func() {
 		if nrc.MetricsEnabled {
 			metrics.ControllerRoutesSyncTime.Observe(time.Since(start).Seconds())
 		}
 	}()
-	// Get the current list of the nodes from API server
-	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		return errors.New("Failed to list nodes from API server: " + err.Error())
-	}
+
+	nodes := nrc.nodeLister.List()
 
 	// Collect active PodCIDR(s) and NodeIPs from nodes
 	currentPodCidrs := make([]string, 0)
 	currentNodeIPs := make([]string, 0)
-	for _, node := range nodes.Items {
+	for _, obj := range nodes {
+		node := obj.(*v1core.Node)
 		podCIDR := node.GetAnnotations()["kube-router.io/pod-cidr"]
 		if podCIDR == "" {
 			podCIDR = node.Spec.PodCIDR
@@ -556,7 +555,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 			continue
 		}
 		currentPodCidrs = append(currentPodCidrs, podCIDR)
-		nodeIP, err := utils.GetNodeIP(&node)
+		nodeIP, err := utils.GetNodeIP(node)
 		if err != nil {
 			return fmt.Errorf("Failed to find a node IP: %s", err)
 		}
