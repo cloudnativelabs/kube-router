@@ -48,6 +48,7 @@ type KubeRouterConfig struct {
 	MetricsPath                    string
 	MetricsPort                    uint16
 	NodePortBindOnAllIp            bool
+	OtherKnownCidrs                []string
 	OverrideNextHop                bool
 	PeerASNs                       []uint
 	PeerMultihopTtl                uint8
@@ -102,6 +103,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.")
 	fs.StringSliceVar(&s.ExcludedCidrs, "excluded-cidrs", s.ExcludedCidrs,
 		"Excluded CIDRs are used to exclude IPVS rules from deletion.")
+	fs.StringSliceVar(&s.OtherKnownCidrs, "other-known-cidrs", s.OtherKnownCidrs,
+		"CIDRs excluded from masquerading by egress iptables rule.")
 	fs.BoolVar(&s.EnablePodEgress, "enable-pod-egress", true,
 		"SNAT traffic from Pods to destinations outside the cluster.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
