@@ -19,6 +19,10 @@ Users (Alphabetically)
      * Name: Globo.com
        Description: Globo is using kube-router for production hybrid (bare-metal and VMs) Kubernetes clusters across multiple datacenters on Brazil.
        Usage: Pod Networking, IPVS Service Proxy, Network Policy Controller, BGP
+     * Name: Numberly
+       Description: Numberly is using kube-router for production bare-metal Kubernetes clusters globally.
+       Usage: Pod Networking, BGP, Network Policy Controller
+       Contact: @ramnes @Lujeni
      * Name: PubMatic
        Description: PubMatic is using kube-router for production kubernetes clusters located in world wide Datacenters.
        Usage: Pod Networking, BGP
