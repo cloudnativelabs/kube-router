@@ -1294,9 +1294,11 @@ func Test_syncInternalPeers(t *testing.T) {
 			}
 			defer testcase.nrc.bgpServer.Stop()
 
+			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
 			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
 				t.Errorf("failed to create existing nodes: %v", err)
 			}
+			waitForListerWithTimeout(testcase.nrc.nodeLister, time.Second*10, t)
 
 			testcase.nrc.syncInternalPeers()
 
@@ -2486,12 +2488,14 @@ func startInformersForRoutes(nrc *NetworkRoutingController, clientset kubernetes
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
 	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 
 	go informerFactory.Start(nil)
 	informerFactory.WaitForCacheSync(nil)
 
 	nrc.svcLister = svcInformer.GetIndexer()
 	nrc.epLister = epInformer.GetIndexer()
+	nrc.nodeLister = nodeInformer.GetIndexer()
 }
 
 func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *testing.T) {
