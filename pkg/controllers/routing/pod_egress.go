@@ -13,16 +13,24 @@ var (
 	podEgressArgs4 = []string{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
 		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
+		"-m", "set", "!", "--match-set", otherSubnetsIPSetName, "dst",
 		"-j", "MASQUERADE"}
 	podEgressArgs6 = []string{"-m", "set", "--match-set", "inet6:" + podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", "inet6:" + podSubnetsIPSetName, "dst",
 		"-m", "set", "!", "--match-set", "inet6:" + nodeAddrsIPSetName, "dst",
+		"-m", "set", "!", "--match-set", "inet6:" + otherSubnetsIPSetName, "dst",
 		"-j", "MASQUERADE"}
 	podEgressArgsBad4 = [][]string{{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
+		"-j", "MASQUERADE"},{"-m", "set", "--match-set", podSubnetsIPSetName, "src",
+		"-m", "set", "!", "--match-set", podSubnetsIPSetName, "dst",
+		"-m", "set", "!", "--match-set", nodeAddrsIPSetName, "dst",
 		"-j", "MASQUERADE"}}
 	podEgressArgsBad6 = [][]string{{"-m", "set", "--match-set", "inet6:" + podSubnetsIPSetName, "src",
 		"-m", "set", "!", "--match-set", "inet6:" + podSubnetsIPSetName, "dst",
+		"-j", "MASQUERADE"},{"-m", "set", "--match-set", "inet6:" + podSubnetsIPSetName, "src",
+		"-m", "set", "!", "--match-set", "inet6:" + podSubnetsIPSetName, "dst",
+		"-m", "set", "!", "--match-set", "inet6:" + nodeAddrsIPSetName, "dst",
 		"-j", "MASQUERADE"}}
 )
 

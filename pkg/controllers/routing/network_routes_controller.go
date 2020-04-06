@@ -36,10 +36,11 @@ import (
 const (
 	IFACE_NOT_FOUND = "Link not found"
 
-	customRouteTableID   = "77"
-	customRouteTableName = "kube-router"
-	podSubnetsIPSetName  = "kube-router-pod-subnets"
-	nodeAddrsIPSetName   = "kube-router-node-ips"
+	customRouteTableID    = "77"
+	customRouteTableName  = "kube-router"
+	podSubnetsIPSetName   = "kube-router-pod-subnets"
+	nodeAddrsIPSetName    = "kube-router-node-ips"
+	otherSubnetsIPSetName = "kube-router-other-ips"
 
 	nodeASNAnnotation                  = "kube-router.io/node.asn"
 	pathPrependASNAnnotation           = "kube-router.io/path-prepend.as"
@@ -110,6 +111,7 @@ type NetworkRoutingController struct {
 	localAddressList               []string
 	overrideNextHop                bool
 	podCidr                        string
+	otherKnownCidrs                []string
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -592,6 +594,22 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		return fmt.Errorf("Failed to sync Node Addresses ipset: %s", err)
 	}
 
+	// Syncing Other Addresses ipset entries
+	nsSet := nrc.ipSetHandler.Get(otherSubnetsIPSetName)
+	if nsSet == nil {
+		glog.Infof("Creating missing ipset \"%s\"", otherSubnetsIPSetName)
+		_, err = nrc.ipSetHandler.Create(otherSubnetsIPSetName, utils.OptionTimeout, "0")
+		if err != nil {
+			return fmt.Errorf("ipset \"%s\" not found in controller instance",
+				otherSubnetsIPSetName)
+		}
+	}
+	err = nsSet.Refresh(nrc.otherKnownCidrs, nsSet.Options...)
+	if err != nil {
+		return fmt.Errorf("Failed to sync Other Addresses ipset: %s", err)
+	}
+
+
 	return nil
 }
 
@@ -864,6 +882,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
+	nrc.otherKnownCidrs = kubeRouterConfig.OtherKnownCidrs
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
 	node, err := utils.GetNodeObject(clientset, nrc.hostnameOverride)
@@ -920,6 +939,11 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 
 	_, err = nrc.ipSetHandler.Create(nodeAddrsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = nrc.ipSetHandler.Create(otherSubnetsIPSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
 	if err != nil {
 		return nil, err
 	}
