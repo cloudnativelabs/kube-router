@@ -211,6 +211,11 @@ func (npc *NetworkPolicyController) OnNamespaceUpdate(obj interface{}) {
 	}
 	glog.V(2).Infof("Received update for namespace: %s", namespace.Name)
 
+	if !npc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to namespace: %s, controller still performing bootup full-sync", namespace.Name)
+		return
+	}
+
 	err := npc.Sync()
 	if err != nil {
 		glog.Errorf("Error syncing on namespace update: %s", err)
@@ -1712,6 +1717,11 @@ func (npc *NetworkPolicyController) handleNamespaceDelete(obj interface{}) {
 		return
 	}
 	glog.V(2).Infof("Received namespace: %s delete event", namespace.Name)
+
+	if !npc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to namespace: %s, controller still performing bootup full-sync", namespace.Name)
+		return
+	}
 
 	err := npc.Sync()
 	if err != nil {
