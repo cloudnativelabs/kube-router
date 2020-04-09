@@ -667,10 +667,10 @@ func (npc *NetworkPolicyController) appendRuleToPolicyChain(iptablesCmdHandler *
 		args = append(args, "-m", "comment", "--comment", comment)
 	}
 	if srcIpSetName != "" {
-		args = append(args, "-m", "set", "--set", srcIpSetName, "src")
+		args = append(args, "-m", "set", "--match-set", srcIpSetName, "src")
 	}
 	if dstIpSetName != "" {
-		args = append(args, "-m", "set", "--set", dstIpSetName, "dst")
+		args = append(args, "-m", "set", "--match-set", dstIpSetName, "dst")
 	}
 	if protocol != "" {
 		args = append(args, "-p", protocol)
