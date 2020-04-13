@@ -332,7 +332,18 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 
 		},
 		DeleteFunc: func(obj interface{}) {
-			node := obj.(*v1core.Node)
+			node, ok := obj.(*v1core.Node)
+			if !ok {
+				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+				if !ok {
+					glog.Errorf("unexpected object type: %v", obj)
+					return
+				}
+				if node, ok = tombstone.Obj.(*v1core.Node); !ok {
+					glog.Errorf("unexpected object type: %v", obj)
+					return
+				}
+			}
 			nodeIP, _ := utils.GetNodeIP(node)
 
 			glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
