@@ -5,6 +5,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"net"
 	"regexp"
@@ -75,9 +76,9 @@ type NetworkPolicyController struct {
 
 // internal structure to represent a network policy
 type networkPolicyInfo struct {
-	name      string
-	namespace string
-	labels    map[string]string
+	name        string
+	namespace   string
+	podSelector labels.Selector
 
 	// set of pods matching network policy spec podselector label selector
 	targetPods map[string]podInfo
@@ -1161,14 +1162,15 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 	for _, policyObj := range npc.npLister.List() {
 
 		policy, ok := policyObj.(*networking.NetworkPolicy)
+		podSelector, _ := v1.LabelSelectorAsSelector(&policy.Spec.PodSelector)
 		if !ok {
 			return nil, fmt.Errorf("Failed to convert")
 		}
 		newPolicy := networkPolicyInfo{
-			name:       policy.Name,
-			namespace:  policy.Namespace,
-			labels:     policy.Spec.PodSelector.MatchLabels,
-			policyType: "ingress",
+			name:        policy.Name,
+			namespace:   policy.Namespace,
+			podSelector: podSelector,
+			policyType:  "ingress",
 		}
 
 		// check if there is explicitly specified PolicyTypes in the spec
@@ -1199,7 +1201,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 			}
 		}
 
-		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, policy.Spec.PodSelector.MatchLabels)
+		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
 		newPolicy.targetPods = make(map[string]podInfo)
 		namedPort2IngressEps := make(namedPort2eps)
 		if err == nil {
@@ -1322,41 +1324,43 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 	var err error
 	// spec can have both PodSelector AND NamespaceSelector
 	if peer.NamespaceSelector != nil {
-		namespaces, err := npc.ListNamespaceByLabels(peer.NamespaceSelector.MatchLabels)
+		namespaceSelector, _ := v1.LabelSelectorAsSelector(peer.NamespaceSelector)
+		namespaces, err := npc.ListNamespaceByLabels(namespaceSelector)
 		if err != nil {
 			return nil, errors.New("Failed to build network policies info due to " + err.Error())
 		}
 
-		var podSelectorLabels map[string]string
+		podSelector := labels.Everything()
 		if peer.PodSelector != nil {
-			podSelectorLabels = peer.PodSelector.MatchLabels
+			podSelector, _ = v1.LabelSelectorAsSelector(peer.PodSelector)
 		}
 		for _, namespace := range namespaces {
-			namespacePods, err := npc.ListPodsByNamespaceAndLabels(namespace.Name, podSelectorLabels)
+			namespacePods, err := npc.ListPodsByNamespaceAndLabels(namespace.Name, podSelector)
 			if err != nil {
 				return nil, errors.New("Failed to build network policies info due to " + err.Error())
 			}
 			matchingPods = append(matchingPods, namespacePods...)
 		}
 	} else if peer.PodSelector != nil {
-		matchingPods, err = npc.ListPodsByNamespaceAndLabels(policy.Namespace, peer.PodSelector.MatchLabels)
+		podSelector, _ := v1.LabelSelectorAsSelector(peer.PodSelector)
+		matchingPods, err = npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
 	}
 
 	return matchingPods, err
 }
 
-func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace string, labelsToMatch labels.Set) (ret []*api.Pod, err error) {
+func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace string, podSelector labels.Selector) (ret []*api.Pod, err error) {
 	podLister := listers.NewPodLister(npc.podLister)
-	allMatchedNameSpacePods, err := podLister.Pods(namespace).List(labelsToMatch.AsSelector())
+	allMatchedNameSpacePods, err := podLister.Pods(namespace).List(podSelector)
 	if err != nil {
 		return nil, err
 	}
 	return allMatchedNameSpacePods, nil
 }
 
-func (npc *NetworkPolicyController) ListNamespaceByLabels(set labels.Set) ([]*api.Namespace, error) {
+func (npc *NetworkPolicyController) ListNamespaceByLabels(namespaceSelector labels.Selector) ([]*api.Namespace, error) {
 	namespaceLister := listers.NewNamespaceLister(npc.nsLister)
-	matchedNamespaces, err := namespaceLister.List(set.AsSelector())
+	matchedNamespaces, err := namespaceLister.List(namespaceSelector)
 	if err != nil {
 		return nil, err
 	}
@@ -1417,12 +1421,13 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 	for _, policyObj := range npc.npLister.List() {
 
 		policy, _ := policyObj.(*apiextensions.NetworkPolicy)
+		podSelector, _ := v1.LabelSelectorAsSelector(&policy.Spec.PodSelector)
 		newPolicy := networkPolicyInfo{
-			name:      policy.Name,
-			namespace: policy.Namespace,
-			labels:    policy.Spec.PodSelector.MatchLabels,
+			name:        policy.Name,
+			namespace:   policy.Namespace,
+			podSelector: podSelector,
 		}
-		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, policy.Spec.PodSelector.MatchLabels)
+		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
 		newPolicy.targetPods = make(map[string]podInfo)
 		newPolicy.ingressRules = make([]ingressRule, 0)
 		namedPort2IngressEps := make(namedPort2eps)
@@ -1447,7 +1452,8 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 			ingressRule.ports, ingressRule.namedPorts = npc.processBetaNetworkPolicyPorts(specIngressRule.Ports, namedPort2IngressEps)
 			ingressRule.srcPods = make([]podInfo, 0)
 			for _, peer := range specIngressRule.From {
-				matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, peer.PodSelector.MatchLabels)
+				podSelector, _ := v1.LabelSelectorAsSelector(peer.PodSelector)
+				matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
 				if err == nil {
 					for _, matchingPod := range matchingPods {
 						if matchingPod.Status.PodIP == "" {
