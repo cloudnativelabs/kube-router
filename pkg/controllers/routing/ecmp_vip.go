@@ -121,15 +121,15 @@ func (nrc *NetworkRoutingController) handleServiceDelete(svc *v1core.Service) {
 		glog.Errorf("Failed to get active VIP's on service delete event due to: %s", err.Error())
 		return
 	}
-	activeVIPsMap := make(map[string]string)
+	activeVIPsMap := make(map[string]bool)
 	for _, activeVIP := range activeVIPs {
-		activeVIPsMap[activeVIP] = ""
+		activeVIPsMap[activeVIP] = true
 	}
 	serviceVIPs := nrc.getAllVIPsForService(svc)
 	withdrawVIPs := make([]string, 0)
 	for _, serviceVIP := range serviceVIPs {
 		// withdraw VIP only if deleted service is the last service using the VIP
-		if _, ok := activeVIPsMap[serviceVIP]; !ok {
+		if !activeVIPsMap[serviceVIP] {
 			withdrawVIPs = append(withdrawVIPs, serviceVIP)
 		}
 	}
