@@ -305,46 +305,47 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 
 		activePolicyChains[policyChainName] = true
 
-		// create a ipset for all destination pod ip's matched by the policy spec PodSelector
-		targetDestPodIpSetName := policyDestinationPodIpSetName(policy.namespace, policy.name)
-		targetDestPodIpSet, err := npc.ipSetHandler.Create(targetDestPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
-		}
-
-		// create a ipset for all source pod ip's matched by the policy spec PodSelector
-		targetSourcePodIpSetName := policySourcePodIpSetName(policy.namespace, policy.name)
-		targetSourcePodIpSet, err := npc.ipSetHandler.Create(targetSourcePodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
-		}
-
-		activePolicyIpSets[targetDestPodIpSet.Name] = true
-		activePolicyIpSets[targetSourcePodIpSet.Name] = true
-
 		currnetPodIps := make([]string, 0, len(policy.targetPods))
 		for ip := range policy.targetPods {
 			currnetPodIps = append(currnetPodIps, ip)
 		}
 
-		err = targetSourcePodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
-		if err != nil {
-			glog.Errorf("failed to refresh targetSourcePodIpSet: " + err.Error())
-		}
-		err = targetDestPodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
-		if err != nil {
-			glog.Errorf("failed to refresh targetDestPodIpSet: " + err.Error())
+		if policy.policyType == "both" || policy.policyType == "ingress" {
+			// create a ipset for all destination pod ip's matched by the policy spec PodSelector
+			targetDestPodIpSetName := policyDestinationPodIpSetName(policy.namespace, policy.name)
+			targetDestPodIpSet, err := npc.ipSetHandler.Create(targetDestPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
+			}
+			err = targetDestPodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
+			if err != nil {
+				glog.Errorf("failed to refresh targetDestPodIpSet,: " + err.Error())
+			}
+			err = npc.processIngressRules(policy, targetDestPodIpSetName, activePolicyIpSets, version)
+			if err != nil {
+				return nil, nil, err
+			}
+			activePolicyIpSets[targetDestPodIpSet.Name] = true
 		}
 
-		err = npc.processIngressRules(policy, targetDestPodIpSetName, activePolicyIpSets, version)
-		if err != nil {
-			return nil, nil, err
+		if policy.policyType == "both" || policy.policyType == "egress" {
+			// create a ipset for all source pod ip's matched by the policy spec PodSelector
+			targetSourcePodIpSetName := policySourcePodIpSetName(policy.namespace, policy.name)
+			targetSourcePodIpSet, err := npc.ipSetHandler.Create(targetSourcePodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
+			}
+			err = targetSourcePodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
+			if err != nil {
+				glog.Errorf("failed to refresh targetSourcePodIpSet: " + err.Error())
+			}
+			err = npc.processEgressRules(policy, targetSourcePodIpSetName, activePolicyIpSets, version)
+			if err != nil {
+				return nil, nil, err
+			}
+			activePolicyIpSets[targetSourcePodIpSet.Name] = true
 		}
 
-		err = npc.processEgressRules(policy, targetSourcePodIpSetName, activePolicyIpSets, version)
-		if err != nil {
-			return nil, nil, err
-		}
 	}
 
 	glog.V(2).Infof("Iptables chains in the filter table are synchronized with the network policies.")
@@ -1191,32 +1192,21 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 			policyType:  "ingress",
 		}
 
-		// check if there is explicitly specified PolicyTypes in the spec
-		if len(policy.Spec.PolicyTypes) > 0 {
-			ingressType, egressType := false, false
-			for _, policyType := range policy.Spec.PolicyTypes {
-				if policyType == networking.PolicyTypeIngress {
-					ingressType = true
-				}
-				if policyType == networking.PolicyTypeEgress {
-					egressType = true
-				}
+		ingressType, egressType := false, false
+		for _, policyType := range policy.Spec.PolicyTypes {
+			if policyType == networking.PolicyTypeIngress {
+				ingressType = true
 			}
-			if ingressType && egressType {
-				newPolicy.policyType = "both"
-			} else if egressType {
-				newPolicy.policyType = "egress"
-			} else if ingressType {
-				newPolicy.policyType = "ingress"
+			if policyType == networking.PolicyTypeEgress {
+				egressType = true
 			}
-		} else {
-			if policy.Spec.Egress != nil && policy.Spec.Ingress != nil {
-				newPolicy.policyType = "both"
-			} else if policy.Spec.Egress != nil {
-				newPolicy.policyType = "egress"
-			} else if policy.Spec.Ingress != nil {
-				newPolicy.policyType = "ingress"
-			}
+		}
+		if ingressType && egressType {
+			newPolicy.policyType = "both"
+		} else if egressType {
+			newPolicy.policyType = "egress"
+		} else if ingressType {
+			newPolicy.policyType = "ingress"
 		}
 
 		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
