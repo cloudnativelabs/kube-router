@@ -52,7 +52,7 @@ func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr string, a
 func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 	svc := &ipvs.Service{
 		Address:  vip,
 		Protocol: protocol,
@@ -179,8 +179,8 @@ var _ = Describe("NetworkServicesController", func() {
 		})
 		JustBeforeEach(func() {
 			// pre-inject some foo ipvs Service to verify its deletion
-			fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, "rr", schedFlags{})
-			fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, "rr", schedFlags{true, true, false})
+			fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, 0, "rr", schedFlags{})
+			fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, 0, "rr", schedFlags{true, true, false})
 			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {

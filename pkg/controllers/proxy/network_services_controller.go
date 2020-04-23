@@ -69,7 +69,7 @@ var (
 
 type ipvsCalls interface {
 	ipvsNewService(ipvsSvc *ipvs.Service) error
-	ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error)
+	ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
 	ipvsDelService(ipvsSvc *ipvs.Service) error
 	ipvsUpdateService(ipvsSvc *ipvs.Service) error
 	ipvsGetServices() ([]*ipvs.Service, error)
@@ -78,7 +78,7 @@ type ipvsCalls interface {
 	ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
 	ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error)
 	ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
-	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error)
+	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
 }
 
 type netlinkCalls interface {
@@ -237,23 +237,24 @@ type NetworkServicesController struct {
 
 // internal representation of kubernetes service
 type serviceInfo struct {
-	name                     string
-	namespace                string
-	clusterIP                net.IP
-	port                     int
-	targetPort               string
-	protocol                 string
-	nodePort                 int
-	sessionAffinity          bool
-	directServerReturn       bool
-	scheduler                string
-	directServerReturnMethod string
-	hairpin                  bool
-	skipLbIps                bool
-	externalIPs              []string
-	loadBalancerIPs          []string
-	local                    bool
-	flags                    schedFlags
+	name                          string
+	namespace                     string
+	clusterIP                     net.IP
+	port                          int
+	targetPort                    string
+	protocol                      string
+	nodePort                      int
+	sessionAffinity               bool
+	sessionAffinityTimeoutSeconds int32
+	directServerReturn            bool
+	scheduler                     string
+	directServerReturnMethod      string
+	hairpin                       bool
+	skipLbIps                     bool
+	externalIPs                   []string
+	loadBalancerIPs               []string
+	local                         bool
+	flags                         schedFlags
 }
 
 // IPVS scheduler flags
@@ -1070,7 +1071,13 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 					svcInfo.loadBalancerIPs = append(svcInfo.loadBalancerIPs, lbIngress.IP)
 				}
 			}
-			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == "ClientIP"
+			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == api.ServiceAffinityClientIP
+
+			if svcInfo.sessionAffinity {
+				// Kube-apiserver side guarantees SessionAffinityConfig won't be nil when session affinity type is ClientIP"
+				// https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/v1/defaults.go#L106
+				svcInfo.sessionAffinityTimeoutSeconds = *svc.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds
+			}
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations[svcHairpinAnnotation]
 			_, svcInfo.local = svc.ObjectMeta.Annotations[svcLocalAnnotation]
 			_, svcInfo.skipLbIps = svc.ObjectMeta.Annotations[svcSkipLbIpsAnnotation]
@@ -1473,12 +1480,11 @@ func ipvsDestinationString(d *ipvs.Destination) string {
 	return fmt.Sprintf("%s:%v (Weight: %v)", d.Address, d.Port, d.Weight)
 }
 
-func ipvsSetPersistence(svc *ipvs.Service, p bool) {
+func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) {
 	if p {
 		svc.Flags |= 0x0001
 		svc.Netmask |= 0xFFFFFFFF
-		// TODO: once service manifest supports timeout time remove hardcoding
-		svc.Timeout = 180 * 60
+		svc.Timeout = uint32(timeout)
 	} else {
 		svc.Flags &^= 0x0001
 		svc.Netmask &^= 0xFFFFFFFF
@@ -1530,13 +1536,13 @@ func changedIpvsSchedFlags(svc *ipvs.Service, s schedFlags) bool {
 	return false
 }
 
-func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 
 	var err error
 	for _, svc := range svcs {
 		if vip.Equal(svc.Address) && protocol == svc.Protocol && port == svc.Port {
 			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) {
-				ipvsSetPersistence(svc, persistent)
+				ipvsSetPersistence(svc, persistent, persistentTimeout)
 
 				if changedIpvsSchedFlags(svc, flags) {
 					ipvsSetSchedFlags(svc, flags)
@@ -1583,7 +1589,7 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 		SchedName:     scheduler,
 	}
 
-	ipvsSetPersistence(&svc, persistent)
+	ipvsSetPersistence(&svc, persistent, persistentTimeout)
 	ipvsSetSchedFlags(&svc, flags)
 
 	err = ln.ipvsNewService(&svc)
@@ -1605,7 +1611,7 @@ func generateFwmark(ip, protocol, port string) uint32 {
 }
 
 // ipvsAddFWMarkService: creates a IPVS service using FWMARK
-func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 
 	var protocolStr string
 	if protocol == syscall.IPPROTO_TCP {
@@ -1627,7 +1633,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 	for _, svc := range svcs {
 		if fwmark == svc.FWMark {
 			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) {
-				ipvsSetPersistence(svc, persistent)
+				ipvsSetPersistence(svc, persistent, persistentTimeout)
 
 				if changedIpvsSchedFlags(svc, flags) {
 					ipvsSetSchedFlags(svc, flags)
@@ -1674,7 +1680,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 		SchedName:     ipvs.RoundRobin,
 	}
 
-	ipvsSetPersistence(&svc, persistent)
+	ipvsSetPersistence(&svc, persistent, persistentTimeout)
 	ipvsSetSchedFlags(&svc, flags)
 
 	err = ln.ipvsNewService(&svc)
