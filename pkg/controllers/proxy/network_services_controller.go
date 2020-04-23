@@ -1812,11 +1812,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
 		}
 	}
 	out, err := exec.Command("ip", "route", "list", "table", customDSRRouteTableID).Output()
-	if err != nil {
-		return errors.New("Failed to verify required default route exists. " +
-			"Failed to setup policy routing required for DSR due to " + err.Error())
-	}
-	if !strings.Contains(string(out), " lo ") {
+	if err != nil || !strings.Contains(string(out), " lo ") {
 		if err = exec.Command("ip", "route", "add", "local", "default", "dev", "lo", "table",
 			customDSRRouteTableID).Run(); err != nil {
 			return errors.New("Failed to add route in custom route table due to: " + err.Error())
@@ -1847,12 +1843,6 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 	}
 
-	_, err = exec.Command("ip", "route", "list", "table", externalIPRouteTableId).Output()
-	if err != nil {
-		return errors.New("Failed to verify required routing table for external IP's exists. " +
-			"Failed to setup policy routing required for DSR due to " + err.Error())
-	}
-
 	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
 		return errors.New("Failed to verify if `ip rule add prio 32765 from all lookup external_ip` exists due to: " + err.Error())
@@ -1866,10 +1856,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 	}
 
-	out, err = exec.Command("ip", "route", "list", "table", externalIPRouteTableId).Output()
-	if err != nil {
-		return errors.New("Failed to get routes in external_ip table due to: " + err.Error())
-	}
+	out, _ = exec.Command("ip", "route", "list", "table", externalIPRouteTableId).Output()
 	outStr := string(out)
 	activeExternalIPs := make(map[string]bool)
 	for _, svc := range serviceInfoMap {
