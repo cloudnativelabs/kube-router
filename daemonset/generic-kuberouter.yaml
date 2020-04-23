@@ -79,6 +79,9 @@ spec:
           readOnly: true
         - name: cni-conf-dir
           mountPath: /etc/cni/net.d
+        - name: xtables-lock
+          mountPath: /run/xtables.lock
+          readOnly: false
       initContainers:
       - name: install-cni
         image: busybox
@@ -120,6 +123,10 @@ spec:
       - name: kube-router-cfg
         configMap:
           name: kube-router-cfg
+      - name: xtables-lock
+        hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
 
 ---
 apiVersion: v1
