@@ -54,6 +54,10 @@ spec:
             memory: 250Mi
         securityContext:
           privileged: true
+        volumeMounts:
+        - name: xtables-lock
+          mountPath: /run/xtables.lock
+          readOnly: false
       hostNetwork: true
       tolerations:
       - key: CriticalAddonsOnly
@@ -64,7 +68,11 @@ spec:
       - effect: NoSchedule
         key: node.kubernetes.io/not-ready
         operator: Exists
-
+      volumes:
+        - name: xtables-lock
+          hostPath:
+            path: /run/xtables.lock
+            type: FileOrCreate
 ---
 apiVersion: v1
 kind: ServiceAccount

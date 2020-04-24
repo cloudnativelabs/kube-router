@@ -78,6 +78,9 @@ spec:
         - name: kubeconfig
           mountPath: /var/lib/kube-router/kubeconfig
           readOnly: true
+        - name: xtables-lock
+          mountPath: /run/xtables.lock
+          readOnly: false
       initContainers:
       - name: install-cni
         image: busybox
@@ -122,3 +125,7 @@ spec:
       - name: kubeconfig
         hostPath:
           path: /var/lib/kube-router/kubeconfig
+      - name: xtables-lock
+        hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate
