@@ -18,22 +18,23 @@ MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
 DOCKER_BUILD_IMAGE?=golang:1.10.8-alpine3.9
+QEMU_IMAGE?=multiarch/qemu-user-static
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
-DOCKERFILE_SED_EXPR?=
+DOCKERFILE_SED_EXPR?=s,FROM alpine,FROM arm32v6/alpine,
 else ifeq ($(GOARCH), arm64)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM aarch64
-DOCKERFILE_SED_EXPR?=
+DOCKERFILE_SED_EXPR?=s,FROM alpine,FROM arm64v8/alpine,
 else ifeq ($(GOARCH), s390x)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=IBM S/390
-DOCKERFILE_SED_EXPR?=
+DOCKERFILE_SED_EXPR?=s,FROM alpine,FROM s390x/alpine,
 else ifeq ($(GOARCH), ppc64le)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=64-bit PowerPC
-DOCKERFILE_SED_EXPR?=
+DOCKERFILE_SED_EXPR?=s,FROM alpine,FROM ppc64le/alpine,
 else
 ARCH_TAG_PREFIX=amd64
 DOCKERFILE_SED_EXPR?=
@@ -91,7 +92,11 @@ run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
 container: Dockerfile.$(GOARCH).run kube-router gobgp multiarch-binverify ## Builds a Docker container image.
-	@echo Starting kube-router container image build.
+	@echo Starting kube-router container image build for $(GOARCH) on $(shell go env GOHOSTARCH)
+	@if [ "$(GOARCH)" != "$(shell go env GOHOSTARCH)" ]; then \
+	    echo "Using qemu to build non-native container"; \
+	    $(DOCKER) run --rm --privileged $(QEMU_IMAGE) --reset -p yes; \
+	fi
 	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" -f Dockerfile.$(GOARCH).run .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
 	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
