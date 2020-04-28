@@ -37,10 +37,21 @@ if [ -n "$TRAVIS_TAG" ]; then
     make push-release RELEASE_TAG="ppc64le-$TRAVIS_TAG" GOARCH=ppc64le
     make clean RELEASE_TAG="ppc64le-$TRAVIS_TAG" GOARCH=ppc64le
     echo "Pushing manifest on Travis"
-    make push-manifest RELEASE_TAG="$TRAVIS_TAG"
+    make push-manifest-release RELEASE_TAG="$TRAVIS_TAG"
     exit 0
 fi
 
 # Push image tag format: COMMIT
 echo "Running push build on Travis"
-make push
+make push GOARCH=amd64
+make clean GOARCH=amd64
+make push GOARCH=arm64
+make clean GOARCH=arm64
+make push GOARCH=arm
+make clean GOARCH=arm
+make push GOARCH=s390x
+make clean GOARCH=s390x
+make push GOARCH=ppc64le
+make clean GOARCH=ppc64le
+make push-manifest
+
