@@ -13,8 +13,8 @@ if [ "${TRAVIS_EVENT_TYPE}" = "pull_request" ]; then
     fi
     echo "Building/pushing PR$TRAVIS_PULL_REQUEST from $PR_USER"
     for GOARCH in ${GOARCHES[@]}; do
-      make push IMG_TAG="$GOARCH-PR$TRAVIS_PULL_REQUEST" GOARCH=amd64
-      make clean IMG_TAG="$GOARCH-PR$TRAVIS_PULL_REQUEST" GOARCH=amd64
+      make push IMG_TAG="$GOARCH-PR$TRAVIS_PULL_REQUEST" GOARCH=$GOARCH
+      make clean IMG_TAG="$GOARCH-PR$TRAVIS_PULL_REQUEST" GOARCH=$GOARCH
     done
      echo "Pushing PR manifest on Travis"
     make push-manifest MANIFEST_TAG="$PR$TRAVIS_PULL_REQUEST"
