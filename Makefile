@@ -8,7 +8,7 @@ IMG_NAMESPACE?=cloudnativelabs
 GIT_COMMIT=$(shell git describe --tags --dirty)
 GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 IMG_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(if $(ARCH_TAG_PREFIX),$(ARCH_TAG_PREFIX)-)$(GIT_BRANCH)
-MANIFEST_TAG=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(GIT_BRANCH)
+MANIFEST_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(GIT_BRANCH)
 RELEASE_TAG?=$(GOARCH)-$(shell build/get-git-tag.sh)
 REGISTRY?=$(if $(IMG_FQDN),$(IMG_FQDN)/$(IMG_NAMESPACE)/$(NAME),$(IMG_NAMESPACE)/$(NAME))
 REGISTRY_DEV?=$(REGISTRY)$(DEV_SUFFIX)
@@ -131,7 +131,7 @@ push-manifest:
 	@echo Starting kube-router manifest push.
 	./manifest-tool push from-args \
 		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
-		--template "$(REGISTRY_DEV):ARCH-$(IMG_TAG)" \
+		--template "$(REGISTRY_DEV):ARCH-$(MANIFEST_TAG)" \
 		--target "$(REGISTRY_DEV):$(MANIFEST_TAG)"
 
 push-release: push
