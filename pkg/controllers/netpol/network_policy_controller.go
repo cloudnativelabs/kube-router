@@ -817,9 +817,9 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			}
 		}
 
-		// add rule to log the packets that will be droopped due to network policy enforcement
+		// add rule to log the packets that will be dropped due to network policy enforcement
 		comment = "rule to log dropped traffic POD name:" + pod.name + " namespace: " + pod.namespace
-		args = []string{"-m", "comment", "--comment", comment, "-j", "NFLOG", "--nflog-group", "100"}
+		args = []string{"-m", "comment", "--comment", comment, "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10"}
 		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
@@ -941,9 +941,9 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			}
 		}
 
-		// add rule to log the packets that will be droopped due to network policy enforcement
+		// add rule to log the packets that will be dropped due to network policy enforcement
 		comment = "rule to log dropped traffic POD name:" + pod.name + " namespace: " + pod.namespace
-		args = []string{"-m", "comment", "--comment", comment, "-j", "NFLOG", "--nflog-group", "100"}
+		args = []string{"-m", "comment", "--comment", comment, "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10"}
 		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
