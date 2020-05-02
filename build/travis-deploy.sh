@@ -17,7 +17,7 @@ if [ "${TRAVIS_EVENT_TYPE}" = "pull_request" ]; then
       make clean IMG_TAG="${GOARCH}-PR${TRAVIS_PULL_REQUEST}" GOARCH="${GOARCH}"
     done
     echo "Pushing PR manifest on Travis"
-    make push-manifest MANIFEST_TAG="${PR}${TRAVIS_PULL_REQUEST}"
+    make push-manifest MANIFEST_TAG="PR${TRAVIS_PULL_REQUEST}"
     exit 0
 fi
 
