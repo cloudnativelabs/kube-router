@@ -379,6 +379,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			}
 
 		case perform := <-nsc.syncChan:
+			healthcheck.SendHeartBeat(healthChan, "NSC")
 			switch perform {
 			case synctypeAll:
 				glog.V(1).Info("Performing requested full sync of services")
@@ -394,6 +395,9 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				if err != nil {
 					glog.Errorf("Error during ipvs sync in network service controller. Error: " + err.Error())
 				}
+			}
+			if err == nil {
+				healthcheck.SendHeartBeat(healthChan, "NSC")
 			}
 
 		case <-t.C:
