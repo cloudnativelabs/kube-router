@@ -256,8 +256,8 @@ ifeq (vagrant,$(firstword $(MAKECMDGOALS)))
 endif
 
 .PHONY: build clean container run release goreleaser push gofmt gofmt-fix gomoqs
-.PHONY: update-glide test docker-login push-release github-release help
-.PHONY: gopath gopath-fix vagrant-up-single-node
+.PHONY: update-glide test docker-login push-manifest push-manifest-release
+.PHONY: push-release github-release help gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
 .PHONY: multiarch-binverify
 
