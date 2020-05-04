@@ -888,37 +888,23 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 			}
 		}
 
-		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
-		// this rule applies to the traffic getting forwarded/routed (traffic from the pod destinted
-		// to pod on a different node)
-		comment = "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
-			" to chain " + podFwChainName
-		args = []string{"-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName}
-		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
+		egressFilterChains := []string{"FORWARD", "OUTPUT", "INPUT"}
+		for _, chain := range egressFilterChains {
+			// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
+			// this rule applies to the traffic getting forwarded/routed (traffic from the pod destinted
+			// to pod on a different node)
+			comment = "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
+				" to chain " + podFwChainName
+			args = []string{"-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName}
+			exists, err = iptablesCmdHandler.Exists("filter", chain, args...)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
-		}
-
-		// ensure there is rule in filter table and OUTPUT chain to jump to pod specific firewall chain
-		// this rule applies to the traffic getting proxied (traffic from the pod accessing service
-		// resulting in traffic DNAT'ed to a pod IP)
-		comment = "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
-			" to chain " + podFwChainName
-		args = []string{"-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName}
-		exists, err = iptablesCmdHandler.Exists("filter", "OUTPUT", args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", "OUTPUT", 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			if !exists {
+				err := iptablesCmdHandler.Insert("filter", chain, 1, args...)
+				if err != nil {
+					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+				}
 			}
 		}
 
