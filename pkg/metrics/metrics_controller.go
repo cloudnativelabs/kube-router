@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -147,8 +146,6 @@ var (
 type Controller struct {
 	MetricsPath string
 	MetricsPort uint16
-	mu          sync.Mutex
-	nodeIP      net.IP
 }
 
 // Run prometheus metrics controller
