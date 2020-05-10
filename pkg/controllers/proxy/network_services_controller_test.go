@@ -77,9 +77,6 @@ func (lnm *LinuxNetworkingMockImpl) cleanupMangleTableRule(ip string, protocol s
 	return nil
 }
 
-func logf(format string, a ...interface{}) {
-	fmt.Fprintf(GinkgoWriter, "INFO: "+format+"\n", a...)
-}
 func fatalf(format string, a ...interface{}) {
 	msg := fmt.Sprintf("FATAL: "+format+"\n", a...)
 	Fail(msg)
