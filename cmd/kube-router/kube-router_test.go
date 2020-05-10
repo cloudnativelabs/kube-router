@@ -18,7 +18,10 @@ func TestMainHelp(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		io.Copy(stderrBuf, stderrR)
+		_, err := io.Copy(stderrBuf, stderrR)
+		if err != nil {
+			panic(err)
+		}
 		wg.Done()
 	}()
 
@@ -37,7 +40,10 @@ func TestMainHelp(t *testing.T) {
 		t.Fatalf("could not open docs/user-guide.md: %s\n", err)
 	}
 	docBuf := bytes.NewBuffer(nil)
-	docBuf.ReadFrom(docF)
+	_, err = docBuf.ReadFrom(docF)
+	if err != nil {
+		t.Fatalf("could not read from buffer: %s\n", err)
+	}
 	docF.Close()
 
 	exp := append([]byte("```\n"), stderrBuf.Bytes()...)
