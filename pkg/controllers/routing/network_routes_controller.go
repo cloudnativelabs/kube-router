@@ -338,22 +338,20 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
 	watcher := nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 	for {
-		select {
-		case ev := <-watcher.Event():
-			switch msg := ev.(type) {
-			case *gobgp.WatchEventBestPath:
-				glog.V(3).Info("Processing bgp route advertisement from peer")
-				if nrc.MetricsEnabled {
-					metrics.ControllerBGPadvertisementsReceived.Inc()
+		ev := <-watcher.Event()
+		switch msg := ev.(type) {
+		case *gobgp.WatchEventBestPath:
+			glog.V(3).Info("Processing bgp route advertisement from peer")
+			if nrc.MetricsEnabled {
+				metrics.ControllerBGPadvertisementsReceived.Inc()
+			}
+			for _, path := range msg.PathList {
+				if path.IsLocal() {
+					continue
 				}
-				for _, path := range msg.PathList {
-					if path.IsLocal() {
-						continue
-					}
-					if err := nrc.injectRoute(path); err != nil {
-						glog.Errorf("Failed to inject routes due to: " + err.Error())
-						continue
-					}
+				if err := nrc.injectRoute(path); err != nil {
+					glog.Errorf("Failed to inject routes due to: " + err.Error())
+					continue
 				}
 			}
 		}
@@ -717,7 +715,11 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	go nrc.bgpServer.Serve()
 
 	g := bgpapi.NewGrpcServer(nrc.bgpServer, nrc.nodeIP.String()+":50051"+","+"127.0.0.1:50051")
-	go g.Serve()
+	go func() {
+		if err = g.Serve(); err != nil {
+			glog.Errorf("%s", err)
+		}
+	}()
 
 	var localAddressList []string
 
@@ -757,7 +759,10 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		asnStrings := stringToSlice(nodeBgpPeerAsnsAnnotation, ",")
 		peerASNs, err := stringSliceToUInt32(asnStrings)
 		if err != nil {
-			nrc.bgpServer.Stop()
+			err2 := nrc.bgpServer.Stop()
+			if err2 != nil {
+				return fmt.Errorf("Failed to stop bgpServer: %s", err)
+			}
 			return fmt.Errorf("Failed to parse node's Peer ASN Numbers Annotation: %s", err)
 		}
 
@@ -770,7 +775,11 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		ipStrings := stringToSlice(nodeBgpPeersAnnotation, ",")
 		peerIPs, err := stringSliceToIPs(ipStrings)
 		if err != nil {
-			nrc.bgpServer.Stop()
+			err2 := nrc.bgpServer.Stop()
+			if err2 != nil {
+				return fmt.Errorf("Failed to stop bgpServer: %s", err)
+			}
+
 			return fmt.Errorf("Failed to parse node's Peer Addresses Annotation: %s", err)
 		}
 
@@ -782,7 +791,10 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			portStrings := stringToSlice(nodeBgpPeerPortsAnnotation, ",")
 			peerPorts, err = stringSliceToUInt16(portStrings)
 			if err != nil {
-				nrc.bgpServer.Stop()
+				err2 := nrc.bgpServer.Stop()
+				if err2 != nil {
+					return fmt.Errorf("Failed to stop bgpServer: %s", err)
+				}
 				return fmt.Errorf("Failed to parse node's Peer Port Numbers Annotation: %s", err)
 			}
 		}
@@ -796,7 +808,10 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			passStrings := stringToSlice(nodeBGPPasswordsAnnotation, ",")
 			peerPasswords, err = stringSliceB64Decode(passStrings)
 			if err != nil {
-				nrc.bgpServer.Stop()
+				err2 := nrc.bgpServer.Stop()
+				if err2 != nil {
+					return fmt.Errorf("Failed to stop bgpServer: %s", err)
+				}
 				return fmt.Errorf("Failed to parse node's Peer Passwords Annotation: %s", err)
 			}
 		}
@@ -804,7 +819,11 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		// Create and set Global Peer Router complete configs
 		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerPorts, peerASNs, peerPasswords)
 		if err != nil {
-			nrc.bgpServer.Stop()
+			err2 := nrc.bgpServer.Stop()
+			if err2 != nil {
+				return fmt.Errorf("Failed to stop bgpServer: %s", err)
+			}
+
 			return fmt.Errorf("Failed to process Global Peer Router configs: %s", err)
 		}
 
@@ -814,7 +833,11 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	if len(nrc.globalPeerRouters) != 0 {
 		err := connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart, nrc.bgpGracefulRestartDeferralTime, nrc.peerMultihopTTL)
 		if err != nil {
-			nrc.bgpServer.Stop()
+			err2 := nrc.bgpServer.Stop()
+			if err2 != nil {
+				return fmt.Errorf("Failed to stop bgpServer: %s", err)
+			}
+
 			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
 				err)
 		}
