@@ -309,7 +309,10 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 
 				// ensure VIP less director. we dont assign VIP to any interface
 				err = nsc.ln.ipAddrDel(dummyVipInterface, externalIP)
-
+				if err != nil {
+					glog.Errorf("Failed to delete external ip adress from dummyVipInterface due to %s", err)
+					continue
+				}
 				// do policy routing to deliver the packet locally so that IPVS can pick the packet
 				err = routeVIPTrafficToDirector("0x" + fmt.Sprintf("%x", fwMark))
 				if err != nil {
@@ -460,7 +463,6 @@ func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap 
 }
 
 func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpointMap map[string][]string) error {
-
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
 		return errors.New("Failed get list of IPVS services due to: " + err.Error())
@@ -468,7 +470,6 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 
 	// cleanup stale ipvs service and servers
 	glog.V(1).Info("Cleaning up if any, old ipvs service and servers which are no longer needed")
-	ipvsSvcs, err = nsc.ln.ipvsGetServices()
 
 	if err != nil {
 		return errors.New("Failed to list IPVS services: " + err.Error())
