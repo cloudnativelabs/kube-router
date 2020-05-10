@@ -18,11 +18,6 @@ type gracefulQueue struct {
 	queue []gracefulRequest
 }
 
-type gracefulQueueItem struct {
-	added   time.Time
-	service *ipvs.Service
-}
-
 type gracefulRequest struct {
 	ipvsSvc                   *ipvs.Service
 	ipvsDst                   *ipvs.Destination
