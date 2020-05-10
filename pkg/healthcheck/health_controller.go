@@ -138,7 +138,7 @@ func (hc *HealthController) CheckHealth() bool {
 }
 
 //RunServer starts the HealthController's server
-func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(hc.HealthPort)), Handler: http.DefaultServeMux}
 	http.HandleFunc("/healthz", hc.Handler)
@@ -169,14 +169,14 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 }
 
 //RunCheck starts the HealthController's check
-func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(5000 * time.Millisecond)
 	defer wg.Done()
 	for {
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down HealthController RunCheck")
-			return nil
+			return
 		case heartbeat := <-healthChan:
 			hc.HandleHeartbeat(heartbeat)
 		case <-t.C:

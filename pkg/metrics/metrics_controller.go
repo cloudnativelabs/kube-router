@@ -149,7 +149,7 @@ type Controller struct {
 }
 
 // Run prometheus metrics controller
-func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) error {
+func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(3 * time.Second)
 	defer wg.Done()
 	glog.Info("Starting metrics controller")
@@ -176,7 +176,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 			if err := srv.Shutdown(context.Background()); err != nil {
 				glog.Errorf("could not shutdown: %v", err)
 			}
-			return nil
+			return
 		case <-t.C:
 			glog.V(4).Info("Metrics controller tick")
 		}
