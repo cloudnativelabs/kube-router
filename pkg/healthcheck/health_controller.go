@@ -51,7 +51,10 @@ func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 	if hc.Status.Healthy {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK\n"))
+		_, err := w.Write([]byte("OK\n"))
+		if err != nil {
+			glog.Errorf("Failed to write body: %s", err)
+		}
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 		/*
@@ -65,7 +68,10 @@ func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 				time.Since(hc.Status.MetricsControllerAlive))
 			w.Write([]byte(statusText))
 		*/
-		w.Write([]byte("Unhealthy"))
+		_, err := w.Write([]byte("Unhealthy"))
+		if err != nil {
+			glog.Errorf("Failed to write body: %s", err)
+		}
 	}
 }
 
@@ -156,15 +162,13 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 		hc.HTTPEnabled = false
 	}
 
-	select {
-	case <-stopCh:
-		glog.Infof("Shutting down health controller")
-		if hc.HTTPEnabled {
-			if err := srv.Shutdown(context.Background()); err != nil {
-				glog.Errorf("could not shutdown: %v", err)
-			}
+	// block until we receive a shut down signal
+	<-stopCh
+	glog.Infof("Shutting down health controller")
+	if hc.HTTPEnabled {
+		if err := srv.Shutdown(context.Background()); err != nil {
+			glog.Errorf("could not shutdown: %v", err)
 		}
-		return nil
 	}
 }
 
