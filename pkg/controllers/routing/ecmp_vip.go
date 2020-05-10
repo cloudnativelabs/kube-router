@@ -204,8 +204,7 @@ func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEv
 		},
 		DeleteFunc: func(obj interface{}) {
 			// don't do anything if an endpoints resource is deleted since
-			// the service delete event handles route withdrawls
-			return
+			// the service delete event handles route withdrawals
 		},
 	}
 }
