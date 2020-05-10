@@ -293,7 +293,11 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 					continue
 				}
 				externalIpServices = append(externalIpServices, externalIPService{ipvsSvc: ipvsExternalIPSvc, externalIp: externalIP})
-				fwMark := generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port))
+				fwMark, err := generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port))
+				if err != nil {
+					glog.Errorf("Failed to generate Fwmark")
+					continue
+				}
 				externalIpServiceId = fmt.Sprint(fwMark)
 
 				// ensure there is iptables mangle table rule to FWMARK the packet

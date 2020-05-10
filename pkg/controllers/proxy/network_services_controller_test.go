@@ -184,12 +184,14 @@ var _ = Describe("NetworkServicesController", func() {
 			Expect(syncErr).To(Succeed())
 		})
 		It("Should have called cleanupMangleTableRule for ExternalIPs", func() {
+			fwmark1, _ := generateFwmark("1.1.1.1", "tcp", "8080")
+			fwmark2, _ := generateFwmark("2.2.2.2", "tcp", "8080")
 			Expect(
 				fmt.Sprintf("%v", mockedLinuxNetworking.cleanupMangleTableRuleCalls())).To(
 				Equal(
 					fmt.Sprintf("[{1.1.1.1 tcp 8080 %d} {2.2.2.2 tcp 8080 %d}]",
-						generateFwmark("1.1.1.1", "tcp", "8080"),
-						generateFwmark("2.2.2.2", "tcp", "8080"))))
+						fwmark1,
+						fwmark2)))
 		})
 		It("Should have called setupPolicyRoutingForDSR", func() {
 			Expect(
