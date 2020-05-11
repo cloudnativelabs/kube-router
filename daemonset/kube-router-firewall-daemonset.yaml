@@ -79,7 +79,7 @@ spec:
           readOnly: false
       initContainers:
       - name: install-cni
-        image: busybox
+        image: docker.io/cloudnativelabs/kube-router
         imagePullPolicy: Always
         command:
         - /bin/sh
