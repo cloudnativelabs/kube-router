@@ -63,7 +63,7 @@ const (
 )
 
 var (
-	h      *ipvs.Handle
+	h        *ipvs.Handle
 	NodeIP   net.IP
 	BridgeIP net.IP
 )
