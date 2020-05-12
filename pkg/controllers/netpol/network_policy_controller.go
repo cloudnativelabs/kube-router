@@ -953,6 +953,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 	cleanupPolicyChains := make([]string, 0)
 	cleanupPolicyIPSets := make([]*utils.Set, 0)
 
+	// initialize tool sets for working with iptables and ipset
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		glog.Fatalf("failed to initialize iptables command executor due to %s", err.Error())
@@ -966,7 +967,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		glog.Fatalf("failed to initialize ipsets command executor due to %s", err.Error())
 	}
 
-	// get the list of chains created for pod firewall and network policies
+	// find iptables chains and ipsets that are no longer used by comparing current to the active maps we were passed
 	chains, err := iptablesCmdHandler.ListChains("filter")
 	for _, chain := range chains {
 		if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
@@ -989,37 +990,26 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		}
 	}
 
-	// cleanup FORWARD chain rules to jump to pod firewall
-	for _, chain := range cleanupPodFwChains {
+	// remove stale iptables podFwChain references from the filter table chains
+	for _, podFwChain := range cleanupPodFwChains {
 
-		forwardChainRules, err := iptablesCmdHandler.List("filter", "FORWARD")
-		if err != nil {
-			return fmt.Errorf("failed to list rules in filter table, FORWARD chain due to %s", err.Error())
-		}
-		outputChainRules, err := iptablesCmdHandler.List("filter", "OUTPUT")
-		if err != nil {
-			return fmt.Errorf("failed to list rules in filter table, OUTPUT chain due to %s", err.Error())
-		}
-
-		// TODO delete rule by spec, than rule number to avoid extra loop
-		var realRuleNo int
-		for i, rule := range forwardChainRules {
-			if strings.Contains(rule, chain) {
-				err = iptablesCmdHandler.Delete("filter", "FORWARD", strconv.Itoa(i-realRuleNo))
-				if err != nil {
-					return fmt.Errorf("failed to delete rule: %s from the FORWARD chain of filter table due to %s", rule, err.Error())
-				}
-				realRuleNo++
+		primaryChains := []string{"FORWARD", "OUTPUT", "INPUT"}
+		for _, egressChain := range primaryChains {
+			forwardChainRules, err := iptablesCmdHandler.List("filter", egressChain)
+			if err != nil {
+				return fmt.Errorf("failed to list rules in filter table, %s podFwChain due to %s", egressChain, err.Error())
 			}
-		}
-		realRuleNo = 0
-		for i, rule := range outputChainRules {
-			if strings.Contains(rule, chain) {
-				err = iptablesCmdHandler.Delete("filter", "OUTPUT", strconv.Itoa(i-realRuleNo))
-				if err != nil {
-					return fmt.Errorf("failed to delete rule: %s from the OUTPUT chain of filter table due to %s", rule, err.Error())
+
+			// TODO delete rule by spec, than rule number to avoid extra loop
+			var realRuleNo int
+			for i, rule := range forwardChainRules {
+				if strings.Contains(rule, podFwChain) {
+					err = iptablesCmdHandler.Delete("filter", egressChain, strconv.Itoa(i-realRuleNo))
+					if err != nil {
+						return fmt.Errorf("failed to delete rule: %s from the %s podFwChain of filter table due to %s", rule, egressChain, err.Error())
+					}
+					realRuleNo++
 				}
-				realRuleNo++
 			}
 		}
 	}
@@ -1042,7 +1032,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 	for _, policyChain := range cleanupPolicyChains {
 		glog.V(2).Infof("Found policy chain to cleanup %s", policyChain)
 
-		// first clean up any references from pod firewall chain
+		// first clean up any references from active pod firewall chains
 		for podFwChain := range activePodFwChains {
 			podFwChainRules, err := iptablesCmdHandler.List("filter", podFwChain)
 			if err != nil {
@@ -1059,6 +1049,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 			}
 		}
 
+		// now that all stale and active references to the network policy chain have been removed, delete the chain
 		err = iptablesCmdHandler.ClearChain("filter", policyChain)
 		if err != nil {
 			return fmt.Errorf("Failed to flush the rules in chain %s due to  %s", policyChain, err)
