@@ -990,37 +990,26 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		}
 	}
 
-	// remove stale iptables chain references from the filter table chains
-	for _, chain := range cleanupPodFwChains {
+	// remove stale iptables podFwChain references from the filter table chains
+	for _, podFwChain := range cleanupPodFwChains {
 
-		forwardChainRules, err := iptablesCmdHandler.List("filter", "FORWARD")
-		if err != nil {
-			return fmt.Errorf("failed to list rules in filter table, FORWARD chain due to %s", err.Error())
-		}
-		outputChainRules, err := iptablesCmdHandler.List("filter", "OUTPUT")
-		if err != nil {
-			return fmt.Errorf("failed to list rules in filter table, OUTPUT chain due to %s", err.Error())
-		}
-
-		// TODO delete rule by spec, than rule number to avoid extra loop
-		var realRuleNo int
-		for i, rule := range forwardChainRules {
-			if strings.Contains(rule, chain) {
-				err = iptablesCmdHandler.Delete("filter", "FORWARD", strconv.Itoa(i-realRuleNo))
-				if err != nil {
-					return fmt.Errorf("failed to delete rule: %s from the FORWARD chain of filter table due to %s", rule, err.Error())
-				}
-				realRuleNo++
+		primaryChains := []string{"FORWARD", "OUTPUT", "INPUT"}
+		for _, egressChain := range primaryChains {
+			forwardChainRules, err := iptablesCmdHandler.List("filter", egressChain)
+			if err != nil {
+				return fmt.Errorf("failed to list rules in filter table, %s podFwChain due to %s", egressChain, err.Error())
 			}
-		}
-		realRuleNo = 0
-		for i, rule := range outputChainRules {
-			if strings.Contains(rule, chain) {
-				err = iptablesCmdHandler.Delete("filter", "OUTPUT", strconv.Itoa(i-realRuleNo))
-				if err != nil {
-					return fmt.Errorf("failed to delete rule: %s from the OUTPUT chain of filter table due to %s", rule, err.Error())
+
+			// TODO delete rule by spec, than rule number to avoid extra loop
+			var realRuleNo int
+			for i, rule := range forwardChainRules {
+				if strings.Contains(rule, podFwChain) {
+					err = iptablesCmdHandler.Delete("filter", egressChain, strconv.Itoa(i-realRuleNo))
+					if err != nil {
+						return fmt.Errorf("failed to delete rule: %s from the %s podFwChain of filter table due to %s", rule, egressChain, err.Error())
+					}
+					realRuleNo++
 				}
-				realRuleNo++
 			}
 		}
 	}
