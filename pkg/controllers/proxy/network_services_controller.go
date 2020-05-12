@@ -64,7 +64,8 @@ const (
 
 var (
 	h      *ipvs.Handle
-	NodeIP net.IP
+	NodeIP   net.IP
+	BridgeIP net.IP
 )
 
 type ipvsCalls interface {
@@ -111,10 +112,8 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 	}
 	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
 	if err == nil {
-		bridge, _ := netlink.LinkByName("kube-bridge")
-		bridgeIPs, _ := netlink.AddrList(bridge, netlink.FAMILY_V4)
 		out, err := exec.Command("ip", "route", "delete", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
-			bridgeIPs[0].IP.String(), "table", "local").CombinedOutput()
+			BridgeIP.String(), "table", "local").CombinedOutput()
 		if err != nil && !strings.Contains(string(out), "No such process") {
 			glog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
 		}
@@ -143,12 +142,10 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 		return nil
 	}
 
-	bridge, _ := netlink.LinkByName("kube-bridge")
-	bridgeIPs, _ := netlink.AddrList(bridge, netlink.FAMILY_V4)
 	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
 	// route is not replaced. For now do it with command.
 	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
-		bridgeIPs[0].IP.String(), "table", "local").CombinedOutput()
+		BridgeIP.String(), "table", "local").CombinedOutput()
 	if err != nil {
 		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
 	}
@@ -2198,6 +2195,16 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 	nsc.nodeIP = NodeIP
+
+	bridge, err := netlink.LinkByName("kube-bridge")
+	if err != nil {
+		return nil, err
+	}
+	bridgeIPs, err := netlink.AddrList(bridge, netlink.FAMILY_V4)
+	if err != nil {
+		return nil, err
+	}
+	BridgeIP = bridgeIPs[0].IP
 
 	nsc.podLister = podInformer.GetIndexer()
 
