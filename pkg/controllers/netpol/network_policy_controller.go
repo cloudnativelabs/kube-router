@@ -953,6 +953,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 	cleanupPolicyChains := make([]string, 0)
 	cleanupPolicyIPSets := make([]*utils.Set, 0)
 
+	// initialize tool sets for working with iptables and ipset
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		glog.Fatalf("failed to initialize iptables command executor due to %s", err.Error())
@@ -966,7 +967,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		glog.Fatalf("failed to initialize ipsets command executor due to %s", err.Error())
 	}
 
-	// get the list of chains created for pod firewall and network policies
+	// find iptables chains and ipsets that are no longer used by comparing current to the active maps we were passed
 	chains, err := iptablesCmdHandler.ListChains("filter")
 	for _, chain := range chains {
 		if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
@@ -989,7 +990,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		}
 	}
 
-	// cleanup FORWARD chain rules to jump to pod firewall
+	// remove stale iptables chain references from the filter table chains
 	for _, chain := range cleanupPodFwChains {
 
 		forwardChainRules, err := iptablesCmdHandler.List("filter", "FORWARD")
@@ -1042,7 +1043,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 	for _, policyChain := range cleanupPolicyChains {
 		glog.V(2).Infof("Found policy chain to cleanup %s", policyChain)
 
-		// first clean up any references from pod firewall chain
+		// first clean up any references from active pod firewall chains
 		for podFwChain := range activePodFwChains {
 			podFwChainRules, err := iptablesCmdHandler.List("filter", podFwChain)
 			if err != nil {
@@ -1059,6 +1060,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 			}
 		}
 
+		// now that all stale and active references to the network policy chain have been removed, delete the chain
 		err = iptablesCmdHandler.ClearChain("filter", policyChain)
 		if err != nil {
 			return fmt.Errorf("Failed to flush the rules in chain %s due to  %s", policyChain, err)
