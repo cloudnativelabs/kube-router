@@ -52,14 +52,15 @@ const (
 
 // NetworkPolicyController strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	nodeIP          net.IP
-	nodeHostName    string
-	mu              sync.Mutex
-	syncPeriod      time.Duration
-	MetricsEnabled  bool
-	v1NetworkPolicy bool
-	readyForUpdates bool
-	healthChan      chan<- *healthcheck.ControllerHeartbeat
+	nodeIP              net.IP
+	nodeHostName        string
+	mu                  sync.Mutex
+	syncPeriod          time.Duration
+	MetricsEnabled      bool
+	v1NetworkPolicy     bool
+	readyForUpdates     bool
+	healthChan          chan<- *healthcheck.ControllerHeartbeat
+	fullSyncRequestChan chan struct{}
 
 	ipSetHandler *utils.IPSet
 
@@ -142,23 +143,26 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	glog.Info("Starting network policy controller")
 	npc.healthChan = healthChan
 
+	// Full syncs of the network policy controller take a lot of time and can only be processed one at a time,
+	// therefore, we start it in it's own goroutine and request a sync through a single item channel
+	glog.Info("Starting network policy controller full sync goroutine")
+	go func(fullSyncRequest <-chan struct{}, stopCh <-chan struct{}) {
+		for {
+			select {
+			case <-stopCh:
+				glog.Info("Shutting down network policies full sync goroutine")
+				return
+			case <-fullSyncRequest:
+				glog.V(3).Info("Received request for a full sync, processing")
+				npc.fullPolicySync()
+			}
+		}
+	}(npc.fullSyncRequestChan, stopCh)
+
 	// loop forever till notified to stop on stopCh
 	for {
-		select {
-		case <-stopCh:
-			glog.Info("Shutting down network policies controller")
-			return
-		default:
-		}
-
-		glog.V(1).Info("Performing periodic sync of iptables to reflect network policies")
-		err := npc.Sync()
-		if err != nil {
-			glog.Errorf("Error during periodic sync of network policies in network policy controller. Error: " + err.Error())
-			glog.Errorf("Skipping sending heartbeat from network policy controller as periodic sync failed.")
-		} else {
-			healthcheck.SendHeartBeat(healthChan, "NPC")
-		}
+		glog.V(1).Info("Requesting periodic sync of iptables to reflect network policies")
+		npc.RequestFullSync()
 		npc.readyForUpdates = true
 		select {
 		case <-stopCh:
@@ -179,10 +183,7 @@ func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 		return
 	}
 
-	err := npc.Sync()
-	if err != nil {
-		glog.Errorf("Error syncing network policy for the update to pod: %s/%s Error: %s", pod.Namespace, pod.Name, err)
-	}
+	npc.RequestFullSync()
 }
 
 // OnNetworkPolicyUpdate handles updates to network policy from the kubernetes api server
@@ -195,10 +196,7 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
 		return
 	}
 
-	err := npc.Sync()
-	if err != nil {
-		glog.Errorf("Error syncing network policy for the update to network policy: %s/%s Error: %s", netpol.Namespace, netpol.Name, err)
-	}
+	npc.RequestFullSync()
 }
 
 // OnNamespaceUpdate handles updates to namespace from kubernetes api server
@@ -215,14 +213,21 @@ func (npc *NetworkPolicyController) OnNamespaceUpdate(obj interface{}) {
 		return
 	}
 
-	err := npc.Sync()
-	if err != nil {
-		glog.Errorf("Error syncing on namespace update: %s", err)
+	npc.RequestFullSync()
+}
+
+// RequestFullSync allows the request of a full network policy sync without blocking the callee
+func (npc *NetworkPolicyController) RequestFullSync() {
+	select {
+	case npc.fullSyncRequestChan <- struct{}{}:
+		glog.V(3).Info("Full sync request queue was empty so a full sync request was successfully sent")
+	default: // Don't block if the buffered channel is full, return quickly so that we don't block callee execution
+		glog.V(1).Info("Full sync request queue was full, skipping...")
 	}
 }
 
 // Sync synchronizes iptables to desired state of network policies
-func (npc *NetworkPolicyController) Sync() error {
+func (npc *NetworkPolicyController) fullPolicySync() {
 
 	var err error
 	var networkPoliciesInfo []networkPolicyInfo
@@ -244,32 +249,35 @@ func (npc *NetworkPolicyController) Sync() error {
 	if npc.v1NetworkPolicy {
 		networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 		if err != nil {
-			return errors.New("Aborting sync. Failed to build network policies: " + err.Error())
+			glog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
+			return
 		}
 	} else {
 		// TODO remove the Beta support
 		networkPoliciesInfo, err = npc.buildBetaNetworkPoliciesInfo()
 		if err != nil {
-			return errors.New("Aborting sync. Failed to build network policies: " + err.Error())
+			glog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
+			return
 		}
 	}
 
 	activePolicyChains, activePolicyIpSets, err := npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
-		return errors.New("Aborting sync. Failed to sync network policy chains: " + err.Error())
+		glog.Errorf("Aborting sync. Failed to sync network policy chains: %v" + err.Error())
+		return
 	}
 
 	activePodFwChains, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
-		return errors.New("Aborting sync. Failed to sync pod firewalls: " + err.Error())
+		glog.Errorf("Aborting sync. Failed to sync pod firewalls: %v", err.Error())
+		return
 	}
 
 	err = cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIpSets)
 	if err != nil {
-		return errors.New("Aborting sync. Failed to cleanup stale iptables rules: " + err.Error())
+		glog.Errorf("Aborting sync. Failed to cleanup stale iptables rules: %v", err.Error())
+		return
 	}
-
-	return nil
 }
 
 // Configure iptables rules representing each network policy. All pod's matched by
@@ -1699,10 +1707,7 @@ func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
 		return
 	}
 
-	err := npc.Sync()
-	if err != nil {
-		glog.Errorf("Error syncing network policy for pod: %s/%s delete event Error: %s", pod.Namespace, pod.Name, err)
-	}
+	npc.RequestFullSync()
 }
 
 func (npc *NetworkPolicyController) handleNamespaceDelete(obj interface{}) {
@@ -1729,10 +1734,7 @@ func (npc *NetworkPolicyController) handleNamespaceDelete(obj interface{}) {
 		return
 	}
 
-	err := npc.Sync()
-	if err != nil {
-		glog.Errorf("Error syncing network policies on namespace: %s delete event", err)
-	}
+	npc.RequestFullSync()
 }
 
 func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
@@ -1755,10 +1757,7 @@ func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
 		return
 	}
 
-	err := npc.Sync()
-	if err != nil {
-		glog.Errorf("Error syncing network policy for the network policy: %s/%s delete event, Error: %s", netpol.Namespace, netpol.Name, err)
-	}
+	npc.RequestFullSync()
 }
 
 // NewNetworkPolicyController returns new NetworkPolicyController object
@@ -1766,6 +1765,11 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
 	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) (*NetworkPolicyController, error) {
 	npc := NetworkPolicyController{}
+
+	// Creating a single-item buffered channel to ensure that we only keep a single full sync request at a time,
+	// additional requests would be pointless to queue since after the first one was processed the system would already
+	// be up to date with all of the policy changes from any enqueued request after that
+	npc.fullSyncRequestChan = make(chan struct{}, 1)
 
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
