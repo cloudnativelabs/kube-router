@@ -61,9 +61,7 @@ type NetworkPolicyController struct {
 	readyForUpdates bool
 	healthChan      chan<- *healthcheck.ControllerHeartbeat
 
-	// list of all active network policies expressed as networkPolicyInfo
-	networkPoliciesInfo *[]networkPolicyInfo
-	ipSetHandler        *utils.IPSet
+	ipSetHandler *utils.IPSet
 
 	podLister cache.Indexer
 	npLister  cache.Indexer
@@ -227,6 +225,7 @@ func (npc *NetworkPolicyController) OnNamespaceUpdate(obj interface{}) {
 func (npc *NetworkPolicyController) Sync() error {
 
 	var err error
+	var networkPoliciesInfo []networkPolicyInfo
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
 
@@ -243,24 +242,24 @@ func (npc *NetworkPolicyController) Sync() error {
 
 	glog.V(1).Infof("Starting sync of iptables with version: %s", syncVersion)
 	if npc.v1NetworkPolicy {
-		npc.networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
+		networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 		if err != nil {
 			return errors.New("Aborting sync. Failed to build network policies: " + err.Error())
 		}
 	} else {
 		// TODO remove the Beta support
-		npc.networkPoliciesInfo, err = npc.buildBetaNetworkPoliciesInfo()
+		networkPoliciesInfo, err = npc.buildBetaNetworkPoliciesInfo()
 		if err != nil {
 			return errors.New("Aborting sync. Failed to build network policies: " + err.Error())
 		}
 	}
 
-	activePolicyChains, activePolicyIpSets, err := npc.syncNetworkPolicyChains(syncVersion)
+	activePolicyChains, activePolicyIpSets, err := npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
 		return errors.New("Aborting sync. Failed to sync network policy chains: " + err.Error())
 	}
 
-	activePodFwChains, err := npc.syncPodFirewallChains(syncVersion)
+	activePodFwChains, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
 		return errors.New("Aborting sync. Failed to sync pod firewalls: " + err.Error())
 	}
@@ -278,7 +277,7 @@ func (npc *NetworkPolicyController) Sync() error {
 // is used for matching destination ip address. Each ingress rule in the network
 // policyspec is evaluated to set of matching pods, which are grouped in to a
 // ipset used for source ip addr matching.
-func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map[string]bool, map[string]bool, error) {
+func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo []networkPolicyInfo, version string) (map[string]bool, map[string]bool, error) {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
@@ -294,7 +293,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(version string) (map
 	}
 
 	// run through all network policies
-	for _, policy := range *npc.networkPoliciesInfo {
+	for _, policy := range networkPoliciesInfo {
 
 		// ensure there is a unique chain per network policy in filter table
 		policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
@@ -693,7 +692,7 @@ func (npc *NetworkPolicyController) appendRuleToPolicyChain(iptablesCmdHandler *
 	return nil
 }
 
-func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[string]bool, error) {
+func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []networkPolicyInfo, version string) (map[string]bool, error) {
 
 	activePodFwChains := make(map[string]bool)
 
@@ -703,7 +702,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 	}
 
 	// loop through the pods running on the node which to which ingress network policies to be applied
-	ingressNetworkPolicyEnabledPods, err := npc.getIngressNetworkPolicyEnabledPods(npc.nodeIP.String())
+	ingressNetworkPolicyEnabledPods, err := npc.getIngressNetworkPolicyEnabledPods(networkPoliciesInfo, npc.nodeIP.String())
 	if err != nil {
 		return nil, err
 	}
@@ -724,7 +723,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		activePodFwChains[podFwChainName] = true
 
 		// add entries in pod firewall to run through required network policies
-		for _, policy := range *npc.networkPoliciesInfo {
+		for _, policy := range networkPoliciesInfo {
 			if _, ok := policy.targetPods[pod.ip]; ok {
 				comment := "run through nw policy " + policy.name
 				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
@@ -835,7 +834,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 	}
 
 	// loop through the pods running on the node which egress network policies to be applied
-	egressNetworkPolicyEnabledPods, err := npc.getEgressNetworkPolicyEnabledPods(npc.nodeIP.String())
+	egressNetworkPolicyEnabledPods, err := npc.getEgressNetworkPolicyEnabledPods(networkPoliciesInfo, npc.nodeIP.String())
 	if err != nil {
 		return nil, err
 	}
@@ -856,7 +855,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(version string) (map[s
 		activePodFwChains[podFwChainName] = true
 
 		// add entries in pod firewall to run through required network policies
-		for _, policy := range *npc.networkPoliciesInfo {
+		for _, policy := range networkPoliciesInfo {
 			if _, ok := policy.targetPods[pod.ip]; ok {
 				comment := "run through nw policy " + policy.name
 				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
@@ -1071,7 +1070,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 	return nil
 }
 
-func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(nodeIp string) (*map[string]podInfo, error) {
+func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(networkPoliciesInfo []networkPolicyInfo, nodeIp string) (*map[string]podInfo, error) {
 	nodePods := make(map[string]podInfo)
 
 	for _, obj := range npc.podLister.List() {
@@ -1080,7 +1079,7 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(nodeIp st
 		if strings.Compare(pod.Status.HostIP, nodeIp) != 0 {
 			continue
 		}
-		for _, policy := range *npc.networkPoliciesInfo {
+		for _, policy := range networkPoliciesInfo {
 			if policy.namespace != pod.ObjectMeta.Namespace {
 				continue
 			}
@@ -1099,7 +1098,7 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(nodeIp st
 
 }
 
-func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(nodeIp string) (*map[string]podInfo, error) {
+func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(networkPoliciesInfo []networkPolicyInfo, nodeIp string) (*map[string]podInfo, error) {
 
 	nodePods := make(map[string]podInfo)
 
@@ -1109,7 +1108,7 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(nodeIp str
 		if strings.Compare(pod.Status.HostIP, nodeIp) != 0 {
 			continue
 		}
-		for _, policy := range *npc.networkPoliciesInfo {
+		for _, policy := range networkPoliciesInfo {
 			if policy.namespace != pod.ObjectMeta.Namespace {
 				continue
 			}
@@ -1167,7 +1166,7 @@ func (npc *NetworkPolicyController) processBetaNetworkPolicyPorts(npPorts []apie
 	return
 }
 
-func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
+func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
 
@@ -1315,7 +1314,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() (*[]networkPolicy
 		NetworkPolicies = append(NetworkPolicies, newPolicy)
 	}
 
-	return &NetworkPolicies, nil
+	return NetworkPolicies, nil
 }
 
 func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy, peer networking.NetworkPolicyPeer) ([]*api.Pod, error) {
@@ -1415,7 +1414,7 @@ func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPort
 	}
 }
 
-func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPolicyInfo, error) {
+func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() ([]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
 
@@ -1473,7 +1472,7 @@ func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() (*[]networkPo
 		NetworkPolicies = append(NetworkPolicies, newPolicy)
 	}
 
-	return &NetworkPolicies, nil
+	return NetworkPolicies, nil
 }
 
 func podFirewallChainName(namespace, podName string, version string) string {
