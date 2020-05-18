@@ -58,7 +58,6 @@ type NetworkPolicyController struct {
 	syncPeriod          time.Duration
 	MetricsEnabled      bool
 	v1NetworkPolicy     bool
-	readyForUpdates     bool
 	healthChan          chan<- *healthcheck.ControllerHeartbeat
 	fullSyncRequestChan chan struct{}
 
@@ -163,7 +162,6 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	for {
 		glog.V(1).Info("Requesting periodic sync of iptables to reflect network policies")
 		npc.RequestFullSync()
-		npc.readyForUpdates = true
 		select {
 		case <-stopCh:
 			glog.Infof("Shutting down network policies controller")
@@ -178,11 +176,6 @@ func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 	pod := obj.(*api.Pod)
 	glog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
 
-	if !npc.readyForUpdates {
-		glog.V(3).Infof("Skipping update to pod: %s/%s, controller still performing bootup full-sync", pod.Namespace, pod.Name)
-		return
-	}
-
 	npc.RequestFullSync()
 }
 
@@ -190,11 +183,6 @@ func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
 	netpol := obj.(*networking.NetworkPolicy)
 	glog.V(2).Infof("Received update for network policy: %s/%s", netpol.Namespace, netpol.Name)
-
-	if !npc.readyForUpdates {
-		glog.V(3).Infof("Skipping update to network policy: %s/%s, controller still performing bootup full-sync", netpol.Namespace, netpol.Name)
-		return
-	}
 
 	npc.RequestFullSync()
 }
@@ -207,11 +195,6 @@ func (npc *NetworkPolicyController) OnNamespaceUpdate(obj interface{}) {
 		return
 	}
 	glog.V(2).Infof("Received update for namespace: %s", namespace.Name)
-
-	if !npc.readyForUpdates {
-		glog.V(3).Infof("Skipping update to namespace: %s, controller still performing bootup full-sync", namespace.Name)
-		return
-	}
 
 	npc.RequestFullSync()
 }
@@ -1702,10 +1685,6 @@ func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
 		}
 	}
 	glog.V(2).Infof("Received pod: %s/%s delete event", pod.Namespace, pod.Name)
-	if !npc.readyForUpdates {
-		glog.V(3).Infof("Skipping pod: %s/%s delete event, controller still performing bootup full-sync", pod.Namespace, pod.Name)
-		return
-	}
 
 	npc.RequestFullSync()
 }
@@ -1729,11 +1708,6 @@ func (npc *NetworkPolicyController) handleNamespaceDelete(obj interface{}) {
 	}
 	glog.V(2).Infof("Received namespace: %s delete event", namespace.Name)
 
-	if !npc.readyForUpdates {
-		glog.V(3).Infof("Skipping update to namespace: %s, controller still performing bootup full-sync", namespace.Name)
-		return
-	}
-
 	npc.RequestFullSync()
 }
 
@@ -1751,11 +1725,6 @@ func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
 		}
 	}
 	glog.V(2).Infof("Received network policy: %s/%s delete event", netpol.Namespace, netpol.Name)
-
-	if !npc.readyForUpdates {
-		glog.V(3).Infof("Skipping network policy: %s/%s delete event as controller still performing bootup full-sync", netpol.Namespace, netpol.Name)
-		return
-	}
 
 	npc.RequestFullSync()
 }
