@@ -1,4 +1,5 @@
 .vscode
+.idea
 /kube-router
 /gobgp
 _output
