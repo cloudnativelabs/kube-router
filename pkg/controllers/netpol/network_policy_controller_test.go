@@ -357,7 +357,7 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			np := test.netpol.findNetpolMatch(netpols)
+			np := test.netpol.findNetpolMatch(&netpols)
 			testForMissingOrUnwanted(t, "targetPods", tListOfPodsFromTargets(np.targetPods), test.targetPods)
 			for _, ingress := range np.ingressRules {
 				testForMissingOrUnwanted(t, "ingress srcPods", ingress.srcPods, test.inSourcePods)
