@@ -54,10 +54,10 @@ const (
 	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
+	IpvsFirewallChainName             = "KUBE-ROUTER-SERVICES"
 	localIPsIPSetName                 = "kube-router-local-ips"
 	ipvsServicesIPSetName             = "kube-router-ipvs-services"
 	serviceIPsIPSetName               = "kube-router-service-ips"
-	ipvsFirewallChainName             = "KUBE-ROUTER-SERVICES"
 	synctypeAll                       = iota
 	synctypeIpvs
 )
@@ -466,7 +466,7 @@ func getIpvsFirewallInputChainRule() []string {
 	return []string{
 		"-m", "comment", "--comment", "handle traffic to IPVS service IPs in custom chain",
 		"-m", "set", "--match-set", serviceIPsIPSetName, "dst",
-		"-j", ipvsFirewallChainName}
+		"-j", IpvsFirewallChainName}
 }
 
 func (nsc *NetworkServicesController) setupIpvsFirewall() error {
@@ -514,7 +514,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	}
 
 	// ClearChain either clears an existing chain or creates a new one.
-	err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
+	err = iptablesCmdHandler.ClearChain("filter", IpvsFirewallChainName)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
@@ -532,12 +532,12 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	args = []string{"-m", "comment", "--comment", comment,
 		"-m", "set", "--match-set", ipvsServicesIPSetName, "dst,dst",
 		"-j", "ACCEPT"}
-	exists, err = iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
+	exists, err = iptablesCmdHandler.Exists("filter", IpvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
-		err := iptablesCmdHandler.Insert("filter", ipvsFirewallChainName, 1, args...)
+		err := iptablesCmdHandler.Insert("filter", IpvsFirewallChainName, 1, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
@@ -547,7 +547,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	args = []string{"-m", "comment", "--comment", comment,
 		"-p", "icmp", "--icmp-type", "echo-request",
 		"-j", "ACCEPT"}
-	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+	err = iptablesCmdHandler.AppendUnique("filter", IpvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
@@ -558,7 +558,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	args = []string{"-m", "comment", "--comment", comment,
 		"-m", "set", "!", "--match-set", localIPsIPSetName, "dst",
 		"-j", "REJECT", "--reject-with", "icmp-port-unreachable"}
-	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+	err = iptablesCmdHandler.AppendUnique("filter", IpvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
@@ -597,12 +597,12 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 			glog.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
-		err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
+		err = iptablesCmdHandler.ClearChain("filter", IpvsFirewallChainName)
 		if err != nil {
 			glog.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 
-		err = iptablesCmdHandler.DeleteChain("filter", ipvsFirewallChainName)
+		err = iptablesCmdHandler.DeleteChain("filter", IpvsFirewallChainName)
 		if err != nil {
 			glog.Errorf("Failed to run iptables command: %s", err.Error())
 		}
