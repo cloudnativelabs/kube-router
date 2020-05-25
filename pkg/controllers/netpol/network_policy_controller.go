@@ -768,6 +768,14 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			}
 		}
 
+		// add default DROP rule at the end of chain
+		comment = "default rule to REJECT traffic destined for POD name:" + pod.name + " namespace: " + pod.namespace
+		args = []string{"-m", "comment", "--comment", comment, "-j", "REJECT"}
+		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting routed (coming for other node pods)
 		comment = "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
@@ -819,14 +827,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// add rule to log the packets that will be dropped due to network policy enforcement
 		comment = "rule to log dropped traffic POD name:" + pod.name + " namespace: " + pod.namespace
 		args = []string{"-m", "comment", "--comment", comment, "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10"}
-		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-
-		// add default DROP rule at the end of chain
-		comment = "default rule to REJECT traffic destined for POD name:" + pod.name + " namespace: " + pod.namespace
-		args = []string{"-m", "comment", "--comment", comment, "-j", "REJECT"}
 		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
