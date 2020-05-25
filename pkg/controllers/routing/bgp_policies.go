@@ -2,7 +2,7 @@ package routing
 
 import (
 	"errors"
-	"fmt"
+	"github.com/golang/glog"
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/osrg/gobgp/config"
@@ -56,7 +56,8 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 			nodeObj := node.(*v1core.Node)
 			nodeIP, err := utils.GetNodeIP(nodeObj)
 			if err != nil {
-				return fmt.Errorf("Failed to find a node IP: %s", err)
+				glog.Errorf("Failed to find a node IP and therefore cannot add internal BGP Peer: %v", err)
+				continue
 			}
 			iBGPPeers = append(iBGPPeers, nodeIP.String())
 		}

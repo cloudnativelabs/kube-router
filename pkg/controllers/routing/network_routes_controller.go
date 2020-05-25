@@ -553,7 +553,8 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		currentPodCidrs = append(currentPodCidrs, podCIDR)
 		nodeIP, err := utils.GetNodeIP(node)
 		if err != nil {
-			return fmt.Errorf("Failed to find a node IP: %s", err)
+			glog.Errorf("Failed to find a node IP, cannot add to node ipset which could affect routing: %v", err)
+			continue
 		}
 		currentNodeIPs = append(currentNodeIPs, nodeIP.String())
 	}
