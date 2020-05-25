@@ -45,7 +45,11 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	currentNodes := make([]string, 0)
 	for _, obj := range nodes {
 		node := obj.(*v1core.Node)
-		nodeIP, _ := utils.GetNodeIP(node)
+		nodeIP, err := utils.GetNodeIP(node)
+		if err != nil {
+			glog.Errorf("Failed to find a node IP and therefore cannot sync internal BGP Peer: %v", err)
+			continue
+		}
 
 		// skip self
 		if nodeIP.String() == nrc.nodeIP.String() {
@@ -321,7 +325,11 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			node := obj.(*v1core.Node)
-			nodeIP, _ := utils.GetNodeIP(node)
+			nodeIP, err := utils.GetNodeIP(node)
+			if err != nil {
+				glog.Errorf("New node received, but we were unable to add it as we were couldn't find it's node IP: %v", err)
+				return
+			}
 
 			glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
 			nrc.OnNodeUpdate(obj)
@@ -344,9 +352,15 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 					return
 				}
 			}
-			nodeIP, _ := utils.GetNodeIP(node)
+			nodeIP, err := utils.GetNodeIP(node)
+			// In this case even if we can't get the NodeIP that's alright as the node is being removed anyway and
+			// future node lister operations that happen in OnNodeUpdate won't be affected as the node won't be returned
+			if err == nil {
+				glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
+			} else {
+				glog.Infof("Received node (IP unavailable) removed update from watch API, so remove node from peer")
+			}
 
-			glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
 			nrc.OnNodeUpdate(obj)
 		},
 	}
