@@ -23,6 +23,8 @@ type KubeRouterConfig struct {
 	CleanupConfig                  bool
 	ClusterAsn                     uint
 	ClusterCIDR                    string
+	ClusterIPCIDR                  string
+	NodePortRange                  string
 	DisableSrcDstCheck             bool
 	EnableCNI                      bool
 	EnableiBGP                     bool
@@ -74,6 +76,8 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		BGPGracefulRestartDeferralTime: 360 * time.Second,
 		EnableOverlay:                  true,
 		OverlayType:                    "subnet",
+		ClusterIPCIDR:                  "10.96.0.0/12",
+		NodePortRange:                  "30000:32767",
 	}
 }
 
@@ -102,6 +106,10 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.")
 	fs.StringSliceVar(&s.ExcludedCidrs, "excluded-cidrs", s.ExcludedCidrs,
 		"Excluded CIDRs are used to exclude IPVS rules from deletion.")
+	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
+		"CIDR value from which service cluster IPs are assigned.")
+	fs.StringVar(&s.NodePortRange, "service-node-port-range", s.NodePortRange,
+		"CIDR value from which service cluster IPs are assigned.")
 	fs.BoolVar(&s.EnablePodEgress, "enable-pod-egress", true,
 		"SNAT traffic from Pods to destinations outside the cluster.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,

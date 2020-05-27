@@ -54,14 +54,16 @@ const (
 
 // NetworkPolicyController strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	nodeIP              net.IP
-	nodeHostName        string
-	mu                  sync.Mutex
-	syncPeriod          time.Duration
-	MetricsEnabled      bool
-	v1NetworkPolicy     bool
-	healthChan          chan<- *healthcheck.ControllerHeartbeat
-	fullSyncRequestChan chan struct{}
+	nodeIP                net.IP
+	nodeHostName          string
+	serviceClusterIPRange string
+	serviceNodePortRange  string
+	mu                    sync.Mutex
+	syncPeriod            time.Duration
+	MetricsEnabled        bool
+	v1NetworkPolicy       bool
+	healthChan            chan<- *healthcheck.ControllerHeartbeat
+	fullSyncRequestChan   chan struct{}
 
 	ipSetHandler *utils.IPSet
 
@@ -197,6 +199,42 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		glog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
 	}
 
+	ensureRuleAtposition := func(chain string, ruleSpec []string, position int) {
+		rules, err := iptablesCmdHandler.List("filter", chain)
+		if err != nil {
+			glog.Fatalf("failed to list rules in filter table %s chain due to %s", chain, err.Error())
+		}
+
+		exists, err := iptablesCmdHandler.Exists("filter", chain, ruleSpec...)
+		if err != nil {
+			glog.Fatalf("Failed to verify rule exists in %s chain due to %s", chain, err.Error())
+		}
+		if !exists {
+			err := iptablesCmdHandler.Insert("filter", chain, 1, ruleSpec...)
+			if err != nil {
+				glog.Fatalf("Failed to run iptables command to insert in %s chain %s", chain, err.Error())
+			}
+		}
+		var ruleNo int
+		for i, rule := range rules {
+			rule = strings.Replace(rule, "\"", "", 2)
+			if strings.Contains(rule, strings.Join(ruleSpec, " ")) {
+				ruleNo = i
+				break
+			}
+		}
+		if ruleNo != position {
+			err = iptablesCmdHandler.Insert("filter", chain, position, ruleSpec...)
+			if err != nil {
+				glog.Fatalf("Failed to run iptables command to insert in %s chain %s", chain, err.Error())
+			}
+			err = iptablesCmdHandler.Delete("filter", chain, strconv.Itoa(ruleNo+1))
+			if err != nil {
+				glog.Fatalf("Failed to delete incorrect rule in %s chain due to %s", chain, err.Error())
+			}
+		}
+	}
+
 	chains := map[string]string{"INPUT": kubeInputChainName, "FORWARD": kubeForwardChainName, "OUTPUT": kubeOutputChainName}
 
 	for builtinChain, customChain := range chains {
@@ -205,40 +243,20 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			glog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
 		}
 		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
-		exists, err := iptablesCmdHandler.Exists("filter", builtinChain, args...)
-		if err != nil {
-			glog.Fatalf("Failed to verify rule exists to jump to chain %s in %s chain due to %s", customChain, builtinChain, err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", builtinChain, 1, args...)
-			if err != nil {
-				glog.Fatalf("Failed to run iptables command to insert in %s chain %s", builtinChain, err.Error())
-			}
-		} else {
-			rules, err := iptablesCmdHandler.List("filter", builtinChain)
-			if err != nil {
-				glog.Fatalf("failed to list rules in filter table %s chain due to %s", builtinChain, err.Error())
-			}
-
-			var ruleNo int
-			for i, rule := range rules {
-				if strings.Contains(rule, customChain) {
-					ruleNo = i
-					break
-				}
-			}
-			if ruleNo != 1 {
-				err = iptablesCmdHandler.Insert("filter", builtinChain, 1, args...)
-				if err != nil {
-					glog.Fatalf("Failed to run iptables command to insert in %s chain %s", builtinChain, err.Error())
-				}
-				err = iptablesCmdHandler.Delete("filter", builtinChain, strconv.Itoa(ruleNo+1))
-				if err != nil {
-					glog.Fatalf("Failed to delete wrong rule to jump to chain %s in %s chain due to %s", customChain, builtinChain, err.Error())
-				}
-			}
-		}
+		ensureRuleAtposition(builtinChain, args, 1)
 	}
+
+	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange, "-j", "RETURN"}
+	ensureRuleAtposition(kubeInputChainName, whitelistServiceVips, 1)
+
+	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment", "allow LOCAL traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
+	ensureRuleAtposition(kubeInputChainName, whitelistTCPNodeports, 2)
+
+	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment", "allow LOCAL traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
+	ensureRuleAtposition(kubeInputChainName, whitelistUDPNodeports, 3)
+
 }
 
 // OnPodUpdate handles updates to pods from the Kubernetes api server
@@ -953,7 +971,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
 			if !exists {
-				err := iptablesCmdHandler.Insert("filter", chain, 1, args...)
+				err := iptablesCmdHandler.AppendUnique("filter", chain, args...)
 				if err != nil {
 					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 				}
@@ -1779,6 +1797,9 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	// additional requests would be pointless to queue since after the first one was processed the system would already
 	// be up to date with all of the policy changes from any enqueued request after that
 	npc.fullSyncRequestChan = make(chan struct{}, 1)
+
+	npc.serviceClusterIPRange = config.ClusterIPCIDR
+	npc.serviceNodePortRange = config.NodePortRange
 
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
