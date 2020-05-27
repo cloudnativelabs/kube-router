@@ -756,11 +756,21 @@ func (npc *NetworkPolicyController) appendRuleToPolicyChain(iptablesCmdHandler *
 	if dPort != "" {
 		args = append(args, "--dport", dPort)
 	}
-	args = append(args, "-j", "ACCEPT")
-	err := iptablesCmdHandler.AppendUnique("filter", policyChainName, args...)
+
+	markComment := "rule to mark traffic matching a network policy"
+	markArgs := append(args, "-j", "MARK", "-m", "comment", "--comment", markComment, "--set-xmark", "0x10000/0x10000")
+	err := iptablesCmdHandler.AppendUnique("filter", policyChainName, markArgs...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
+
+	returnComment := "rule to RETURN traffic matching a network policy"
+	returnArgs := append(args, "-m", "comment", "--comment", returnComment, "-m", "mark", "--mark", "0x10000/0x10000", "-j", "RETURN")
+	err = iptablesCmdHandler.AppendUnique("filter", policyChainName, returnArgs...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
 	return nil
 }
 
@@ -771,6 +781,33 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		glog.Fatalf("Failed to initialize iptables executor: %s", err.Error())
+	}
+
+	dropUnmarkedTrafficRules := func(podName, podNamespace, podFwChainName string) error {
+		// add rule to log the packets that will be dropped due to network policy enforcement
+		comment := "rule to log dropped traffic POD name:" + podName + " namespace: " + podNamespace
+		args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10"}
+		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+
+		// add rule to DROP if no applicable network policy permits the traffic
+		comment = "rule to REJECT traffic destined for POD name:" + podName + " namespace: " + podNamespace
+		args = []string{"-m", "comment", "--comment", comment, "-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "REJECT"}
+		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+
+		// reset mark to let traffic pass through rest of the chains
+		args = []string{"-j", "MARK", "--set-mark", "0"}
+		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+
+		return nil
 	}
 
 	// loop through the pods running on the node which to which ingress network policies to be applied
@@ -888,20 +925,9 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			}
 		}
 
-		// add rule to log the packets that will be dropped due to network policy enforcement
-		comment = "rule to log dropped traffic POD name:" + pod.name + " namespace: " + pod.namespace
-		args = []string{"-m", "comment", "--comment", comment, "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10"}
-		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+		err = dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-
-		// add default DROP rule at the end of chain
-		comment = "default rule to REJECT traffic destined for POD name:" + pod.name + " namespace: " + pod.namespace
-		args = []string{"-m", "comment", "--comment", comment, "-j", "REJECT"}
-		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return nil, err
 		}
 	}
 
@@ -998,20 +1024,9 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			}
 		}
 
-		// add rule to log the packets that will be dropped due to network policy enforcement
-		comment = "rule to log dropped traffic POD name:" + pod.name + " namespace: " + pod.namespace
-		args = []string{"-m", "comment", "--comment", comment, "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10"}
-		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+		err = dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-
-		// add default DROP rule at the end of chain
-		comment = "default rule to REJECT traffic destined for POD name:" + pod.name + " namespace: " + pod.namespace
-		args = []string{"-m", "comment", "--comment", comment, "-j", "REJECT"}
-		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return nil, err
 		}
 	}
 
