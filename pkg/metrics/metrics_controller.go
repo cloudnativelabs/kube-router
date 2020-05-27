@@ -141,6 +141,12 @@ var (
 		Name:      "controller_policy_chains_sync_time",
 		Help:      "Time it took for controller to sync policy chains",
 	})
+	// ControllerIpSetSyncTime Time it took for controller to sync ipsets
+	ControllerIpSetSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "controller_ipset_sync_time",
+		Help:      "Time it took for controller to sync ipsets",
+	})
 )
 
 // Controller Holds settings for the metrics controller
