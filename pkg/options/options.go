@@ -107,9 +107,9 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringSliceVar(&s.ExcludedCidrs, "excluded-cidrs", s.ExcludedCidrs,
 		"Excluded CIDRs are used to exclude IPVS rules from deletion.")
 	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
-		"CIDR value from which service cluster IPs are assigned.")
+		"CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12")
 	fs.StringVar(&s.NodePortRange, "service-node-port-range", s.NodePortRange,
-		"CIDR value from which service cluster IPs are assigned.")
+		"NodePort range. Default: 30000-32767")
 	fs.BoolVar(&s.EnablePodEgress, "enable-pod-egress", true,
 		"SNAT traffic from Pods to destinations outside the cluster.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
