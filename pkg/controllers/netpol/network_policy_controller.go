@@ -196,18 +196,6 @@ func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
 	npc.RequestFullSync()
 }
 
-// OnNamespaceUpdate handles updates to namespace from kubernetes api server
-func (npc *NetworkPolicyController) OnNamespaceUpdate(obj interface{}) {
-	namespace := obj.(*api.Namespace)
-	// namespace (and annotations on it) has no significance in GA ver of network policy
-	if npc.v1NetworkPolicy {
-		return
-	}
-	glog.V(2).Infof("Received update for namespace: %s", namespace.Name)
-
-	npc.RequestFullSync()
-}
-
 // RequestFullSync allows the request of a full network policy sync without blocking the callee
 func (npc *NetworkPolicyController) RequestFullSync() {
 	select {
@@ -1647,23 +1635,6 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 	}
 }
 
-func (npc *NetworkPolicyController) newNamespaceEventHandler() cache.ResourceEventHandler {
-	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			npc.OnNamespaceUpdate(obj)
-
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			npc.OnNamespaceUpdate(newObj)
-
-		},
-		DeleteFunc: func(obj interface{}) {
-			npc.handleNamespaceDelete(obj)
-
-		},
-	}
-}
-
 func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
@@ -1694,28 +1665,6 @@ func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
 		}
 	}
 	glog.V(2).Infof("Received pod: %s/%s delete event", pod.Namespace, pod.Name)
-
-	npc.RequestFullSync()
-}
-
-func (npc *NetworkPolicyController) handleNamespaceDelete(obj interface{}) {
-	namespace, ok := obj.(*api.Namespace)
-	if !ok {
-		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
-		if !ok {
-			glog.Errorf("unexpected object type: %v", obj)
-			return
-		}
-		if namespace, ok = tombstone.Obj.(*api.Namespace); !ok {
-			glog.Errorf("unexpected object type: %v", obj)
-			return
-		}
-	}
-	// namespace (and annotations on it) has no significance in GA ver of network policy
-	if npc.v1NetworkPolicy {
-		return
-	}
-	glog.V(2).Infof("Received namespace: %s delete event", namespace.Name)
 
 	npc.RequestFullSync()
 }
