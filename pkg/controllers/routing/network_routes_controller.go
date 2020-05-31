@@ -351,7 +351,6 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 				}
 				if err := nrc.injectRoute(path); err != nil {
 					glog.Errorf("Failed to inject routes due to: " + err.Error())
-					continue
 				}
 			}
 		}
@@ -715,6 +714,8 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	go nrc.bgpServer.Serve()
 
 	g := bgpapi.NewGrpcServer(nrc.bgpServer, nrc.nodeIP.String()+":50051"+","+"127.0.0.1:50051")
+
+	// TODO: Re-evaluate error-handling when upgrading gobgp
 	go func() {
 		if err = g.Serve(); err != nil {
 			glog.Errorf("%s", err)
