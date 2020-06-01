@@ -679,7 +679,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 		} else if ipvsService.FWMark != 0 {
 			address, protocol, port, err = nsc.lookupServiceByFWMark(ipvsService.FWMark)
 			if err != nil {
-				return fmt.Errorf("failed to lookup %d by FWMark: %s", ipvsService.FWMark, err)
+				glog.Errorf("failed to lookup %d by FWMark: %s", ipvsService.FWMark, err)
 			}
 			if address == "" {
 				continue
