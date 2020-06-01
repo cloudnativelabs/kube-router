@@ -762,7 +762,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		if err != nil {
 			err2 := nrc.bgpServer.Stop()
 			if err2 != nil {
-				return fmt.Errorf("Failed to stop bgpServer: %s", err)
+				glog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
 			return fmt.Errorf("Failed to parse node's Peer ASN Numbers Annotation: %s", err)
 		}
@@ -778,7 +778,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		if err != nil {
 			err2 := nrc.bgpServer.Stop()
 			if err2 != nil {
-				return fmt.Errorf("Failed to stop bgpServer: %s", err)
+				glog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
 
 			return fmt.Errorf("Failed to parse node's Peer Addresses Annotation: %s", err)
@@ -794,7 +794,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			if err != nil {
 				err2 := nrc.bgpServer.Stop()
 				if err2 != nil {
-					return fmt.Errorf("Failed to stop bgpServer: %s", err)
+					glog.Errorf("Failed to stop bgpServer: %s", err2)
 				}
 				return fmt.Errorf("Failed to parse node's Peer Port Numbers Annotation: %s", err)
 			}
@@ -811,7 +811,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 			if err != nil {
 				err2 := nrc.bgpServer.Stop()
 				if err2 != nil {
-					return fmt.Errorf("Failed to stop bgpServer: %s", err)
+					glog.Errorf("Failed to stop bgpServer: %s", err2)
 				}
 				return fmt.Errorf("Failed to parse node's Peer Passwords Annotation: %s", err)
 			}
@@ -822,7 +822,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		if err != nil {
 			err2 := nrc.bgpServer.Stop()
 			if err2 != nil {
-				return fmt.Errorf("Failed to stop bgpServer: %s", err)
+				glog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
 
 			return fmt.Errorf("Failed to process Global Peer Router configs: %s", err)
@@ -836,7 +836,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		if err != nil {
 			err2 := nrc.bgpServer.Stop()
 			if err2 != nil {
-				return fmt.Errorf("Failed to stop bgpServer: %s", err)
+				glog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
 
 			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
