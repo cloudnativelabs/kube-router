@@ -37,9 +37,9 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 	if err != nil {
 		err2 := nrc.bgpServer.AddDefinedSet(podCidrPrefixSet)
 		if err2 != nil {
-			return fmt.Errorf("Failed to add podCidrPrefixSet: %s", err2)
+			glog.Errorf("Failed to add podCidrPrefixSet: %s", err2)
 		}
-		return fmt.Errorf("Failed to replace defined set %s", err)
+		glog.Errorf("Failed to replace defined set %s", err)
 	}
 
 	// creates prefix set to represent all the advertisable IP associated with the services
@@ -60,9 +60,9 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 	if err != nil {
 		err2 := nrc.bgpServer.AddDefinedSet(clusterIPPrefixSet)
 		if err2 != nil {
-			return fmt.Errorf("Failed to add clusterIPPrefixSet: %s", err2)
+			glog.Errorf("Failed to add clusterIPPrefixSet: %s", err2)
 		}
-		return fmt.Errorf("Failed to replace defined set %s", err)
+		glog.Errorf("Failed to replace defined set %s", err)
 	}
 
 	iBGPPeers := make([]string, 0)
@@ -86,9 +86,9 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		if err != nil {
 			err2 := nrc.bgpServer.AddDefinedSet(iBGPPeerNS)
 			if err2 != nil {
-				return fmt.Errorf("Failed to add iBGPPeerNS: %s", err2)
+				glog.Errorf("Failed to add iBGPPeerNS: %s", err2)
 			}
-			return fmt.Errorf("Failed to replace defined set %s", err)
+			glog.Errorf("Failed to replace defined set %s", err)
 		}
 	}
 
@@ -110,9 +110,9 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		if err != nil {
 			err2 := nrc.bgpServer.AddDefinedSet(ns)
 			if err2 != nil {
-				return fmt.Errorf("Failed to add ns: %s", err2)
+				glog.Errorf("Failed to add ns: %s", err2)
 			}
-			return fmt.Errorf("Failed to replace defined set %s", err)
+			glog.Errorf("Failed to replace defined set %s", err)
 		}
 	}
 
@@ -126,9 +126,9 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 	if err != nil {
 		err2 := nrc.bgpServer.AddDefinedSet(ns)
 		if err2 != nil {
-			return fmt.Errorf("Failed to add ns: %s", err2)
+			glog.Errorf("Failed to add ns: %s", err2)
 		}
-		return fmt.Errorf("Failed to replace defined set %s", err)
+		glog.Errorf("Failed to replace defined set %s", err)
 	}
 
 	err = nrc.addExportPolicies()
