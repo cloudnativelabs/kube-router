@@ -32,7 +32,6 @@ import (
 )
 
 const (
-	networkPolicyAnnotation      = "net.beta.kubernetes.io/network-policy"
 	kubePodFirewallChainPrefix   = "KUBE-POD-FW-"
 	kubeNetworkPolicyChainPrefix = "KUBE-NWPLCY-"
 	kubeSourceIpSetPrefix        = "KUBE-SRC-"
@@ -968,6 +967,9 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 
 	// find iptables chains and ipsets that are no longer used by comparing current to the active maps we were passed
 	chains, err := iptablesCmdHandler.ListChains("filter")
+	if err != nil {
+		return fmt.Errorf("Unable to list chains: %s", err)
+	}
 	for _, chain := range chains {
 		if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
 			if _, ok := activePolicyChains[chain]; !ok {
@@ -1035,7 +1037,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 		for podFwChain := range activePodFwChains {
 			podFwChainRules, err := iptablesCmdHandler.List("filter", podFwChain)
 			if err != nil {
-
+				return fmt.Errorf("Unable to list rules from the chain %s: %s", podFwChain, err)
 			}
 			for i, rule := range podFwChainRules {
 				if strings.Contains(rule, policyChain) {
@@ -1557,6 +1559,9 @@ func (npc *NetworkPolicyController) Cleanup() {
 	for i, rule := range forwardChainRules {
 		if strings.Contains(rule, kubePodFirewallChainPrefix) {
 			err = iptablesCmdHandler.Delete("filter", "FORWARD", strconv.Itoa(i-realRuleNo))
+			if err != nil {
+				glog.Errorf("Failed to delete iptables rule as part of cleanup: %s", err)
+			}
 			realRuleNo++
 		}
 	}
@@ -1573,12 +1578,19 @@ func (npc *NetworkPolicyController) Cleanup() {
 	for i, rule := range forwardChainRules {
 		if strings.Contains(rule, kubePodFirewallChainPrefix) {
 			err = iptablesCmdHandler.Delete("filter", "OUTPUT", strconv.Itoa(i-realRuleNo))
+			if err != nil {
+				glog.Errorf("Failed to delete iptables rule as part of cleanup: %s", err)
+			}
 			realRuleNo++
 		}
 	}
 
 	// flush and delete pod specific firewall chain
 	chains, err := iptablesCmdHandler.ListChains("filter")
+	if err != nil {
+		glog.Errorf("Unable to list chains: %s", err)
+		return
+	}
 	for _, chain := range chains {
 		if strings.HasPrefix(chain, kubePodFirewallChainPrefix) {
 			err = iptablesCmdHandler.ClearChain("filter", chain)
@@ -1596,6 +1608,10 @@ func (npc *NetworkPolicyController) Cleanup() {
 
 	// flush and delete per network policy specific chain
 	chains, err = iptablesCmdHandler.ListChains("filter")
+	if err != nil {
+		glog.Errorf("Unable to list chains: %s", err)
+		return
+	}
 	for _, chain := range chains {
 		if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
 			err = iptablesCmdHandler.ClearChain("filter", chain)

@@ -29,6 +29,10 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		}
 		providerID := strings.Replace(node.Spec.ProviderID, "///", "//", 1)
 		URL, err := url.Parse(providerID)
+		if err != nil {
+			glog.Errorf("Failed to parse URL for providerID " + providerID + " : " + err.Error())
+			return
+		}
 		instanceID := URL.Path
 		instanceID = strings.Trim(instanceID, "/")
 
