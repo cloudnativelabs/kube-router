@@ -260,7 +260,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.
 }
 
 // Does validation and returns neighbor configs
-func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []string, holdtime float64) (
+func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []string) (
 	[]*config.Neighbor, error) {
 	peers := make([]*config.Neighbor, 0)
 
@@ -300,7 +300,6 @@ func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []str
 				NeighborAddress: ips[i].String(),
 				PeerAs:          asns[i],
 			},
-			Timers: config.Timers{Config: config.TimersConfig{HoldTime: holdtime}},
 			Transport: config.Transport{
 				Config: config.TransportConfig{
 					RemotePort: options.DEFAULT_BGP_PORT,
