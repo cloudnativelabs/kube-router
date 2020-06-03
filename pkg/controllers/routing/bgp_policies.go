@@ -36,9 +36,17 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 	// creates prefix set to represent all the advertisable IP associated with the services
 	advIPPrefixList := make([]config.Prefix, 0)
 	advIps, _, _ := nrc.getAllVIPs()
-	for _, ip := range advIps {
-		advIPPrefixList = append(advIPPrefixList, config.Prefix{IpPrefix: ip + "/32"})
+
+	//If the value of advertise-cluster-subnet parameter is not empty, then the value of advertise-cluster-subnet parameter is put into RIB, otherwise it will be done according to the original rules.
+	if len(nrc.advertiseClusterSubnet) != 0 {
+		advIPPrefixList = append(advIPPrefixList, config.Prefix{IpPrefix: nrc.advertiseClusterSubnet})
+	} else {
+		for _, ip := range advIps {
+			//housj add
+			advIPPrefixList = append(advIPPrefixList, config.Prefix{IpPrefix: ip + "/32"})
+		}
 	}
+
 	clusterIPPrefixSet, err := table.NewPrefixSet(config.PrefixSet{
 		PrefixSetName: "clusteripprefixset",
 		PrefixList:    advIPPrefixList,
