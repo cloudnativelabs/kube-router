@@ -97,6 +97,7 @@ type NetworkRoutingController struct {
 	peerMultihopTTL                uint8
 	MetricsEnabled                 bool
 	bgpServerStarted               bool
+	bgpHoldtime                    float64
 	bgpPort                        uint16
 	bgpRRClient                    bool
 	bgpRRServer                    bool
@@ -803,7 +804,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 		}
 
 		// Create and set Global Peer Router complete configs
-		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerPorts, peerASNs, peerPasswords)
+		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerPorts, peerASNs, peerPasswords, nrc.bgpHoldtime)
 		if err != nil {
 			nrc.bgpServer.Stop()
 			return fmt.Errorf("Failed to process Global Peer Router configs: %s", err)
@@ -862,6 +863,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
+	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldtime
 	nrc.advertiseClusterSubnet = kubeRouterConfig.AdvertiseClusterSubnet
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
@@ -967,8 +969,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	}
 
-	nrc.globalPeerRouters, err = newGlobalPeers(kubeRouterConfig.PeerRouters, peerPorts,
-		peerASNs, peerPasswords)
+	nrc.globalPeerRouters, err = newGlobalPeers(kubeRouterConfig.PeerRouters, peerPorts, peerASNs, peerPasswords, nrc.bgpHoldtime)
 	if err != nil {
 		return nil, fmt.Errorf("Error processing Global Peer Router configs: %s", err)
 	}
