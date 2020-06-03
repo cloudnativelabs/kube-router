@@ -2,6 +2,7 @@ package routing
 
 import (
 	"errors"
+	"fmt"
 	"github.com/golang/glog"
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
@@ -28,9 +29,17 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 			},
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("Failed to create podCidrPrefixSet: %s", err)
+	}
+
 	err = nrc.bgpServer.ReplaceDefinedSet(podCidrPrefixSet)
 	if err != nil {
-		nrc.bgpServer.AddDefinedSet(podCidrPrefixSet)
+		err2 := nrc.bgpServer.AddDefinedSet(podCidrPrefixSet)
+		if err2 != nil {
+			glog.Errorf("Failed to add podCidrPrefixSet: %s", err2)
+		}
+		glog.Errorf("Failed to replace defined set %s", err)
 	}
 
 	// creates prefix set to represent all the advertisable IP associated with the services
@@ -43,9 +52,17 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		PrefixSetName: "clusteripprefixset",
 		PrefixList:    advIPPrefixList,
 	})
+	if err != nil {
+		return fmt.Errorf("Failed to create clusterIPPrefixSet: %s", err)
+	}
+
 	err = nrc.bgpServer.ReplaceDefinedSet(clusterIPPrefixSet)
 	if err != nil {
-		nrc.bgpServer.AddDefinedSet(clusterIPPrefixSet)
+		err2 := nrc.bgpServer.AddDefinedSet(clusterIPPrefixSet)
+		if err2 != nil {
+			glog.Errorf("Failed to add clusterIPPrefixSet: %s", err2)
+		}
+		glog.Errorf("Failed to replace defined set %s", err)
 	}
 
 	iBGPPeers := make([]string, 0)
@@ -67,7 +84,11 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		})
 		err := nrc.bgpServer.ReplaceDefinedSet(iBGPPeerNS)
 		if err != nil {
-			nrc.bgpServer.AddDefinedSet(iBGPPeerNS)
+			err2 := nrc.bgpServer.AddDefinedSet(iBGPPeerNS)
+			if err2 != nil {
+				glog.Errorf("Failed to add iBGPPeerNS: %s", err2)
+			}
+			glog.Errorf("Failed to replace defined set %s", err)
 		}
 	}
 
@@ -78,9 +99,7 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		}
 	}
 	if len(nrc.nodePeerRouters) > 0 {
-		for _, peer := range nrc.nodePeerRouters {
-			externalBgpPeers = append(externalBgpPeers, peer)
-		}
+		externalBgpPeers = append(externalBgpPeers, nrc.nodePeerRouters...)
 	}
 	if len(externalBgpPeers) > 0 {
 		ns, _ := table.NewNeighborSet(config.NeighborSet{
@@ -89,7 +108,11 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		})
 		err := nrc.bgpServer.ReplaceDefinedSet(ns)
 		if err != nil {
-			nrc.bgpServer.AddDefinedSet(ns)
+			err2 := nrc.bgpServer.AddDefinedSet(ns)
+			if err2 != nil {
+				glog.Errorf("Failed to add ns: %s", err2)
+			}
+			glog.Errorf("Failed to replace defined set %s", err)
 		}
 	}
 
@@ -101,7 +124,11 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 	})
 	err = nrc.bgpServer.ReplaceDefinedSet(ns)
 	if err != nil {
-		nrc.bgpServer.AddDefinedSet(ns)
+		err2 := nrc.bgpServer.AddDefinedSet(ns)
+		if err2 != nil {
+			glog.Errorf("Failed to add ns: %s", err2)
+		}
+		glog.Errorf("Failed to replace defined set %s", err)
 	}
 
 	err = nrc.addExportPolicies()

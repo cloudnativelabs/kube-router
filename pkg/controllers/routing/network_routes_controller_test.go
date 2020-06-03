@@ -169,7 +169,11 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -483,7 +487,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
+
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -640,7 +649,12 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
+
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -829,7 +843,12 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
+
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -1091,7 +1110,12 @@ func Test_advertisePodRoute(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
+
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -1292,7 +1316,11 @@ func Test_syncInternalPeers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
 
 			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
 			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
@@ -2305,7 +2333,11 @@ func Test_AddPolicies(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
 
 			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
 

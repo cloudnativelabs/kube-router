@@ -63,9 +63,13 @@ const (
 )
 
 var (
+<<<<<<< HEAD
 	h        *ipvs.Handle
 	NodeIP   net.IP
 	BridgeIP net.IP
+=======
+	NodeIP net.IP
+>>>>>>> 12674d5f... Add golangci-lint support (#895)
 )
 
 type ipvsCalls interface {
@@ -444,22 +448,27 @@ func (nsc *NetworkServicesController) doSync() error {
 	}
 
 	if nsc.MetricsEnabled {
-		nsc.publishMetrics(nsc.serviceMap)
+		err = nsc.publishMetrics(nsc.serviceMap)
+		glog.Errorf("Error publishing metrics: %s", err.Error())
+		return err
 	}
 	return nil
 }
 
 // Lookup service ip, protocol, port by given fwmark value (reverse of generateFwmark)
-func (nsc *NetworkServicesController) lookupServiceByFWMark(FWMark uint32) (string, string, int) {
+func (nsc *NetworkServicesController) lookupServiceByFWMark(FWMark uint32) (string, string, int, error) {
 	for _, svc := range nsc.serviceMap {
 		for _, externalIP := range svc.externalIPs {
-			gfwmark := generateFwmark(externalIP, svc.protocol, fmt.Sprint(svc.port))
+			gfwmark, err := generateFwmark(externalIP, svc.protocol, fmt.Sprint(svc.port))
+			if err != nil {
+				return "", "", 0, err
+			}
 			if FWMark == gfwmark {
-				return externalIP, svc.protocol, svc.port
+				return externalIP, svc.protocol, svc.port, nil
 			}
 		}
 	}
-	return "", "", 0
+	return "", "", 0, nil
 }
 
 func getIpvsFirewallInputChainRule() []string {
@@ -641,6 +650,9 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 
 	// Populate local addresses ipset.
 	addrs, err := getAllLocalIPs()
+	if err != nil {
+		return fmt.Errorf("failed to get local IPs: %s", err)
+	}
 	localIPsSets := make([]string, 0, len(addrs))
 	for _, addr := range addrs {
 		localIPsSets = append(localIPsSets, addr.IP.String())
@@ -671,7 +683,10 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 			}
 			port = int(ipvsService.Port)
 		} else if ipvsService.FWMark != 0 {
-			address, protocol, port = nsc.lookupServiceByFWMark(ipvsService.FWMark)
+			address, protocol, port, err = nsc.lookupServiceByFWMark(ipvsService.FWMark)
+			if err != nil {
+				glog.Errorf("failed to lookup %d by FWMark: %s", ipvsService.FWMark, err)
+			}
 			if address == "" {
 				continue
 			}
@@ -874,10 +889,13 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	defer hostNetworkNamespaceHandle.Close()
 
 	activeNetworkNamespaceHandle, err = netns.Get()
+	if err != nil {
+		return errors.New("Failed to get namespace due to " + err.Error())
+	}
 	glog.V(1).Infof("Current network namespace before netns.Set: " + activeNetworkNamespaceHandle.String())
 	activeNetworkNamespaceHandle.Close()
 
-	dockerClient, err := client.NewEnvClient()
+	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return errors.New("Failed to get docker client due to " + err.Error())
 	}
@@ -901,6 +919,9 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	}
 
 	activeNetworkNamespaceHandle, err = netns.Get()
+	if err != nil {
+		return errors.New("Failed to get activeNetworkNamespace due to " + err.Error())
+	}
 	glog.V(2).Infof("Current network namespace after netns. Set to container network namespace: " + activeNetworkNamespaceHandle.String())
 	activeNetworkNamespaceHandle.Close()
 
@@ -911,7 +932,10 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	tunIf, err := netlink.LinkByName(KUBE_TUNNEL_IF)
 	if err != nil {
 		if err.Error() != IFACE_NOT_FOUND {
-			netns.Set(hostNetworkNamespaceHandle)
+			err = netns.Set(hostNetworkNamespaceHandle)
+			if err != nil {
+				return errors.New("Failed to get hostNetworkNamespace due to " + err.Error())
+			}
 			activeNetworkNamespaceHandle, err = netns.Get()
 			glog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 			activeNetworkNamespaceHandle.Close()
@@ -925,7 +949,10 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 		}
 		err = netlink.LinkAdd(&ipTunLink)
 		if err != nil {
-			netns.Set(hostNetworkNamespaceHandle)
+			err = netns.Set(hostNetworkNamespaceHandle)
+			if err != nil {
+				return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
+			}
 			activeNetworkNamespaceHandle, err = netns.Get()
 			glog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 			activeNetworkNamespaceHandle.Close()
@@ -941,15 +968,18 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 				break
 			}
 			if err != nil && err.Error() == IFACE_NOT_FOUND {
-				continue
 				glog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KUBE_TUNNEL_IF)
+				continue
 			} else {
 				break
 			}
 		}
 
 		if err != nil {
-			netns.Set(hostNetworkNamespaceHandle)
+			err = netns.Set(hostNetworkNamespaceHandle)
+			if err != nil {
+				return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
+			}
 			activeNetworkNamespaceHandle, err = netns.Get()
 			glog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 			activeNetworkNamespaceHandle.Close()
@@ -962,7 +992,10 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	// bring the tunnel interface up
 	err = netlink.LinkSetUp(tunIf)
 	if err != nil {
-		netns.Set(hostNetworkNamespaceHandle)
+		err = netns.Set(hostNetworkNamespaceHandle)
+		if err != nil {
+			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
+		}
 		activeNetworkNamespaceHandle, err = netns.Get()
 		glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 		activeNetworkNamespaceHandle.Close()
@@ -972,8 +1005,15 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	// assign VIP to the KUBE_TUNNEL_IF interface
 	err = ln.ipAddrAdd(tunIf, vip, false)
 	if err != nil && err.Error() != IFACE_HAS_ADDR {
-		netns.Set(hostNetworkNamespaceHandle)
+		err = netns.Set(hostNetworkNamespaceHandle)
+		if err != nil {
+			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
+		}
 		activeNetworkNamespaceHandle, err = netns.Get()
+		if err != nil {
+			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
+		}
+
 		glog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to assign vip " + vip + " to kube-tunnel-if interface ")
@@ -983,8 +1023,15 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	// disable rp_filter on all interface
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		netns.Set(hostNetworkNamespaceHandle)
+		err = netns.Set(hostNetworkNamespaceHandle)
+		if err != nil {
+			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
+		}
 		activeNetworkNamespaceHandle, err = netns.Get()
+		if err != nil {
+			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
+		}
+
 		glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to disable rp_filter on kube-tunnel-if in the endpoint container")
@@ -992,8 +1039,14 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/eth0/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		netns.Set(hostNetworkNamespaceHandle)
+		err = netns.Set(hostNetworkNamespaceHandle)
+		if err != nil {
+			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
+		}
 		activeNetworkNamespaceHandle, err = netns.Get()
+		if err != nil {
+			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
+		}
 		glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to disable rp_filter on eth0 in the endpoint container")
@@ -1001,8 +1054,14 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		netns.Set(hostNetworkNamespaceHandle)
+		err = netns.Set(hostNetworkNamespaceHandle)
+		if err != nil {
+			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
+		}
 		activeNetworkNamespaceHandle, err = netns.Get()
+		if err != nil {
+			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
+		}
 		glog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 		activeNetworkNamespaceHandle.Close()
 		return errors.New("Failed to disable rp_filter on `all` in the endpoint container")
@@ -1010,8 +1069,14 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 
 	glog.Infof("Successfully disabled rp_filter in endpoint " + endpointIP + ".")
 
-	netns.Set(hostNetworkNamespaceHandle)
+	err = netns.Set(hostNetworkNamespaceHandle)
+	if err != nil {
+		return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
+	}
 	activeNetworkNamespaceHandle, err = netns.Get()
+	if err != nil {
+		return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
+	}
 	glog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 	activeNetworkNamespaceHandle.Close()
 	return nil
@@ -1109,13 +1174,10 @@ func parseSchedFlags(value string) schedFlags {
 		switch strings.Trim(flag, " ") {
 		case IPVS_SVC_F_SCHED1:
 			flag1 = true
-			break
 		case IPVS_SVC_F_SCHED2:
 			flag2 = true
-			break
 		case IPVS_SVC_F_SCHED3:
 			flag3 = true
-			break
 		default:
 		}
 	}
@@ -1235,7 +1297,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 
 	// Key is a string that will match iptables.List() rules
 	// Value is a string[] with arguments that iptables transaction functions expect
-	rulesNeeded := make(map[string][]string, 0)
+	rulesNeeded := make(map[string][]string)
 
 	// Generate the rules that we need
 	for svcName, svcInfo := range nsc.serviceMap {
@@ -1287,7 +1349,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	}
 
 	// Create a chain for hairpin rules, if needed
-	if hasHairpinChain != true {
+	if !hasHairpinChain {
 		err = iptablesCmdHandler.NewChain("nat", hairpinChain)
 		if err != nil {
 			return errors.New("Failed to create iptables chain \"" + hairpinChain +
@@ -1609,10 +1671,13 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 // TODO: collision can rarely happen but still need to be ruled out
 // TODO: I ran into issues with FWMARK for any value above 2^15. Either policy
 // routing and IPVS FWMARK service was not functioning with value above 2^15
-func generateFwmark(ip, protocol, port string) uint32 {
+func generateFwmark(ip, protocol, port string) (uint32, error) {
 	h := fnv.New32a()
-	h.Write([]byte(ip + "-" + protocol + "-" + port))
-	return h.Sum32() & 0x3FFF
+	_, err := h.Write([]byte(ip + "-" + protocol + "-" + port))
+	if err != nil {
+		return 0, err
+	}
+	return h.Sum32() & 0x3FFF, err
 }
 
 // ipvsAddFWMarkService: creates a IPVS service using FWMARK
@@ -1628,8 +1693,10 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 	}
 
 	// generate a FWMARK value unique to the external IP + protocol+ port combination
-	fwmark := generateFwmark(vip.String(), protocolStr, fmt.Sprint(port))
-
+	fwmark, err := generateFwmark(vip.String(), protocolStr, fmt.Sprint(port))
+	if err != nil {
+		return nil, err
+	}
 	svcs, err := ln.ipvsGetServices()
 	if err != nil {
 		return nil, err
@@ -1958,6 +2025,9 @@ func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 			return nil, errors.New("Failed to add dummy interface:  " + err.Error())
 		}
 		dummyVipInterface, err = netlink.LinkByName(KUBE_DUMMY_IF)
+		if err != nil {
+			return nil, errors.New("Failed to get dummy interface: " + err.Error())
+		}
 		err = netlink.LinkSetUp(dummyVipInterface)
 		if err != nil {
 			return nil, errors.New("Failed to bring dummy interface up: " + err.Error())

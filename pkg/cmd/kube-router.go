@@ -180,7 +180,7 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	// Handle SIGINT and SIGTERM
-	ch := make(chan os.Signal)
+	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	<-ch
 
@@ -211,7 +211,7 @@ func PrintVersion(logOutput bool) {
 	output := fmt.Sprintf("Running %v version %s, built on %s, %s\n", os.Args[0], version, buildDate, runtime.Version())
 
 	if !logOutput {
-		fmt.Fprintf(os.Stderr, output)
+		fmt.Fprintf(os.Stderr, "%s", output)
 	} else {
 		glog.Info(output)
 	}

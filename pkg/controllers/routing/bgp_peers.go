@@ -335,9 +335,7 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			nrc.OnNodeUpdate(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			// we are interested only node add/delete, so skip update
-			return
-
+			// we are only interested in node add/delete, so skip update
 		},
 		DeleteFunc: func(obj interface{}) {
 			node, ok := obj.(*v1core.Node)
