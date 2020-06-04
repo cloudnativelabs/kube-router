@@ -33,7 +33,10 @@ In order for your architecture to support a larger network, you need to do the f
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(3) You need to set both "--advertise-cluster-IP=true" and "--advertise-cluster-subnet=you_subnet_cidr" parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.See this link for details (<a href="../docs/large-networks03.md">large-networks03 documentation</a>).
 <br>
 <br>
-<font size="4">**YAML source files used in this document**</font><br>
+
+<font size="4">**YAML source files used in this document**</font>
+
+<br>
 For the YAML source files used in this document, please click on <a href="../daemonset/kube-router-daemonset-advertise-cluster-subnet.yaml">this link</a> to view them.
 <br>
 <br>
