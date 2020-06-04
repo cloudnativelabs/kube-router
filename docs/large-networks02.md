@@ -137,7 +137,10 @@ You will find that the number of BGP peers per kubernetes node is n-1 (n is the 
 
 <br>
 <br>
-<font size="4">**How to optimize the BGP neighborhood of kubernetes node?**</font><br>
+
+<font size="4">**How to optimize the BGP neighborhood of kubernetes node?**</font>
+
+<br>
 
 To solve this problem, you need to turn on the BGP function of the router device on the node server. Moreover, hardware router devices have special chips to handle BGP routing forwarding, and its performance is better. At the same time, you need to set the parameter "--enable-ibgp=false" of kube-router. 
 <br>
