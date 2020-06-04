@@ -7,7 +7,7 @@
 
 <font size="4">**1 Introduction of cluster BGP network environment**</font><br>
 <table>
-<tr><td>**Item**</td><td>**Content**</td></tr>
+<tr><td> **Item** </td><td> **Content** </td></tr>
 <tr><td>Version of kube-router</td><td>Modified based on version 0.3.2</td></tr>
 <tr><td>The number of kubernetes node</td><td>About 3000(46 kubernetes nodes are listed as examples in this document)</td></tr>
 <tr><td>Pod subnet of kubernetes cluster</td><td>172.31.0.0/16</td></tr>
@@ -1330,7 +1330,9 @@ Similarly, we look at the kubernetes service routing on Router3 and Router4, and
 
 
 
-<font size="3">**2.4 Summary**</font><br>
+<font size="3">**2.4 Summary**</font>
+
+<br>
 
 
 At first, there were only seven services in the kubernetes cluster:<br>
@@ -1359,7 +1361,9 @@ You need to set both "--advertise-cluster-IP=true" and "--advertise-cluster-subn
 
 
 
-<font size="3">**3.2  Configure kube-router run parameters**</font><br>
+<font size="3">**3.2  Configure kube-router run parameters**</font>
+
+<br>
 
 <br>
 You can set the following parameters in the white font section:
@@ -1438,7 +1442,9 @@ kube-system-kube-router-new-ytz2o     1/1     Running    0          73s     192.
 
 
 
-<font size="3">**3.3  View the optimized results**</font><br>
+<font size="3">**3.3  View the optimized results**</font>
+
+<br>
 
 Look at Router1's routing table again:
 【Router1】
@@ -1566,7 +1572,9 @@ Similarly, we look at the kubernetes service routing on Router3, and the results
 
 
 
-<font size="3">**3.4 Summary**</font><br>
+<font size="3">**3.4 Summary**</font>
+
+<br>
 
 
 Through the above optimization, we can know that the number of routes has been reduced by 90%. The comparison before and after optimization is as follows:
