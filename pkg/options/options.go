@@ -13,6 +13,7 @@ const DEFAULT_BGP_PORT = 179
 
 type KubeRouterConfig struct {
 	AdvertiseClusterIp             bool
+	AdvertiseClusterSubnet         string
 	AdvertiseExternalIp            bool
 	AdvertiseNodePodCidr           bool
 	AdvertiseLoadBalancerIp        bool
@@ -118,6 +119,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
 		"Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.")
+	fs.StringVar(&s.AdvertiseClusterSubnet, "advertise-cluster-subnet", s.AdvertiseClusterSubnet,
+		"If this parameter is set, the cluster IP of service will not be put into RIB, but the value set by this parameter will be put into RIB. The main purpose of this parameter is to reduce the number of service routes sent by kube-router to the upper BGP network devices.")
 	fs.BoolVar(&s.AdvertiseExternalIp, "advertise-external-ip", false,
 		"Add External IP of service to the RIB so that it gets advertised to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseLoadBalancerIp, "advertise-loadbalancer-ip", false,

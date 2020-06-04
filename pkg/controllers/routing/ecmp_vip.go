@@ -23,22 +23,34 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
 
-	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
-
-	_, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		vip), false, attrs, time.Now(), false)})
+	//If the value of advertise-cluster-subnet parameter is not empty, then the value of advertise-cluster-subnet parameter is put into RIB, otherwise it will be done according to the original rules.
+	var svcSubnet = vip
+	var svcCidrLen = 32
+	if len(nrc.advertiseClusterSubnet) != 0 {
+		svcCidrStr := strings.Split(nrc.advertiseClusterSubnet, "/")
+		svcSubnet = svcCidrStr[0]
+		svcCidrLen, _ = strconv.Atoi(svcCidrStr[1])
+	}
+	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", svcSubnet, strconv.Itoa(svcCidrLen), nrc.nodeIP.String())
+	_, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(svcCidrLen),
+		svcSubnet), false, attrs, time.Now(), false)})
 
 	return err
 }
 
 // bgpWithdrawVIP  unadvertises the service vip
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
-	glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
-	pathList := []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		vip), true, nil, time.Now(), false)}
-
-	err := nrc.bgpServer.DeletePath([]byte(nil), 0, "", pathList)
+	//If the value of the advertise-cluster-subnet parameter is not empty, no operation will be performed, otherwise the original rules will be followed.
+	var err error
+	if len(nrc.advertiseClusterSubnet) == 0 {
+		glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
+		pathList := []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
+			vip), true, nil, time.Now(), false)}
+		err = nrc.bgpServer.DeletePath([]byte(nil), 0, "", pathList)
+	} else {
+		err = nil
+	}
 
 	return err
 }

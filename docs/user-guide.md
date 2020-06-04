@@ -37,6 +37,7 @@ Also you can choose to run kube-router as agent running on each cluster node. Al
 ```
 Usage of kube-router:
       --advertise-cluster-ip                          Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.
+      --advertise-cluster-subnet string               If this parameter is set, the cluster IP of service will not be put into RIB, but the value set by this parameter will be put into RIB. The main purpose of this parameter is to reduce the number of service routes sent by kube-router to the upper BGP network devices.
       --advertise-external-ip                         Add External IP of service to the RIB so that it gets advertised to the BGP peers.
       --advertise-loadbalancer-ip                     Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr                            Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
