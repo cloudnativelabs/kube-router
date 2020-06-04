@@ -7,7 +7,7 @@
 
 <font size="4">**1 Introduction of cluster BGP network environment**</font><br>
 <table>
-<tr><td> **Item** </td><td> **Content** </td></tr>
+<tr><td> Item </td><td> Content </td></tr>
 <tr><td>Version of kube-router</td><td>Modified based on version 0.3.2</td></tr>
 <tr><td>The number of kubernetes node</td><td>About 3000(46 kubernetes nodes are listed as examples in this document)</td></tr>
 <tr><td>Pod subnet of kubernetes cluster</td><td>172.31.0.0/16</td></tr>
