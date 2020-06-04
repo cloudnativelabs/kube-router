@@ -73,7 +73,6 @@ default        nginx01                                ClusterIP     172.30.28.17
 <br>
 <br>
 <font size="4">**2  Bad conditions before optimization using the "advertise-cluster-subnet" parameter**</font><br>
-
 <font size="3">**2.1  A Brief Introduction to Bad Conditions**</font><br>
 
 <br>
