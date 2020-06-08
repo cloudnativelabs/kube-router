@@ -210,14 +210,15 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			glog.Fatalf("Failed to verify rule exists in %s chain due to %s", chain, err.Error())
 		}
 		if !exists {
-			err := iptablesCmdHandler.Insert("filter", chain, 1, ruleSpec...)
+			err := iptablesCmdHandler.Insert("filter", chain, position, ruleSpec...)
 			if err != nil {
 				glog.Fatalf("Failed to run iptables command to insert in %s chain %s", chain, err.Error())
 			}
+			return
 		}
 		var ruleNo int
 		for i, rule := range rules {
-			rule = strings.Replace(rule, "\"", "", 2)
+			rule = strings.Replace(rule, "\"", "", 2) //removes quote from comment string
 			if strings.Contains(rule, strings.Join(ruleSpec, " ")) {
 				ruleNo = i
 				break
