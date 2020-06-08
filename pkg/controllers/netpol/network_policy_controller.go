@@ -36,6 +36,9 @@ const (
 	kubeNetworkPolicyChainPrefix = "KUBE-NWPLCY-"
 	kubeSourceIpSetPrefix        = "KUBE-SRC-"
 	kubeDestinationIpSetPrefix   = "KUBE-DST-"
+	kubeInputChainName           = "KUBE-ROUTER-INPUT"
+	kubeForwardChainName         = "KUBE-ROUTER-FORWARD"
+	kubeOutputChainName          = "KUBE-ROUTER-OUTPUT"
 )
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
@@ -141,6 +144,9 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	glog.Info("Starting network policy controller")
 	npc.healthChan = healthChan
 
+	// setup kube-router specific top level cutoms chains
+	npc.ensureTopLevelChains()
+
 	// Full syncs of the network policy controller take a lot of time and can only be processed one at a time,
 	// therefore, we start it in it's own goroutine and request a sync through a single item channel
 	glog.Info("Starting network policy controller full sync goroutine")
@@ -175,6 +181,62 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 			glog.Infof("Shutting down network policies controller")
 			return
 		case <-t.C:
+		}
+	}
+}
+
+// Creates custom chains KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT
+// and following rules in the filter table to jump from builtin chain to custom chain
+// -A INPUT   -m comment --comment "kube-router netpol" -j KUBE-ROUTER-INPUT
+// -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
+// -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
+func (npc *NetworkPolicyController) ensureTopLevelChains() {
+
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		glog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
+	}
+
+	chains := map[string]string{"INPUT": kubeInputChainName, "FORWARD": kubeForwardChainName, "OUTPUT": kubeOutputChainName}
+
+	for builtinChain, customChain := range chains {
+		err = iptablesCmdHandler.NewChain("filter", customChain)
+		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+			glog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
+		}
+		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
+		exists, err := iptablesCmdHandler.Exists("filter", builtinChain, args...)
+		if err != nil {
+			glog.Fatalf("Failed to verify rule exists to jump to chain %s in %s chain due to %s", customChain, builtinChain, err.Error())
+		}
+		if !exists {
+			err := iptablesCmdHandler.Insert("filter", builtinChain, 1, args...)
+			if err != nil {
+				glog.Fatalf("Failed to run iptables command to insert in %s chain %s", builtinChain, err.Error())
+			}
+		} else {
+			rules, err := iptablesCmdHandler.List("filter", builtinChain)
+			if err != nil {
+				glog.Fatalf("failed to list rules in filter table %s chain due to %s", builtinChain, err.Error())
+			}
+
+			var ruleNo int
+			for i, rule := range rules {
+				if strings.Contains(rule, customChain) {
+					ruleNo = i
+					break
+				}
+			}
+			if ruleNo != 1 {
+				err = iptablesCmdHandler.Insert("filter", builtinChain, 1, args...)
+				if err != nil {
+					glog.Fatalf("Failed to run iptables command to insert in %s chain %s", builtinChain, err.Error())
+				}
+				err = iptablesCmdHandler.Delete("filter", builtinChain, strconv.Itoa(ruleNo+1))
+				if err != nil {
+					glog.Fatalf("Failed to delete wrong rule to jump to chain %s in %s chain due to %s", customChain, builtinChain, err.Error())
+				}
+			}
 		}
 	}
 }
@@ -225,6 +287,10 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	}()
 
 	glog.V(1).Infof("Starting sync of iptables with version: %s", syncVersion)
+
+	// ensure kube-router specific top level chains and corresponding rules exist
+	npc.ensureTopLevelChains()
+
 	if npc.v1NetworkPolicy {
 		networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 		if err != nil {
@@ -760,12 +826,12 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		comment = "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
 			" to chain " + podFwChainName
 		args = []string{"-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName}
-		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
+		exists, err = iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
-			err := iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
+			err := iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
@@ -773,12 +839,12 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 
 		// ensure there is rule in filter table and OUTPUT chain to jump to pod specific firewall chain
 		// this rule applies to the traffic from a pod getting routed back to another pod on same node by service proxy
-		exists, err = iptablesCmdHandler.Exists("filter", "OUTPUT", args...)
+		exists, err = iptablesCmdHandler.Exists("filter", kubeOutputChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
-			err := iptablesCmdHandler.Insert("filter", "OUTPUT", 1, args...)
+			err := iptablesCmdHandler.Insert("filter", kubeOutputChainName, 1, args...)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
@@ -792,12 +858,12 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			"-m", "comment", "--comment", comment,
 			"-d", pod.ip,
 			"-j", podFwChainName}
-		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
+		exists, err = iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
-			err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
+			err = iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
@@ -874,7 +940,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			}
 		}
 
-		egressFilterChains := []string{"FORWARD", "OUTPUT", "INPUT"}
+		egressFilterChains := []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName}
 		for _, chain := range egressFilterChains {
 			// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 			// this rule applies to the traffic getting forwarded/routed (traffic from the pod destinted
@@ -902,12 +968,12 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			"-m", "comment", "--comment", comment,
 			"-s", pod.ip,
 			"-j", podFwChainName}
-		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
+		exists, err = iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
-			err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
+			err = iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
 			if err != nil {
 				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
@@ -982,7 +1048,7 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 	// remove stale iptables podFwChain references from the filter table chains
 	for _, podFwChain := range cleanupPodFwChains {
 
-		primaryChains := []string{"FORWARD", "OUTPUT", "INPUT"}
+		primaryChains := []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName}
 		for _, egressChain := range primaryChains {
 			forwardChainRules, err := iptablesCmdHandler.List("filter", egressChain)
 			if err != nil {
@@ -1536,7 +1602,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	// delete jump rules in FORWARD chain to pod specific firewall chain
-	forwardChainRules, err := iptablesCmdHandler.List("filter", "FORWARD")
+	forwardChainRules, err := iptablesCmdHandler.List("filter", kubeForwardChainName)
 	if err != nil {
 		glog.Errorf("Failed to delete iptables rules as part of cleanup")
 		return
@@ -1546,7 +1612,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	var realRuleNo int
 	for i, rule := range forwardChainRules {
 		if strings.Contains(rule, kubePodFirewallChainPrefix) {
-			err = iptablesCmdHandler.Delete("filter", "FORWARD", strconv.Itoa(i-realRuleNo))
+			err = iptablesCmdHandler.Delete("filter", kubeForwardChainName, strconv.Itoa(i-realRuleNo))
 			if err != nil {
 				glog.Errorf("Failed to delete iptables rule as part of cleanup: %s", err)
 			}
@@ -1555,7 +1621,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	// delete jump rules in OUTPUT chain to pod specific firewall chain
-	forwardChainRules, err = iptablesCmdHandler.List("filter", "OUTPUT")
+	forwardChainRules, err = iptablesCmdHandler.List("filter", kubeOutputChainName)
 	if err != nil {
 		glog.Errorf("Failed to delete iptables rules as part of cleanup")
 		return
@@ -1565,7 +1631,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	realRuleNo = 0
 	for i, rule := range forwardChainRules {
 		if strings.Contains(rule, kubePodFirewallChainPrefix) {
-			err = iptablesCmdHandler.Delete("filter", "OUTPUT", strconv.Itoa(i-realRuleNo))
+			err = iptablesCmdHandler.Delete("filter", kubeOutputChainName, strconv.Itoa(i-realRuleNo))
 			if err != nil {
 				glog.Errorf("Failed to delete iptables rule as part of cleanup: %s", err)
 			}
