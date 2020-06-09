@@ -223,6 +223,7 @@ type NetworkServicesController struct {
 	MetricsEnabled      bool
 	ln                  LinuxNetworking
 	readyForUpdates     bool
+	ProxyFirewallSetup  *sync.Cond
 
 	// Map of ipsets that we use.
 	ipsetMap map[string]*utils.Set
@@ -350,6 +351,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	if err != nil {
 		glog.Error("Error setting up ipvs firewall: " + err.Error())
 	}
+	nsc.ProxyFirewallSetup.Broadcast()
 
 	gracefulTicker := time.NewTicker(5 * time.Second)
 	defer gracefulTicker.Stop()
@@ -2227,6 +2229,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.serviceMap = make(serviceInfoMap)
 	nsc.endpointsMap = make(endpointsInfoMap)
 	nsc.client = clientset
+
+	nsc.ProxyFirewallSetup = sync.NewCond(&sync.Mutex{})
 
 	nsc.masqueradeAll = false
 	if config.MasqueradeAll {
