@@ -23,11 +23,11 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
 	}
 
-	//If the value of advertise-cluster-subnet parameter is not empty, then the value of advertise-cluster-subnet parameter is put into RIB, otherwise it will be done according to the original rules.
+	//If the value of advertise-service-cluster-ip-range parameter is not empty, then the value of advertise-service-cluster-ip-range parameter is put into RIB, otherwise it will be done according to the original rules.
 	var svcSubnet = vip
 	var svcCidrLen = 32
-	if len(nrc.advertiseClusterSubnet) != 0 {
-		svcCidrStr := strings.Split(nrc.advertiseClusterSubnet, "/")
+	if len(nrc.advertiseServiceClusterIpRange) != 0 {
+		svcCidrStr := strings.Split(nrc.advertiseServiceClusterIpRange, "/")
 		svcSubnet = svcCidrStr[0]
 		svcCidrLen, _ = strconv.Atoi(svcCidrStr[1])
 	}
@@ -41,9 +41,9 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 // bgpWithdrawVIP  unadvertises the service vip
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 
-	//If the value of the advertise-cluster-subnet parameter is not empty, no operation will be performed, otherwise the original rules will be followed.
+	//If the value of the advertise-service-cluster-ip-range parameter is not empty, no operation will be performed, otherwise the original rules will be followed.
 	var err error
-	if len(nrc.advertiseClusterSubnet) == 0 {
+	if len(nrc.advertiseServiceClusterIpRange) == 0 {
 		glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 		pathList := []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
 			vip), true, nil, time.Now(), false)}

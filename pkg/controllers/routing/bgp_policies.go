@@ -46,9 +46,9 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 	advIPPrefixList := make([]config.Prefix, 0)
 	advIps, _, _ := nrc.getAllVIPs()
 
-	//If the value of advertise-cluster-subnet parameter is not empty, then the value of advertise-cluster-subnet parameter is put into RIB, otherwise it will be done according to the original rules.
-	if len(nrc.advertiseClusterSubnet) != 0 {
-		advIPPrefixList = append(advIPPrefixList, config.Prefix{IpPrefix: nrc.advertiseClusterSubnet})
+	//If the value of advertise-service-cluster-ip-range parameter is not empty, then the value of advertise-service-cluster-ip-range parameter is put into RIB, otherwise it will be done according to the original rules.
+	if len(nrc.advertiseServiceClusterIpRange) != 0 {
+		advIPPrefixList = append(advIPPrefixList, config.Prefix{IpPrefix: nrc.advertiseServiceClusterIpRange})
 	} else {
 		for _, ip := range advIps {
 			//housj add

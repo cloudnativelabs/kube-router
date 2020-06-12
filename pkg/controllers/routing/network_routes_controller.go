@@ -78,7 +78,7 @@ type NetworkRoutingController struct {
 	enablePodEgress                bool
 	hostnameOverride               string
 	advertiseClusterIP             bool
-	advertiseClusterSubnet         string
+	advertiseServiceClusterIpRange string
 	advertiseExternalIP            bool
 	advertiseLoadBalancerIP        bool
 	advertisePodCidr               bool
@@ -886,7 +886,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
-	nrc.advertiseClusterSubnet = kubeRouterConfig.AdvertiseClusterSubnet
+	nrc.advertiseServiceClusterIpRange = kubeRouterConfig.AdvertiseServiceClusterIpRange
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
 	node, err := utils.GetNodeObject(clientset, nrc.hostnameOverride)
