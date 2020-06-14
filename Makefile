@@ -107,7 +107,7 @@ container: Dockerfile.$(GOARCH).run kube-router gobgp multiarch-binverify ## Bui
 	    echo "Using qemu to build non-native container"; \
 	    $(DOCKER) run --rm --privileged $(QEMU_IMAGE) --reset -p yes; \
 	fi
-	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" -f Dockerfile.$(GOARCH).run .
+	$(DOCKER) build -t "$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))" -f Dockerfile.$(GOARCH).run .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
 	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
 	fi
