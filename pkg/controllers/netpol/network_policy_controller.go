@@ -200,11 +200,6 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	}
 
 	ensureRuleAtposition := func(chain string, ruleSpec []string, position int) {
-		rules, err := iptablesCmdHandler.List("filter", chain)
-		if err != nil {
-			glog.Fatalf("failed to list rules in filter table %s chain due to %s", chain, err.Error())
-		}
-
 		exists, err := iptablesCmdHandler.Exists("filter", chain, ruleSpec...)
 		if err != nil {
 			glog.Fatalf("Failed to verify rule exists in %s chain due to %s", chain, err.Error())
@@ -216,6 +211,11 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			}
 			return
 		}
+		rules, err := iptablesCmdHandler.List("filter", chain)
+		if err != nil {
+			glog.Fatalf("failed to list rules in filter table %s chain due to %s", chain, err.Error())
+		}
+
 		var ruleNo int
 		for i, rule := range rules {
 			rule = strings.Replace(rule, "\"", "", 2) //removes quote from comment string
