@@ -1357,7 +1357,7 @@ Although in the actual production environment, because of the number of interfac
 
 <font size="3">**3.1  How to set "advertise-service-cluster-ip-range" parameter correctly**</font><br>
 
-You need to set both "--advertise-cluster-IP=true" and "--advertise-service-cluster-ip-range=you_service_cluster_ip_range" parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.Please continue reading the following.
+You need to set both "--advertise-cluster-IP=true" and "--advertise-service-cluster-ip-range=ip_range_cidr" parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.Please continue reading the following.
 
 
 
