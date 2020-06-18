@@ -73,7 +73,7 @@ default        nginx01                                ClusterIP     172.30.28.17
 <br>
 <br>
 
-<font size="4">**2  Bad conditions before optimization using the "advertise-cluster-subnet" parameter**</font>
+<font size="4">**2  Bad conditions before optimization using the "advertise-service-cluster-ip-range" parameter**</font>
 
 <br>
 
@@ -1353,11 +1353,11 @@ Although in the actual production environment, because of the number of interfac
 
 <br>
 <br>
-<font size="4">**3  Adjusting "advertise-cluster-subnet" parameters to optimize network routing**</font><br>
+<font size="4">**3  Adjusting "advertise-service-cluster-ip-range" parameters to optimize network routing**</font><br>
 
-<font size="3">**3.1  How to set "advertise-cluster-subnet" parameter correctly**</font><br>
+<font size="3">**3.1  How to set "advertise-service-cluster-ip-range" parameter correctly**</font><br>
 
-You need to set both "--advertise-cluster-IP=true" and "--advertise-cluster-subnet=subnet" parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.Please continue reading the following.
+You need to set both "--advertise-cluster-IP=true" and "--advertise-service-cluster-ip-range=you_service_cluster_ip_range" parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.Please continue reading the following.
 
 
 
@@ -1378,7 +1378,7 @@ You can set the following parameters in the white font section:
         - --enable-overlay=false<br>
         - --advertise-pod-cidr=true<br><font color=#ffffff>
         - --advertise-cluster-ip=true<br>
-        - --advertise-cluster-subnet=172.30.0.0/16</font><br><font color=#F0E68C>
+        - --advertise-service-cluster-ip-range=172.30.0.0/16</font><br><font color=#F0E68C>
         - --bgp-graceful-restart=true<br>
         - --enable-ibgp=false<br>
         - --nodes-full-mesh=true<br>
