@@ -159,7 +159,7 @@ You can see the white font parameters in the configuration example below.
 
 ```
       - name: kube-router
-        image: cloudnativelabs/kube-router:0.3.2
+        image: cloudnativelabs/kube-router
         imagePullPolicy: IfNotPresent
         args:
         - --run-router=true
