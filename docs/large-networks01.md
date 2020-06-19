@@ -13,7 +13,7 @@
 <tr><td>Pod subnet of kubernetes cluster</td><td>172.31.0.0/16</td></tr>
 <tr><td>Service subnet of kubernetes cluster</td><td>172.30.0.0/16</td></tr>
 <tr><td>The number of Router Device </td><td>About 100</td></tr>
-<tr><td>Router-id of Uplink Router Device</td><td>192.168.110.1(router1)、<br>192.168.120.1(router2)、<br>192.168.130.1(router3)、<br>192.168.140.1(router4)<br>......</td></tr>
+<tr><td>Router-id of Uplink Router Device</td><td>192.168.110.1(router1),<br>192.168.120.1(router2),<br>192.168.130.1(router3),<br>192.168.140.1(router4)<br>......</td></tr>
 </table>
 
 The network topology is as follows:
@@ -33,10 +33,12 @@ In order for your architecture to support a larger network, you need to do the f
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(3) You need to set both "--advertise-cluster-IP=true" and "--advertise-service-cluster-ip-range=ip_range_cidr" parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.See this link for details (<a href="../docs/large-networks03.md">large-networks03 documentation</a>).
 <br>
 <br>
+<br>
 
 <font size="4">**YAML source files used in this document**</font>
 
 <br>
+
 For the YAML source files used in this document, please click on <a href="../daemonset/kube-router-daemonset-advertise-cluster-subnet.yaml">this link</a> to view them.
 <br>
 <br>
