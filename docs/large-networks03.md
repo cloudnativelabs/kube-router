@@ -60,14 +60,14 @@ Look at all the services in the cluster as follows:
 
 ```
 [root@k8s-master ~]# kubectl get service --all-namespaces
-NAMESPACE     NAME                                TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                  AGE<br>
-ci             jenkins                                ClusterIP     172.30.2.11       <none>        80/TCP,50000/TCP         34d<br>
-db            data-comp                             ClusterIP     172.30.5.27       <none>        80/TCP                   43d<br>
-db            redis                                  ClusterIP     172.30.47.53       <none>        6379/TCP                 145d<br>
-coredns       corednsdev                             ClusterIP     172.30.0.2        <none>         53/UDP,53/TCP,9153/TCP   93d<br>
-default        guestbook-ui                           ClusterIP     172.30.12.213      <none>        80/TCP                   145d<br>
-default        kubernetes                             ClusterIP     172.30.0.1         <none>        443/TCP                  145d<br>
-default        nginx01                                ClusterIP     172.30.28.176      <none>        80/TCP                   143d<br>
+NAMESPACE     NAME                                TYPE        CLUSTER-IP         EXTERNAL-IP   PORT(S)                    AGE<br>
+ci             jenkins                            ClusterIP     172.30.2.11       <none>        80/TCP,50000/TCP          34d<br>
+db            data-comp                           ClusterIP     172.30.5.27       <none>        80/TCP                    43d<br>
+db            redis                               ClusterIP     172.30.47.53       <none>        6379/TCP                 145d<br>
+coredns       corednsdev                          ClusterIP     172.30.0.2        <none>         53/UDP,53/TCP,9153/TCP   93d<br>
+default        guestbook-ui                       ClusterIP     172.30.12.213      <none>        80/TCP                   145d<br>
+default        kubernetes                         ClusterIP     172.30.0.1         <none>        443/TCP                  145d<br>
+default        nginx01                            ClusterIP     172.30.28.176      <none>        80/TCP                   143d<br>
  [root@k8s-master ~]#
 ```
 
@@ -879,18 +879,18 @@ Using "kubectl get service", you can see that the white font part is the newly a
 
 ```
 [root@k8s-master ~]# kubectl get service --all-namespaces
-NAMESPACE     NAME                                TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                  AGE<br>
-ci             jenkins                                ClusterIP     172.30.2.11       <none>        80/TCP,50000/TCP         34d<br>
-db            data-comp                             ClusterIP     172.30.5.27       <none>        80/TCP                   43d<br>
-db            redis                                  ClusterIP     172.30.47.53       <none>        6379/TCP                 145d<br>
-coredns       corednsdev                             ClusterIP     172.30.0.2        <none>         53/UDP,53/TCP,9153/TCP   93d<br>
-default        guestbook-ui                           ClusterIP     172.30.12.213      <none>        80/TCP                   145d<br>
-default        kubernetes                             ClusterIP     172.30.0.1         <none>        443/TCP                  145d<br>
-default        nginx01                                ClusterIP     172.30.28.176      <none>        80/TCP                   143d<br>
+NAMESPACE     NAME                                TYPE         CLUSTER-IP        EXTERNAL-IP   PORT(S)                   AGE<br>
+ci             jenkins                           ClusterIP     172.30.2.11        <none>        80/TCP,50000/TCP         34d<br>
+db            data-comp                          ClusterIP     172.30.5.27        <none>        80/TCP                   43d<br>
+db            redis                              ClusterIP     172.30.47.53       <none>        6379/TCP                 145d<br>
+coredns       corednsdev                         ClusterIP     172.30.0.2         <none>        53/UDP,53/TCP,9153/TCP   93d<br>
+default        guestbook-ui                      ClusterIP     172.30.12.213      <none>        80/TCP                   145d<br>
+default        kubernetes                        ClusterIP     172.30.0.1         <none>        443/TCP                  145d<br>
+default        nginx01                           ClusterIP     172.30.28.176      <none>        80/TCP                   143d<br>
 
-default        test-1                                 ClusterIP     172.30.99.97       <none>         80/TCP                   1h<br>
-default        test-2                                 ClusterIP     172.30.99.98         <none>       80/TCP                   1h<br>
-default        test-3                                 ClusterIP     172.30.99.99         <none>       80/TCP                   1h<br>
+default        test-1                            ClusterIP     172.30.99.97       <none>        80/TCP                   1h<br>
+default        test-2                            ClusterIP     172.30.99.98       <none>        80/TCP                   1h<br>
+default        test-3                            ClusterIP     172.30.99.99       <none>        80/TCP                   1h<br>
 
  [root@k8s-master ~]#
 ```
