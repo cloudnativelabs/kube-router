@@ -31,7 +31,7 @@ Taking the router equipment of the mainstream network manufacturer as an example
 You can use the following command to turn on EBGP ECMP：
 
 ```
-[config-Router] config terminal
+[Router] config terminal
 [config-Router] bgp 64558
 [config-Router] maximum-paths 32
 ```
@@ -39,7 +39,7 @@ You can use the following command to turn on EBGP ECMP：
 You can use the following command to turn on IBGP ECMP：
 
 ```
-[config-Router] config terminal
+[Router] config terminal
 [config-Router] bgp 64558
 [config-Router] maximum-paths ibgp 32
 ```
