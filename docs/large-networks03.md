@@ -13,7 +13,7 @@
 <tr><td>Pod subnet of kubernetes cluster</td><td>172.31.0.0/16</td></tr>
 <tr><td>Service subnet of kubernetes cluster</td><td>172.30.0.0/16</td></tr>
 <tr><td>The number of Router Device </td><td>About 100(Four router devices are listed as examples in this document.)</td></tr>
-<tr><td>Router-id of Uplink Router Device</td><td>192.168.110.1(Router1)、<br>192.168.120.1(Router2)、<br>192.168.130.1(Router3)、<br>192.168.140.1(Router4)<br>......</td></tr>
+<tr><td>Router-id of Uplink Router Device</td><td>192.168.110.1(Router1),<br>192.168.120.1(Router2),<br>192.168.130.1(Router3)、<br>192.168.140.1(Router4)<br>......</td></tr>
 </table>
 
 
@@ -24,35 +24,35 @@ Look at all nodes in the cluster as follows:
 
 ```
 [root@k8s-master ~]# kubectl get node
-NAME             STATUS   ROLES    AGE    VERSION<br>
-192.168.120.10   Ready    <none>   282d   v1.14.0<br>
-192.168.120.11   Ready    <none>   282d   v1.14.0<br>
-192.168.120.12   Ready    <none>   282d   v1.14.0<br>
-192.168.120.13   Ready    <none>   282d   v1.14.0<br>
-192.168.120.14   Ready    <none>   282d   v1.14.0<br>
-192.168.120.15   Ready    <none>   282d   v1.14.0<br>
-192.168.120.16   Ready    <none>   282d   v1.14.0<br>
-192.168.120.17   Ready    <none>   282d   v1.14.0<br>
-192.168.120.18   Ready    <none>   282d   v1.14.0<br>
-192.168.120.19   Ready    <none>   282d   v1.14.0<br>
-192.168.120.20   Ready    <none>   282d   v1.14.0<br>
-192.168.120.21   Ready    <none>   282d   v1.14.0<br>
-192.168.120.22   Ready    <none>   282d   v1.14.0<br>
-192.168.120.23   Ready    <none>   282d   v1.14.0<br>
-192.168.120.24   Ready    <none>   282d   v1.14.0<br>
-192.168.120.25   Ready    <none>   282d   v1.14.0<br>
-192.168.120.26   Ready    <none>   282d   v1.14.0<br>
-192.168.110.50   Ready    <none>   282d   v1.14.0<br>
-192.168.110.51   Ready    <none>   282d   v1.14.0<br>
-192.168.110.52   Ready    <none>   49d    v1.14.0<br>
-192.168.110.53   Ready    <none>   282d   v1.14.0<br>
-192.168.110.54   Ready    <none>   282d   v1.14.0<br>
-192.168.110.55   Ready    <none>   49d    v1.14.0<br>
-192.168.110.56   Ready    <none>   282d   v1.14.0<br>
-192.168.110.57   Ready    <none>   282d   v1.14.0<br>
-192.168.110.58   Ready    <none>   49d    v1.14.0<br>
-192.168.110.59   Ready    <none>   282d   v1.14.0<br>
-192.168.110.60   Ready    <none>   282d   v1.14.0<br>
+NAME             STATUS   ROLES    AGE    VERSION
+192.168.120.10   Ready    <none>   282d   v1.14.0
+192.168.120.11   Ready    <none>   282d   v1.14.0
+192.168.120.12   Ready    <none>   282d   v1.14.0
+192.168.120.13   Ready    <none>   282d   v1.14.0
+192.168.120.14   Ready    <none>   282d   v1.14.0
+192.168.120.15   Ready    <none>   282d   v1.14.0
+192.168.120.16   Ready    <none>   282d   v1.14.0
+192.168.120.17   Ready    <none>   282d   v1.14.0
+192.168.120.18   Ready    <none>   282d   v1.14.0
+192.168.120.19   Ready    <none>   282d   v1.14.0
+192.168.120.20   Ready    <none>   282d   v1.14.0
+192.168.120.21   Ready    <none>   282d   v1.14.0
+192.168.120.22   Ready    <none>   282d   v1.14.0
+192.168.120.23   Ready    <none>   282d   v1.14.0
+192.168.120.24   Ready    <none>   282d   v1.14.0
+192.168.120.25   Ready    <none>   282d   v1.14.0
+192.168.120.26   Ready    <none>   282d   v1.14.0
+192.168.110.50   Ready    <none>   282d   v1.14.0
+192.168.110.51   Ready    <none>   282d   v1.14.0
+192.168.110.52   Ready    <none>   49d    v1.14.0
+192.168.110.53   Ready    <none>   282d   v1.14.0
+192.168.110.54   Ready    <none>   282d   v1.14.0
+192.168.110.55   Ready    <none>   49d    v1.14.0
+192.168.110.56   Ready    <none>   282d   v1.14.0
+192.168.110.57   Ready    <none>   282d   v1.14.0
+192.168.110.58   Ready    <none>   49d    v1.14.0
+192.168.110.59   Ready    <none>   282d   v1.14.0
+192.168.110.60   Ready    <none>   282d   v1.14.0
  [root@k8s-master ~]#
  ```
 
