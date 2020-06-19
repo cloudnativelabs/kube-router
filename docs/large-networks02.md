@@ -17,7 +17,7 @@ We can login to each kubernetes node to see the local neighborhood.
 View on k8s-node-1:
 
 ```
-[k8s-node-1 ~]# gobgp neighbor<br>
+[k8s-node-1 ~]# gobgp neighbor
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
 192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
@@ -32,7 +32,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 View on k8s-node-2:
 
 ```
-[k8s-node-2 ~]# gobgp neighbor<br>
+[k8s-node-2 ~]# gobgp neighbor
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
 192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
@@ -47,7 +47,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 View on k8s-node-3:
 
 ```
-[k8s-node-3 ~]# gobgp neighbor<br>
+[k8s-node-3 ~]# gobgp neighbor
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
 192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
@@ -62,7 +62,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 View on k8s-node-4:
 
 ```
-[k8s-node-4 ~]# gobgp neighbor<br>
+[k8s-node-4 ~]# gobgp neighbor
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
 192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
@@ -77,7 +77,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 View on k8s-node-5:
 
 ```
-[k8s-node-5 ~]# gobgp neighbor<br>
+[k8s-node-5 ~]# gobgp neighbor
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
 192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
@@ -92,7 +92,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 View on k8s-node-6:
 
 ```
-[k8s-node-6 ~]# gobgp neighbor<br>
+[k8s-node-6 ~]# gobgp neighbor
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
 192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
@@ -107,7 +107,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 View on k8s-node-7:
 
 ```
-[k8s-node-7 ~]# gobgp neighbor<br>
+[k8s-node-7 ~]# gobgp neighbor
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
 192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
@@ -122,7 +122,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 View on k8s-node-8:
 
 ```
-[k8s-node-8 ~]# gobgp neighbor<br>
+[k8s-node-8 ~]# gobgp neighbor
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
 192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
@@ -184,7 +184,7 @@ We can log in to each kubernetes node and router to see the local neighborhood.
 View on router1:
 
 ```
-<router1>dis bgp peer
+<router1>show bgp peer
  BGP local router ID        : 192.168.110.1<br>
  Local AS number            : 64558<br>
  Total number of peers      : 2        <br>        
@@ -199,7 +199,7 @@ View on router1:
 View on router2:
 
 ```
-<router2>dis bgp peer
+<router2>show bgp peer
  BGP local router ID        : 192.168.120.1<br>
  Local AS number            : 64558<br>
  Total number of peers      : 2        <br>        
@@ -214,7 +214,7 @@ View on router2:
 View on router3:
 
 ```
-<router3>dis bgp peer
+<router3>show bgp peer
  BGP local router ID        : 192.168.130.1<br>
  Local AS number            : 64558<br>
  Total number of peers      : 2            <br>    
@@ -229,7 +229,7 @@ View on router3:
 View on router4:
 
 ```
-<router4>dis bgp peer
+<router4>show bgp peer
  BGP local router ID        : 192.168.140.1<br>
  Local AS number            : 64558<br>
  Total number of peers      : 2                <br>
