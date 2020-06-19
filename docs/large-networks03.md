@@ -502,14 +502,14 @@ kube-system-kube-router-old-9tz2v     1/1     Running    0          73s     192.
 kube-system-kube-router-old-9tz2n     1/1     Running    0          73s     192.168.110.58    192.168.110.58      <none>             <none><br>
 kube-system-kube-router-old-9tzkk     1/1     Running    0          73s     192.168.110.59    192.168.110.59      <none>             <none><br>
 kube-system-kube-router-old-9tzsd     1/1     Running    0          73s     192.168.110.60    192.168.110.60      <none>             <none><br>
- </font><font color=#ffffff>
+
 kube-system-kube-router-old-qf2q1    1/1      Running    0          73s     192.168.120.81    192.168.120.81      <none>             <none><br>
 kube-system-kube-router-old-wtz22     1/1     Running    0          73s     192.168.120.82    192.168.120.82      <none>             <none><br>
 kube-system-kube-router-old-ef2qe    1/1      Running    0          73s     192.168.120.83    192.168.120.83      <none>             <none><br>
 kube-system-kube-router-old-rtz2g     1/1     Running    0          73s     192.168.110.81    192.168.110.81      <none>             <none><br>
 kube-system-kube-router-old-ttz2p     1/1     Running    0          73s     192.168.110.82    192.168.110.82      <none>             <none><br>
 kube-system-kube-router-old-ytz2o     1/1     Running    0          73s     192.168.110.83    192.168.110.83      <none>             <none><br>
- </font><font color=#F0E68C>
+
 [root@k8s-master kube-router]#
 ```
 
@@ -887,11 +887,11 @@ coredns       corednsdev                             ClusterIP     172.30.0.2   
 default        guestbook-ui                           ClusterIP     172.30.12.213      <none>        80/TCP                   145d<br>
 default        kubernetes                             ClusterIP     172.30.0.1         <none>        443/TCP                  145d<br>
 default        nginx01                                ClusterIP     172.30.28.176      <none>        80/TCP                   143d<br>
- </font><font color=#ffffff>
+
 default        test-1                                 ClusterIP     172.30.99.97       <none>         80/TCP                   1h<br>
 default        test-2                                 ClusterIP     172.30.99.98         <none>       80/TCP                   1h<br>
 default        test-3                                 ClusterIP     172.30.99.99         <none>       80/TCP                   1h<br>
- </font><font color=#F0E68C>
+
  [root@k8s-master ~]#
 ```
 
@@ -1464,7 +1464,7 @@ Routing Table : _public_<br>
 
 Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 ……<br>
- </font><font color=#ffffff>
+
 172.30.0.0/16  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -1520,7 +1520,7 @@ Routing Table : _public_<br>
 
 Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 ……<br>
- </font><font color=#ffffff>
+
 172.30.0.0/16  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -1541,7 +1541,7 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
- </font><font color=#F0E68C>
+
 172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
 172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
 172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
