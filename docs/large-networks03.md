@@ -21,8 +21,9 @@ The network topology is as follows:
 ![avatar](../docs/img/large-networks05.jpg)
 
 Look at all nodes in the cluster as follows:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master ~]# kubectl get node<br>
+
+```
+[root@k8s-master ~]# kubectl get node
 NAME             STATUS   ROLES    AGE    VERSION<br>
 192.168.120.10   Ready    <none>   282d   v1.14.0<br>
 192.168.120.11   Ready    <none>   282d   v1.14.0<br>
@@ -52,12 +53,13 @@ NAME             STATUS   ROLES    AGE    VERSION<br>
 192.168.110.58   Ready    <none>   49d    v1.14.0<br>
 192.168.110.59   Ready    <none>   282d   v1.14.0<br>
 192.168.110.60   Ready    <none>   282d   v1.14.0<br>
- [root@k8s-master ~]#<br>
-</font></td></tr></table>
+ [root@k8s-master ~]#
+ ```
 
 Look at all the services in the cluster as follows:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master ~]# kubectl get service --all-namespaces<br>
+
+```
+[root@k8s-master ~]# kubectl get service --all-namespaces
 NAMESPACE     NAME                                TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                  AGE<br>
 ci             jenkins                                ClusterIP     172.30.2.11       <none>        80/TCP,50000/TCP         34d<br>
 db            data-comp                             ClusterIP     172.30.5.27       <none>        80/TCP                   43d<br>
@@ -67,12 +69,10 @@ default        guestbook-ui                           ClusterIP     172.30.12.21
 default        kubernetes                             ClusterIP     172.30.0.1         <none>        443/TCP                  145d<br>
 default        nginx01                                ClusterIP     172.30.28.176      <none>        80/TCP                   143d<br>
  [root@k8s-master ~]#
-</font></td></tr></table>
-
+```
 
 <br>
 <br>
-
 <font size="4">**2  Bad conditions before optimization using the "advertise-service-cluster-ip-range" parameter**</font>
 
 <br>
@@ -81,37 +81,39 @@ default        nginx01                                ClusterIP     172.30.28.17
 
 <br>
 The configuration parameters of kube-router are as follows:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-      - name: kube-router<br>
-        image: cloudnativelabs/kube-router:0.3.2<br>
-        imagePullPolicy: IfNotPresent<br>
-        args:<br>
-        - --run-router=true<br>
-        - --run-firewall=true<br>
-        - --run-service-proxy=true<br>
-        - --enable-overlay=false<br>
-        - --advertise-pod-cidr=true<br><font color=#ffffff>
-        - --advertise-cluster-ip=true        </font><br>
-        - --bgp-graceful-restart=true<br>
-        - --enable-ibgp=false<br><font color=#F0E68C>
-        - --nodes-full-mesh=true<br>
-        - --cluster-asn=64558<br>
-        - --peer-router-ips=192.168.110.1<br>
-        - --peer-router-asns=64558<br>
-        ......<br>
-</font></td></tr></table>
+
+```
+      - name: kube-router
+        image: cloudnativelabs/kube-router
+        imagePullPolicy: IfNotPresent
+        args:
+        - --run-router=true
+        - --run-firewall=true
+        - --run-service-proxy=true
+        - --enable-overlay=false
+        - --advertise-pod-cidr=true
+        - --advertise-cluster-ip=true
+        - --bgp-graceful-restart=true
+        - --enable-ibgp=false
+        - --nodes-full-mesh=true
+        - --cluster-asn=64558
+        - --peer-router-ips=192.168.110.1
+        - --peer-router-asns=64558
+        ......
+```
 
 Create kube-router daemonset using "kubectl create":
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master kube-router]# kubectl create -f kube-router-daemonset-old.yaml<br>
-daemonset.extensions/kube-system-kube-router-old created<br>
-[root@k8s-master kube-router]# <br>
-</font></td></tr></table>
+
+```
+[root@k8s-master kube-router]# kubectl create -f kube-router-daemonset-old.yaml
+daemonset.extensions/kube-system-kube-router-old created
+[root@k8s-master kube-router]# 
+```
 
 After creation, use "kubectl get" to view kube-router pod:
 
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system             <br>     
+```
+[root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system  
 NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES<br>
 kube-system-kube-router-old-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none><br>
 kube-system-kube-router-old-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none><br>
@@ -141,14 +143,13 @@ kube-system-kube-router-old-9tz2v     1/1     Running    0          73s     192.
 kube-system-kube-router-old-9tz2n     1/1     Running    0          73s     192.168.110.58    192.168.110.58      <none>             <none><br>
 kube-system-kube-router-old-9tzkk     1/1     Running    0          73s     192.168.110.59    192.168.110.59      <none>             <none><br>
 kube-system-kube-router-old-9tzsd     1/1     Running    0          73s     192.168.110.60    192.168.110.60      <none>             <none><br>
-[root@k8s-master kube-router]#<br>
-</font></td></tr></table>
-
+[root@k8s-master kube-router]#
+```
 
 View the content of the routing table on Router1:
 
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[Router1] display ip route <br>
+```
+[Router1] display ip route
 Proto: Protocol        Pre: Preference
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -246,8 +247,8 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
 ……<br>
 255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
-[Router1]  <br>
-</font></td></tr></table>
+[Router1]
+```
 
 As can be seen from the routing table on Router1, there are 77 service IP 32-bit host routes.
 <table>
@@ -257,8 +258,9 @@ As can be seen from the routing table on Router1, there are 77 service IP 32-bit
 
 
 View the content of the routing table on Router2:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[Router2] display ip route <br>
+
+```
+[Router2] display ip route
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -404,8 +406,8 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
 ……
 255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
-[Router2]  <br>
-</font></td></tr></table>
+[Router2]
+```
 
 
 As can be seen from the routing table on Router2, there are 77 service IP 32-bit host routes.
@@ -425,51 +427,51 @@ At this time, we will add three kubernetes nodes to Router1, Router2 and Router3
 ![avatar](../docs/img/large-networks06.jpg)
 
 Using the "kubectl get node" command, you can see three new kubernetes nodes in the white font section:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master ~]# kubectl get node<br>
-NAME             STATUS   ROLES    AGE    VERSION<br>
-192.168.120.10   Ready    <none>   282d   v1.14.0<br>
-192.168.120.11   Ready    <none>   282d   v1.14.0<br>
-192.168.120.12   Ready    <none>   282d   v1.14.0<br>
-192.168.120.13   Ready    <none>   282d   v1.14.0<br>
-192.168.120.14   Ready    <none>   282d   v1.14.0<br>
-192.168.120.15   Ready    <none>   282d   v1.14.0<br>
-192.168.120.16   Ready    <none>   282d   v1.14.0<br>
-192.168.120.17   Ready    <none>   282d   v1.14.0<br>
-192.168.120.18   Ready    <none>   282d   v1.14.0<br>
-192.168.120.19   Ready    <none>   282d   v1.14.0<br>
-192.168.120.20   Ready    <none>   282d   v1.14.0<br>
-192.168.120.21   Ready    <none>   282d   v1.14.0<br>
-192.168.120.22   Ready    <none>   282d   v1.14.0<br>
-192.168.120.23   Ready    <none>   282d   v1.14.0<br>
-192.168.120.24   Ready    <none>   282d   v1.14.0<br>
-192.168.120.25   Ready    <none>   282d   v1.14.0<br>
-192.168.120.26   Ready    <none>   282d   v1.14.0<br>
-192.168.110.50   Ready    <none>   282d   v1.14.0<br>
-192.168.110.51   Ready    <none>   282d   v1.14.0<br>
-192.168.110.52   Ready    <none>   49d    v1.14.0<br>
-192.168.110.53   Ready    <none>   282d   v1.14.0<br>
-192.168.110.54   Ready    <none>   282d   v1.14.0<br>
-192.168.110.55   Ready    <none>   49d    v1.14.0<br>
-192.168.110.56   Ready    <none>   282d   v1.14.0<br>
-192.168.110.57   Ready    <none>   282d   v1.14.0<br>
-192.168.110.58   Ready    <none>   49d    v1.14.0<br>
-192.168.110.59   Ready    <none>   282d   v1.14.0<br>
-192.168.110.60   Ready    <none>   282d   v1.14.0<br>
- </font><font color=#ffffff>
-192.168.120.81   Ready    <none>   282d   v1.14.0<br>
-192.168.120.82   Ready    <none>   282d   v1.14.0<br>
-192.168.120.83   Ready    <none>   282d   v1.14.0<br>
-192.168.110.81   Ready    <none>   49d    v1.14.0<br>
-192.168.110.82   Ready    <none>   282d   v1.14.0<br>
-192.168.110.83   Ready    <none>   282d   v1.14.0<br>
- </font><font color=#F0E68C>
+
+```
+[root@k8s-master ~]# kubectl get node
+NAME             STATUS   ROLES    AGE    VERSION
+192.168.120.10   Ready    <none>   282d   v1.14.0
+192.168.120.11   Ready    <none>   282d   v1.14.0
+192.168.120.12   Ready    <none>   282d   v1.14.0
+192.168.120.13   Ready    <none>   282d   v1.14.0
+192.168.120.14   Ready    <none>   282d   v1.14.0
+192.168.120.15   Ready    <none>   282d   v1.14.0
+192.168.120.16   Ready    <none>   282d   v1.14.0
+192.168.120.17   Ready    <none>   282d   v1.14.0
+192.168.120.18   Ready    <none>   282d   v1.14.0
+192.168.120.19   Ready    <none>   282d   v1.14.0
+192.168.120.20   Ready    <none>   282d   v1.14.0
+192.168.120.21   Ready    <none>   282d   v1.14.0
+192.168.120.22   Ready    <none>   282d   v1.14.0
+192.168.120.23   Ready    <none>   282d   v1.14.0
+192.168.120.24   Ready    <none>   282d   v1.14.0
+192.168.120.25   Ready    <none>   282d   v1.14.0
+192.168.120.26   Ready    <none>   282d   v1.14.0
+192.168.110.50   Ready    <none>   282d   v1.14.0
+192.168.110.51   Ready    <none>   282d   v1.14.0
+192.168.110.52   Ready    <none>   49d    v1.14.0
+192.168.110.53   Ready    <none>   282d   v1.14.0
+192.168.110.54   Ready    <none>   282d   v1.14.0
+192.168.110.55   Ready    <none>   49d    v1.14.0
+192.168.110.56   Ready    <none>   282d   v1.14.0
+192.168.110.57   Ready    <none>   282d   v1.14.0
+192.168.110.58   Ready    <none>   49d    v1.14.0
+192.168.110.59   Ready    <none>   282d   v1.14.0
+192.168.110.60   Ready    <none>   282d   v1.14.0
+192.168.120.81   Ready    <none>   282d   v1.14.0
+192.168.120.82   Ready    <none>   282d   v1.14.0
+192.168.120.83   Ready    <none>   282d   v1.14.0
+192.168.110.81   Ready    <none>   49d    v1.14.0
+192.168.110.82   Ready    <none>   282d   v1.14.0
+192.168.110.83   Ready    <none>   282d   v1.14.0
  [root@k8s-master ~]#
- </font></td></tr></table>
+```
 
 Using the "kubectl get pod" command, you can see that the white font part is the three new kube-router pods:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system       <br>           
+
+```
+[root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system         
 NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES<br>
 kube-system-kube-router-old-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none><br>
 kube-system-kube-router-old-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none><br>
@@ -507,15 +509,15 @@ kube-system-kube-router-old-rtz2g     1/1     Running    0          73s     192.
 kube-system-kube-router-old-ttz2p     1/1     Running    0          73s     192.168.110.82    192.168.110.82      <none>             <none><br>
 kube-system-kube-router-old-ytz2o     1/1     Running    0          73s     192.168.110.83    192.168.110.83      <none>             <none><br>
  </font><font color=#F0E68C>
-[root@k8s-master kube-router]#<br>
-</font></td></tr></table>
-
+[root@k8s-master kube-router]#
+```
 
 
 
 Look at Router 1's routing table again:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[Router1] display ip route <br>
+
+```
+[Router1] display ip route 
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -651,9 +653,8 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
 ……<br>
 255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
-[Router1]  <br>
-</font></td></tr></table>
-
+[Router1] 
+```
 
 As can be seen from the routing table on Router1, there are 98 service IP 32-bit host routes.On the original basis, 21 routes have been added.
 <table>
@@ -665,8 +666,9 @@ As can be seen from the routing table on Router1, there are 98 service IP 32-bit
 
 
 Look at Router2's routing table again:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[Router2] display ip route <br>
+
+```
+[Router2] display ip route
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -847,9 +849,8 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
 ……<br>
 255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
-[Router2]  <br>
-</font></td></tr></table>
-
+[Router2] 
+```
 
 
 As can be seen from the routing table on Router2, there are 140 service IP 32-bit host routes.On the original basis, 21 routes have been added.
@@ -874,8 +875,9 @@ Let's add three more kubernetes services to the k8s cluster to see what's wrong.
 ![avatar](../docs/img/large-networks07.jpg)
 
 Using "kubectl get service", you can see that the white font part is the newly added test-1 (172.30.99.97), test-1 (172.30.99.97), test-1 (172.30.99.97), and TEST-1 (172.99.97). The three kubernetes services are also "CLUSTER-IP".
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master ~]# kubectl get service --all-namespaces<br>
+
+```
+[root@k8s-master ~]# kubectl get service --all-namespaces
 NAMESPACE     NAME                                TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                  AGE<br>
 ci             jenkins                                ClusterIP     172.30.2.11       <none>        80/TCP,50000/TCP         34d<br>
 db            data-comp                             ClusterIP     172.30.5.27       <none>        80/TCP                   43d<br>
@@ -889,9 +891,8 @@ default        test-1                                 ClusterIP     172.30.99.97
 default        test-2                                 ClusterIP     172.30.99.98         <none>       80/TCP                   1h<br>
 default        test-3                                 ClusterIP     172.30.99.99         <none>       80/TCP                   1h<br>
  </font><font color=#F0E68C>
- [root@k8s-master ~]#<br>
-</font></td></tr></table>
-
+ [root@k8s-master ~]#
+```
 
 
 
@@ -899,8 +900,9 @@ default        test-3                                 ClusterIP     172.30.99.99
 Next,Look at Router1's routing table again:
 
 【Router1】
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[Router1] display ip route <br>
+
+```
+[Router1] display ip route 
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -1066,8 +1068,8 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
 ……<br>
 255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
-[Router1]  <br>
-</font></td></tr></table>
+[Router1] 
+```
 
 
 As can be seen from the routing table on Router1, there are 140 service IP 32-bit host routes.On the original basis, 42 routes have been added.
@@ -1080,8 +1082,8 @@ As can be seen from the routing table on Router1, there are 140 service IP 32-bi
 
 Next,Look at Router2's routing table again:
 
-<table><tr><td bgcolor=#000000><font color=#F0E68C><br>
-[Router2] display ip route <br>
+```
+[Router2] display ip route 
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -1310,8 +1312,8 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
 ……<br>
 255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
-[Router2]  <br>
-</font></td></tr></table>
+[Router2] 
+```
 
 
 As can be seen from the routing table on Router1, there are 200 service IP 32-bit host routes.On the original basis, 60 routes have been added.
@@ -1367,40 +1369,43 @@ You need to set both "--advertise-cluster-IP=true" and "--advertise-service-clus
 
 <br>
 You can set the following parameters in the white font section:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-      - name: kube-router<br>
-        image: cloudnativelabs/kube-router:0.3.2<br>
-        imagePullPolicy: IfNotPresent<br>
-        args:<br>
-        - --run-router=true<br>
-        - --run-firewall=true<br>
-        - --run-service-proxy=true<br>
-        - --enable-overlay=false<br>
-        - --advertise-pod-cidr=true<br><font color=#ffffff>
-        - --advertise-cluster-ip=true<br>
-        - --advertise-service-cluster-ip-range=172.30.0.0/16</font><br><font color=#F0E68C>
-        - --bgp-graceful-restart=true<br>
-        - --enable-ibgp=false<br>
-        - --nodes-full-mesh=true<br>
-        - --cluster-asn=64558<br>
-        - --peer-router-ips=192.168.110.1<br>
-        - --peer-router-asns=64558<br>
-        ......<br>
-</font></td></tr></table>
+
+```
+      - name: kube-router
+        image: cloudnativelabs/kube-router
+        imagePullPolicy: IfNotPresent
+        args:
+        - --run-router=true
+        - --run-firewall=true
+        - --run-service-proxy=true
+        - --enable-overlay=false
+        - --advertise-pod-cidr=true
+        - --advertise-cluster-ip=true
+        - --advertise-service-cluster-ip-range=172.30.0.0/16
+        - --bgp-graceful-restart=true
+        - --enable-ibgp=false
+        - --nodes-full-mesh=true
+        - --cluster-asn=64558
+        - --peer-router-ips=192.168.110.1
+        - --peer-router-asns=64558
+        ......
+```
+
 Note: Look at the two parameters in the white font section above - - advertise - cluster - IP = true and - - advertise - cluster - subnet = subnet.
 <br>
 
 Update kube-router daemonset using kubectl apply:
 
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master kube-router]# kubectl apply -f kube-router-daemonset-new.yaml<br>
-daemonset.extensions/kube-system-kube-router-new created<br>
-[root@k8s-master kube-router]# <br>
-</font></td></tr></table>
+```
+[root@k8s-master kube-router]# kubectl apply -f kube-router-daemonset-new.yaml
+daemonset.extensions/kube-system-kube-router-new created
+[root@k8s-master kube-router]# 
+```
 
 Use "kubectl get pod" to see that kube-router pod is working properly:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system      <br>            
+
+```
+[root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system          
 NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES<br>
 kube-system-kube-router-new-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none><br>
 kube-system-kube-router-new-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none><br>
@@ -1436,9 +1441,8 @@ kube-system-kube-router-new-9tzsd     1/1     Running    0          73s     192.
 kube-system-kube-router-new-rtz2g     1/1     Running    0          73s     192.168.110.81    192.168.110.81      <none>             <none><br>
 kube-system-kube-router-new-ttz2p     1/1     Running    0          73s     192.168.110.82    192.168.110.82      <none>             <none><br>
 kube-system-kube-router-new-ytz2o     1/1     Running    0          73s     192.168.110.83    192.168.110.83      <none>             <none><br>
-[root@k8s-master kube-router]#<br>
-</font></td></tr></table>
-
+[root@k8s-master kube-router]#
+```
 
 
 
@@ -1448,8 +1452,9 @@ kube-system-kube-router-new-ytz2o     1/1     Running    0          73s     192.
 
 Look at Router1's routing table again:
 【Router1】
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[Router1] display ip route <br>
+
+```
+[Router1] display ip route
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -1489,9 +1494,8 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
 ……<br>
 255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
-[Router1]  <br>
-</font></td></tr></table>
-
+[Router1] 
+```
 
 
 From the routing table on Router1, it can be seen that there are 14 subnetwork routes of service.Routing entries are 90% less than before.
@@ -1505,7 +1509,7 @@ This aggregate route balances the load of the ECMP function to 14 next hop route
 
 Next,Look at Router2's routing table again:
 
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+```
 [Router2] display ip route <br>
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
@@ -1555,9 +1559,8 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
 172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
 ……<br>
 255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
-[Router2]  <br>
-</font></td></tr></table>
-
+[Router2] 
+```
 
 From the routing table on Router2, it can be seen that there are 10 subnetwork routes of service.Routing entries are 90% less than before.
 <table>
