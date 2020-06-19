@@ -150,7 +150,7 @@ kube-system-kube-router-old-9tzsd     1/1     Running    0          73s     192.
 View the content of the routing table on Router1:
 
 ```
-[Router1] display ip route
+[Router1] show ip route
 Proto: Protocol        Pre: Preference
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -261,7 +261,7 @@ As can be seen from the routing table on Router1, there are 77 service IP 32-bit
 View the content of the routing table on Router2:
 
 ```
-[Router2] display ip route
+[Router2] show ip route
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -518,7 +518,7 @@ kube-system-kube-router-old-ytz2o     1/1     Running    0          73s     192.
 Look at Router 1's routing table again:
 
 ```
-[Router1] display ip route 
+[Router1] show ip route 
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -537,11 +537,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#F0E68C>
+
 172.30.0.2/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -553,11 +553,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#F0E68C>
+
 172.30.0.9/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -569,11 +569,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#F0E68C>
+
 172.30.5.27/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -585,11 +585,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#F0E68C>
+
 172.30.12.213/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -601,11 +601,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#F0E68C>
+
 172.30.28.176/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -617,11 +617,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#F0E68C>
+
 172.30.47.53/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -633,11 +633,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#F0E68C>
+
 172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
 172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
 172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -669,7 +669,7 @@ As can be seen from the routing table on Router1, there are 98 service IP 32-bit
 Look at Router2's routing table again:
 
 ```
-[Router2] display ip route
+[Router2] show ip route
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -694,11 +694,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#F0E68C>
+
 172.30.0.2/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -716,11 +716,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#F0E68C>
+
 172.30.0.9/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -738,11 +738,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#F0E68C>
+
 172.30.5.27/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -760,11 +760,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#F0E68C>
+
 172.30.12.213/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -782,11 +782,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#F0E68C>
+
 172.30.28.176/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -804,11 +804,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#F0E68C>
+
 172.30.47.53/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -826,11 +826,11 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-              </font><font color=#ffffff>
+
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#F0E68C>
+
 172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
 172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
 172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -903,7 +903,7 @@ Next,Look at Router1's routing table again:
 【Router1】
 
 ```
-[Router1] display ip route 
+[Router1] show ip route 
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -1009,7 +1009,7 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#ffffff>
+
 172.30.99.97/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -1052,7 +1052,7 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
                                 IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-              </font><font color=#F0E68C>
+
 172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
 172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
 172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
@@ -1084,7 +1084,7 @@ As can be seen from the routing table on Router1, there are 140 service IP 32-bi
 Next,Look at Router2's routing table again:
 
 ```
-[Router2] display ip route 
+[Router2] show ip route 
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -1232,7 +1232,7 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#ffffff>
+
 172.30.99.97/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -1293,7 +1293,7 @@ Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
                                 IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
                                 IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-              </font><font color=#F0E68C>
+
 172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
 172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
 172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
@@ -1456,7 +1456,7 @@ Look at Router1's routing table again:
 【Router1】
 
 ```
-[Router1] display ip route
+[Router1] show ip route
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
@@ -1512,7 +1512,7 @@ This aggregate route balances the load of the ECMP function to 14 next hop route
 Next,Look at Router2's routing table again:
 
 ```
-[Router2] display ip route <br>
+[Router2] show ip route
 Proto: Protocol        Pre: Preference<br>
 Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
 ------------------------------------------------------------------------------<br>
