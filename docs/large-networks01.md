@@ -13,7 +13,7 @@
 <tr><td>Pod subnet of kubernetes cluster</td><td>172.31.0.0/16</td></tr>
 <tr><td>Service subnet of kubernetes cluster</td><td>172.30.0.0/16</td></tr>
 <tr><td>The number of Router Device </td><td>About 100</td></tr>
-<tr><td>Router-id of Uplink Router Device</td><td>192.168.110.1(router1)<br>,192.168.120.1(router2)<br>,192.168.130.1(router3)<br>,192.168.140.1(router4)<br>,......</td></tr>
+<tr><td>Router-id of Uplink Router Device</td><td>192.168.110.1(router1),<br>192.168.120.1(router2),<br>192.168.130.1(router3),<br>192.168.140.1(router4),<br>......</td></tr>
 </table>
 
 The network topology is as follows:
