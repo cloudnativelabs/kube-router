@@ -29,35 +29,40 @@ Taking the router equipment of the mainstream network manufacturer as an example
 
 <font size="3">**2.1 Cisco Network Equipment Configuration BGP ECMP**</font><br>
 You can use the following command to turn on EBGP ECMP：
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[config-Router] config terminal<br>
-[config-Router] bgp 64558<br>
-[config-Router] maximum-paths 32<br>
-</font></td></tr></table>
+
+```
+[config-Router] config terminal
+[config-Router] bgp 64558
+[config-Router] maximum-paths 32
+```
 
 You can use the following command to turn on IBGP ECMP：
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[config-Router] config terminal<br>
-[config-Router] bgp 64558<br>
-[config-Router] maximum-paths ibgp 32<br>
-</font></td></tr></table>
+
+```
+[config-Router] config terminal
+[config-Router] bgp 64558
+[config-Router] maximum-paths ibgp 32
+```
 
 <font size="3">**2.2 Huawei Network Equipment Configuration BGP ECMP**</font><br>
 You can use the following command to turn on EBGP ECMP：
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[Router] system view<br>
-[Router] bgp 64558<br>
-[Router-bgp] ipv4-family unicast<br>
-[Router-bgp-af-ipv4] maximum load-balancing ebgp 32<br>
-</font></td></tr></table>
+
+```
+[Router] system view
+[Router] bgp 64558
+[Router-bgp] ipv4-family unicast
+[Router-bgp-af-ipv4] maximum load-balancing ebgp 32
+```
 
 You can use the following command to turn on IBGP ECMP：
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-[Router] system view<br>
-[Router] bgp 64558<br>
-[Router-bgp] ipv4-family unicast<br>
-[Router-bgp-af-ipv4] maximum load-balancing ibgp 32<br>
-</font></td></tr></table>
+
+```
+[Router] system view
+[Router] bgp 64558
+[Router-bgp] ipv4-family unicast
+[Router-bgp-af-ipv4] maximum load-balancing ibgp 32
+```
+
 <br>
 <br>
 
