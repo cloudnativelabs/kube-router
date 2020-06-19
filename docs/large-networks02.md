@@ -15,7 +15,8 @@ When "--enable-ibgp=true" is set by default by kube-router, all kubernetes nodes
 We can login to each kubernetes node to see the local neighborhood.
 <br>
 View on k8s-node-1:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-1 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
@@ -26,10 +27,11 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
 192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-1 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-2:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-2 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
@@ -40,10 +42,11 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
 192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-2 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-3:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-3 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
@@ -54,10 +57,11 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
 192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-3 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-4:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-4 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
@@ -68,10 +72,11 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
 192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-4 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-5:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-5 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
@@ -82,10 +87,11 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
 192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-5 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-6:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-6 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
@@ -96,10 +102,11 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
 192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-6 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-7:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-7 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
@@ -110,10 +117,11 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
 192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-7 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-8:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-8 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
@@ -124,7 +132,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
 192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
  [k8s-node-8 ~]#
- </font></td></tr></table>
+```
 
 We present the neighborhood relationships between all kubernetes nodes in red dotted lines as follows:
 
@@ -148,32 +156,34 @@ To solve this problem, you need to turn on the BGP function of the router device
 For example：
 <br>
 You can see the white font parameters in the configuration example below.
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
-      - name: kube-router<br>
-        image: cloudnativelabs/kube-router:0.3.2<br>
-        imagePullPolicy: IfNotPresent<br>
-        args:<br>
-        - --run-router=true<br>
-        - --run-firewall=true<br>
-        - --run-service-proxy=true<br>
-        - --enable-overlay=false<br>
-        - --advertise-pod-cidr=true<br>
-        - --advertise-cluster-ip=true<br>
-        - --bgp-graceful-restart=true</font><br><font color=#ffffff>
-        - --enable-ibgp=false        </font><br><font color=#F0E68C>
-        - --nodes-full-mesh=true<br>
-        - --cluster-asn=64558<br>
-        - --peer-router-ips=192.168.110.1<br>
-        - --peer-router-asns=64558<br>
-        ......<br>
-</font></td></tr></table>
+
+```
+      - name: kube-router
+        image: cloudnativelabs/kube-router:0.3.2
+        imagePullPolicy: IfNotPresent
+        args:
+        - --run-router=true
+        - --run-firewall=true
+        - --run-service-proxy=true
+        - --enable-overlay=false
+        - --advertise-pod-cidr=true
+        - --advertise-cluster-ip=true
+        - --bgp-graceful-restart=true
+        - --enable-ibgp=false
+        - --nodes-full-mesh=true
+        - --cluster-asn=64558
+        - --peer-router-ips=192.168.110.1
+        - --peer-router-asns=64558
+        ......
+```
        
 When you set this parameter, all kubernetes nodes will not establish BGP neighborhood relationships with each other. Each kubernetes node establishes a BGP peer only between the router it is connected to.
 <br>
 We can log in to each kubernetes node and router to see the local neighborhood.
 <br>
 View on router1:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 <router1>dis bgp peer<br>
  BGP local router ID        : 192.168.110.1<br>
  Local AS number            : 64558<br>
@@ -184,10 +194,11 @@ View on router1:
   192.168.110.11  4       64558     2203     2524     0 17:57:52 Established        1<br>
   192.168.110.12  4       64558     2203     2524     0 17:57:57 Established        1<br>
 <router1>
-</font></td></tr></table>
+```
 
 View on router2:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 <router2>dis bgp peer<br>
  BGP local router ID        : 192.168.120.1<br>
  Local AS number            : 64558<br>
@@ -198,10 +209,11 @@ View on router2:
   192.168.120.13  4       64558     2203     2524     0 17:57:52 Established        1<br>
   192.168.120.14  4       64558     2203     2524     0 17:57:57 Established        1<br>
 <router2>
-</font></td></tr></table>
+```
 
 View on router3:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 <router3>dis bgp peer<br>
  BGP local router ID        : 192.168.130.1<br>
  Local AS number            : 64558<br>
@@ -212,10 +224,11 @@ View on router3:
   192.168.130.15  4       64558     2203     2524     0 17:57:52 Established        1<br>
   192.168.130.16  4       64558     2203     2524     0 17:57:57 Established        1<br>
 <router3>
-</font></td></tr></table>
+```
 
 View on router4:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 <router4>dis bgp peer<br>
  BGP local router ID        : 192.168.140.1<br>
  Local AS number            : 64558<br>
@@ -226,72 +239,80 @@ View on router4:
   192.168.140.17  4       64558     2203     2524     0 17:57:52 Established        1<br>
   192.168.140.18  4       64558     2203     2524     0 17:57:57 Established        1<br>
 <router1>
-</font></td></tr></table>
+```
 
 
 View on k8s-node-1:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-1 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.1  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-1 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-2:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-2 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.110.1  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-2 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-3:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-3 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.120.1  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-3~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-4:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-4 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.120.1  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-4 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-5:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-5 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.130.1  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-5 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-6:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-6 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.130.1  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-6 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-7:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-7 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.140.1  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-7 ~]#
-</font></td></tr></table>
+```
 
 View on k8s-node-8:
-<table><tr><td bgcolor=#000000><font color=#F0E68C>
+
+```
 [k8s-node-8 ~]# gobgp neighbor<br>
 Peer             AS  Up/Down State       |#Received  Accepted<br>
 192.168.140.1  64558 17:17:28 Establ      |        0         0<br>
 [k8s-node-8 ~]#
-</font></td></tr></table>
+```
 
 
 We present the neighborhood relationships between all kubernetes nodes in red dotted lines as follows:
