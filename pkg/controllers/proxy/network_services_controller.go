@@ -445,8 +445,10 @@ func (nsc *NetworkServicesController) doSync() error {
 
 	if nsc.MetricsEnabled {
 		err = nsc.publishMetrics(nsc.serviceMap)
-		glog.Errorf("Error publishing metrics: %s", err.Error())
-		return err
+		if err != nil {
+			glog.Errorf("Error publishing metrics: %v", err)
+			return err
+		}
 	}
 	return nil
 }
