@@ -1,2 +1,23 @@
 run:
   timeout: 5m
+linters:
+  disable-all: true
+  enable:
+    - deadcode
+    - errcheck
+    - gofmt
+    - goimports
+    - golint
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - structcheck
+    - typecheck
+    - unused
+    - varcheck
+output:
+  format: tab
+  print-issued-lines: true
+  print-linter-name: true
