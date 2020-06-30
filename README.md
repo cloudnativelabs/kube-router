@@ -98,7 +98,6 @@ that has been thoroughly tested and optimized.
 - [Architecture](./docs/architecture.md)
 - [See Kube-router in action](./docs/see-it-in-action.md)
 - [User Guide](./docs/user-guide.md)
-- [Operations Guide](./docs/operations-guide.md)
 - [Developer Guide](./docs/developing.md)
 
 ## Project status
