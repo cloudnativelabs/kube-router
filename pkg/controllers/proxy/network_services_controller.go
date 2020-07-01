@@ -2273,7 +2273,11 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	if err != nil {
 		return nil, err
 	}
-	BridgeIP = bridgeIPs[0].IP
+	if len(bridgeIPs) > 0 {
+		BridgeIP = bridgeIPs[0].IP
+	} else {
+		BridgeIP = NodeIP
+	}
 
 	nsc.podLister = podInformer.GetIndexer()
 
