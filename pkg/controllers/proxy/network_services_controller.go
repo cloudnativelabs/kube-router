@@ -64,7 +64,7 @@ const (
 
 var (
 	NodeIP net.IP
-	BridgeIP net.IP
+	SrcIP net.IP
 )
 
 type ipvsCalls interface {
@@ -112,7 +112,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
 	if err == nil {
 		out, err := exec.Command("ip", "route", "delete", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
-			BridgeIP.String(), "table", "local").CombinedOutput()
+			SrcIP.String(), "table", "local").CombinedOutput()
 		if err != nil && !strings.Contains(string(out), "No such process") {
 			glog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
 		}
@@ -144,7 +144,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
 	// route is not replaced. For now do it with command.
 	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
-		BridgeIP.String(), "table", "local").CombinedOutput()
+		SrcIP.String(), "table", "local").CombinedOutput()
 	if err != nil {
 		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
 	}
@@ -2291,9 +2291,9 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 	nsc.nodeIP = NodeIP
 
-	BridgeIP, err = getBridgeIP("kube-bridge")
+	SrcIP, err = getBridgeIP("kube-bridge")
 	if err != nil {
-		BridgeIP = NodeIP
+		SrcIP = NodeIP
 	}
 
 	nsc.podLister = podInformer.GetIndexer()
