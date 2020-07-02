@@ -17,7 +17,7 @@
 </table>
 
 The network topology is as follows:
-![avatar](../docs/img/large-networks01.jpg)
+![largenetwork](../docs/img/large-networks01.jpg)
 
 <br>
 
