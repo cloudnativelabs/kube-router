@@ -2185,6 +2185,25 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 	nsc.OnServiceUpdate(service)
 }
 
+// Get bridge IP Address
+func getBridgeIP(bridgeName string) (net.IP, error) {
+	bridge, err := netlink.LinkByName(bridgeName)
+	if err != nil {
+		return nil, err
+	}
+
+	bridgeIPs, err := netlink.AddrList(bridge, netlink.FAMILY_V4)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(bridgeIPs) == 0 {
+		return nil, errors.New("interface " + bridgeName + "has no IP address")
+	}
+
+	return bridgeIPs[0].IP, nil
+}
+
 // NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
@@ -2265,17 +2284,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 	nsc.nodeIP = NodeIP
 
-	bridge, err := netlink.LinkByName("kube-bridge")
+	BridgeIP, err = getBridgeIP("kube-bridge")
 	if err != nil {
-		return nil, err
-	}
-	bridgeIPs, err := netlink.AddrList(bridge, netlink.FAMILY_V4)
-	if err != nil {
-		return nil, err
-	}
-	if len(bridgeIPs) > 0 {
-		BridgeIP = bridgeIPs[0].IP
-	} else {
 		BridgeIP = NodeIP
 	}
 
