@@ -12,14 +12,14 @@
 Before optimization, network traffic will choose a path to reach its destination.
 <br>
 The network topology is as follows:
-![avatar](../docs/img/large-networks08.jpg)
+![largenetwork](../docs/img/large-networks08.jpg)
 
 
 <font size="3">**1.2 Network traffic sharing after ECMP enabled**</font><br>
 After optimization, network traffic will be balanced to all network devices and nodes.
 <br>
 The network topology is as follows:
-![avatar](../docs/img/large-networks09.jpg)
+![largenetwork](../docs/img/large-networks09.jpg)
 
 <br>
 
