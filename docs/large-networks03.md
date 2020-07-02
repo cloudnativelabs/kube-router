@@ -18,7 +18,7 @@
 
 
 The network topology is as follows:
-![avatar](../docs/img/large-networks05.jpg)
+![largenetwork](../docs/img/large-networks05.jpg)
 
 Look at all nodes in the cluster as follows:
 
@@ -425,7 +425,7 @@ Similarly, we look at the kubernetes service routing on Router3 and Router4, and
 <font size="3">**2.2 Problems after adding kubernetes node nodes：**</font><br>
 
 At this time, we will add three kubernetes nodes to Router1, Router2 and Router3 devices respectively.
-![avatar](../docs/img/large-networks06.jpg)
+![largenetwork](../docs/img/large-networks06.jpg)
 
 Using the "kubectl get node" command, you can see three new kubernetes nodes in the white font section:
 
@@ -873,7 +873,7 @@ Similarly, we look at the kubernetes service routing on Router3, and the results
 
 
 Let's add three more kubernetes services to the k8s cluster to see what's wrong.
-![avatar](../docs/img/large-networks07.jpg)
+![largenetwork](../docs/img/large-networks07.jpg)
 
 Using "kubectl get service", you can see that the white font part is the newly added test-1 (172.30.99.97), test-1 (172.30.99.97), test-1 (172.30.99.97), and TEST-1 (172.99.97). The three kubernetes services are also "CLUSTER-IP".
 
