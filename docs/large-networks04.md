@@ -12,6 +12,7 @@
 Before optimization, network traffic will choose a path to reach its destination.
 <br>
 The network topology is as follows:
+
 ![largenetwork](../docs/img/large-networks08.jpg)
 
 
