@@ -6,17 +6,24 @@
 
 
 <font size="4">**1 Contrast before and after enabling ECMP function of network equipment**</font>
+
 <br>
 <br>
-<font size="3">**1.1 Network traffic flow before ECMP is enabled**</font><br>
+
+<font size="3">**1.1 Network traffic flow before ECMP is enabled**</font>
+
+<br>
 Before optimization, network traffic will choose a path to reach its destination.
 <br>
 The network topology is as follows:
 
 ![largenetwork](../docs/img/large-networks08.jpg)
 
+<br>
 
-<font size="3">**1.2 Network traffic sharing after ECMP enabled**</font><br>
+<font size="3">**1.2 Network traffic sharing after ECMP enabled**</font>
+
+<br>
 After optimization, network traffic will be balanced to all network devices and nodes.
 <br>
 The network topology is as follows:
@@ -25,11 +32,16 @@ The network topology is as follows:
 
 <br>
 
-<font size="4">**2 How to enable BGP ECMP for network devices?**</font><br>
+<font size="4">**2 How to enable BGP ECMP for network devices?**</font>
+
+<br>
 
 Taking the router equipment of the mainstream network manufacturer as an example, this paper briefly introduces how the router equipment can turn on the equivalent routing load balancing of BGP ECMP.
+<br>
 
-<font size="3">**2.1 Cisco Network Equipment Configuration BGP ECMP**</font><br>
+<font size="3">**2.1 Cisco Network Equipment Configuration BGP ECMP**</font>
+
+<br>
 You can use the following command to turn on EBGP ECMP：
 
 ```
@@ -46,7 +58,11 @@ You can use the following command to turn on IBGP ECMP：
 [config-Router] maximum-paths ibgp 32
 ```
 
-<font size="3">**2.2 Huawei Network Equipment Configuration BGP ECMP**</font><br>
+<br>
+
+<font size="3">**2.2 Huawei Network Equipment Configuration BGP ECMP**</font>
+
+<br>
 You can use the following command to turn on EBGP ECMP：
 
 ```
