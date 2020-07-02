@@ -10,7 +10,7 @@
 
 When "--enable-ibgp=true" is set by default by kube-router, all kubernetes nodes establish BGP neighborhood relationships with each other. Suppose there are eight k8s-nodes in our network. Their topological relationships are as follows:
 
-![avatar](../docs/img/large-networks02.jpg)
+![largenetwork](../docs/img/large-networks02.jpg)
 
 We can login to each kubernetes node to see the local neighborhood.
 <br>
@@ -136,7 +136,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 
 We present the neighborhood relationships between all kubernetes nodes in red dotted lines as follows:
 
-![avatar](../docs/img/large-networks03.jpg)
+![largenetwork](../docs/img/large-networks03.jpg)
 
 You will find that the number of BGP peers per kubernetes node is n-1 (n is the total number of all nodes in the k8s cluster). If we had 2000 node servers in our k8s cluster, there would be 1999 BGP peers on each node. With the increasing number of kubernetes nodes in k8s cluster, the number of BGP peers per k8s-node will also increase, which is undoubtedly not a small overhead for node servers. With the increase of cluster size, the pressure of node server will increase.
 <br>
@@ -317,7 +317,7 @@ Peer             AS  Up/Down State       |#Received  Accepted<br>
 
 We present the neighborhood relationships between all kubernetes nodes in red dotted lines as follows:
 
-![avatar](../docs/img/large-networks04.jpg)
+![largenetwork](../docs/img/large-networks04.jpg)
 
 You will find that no matter how many kubernetes nodes you have in your k8s cluster, there is only one BGP neighbor on each kubernetes node. Each router has only BGP neighbors to the downlink kubernetes node and a small number of BGP neighbors to the downlink. In the actual production environment, due to the number of interfaces of router devices, the number of kubernetes nodes that can be connected to each router is very limited, generally less than 100.
 <br>
