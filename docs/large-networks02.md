@@ -131,7 +131,7 @@ Peer             AS  Up/Down State       |#Received  Accepted
 192.168.130.15  64558 17:17:28 Establ      |        0         0
 192.168.130.16  64558 17:17:28 Establ      |        0         0
 192.168.140.17  64558 17:17:28 Establ      |        0         0
- [k8s-node-8 ~]#
+[k8s-node-8 ~]#
 ```
 
 We present the neighborhood relationships between all kubernetes nodes in red dotted lines as follows:
