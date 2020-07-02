@@ -60,14 +60,14 @@ Look at all the services in the cluster as follows:
 
 ```
 [root@k8s-master ~]# kubectl get service --all-namespaces
-NAMESPACE     NAME                                TYPE        CLUSTER-IP         EXTERNAL-IP   PORT(S)                    AGE<br>
-ci            jenkins                            ClusterIP     172.30.2.11       <none>        80/TCP,50000/TCP          34d<br>
-db            data-comp                          ClusterIP     172.30.5.27       <none>        80/TCP                    43d<br>
-db            redis                              ClusterIP     172.30.47.53       <none>        6379/TCP                 145d<br>
-coredns       corednsdev                         ClusterIP     172.30.0.2        <none>         53/UDP,53/TCP,9153/TCP   93d<br>
-default       guestbook-ui                       ClusterIP     172.30.12.213      <none>        80/TCP                   145d<br>
-default       kubernetes                         ClusterIP     172.30.0.1         <none>        443/TCP                  145d<br>
-default       nginx01                            ClusterIP     172.30.28.176      <none>        80/TCP                   143d<br>
+NAMESPACE     NAME                                TYPE        CLUSTER-IP         EXTERNAL-IP   PORT(S)                    AGE
+ci            jenkins                            ClusterIP     172.30.2.11       <none>        80/TCP,50000/TCP          34d
+db            data-comp                          ClusterIP     172.30.5.27       <none>        80/TCP                    43d
+db            redis                              ClusterIP     172.30.47.53       <none>        6379/TCP                 145d
+coredns       corednsdev                         ClusterIP     172.30.0.2        <none>         53/UDP,53/TCP,9153/TCP   93d
+default       guestbook-ui                       ClusterIP     172.30.12.213      <none>        80/TCP                   145d
+default       kubernetes                         ClusterIP     172.30.0.1         <none>        443/TCP                  145d
+default       nginx01                            ClusterIP     172.30.28.176      <none>        80/TCP                   143d
  [root@k8s-master ~]#
 ```
 
@@ -115,35 +115,35 @@ After creation, use "kubectl get" to view kube-router pod:
 
 ```
 [root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system  
-NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES<br>
-kube-system-kube-router-old-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none><br>
-kube-system-kube-router-old-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none><br>
-kube-system-kube-router-old-7f2qq    1/1      Running    0          73s     192.168.120.12    192.168.120.12      <none>             <none><br>
-kube-system-kube-router-old-9tz2w     1/1     Running    0          73s     192.168.120.13    192.168.120.13      <none>             <none><br>
-kube-system-kube-router-old-7f2qe    1/1      Running    0          73s     192.168.120.14    192.168.120.14      <none>             <none><br>
-kube-system-kube-router-old-9tz2r     1/1     Running    0          73s     192.168.120.15    192.168.120.15      <none>             <none><br>
-kube-system-kube-router-old-7f2qt    1/1      Running    0          73s     192.168.120.16    192.168.120.16      <none>             <none><br>
-kube-system-kube-router-old-9tz2y     1/1     Running    0          73s     192.168.120.17    192.168.120.17      <none>             <none><br>
-kube-system-kube-router-old-7f2qu    1/1      Running    0          73s     192.168.120.18    192.168.120.18      <none>             <none><br>
-kube-system-kube-router-old-9tz2i     1/1     Running    0          73s     192.168.120.19    192.168.120.19      <none>             <none><br>
-kube-system-kube-router-old-7f2qo    1/1      Running    0          73s     192.168.120.20    192.168.120.20      <none>             <none><br>
-kube-system-kube-router-old-9tz2p     1/1     Running    0          73s     192.168.120.21    192.168.120.21      <none>             <none><br>
-kube-system-kube-router-old-7f2qa    1/1      Running    0          73s     192.168.120.22    192.168.120.22      <none>             <none><br>
-kube-system-kube-router-old-9tz2s     1/1     Running    0          73s     192.168.120.23    192.168.120.23      <none>             <none><br>
-kube-system-kube-router-old-7f2qd    1/1      Running    0          73s     192.168.120.24    192.168.120.24      <none>             <none><br>
-kube-system-kube-router-old-9tz2f     1/1     Running    0          73s     192.168.120.25    192.168.120.25      <none>             <none><br>
-kube-system-kube-router-old-7f2qg    1/1      Running    0          73s     192.168.120.26    192.168.120.26      <none>             <none><br>
-kube-system-kube-router-old-9tz2h     1/1     Running    0          73s     192.168.110.50    192.168.110.50      <none>             <none><br>
-kube-system-kube-router-old-9tz2j     1/1     Running    0          73s     192.168.110.51    192.168.110.51      <none>             <none><br>
-kube-system-kube-router-old-9tz2k     1/1     Running    0          73s     192.168.110.52    192.168.110.52      <none>             <none><br>
-kube-system-kube-router-old-9tz2l     1/1     Running    0          73s     192.168.110.53    192.168.110.53      <none>             <none><br>
-kube-system-kube-router-old-9tz2z     1/1     Running    0          73s     192.168.110.54    192.168.110.54      <none>             <none><br>
-kube-system-kube-router-old-9tzxx     1/1     Running    0          73s     192.168.110.55    192.168.110.55      <none>             <none><br>
-kube-system-kube-router-old-9tz2c     1/1     Running    0          73s     192.168.110.56    192.168.110.56      <none>             <none><br>
-kube-system-kube-router-old-9tz2v     1/1     Running    0          73s     192.168.110.57    192.168.110.57      <none>             <none><br>
-kube-system-kube-router-old-9tz2n     1/1     Running    0          73s     192.168.110.58    192.168.110.58      <none>             <none><br>
-kube-system-kube-router-old-9tzkk     1/1     Running    0          73s     192.168.110.59    192.168.110.59      <none>             <none><br>
-kube-system-kube-router-old-9tzsd     1/1     Running    0          73s     192.168.110.60    192.168.110.60      <none>             <none><br>
+NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES
+kube-system-kube-router-old-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none>
+kube-system-kube-router-old-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none>
+kube-system-kube-router-old-7f2qq    1/1      Running    0          73s     192.168.120.12    192.168.120.12      <none>             <none>
+kube-system-kube-router-old-9tz2w     1/1     Running    0          73s     192.168.120.13    192.168.120.13      <none>             <none>
+kube-system-kube-router-old-7f2qe    1/1      Running    0          73s     192.168.120.14    192.168.120.14      <none>             <none>
+kube-system-kube-router-old-9tz2r     1/1     Running    0          73s     192.168.120.15    192.168.120.15      <none>             <none>
+kube-system-kube-router-old-7f2qt    1/1      Running    0          73s     192.168.120.16    192.168.120.16      <none>             <none>
+kube-system-kube-router-old-9tz2y     1/1     Running    0          73s     192.168.120.17    192.168.120.17      <none>             <none>
+kube-system-kube-router-old-7f2qu    1/1      Running    0          73s     192.168.120.18    192.168.120.18      <none>             <none>
+kube-system-kube-router-old-9tz2i     1/1     Running    0          73s     192.168.120.19    192.168.120.19      <none>             <none>
+kube-system-kube-router-old-7f2qo    1/1      Running    0          73s     192.168.120.20    192.168.120.20      <none>             <none>
+kube-system-kube-router-old-9tz2p     1/1     Running    0          73s     192.168.120.21    192.168.120.21      <none>             <none>
+kube-system-kube-router-old-7f2qa    1/1      Running    0          73s     192.168.120.22    192.168.120.22      <none>             <none>
+kube-system-kube-router-old-9tz2s     1/1     Running    0          73s     192.168.120.23    192.168.120.23      <none>             <none>
+kube-system-kube-router-old-7f2qd    1/1      Running    0          73s     192.168.120.24    192.168.120.24      <none>             <none>
+kube-system-kube-router-old-9tz2f     1/1     Running    0          73s     192.168.120.25    192.168.120.25      <none>             <none>
+kube-system-kube-router-old-7f2qg    1/1      Running    0          73s     192.168.120.26    192.168.120.26      <none>             <none>
+kube-system-kube-router-old-9tz2h     1/1     Running    0          73s     192.168.110.50    192.168.110.50      <none>             <none>
+kube-system-kube-router-old-9tz2j     1/1     Running    0          73s     192.168.110.51    192.168.110.51      <none>             <none>
+kube-system-kube-router-old-9tz2k     1/1     Running    0          73s     192.168.110.52    192.168.110.52      <none>             <none>
+kube-system-kube-router-old-9tz2l     1/1     Running    0          73s     192.168.110.53    192.168.110.53      <none>             <none>
+kube-system-kube-router-old-9tz2z     1/1     Running    0          73s     192.168.110.54    192.168.110.54      <none>             <none>
+kube-system-kube-router-old-9tzxx     1/1     Running    0          73s     192.168.110.55    192.168.110.55      <none>             <none>
+kube-system-kube-router-old-9tz2c     1/1     Running    0          73s     192.168.110.56    192.168.110.56      <none>             <none>
+kube-system-kube-router-old-9tz2v     1/1     Running    0          73s     192.168.110.57    192.168.110.57      <none>             <none>
+kube-system-kube-router-old-9tz2n     1/1     Running    0          73s     192.168.110.58    192.168.110.58      <none>             <none>
+kube-system-kube-router-old-9tzkk     1/1     Running    0          73s     192.168.110.59    192.168.110.59      <none>             <none>
+kube-system-kube-router-old-9tzsd     1/1     Running    0          73s     192.168.110.60    192.168.110.60      <none>             <none>
 [root@k8s-master kube-router]#
 ```
 
@@ -152,102 +152,102 @@ View the content of the routing table on Router1:
 ```
 [Router1] show ip route
 Proto: Protocol        Pre: Preference
-Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
-------------------------------------------------------------------------------<br>
-Routing Table : _public_<br>
+Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route
+------------------------------------------------------------------------------
+Routing Table : _public_
 
-Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
+Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface
 ……<br>
-172.30.0.1/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-172.30.0.2/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-172.30.0.9/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-172.30.5.27/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-172.30.12.213/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-172.30.28.176/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-172.30.47.53/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-172.31.6.0/26  IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-172.31.6.64/26  IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-172.31.7.0/26  IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-172.31.7.192/26  IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-172.31.8.64/26  IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-172.31.9.64/26  IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-172.31.9.128/26  IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-……<br>
-255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
+172.30.0.1/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+172.30.0.2/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+172.30.0.9/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+172.30.5.27/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+172.30.12.213/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+172.30.28.176/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+172.30.47.53/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 
+172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 
+172.31.6.0/26  IBGP    255  0             RD  192.168.110.53  Vlanif110 
+172.31.6.64/26  IBGP    255  0             RD  192.168.110.54  Vlanif110 
+172.31.7.0/26  IBGP    255  0             RD  192.168.110.55  Vlanif110 
+172.31.7.192/26  IBGP    255  0             RD  192.168.110.56  Vlanif110 
+172.31.8.64/26  IBGP    255  0             RD  192.168.110.57  Vlanif110 
+172.31.9.64/26  IBGP    255  0             RD  192.168.110.58  Vlanif110 
+172.31.9.128/26  IBGP    255  0             RD  192.168.110.59  Vlanif110 
+172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 
+……
+255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 
 [Router1]
 ```
 
@@ -262,151 +262,151 @@ View the content of the routing table on Router2:
 
 ```
 [Router2] show ip route
-Proto: Protocol        Pre: Preference<br>
-Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
-------------------------------------------------------------------------------<br>
-Routing Table : _public_<br>
+Proto: Protocol        Pre: Preference
+Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route
+------------------------------------------------------------------------------
+Routing Table : _public_
 
-Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
+Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface
 ……<br>
-172.30.0.1/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-172.30.0.2/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-172.30.0.9/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-172.30.5.27/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-172.30.12.213/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-172.30.28.176/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-172.30.47.53/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-172.31.4.192/26  IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-172.31.5.64/26  IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-172.31.6.128/26  IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-172.31.6.192/26  IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-172.31.7.64/26  IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-172.31.7.128/26  IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-172.31.9.0/26  IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-172.31.10.0/26  IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-172.31.10.64/26  IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-172.31.11.0/26  IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-172.31.11.192/26  IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-172.31.12.64/26  IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-172.31.13.128/26  IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
+172.30.0.1/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+172.30.0.2/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+172.30.0.9/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+172.30.5.27/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+172.30.12.213/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+172.30.28.176/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+172.30.47.53/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 
+172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 
+172.31.4.192/26  IBGP    255  0             RD  192.168.120.13  Vlanif120 
+172.31.5.64/26  IBGP    255  0             RD  192.168.120.14  Vlanif120 
+172.31.6.128/26  IBGP    255  0             RD  192.168.120.15  Vlanif120 
+172.31.6.192/26  IBGP    255  0             RD  192.168.120.16  Vlanif120 
+172.31.7.64/26  IBGP    255  0             RD  192.168.120.17  Vlanif120 
+172.31.7.128/26  IBGP    255  0             RD  192.168.120.18  Vlanif120 
+172.31.9.0/26  IBGP    255  0             RD  192.168.120.19  Vlanif120 
+172.31.10.0/26  IBGP    255  0             RD  192.168.120.20  Vlanif120 
+172.31.10.64/26  IBGP    255  0             RD  192.168.120.21  Vlanif120 
+172.31.11.0/26  IBGP    255  0             RD  192.168.120.22  Vlanif120 
+172.31.11.192/26  IBGP    255  0             RD  192.168.120.23  Vlanif120 
+172.31.12.64/26  IBGP    255  0             RD  192.168.120.24  Vlanif120 
+172.31.13.128/26  IBGP    255  0             RD  192.168.120.25  Vlanif120 
+172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 
 ……
-255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
+255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 
 [Router2]
 ```
 
@@ -473,42 +473,42 @@ Using the "kubectl get pod" command, you can see that the white font part is the
 
 ```
 [root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system         
-NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES<br>
-kube-system-kube-router-old-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none><br>
-kube-system-kube-router-old-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none><br>
-kube-system-kube-router-old-7f2qq    1/1      Running    0          73s     192.168.120.12    192.168.120.12      <none>             <none><br>
-kube-system-kube-router-old-9tz2w     1/1     Running    0          73s     192.168.120.13    192.168.120.13      <none>             <none><br>
-kube-system-kube-router-old-7f2qe    1/1      Running    0          73s     192.168.120.14    192.168.120.14      <none>             <none><br>
-kube-system-kube-router-old-9tz2r     1/1     Running    0          73s     192.168.120.15    192.168.120.15      <none>             <none><br>
-kube-system-kube-router-old-7f2qt    1/1      Running    0          73s     192.168.120.16    192.168.120.16      <none>             <none><br>
-kube-system-kube-router-old-9tz2y     1/1     Running    0          73s     192.168.120.17    192.168.120.17      <none>             <none><br>
-kube-system-kube-router-old-7f2qu    1/1      Running    0          73s     192.168.120.18    192.168.120.18      <none>             <none><br>
-kube-system-kube-router-old-9tz2i     1/1     Running    0          73s     192.168.120.19    192.168.120.19      <none>             <none><br>
-kube-system-kube-router-old-7f2qo    1/1      Running    0          73s     192.168.120.20    192.168.120.20      <none>             <none><br>
-kube-system-kube-router-old-9tz2p     1/1     Running    0          73s     192.168.120.21    192.168.120.21      <none>             <none><br>
-kube-system-kube-router-old-7f2qa    1/1      Running    0          73s     192.168.120.22    192.168.120.22      <none>             <none><br>
-kube-system-kube-router-old-9tz2s     1/1     Running    0          73s     192.168.120.23    192.168.120.23      <none>             <none><br>
-kube-system-kube-router-old-7f2qd    1/1      Running    0          73s     192.168.120.24    192.168.120.24      <none>             <none><br>
-kube-system-kube-router-old-9tz2f     1/1     Running    0          73s     192.168.120.25    192.168.120.25      <none>             <none><br>
-kube-system-kube-router-old-7f2qg    1/1      Running    0          73s     192.168.120.26    192.168.120.26      <none>             <none><br>
-kube-system-kube-router-old-9tz2h     1/1     Running    0          73s     192.168.110.50    192.168.110.50      <none>             <none><br>
-kube-system-kube-router-old-9tz2j     1/1     Running    0          73s     192.168.110.51    192.168.110.51      <none>             <none><br>
-kube-system-kube-router-old-9tz2k     1/1     Running    0          73s     192.168.110.52    192.168.110.52      <none>             <none><br>
-kube-system-kube-router-old-9tz2l     1/1     Running    0          73s     192.168.110.53    192.168.110.53      <none>             <none><br>
-kube-system-kube-router-old-9tz2z     1/1     Running    0          73s     192.168.110.54    192.168.110.54      <none>             <none><br>
-kube-system-kube-router-old-9tzxx     1/1     Running    0          73s     192.168.110.55    192.168.110.55      <none>             <none><br>
-kube-system-kube-router-old-9tz2c     1/1     Running    0          73s     192.168.110.56    192.168.110.56      <none>             <none><br>
-kube-system-kube-router-old-9tz2v     1/1     Running    0          73s     192.168.110.57    192.168.110.57      <none>             <none><br>
-kube-system-kube-router-old-9tz2n     1/1     Running    0          73s     192.168.110.58    192.168.110.58      <none>             <none><br>
-kube-system-kube-router-old-9tzkk     1/1     Running    0          73s     192.168.110.59    192.168.110.59      <none>             <none><br>
-kube-system-kube-router-old-9tzsd     1/1     Running    0          73s     192.168.110.60    192.168.110.60      <none>             <none><br>
+NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES
+kube-system-kube-router-old-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none>
+kube-system-kube-router-old-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none>
+kube-system-kube-router-old-7f2qq    1/1      Running    0          73s     192.168.120.12    192.168.120.12      <none>             <none>
+kube-system-kube-router-old-9tz2w     1/1     Running    0          73s     192.168.120.13    192.168.120.13      <none>             <none>
+kube-system-kube-router-old-7f2qe    1/1      Running    0          73s     192.168.120.14    192.168.120.14      <none>             <none>
+kube-system-kube-router-old-9tz2r     1/1     Running    0          73s     192.168.120.15    192.168.120.15      <none>             <none>
+kube-system-kube-router-old-7f2qt    1/1      Running    0          73s     192.168.120.16    192.168.120.16      <none>             <none>
+kube-system-kube-router-old-9tz2y     1/1     Running    0          73s     192.168.120.17    192.168.120.17      <none>             <none>
+kube-system-kube-router-old-7f2qu    1/1      Running    0          73s     192.168.120.18    192.168.120.18      <none>             <none>
+kube-system-kube-router-old-9tz2i     1/1     Running    0          73s     192.168.120.19    192.168.120.19      <none>             <none>
+kube-system-kube-router-old-7f2qo    1/1      Running    0          73s     192.168.120.20    192.168.120.20      <none>             <none>
+kube-system-kube-router-old-9tz2p     1/1     Running    0          73s     192.168.120.21    192.168.120.21      <none>             <none>
+kube-system-kube-router-old-7f2qa    1/1      Running    0          73s     192.168.120.22    192.168.120.22      <none>             <none>
+kube-system-kube-router-old-9tz2s     1/1     Running    0          73s     192.168.120.23    192.168.120.23      <none>             <none>
+kube-system-kube-router-old-7f2qd    1/1      Running    0          73s     192.168.120.24    192.168.120.24      <none>             <none>
+kube-system-kube-router-old-9tz2f     1/1     Running    0          73s     192.168.120.25    192.168.120.25      <none>             <none>
+kube-system-kube-router-old-7f2qg    1/1      Running    0          73s     192.168.120.26    192.168.120.26      <none>             <none>
+kube-system-kube-router-old-9tz2h     1/1     Running    0          73s     192.168.110.50    192.168.110.50      <none>             <none>
+kube-system-kube-router-old-9tz2j     1/1     Running    0          73s     192.168.110.51    192.168.110.51      <none>             <none>
+kube-system-kube-router-old-9tz2k     1/1     Running    0          73s     192.168.110.52    192.168.110.52      <none>             <none>
+kube-system-kube-router-old-9tz2l     1/1     Running    0          73s     192.168.110.53    192.168.110.53      <none>             <none>
+kube-system-kube-router-old-9tz2z     1/1     Running    0          73s     192.168.110.54    192.168.110.54      <none>             <none>
+kube-system-kube-router-old-9tzxx     1/1     Running    0          73s     192.168.110.55    192.168.110.55      <none>             <none>
+kube-system-kube-router-old-9tz2c     1/1     Running    0          73s     192.168.110.56    192.168.110.56      <none>             <none>
+kube-system-kube-router-old-9tz2v     1/1     Running    0          73s     192.168.110.57    192.168.110.57      <none>             <none>
+kube-system-kube-router-old-9tz2n     1/1     Running    0          73s     192.168.110.58    192.168.110.58      <none>             <none>
+kube-system-kube-router-old-9tzkk     1/1     Running    0          73s     192.168.110.59    192.168.110.59      <none>             <none>
+kube-system-kube-router-old-9tzsd     1/1     Running    0          73s     192.168.110.60    192.168.110.60      <none>             <none>
 
-kube-system-kube-router-old-qf2q1    1/1      Running    0          73s     192.168.120.81    192.168.120.81      <none>             <none><br>
-kube-system-kube-router-old-wtz22     1/1     Running    0          73s     192.168.120.82    192.168.120.82      <none>             <none><br>
-kube-system-kube-router-old-ef2qe    1/1      Running    0          73s     192.168.120.83    192.168.120.83      <none>             <none><br>
-kube-system-kube-router-old-rtz2g     1/1     Running    0          73s     192.168.110.81    192.168.110.81      <none>             <none><br>
-kube-system-kube-router-old-ttz2p     1/1     Running    0          73s     192.168.110.82    192.168.110.82      <none>             <none><br>
-kube-system-kube-router-old-ytz2o     1/1     Running    0          73s     192.168.110.83    192.168.110.83      <none>             <none><br>
+kube-system-kube-router-old-qf2q1    1/1      Running    0          73s     192.168.120.81    192.168.120.81      <none>             <none>
+kube-system-kube-router-old-wtz22     1/1     Running    0          73s     192.168.120.82    192.168.120.82      <none>             <none>
+kube-system-kube-router-old-ef2qe    1/1      Running    0          73s     192.168.120.83    192.168.120.83      <none>             <none>
+kube-system-kube-router-old-rtz2g     1/1     Running    0          73s     192.168.110.81    192.168.110.81      <none>             <none>
+kube-system-kube-router-old-ttz2p     1/1     Running    0          73s     192.168.110.82    192.168.110.82      <none>             <none>
+kube-system-kube-router-old-ytz2o     1/1     Running    0          73s     192.168.110.83    192.168.110.83      <none>             <none>
 
 [root@k8s-master kube-router]#
 ```
@@ -519,141 +519,141 @@ Look at Router 1's routing table again:
 
 ```
 [Router1] show ip route 
-Proto: Protocol        Pre: Preference<br>
-Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
-------------------------------------------------------------------------------<br>
-Routing Table : _public_<br>
+Proto: Protocol        Pre: Preference
+Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route
+------------------------------------------------------------------------------
+Routing Table : _public_
 
-Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
-……<br>
-172.30.0.1/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
+Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface
+……
+172.30.0.1/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
 
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.30.0.2/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
+172.30.0.2/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
 
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.30.0.9/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
+172.30.0.9/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
 
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.30.5.27/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
+172.30.5.27/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
 
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.30.12.213/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
+172.30.12.213/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
 
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.30.28.176/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
+172.30.28.176/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
 
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.30.47.53/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
+172.30.47.53/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
 
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-172.31.6.0/26  IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-172.31.6.64/26  IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-172.31.7.0/26  IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-172.31.7.192/26  IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-172.31.8.64/26  IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-172.31.9.64/26  IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-172.31.9.128/26  IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-72.31.17.64/26  IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-172.31.17.128/26  IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-……<br>
-255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
+172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 
+172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 
+172.31.6.0/26  IBGP    255  0             RD  192.168.110.53  Vlanif110 
+172.31.6.64/26  IBGP    255  0             RD  192.168.110.54  Vlanif110 
+172.31.7.0/26  IBGP    255  0             RD  192.168.110.55  Vlanif110 
+172.31.7.192/26  IBGP    255  0             RD  192.168.110.56  Vlanif110 
+172.31.8.64/26  IBGP    255  0             RD  192.168.110.57  Vlanif110 
+172.31.9.64/26  IBGP    255  0             RD  192.168.110.58  Vlanif110 
+172.31.9.128/26  IBGP    255  0             RD  192.168.110.59  Vlanif110 
+172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 
+72.31.17.64/26  IBGP    255  0             RD  192.168.110.81  Vlanif110 
+172.31.17.128/26  IBGP    255  0             RD  192.168.110.82  Vlanif110 
+172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 
+……
+255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 
 [Router1] 
 ```
 
@@ -670,186 +670,186 @@ Look at Router2's routing table again:
 
 ```
 [Router2] show ip route
-Proto: Protocol        Pre: Preference<br>
-Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
-------------------------------------------------------------------------------<br>
-Routing Table : _public_<br>
+Proto: Protocol        Pre: Preference
+Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route
+------------------------------------------------------------------------------
+Routing Table : _public_
 
-Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
-……<br>
-172.30.0.1/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
+Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface
+……
+172.30.0.1/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
 
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
 
-172.30.0.2/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
+172.30.0.2/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
 
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
 
-172.30.0.9/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
+172.30.0.9/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
 
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
 
-172.30.5.27/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
+172.30.5.27/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
 
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
 
-172.30.12.213/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
+172.30.12.213/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
 
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
 
-172.30.28.176/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
+172.30.28.176/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
 
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
 
-172.30.47.53/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
+172.30.47.53/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
 
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
 
-172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-172.31.4.192/26  IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-172.31.5.64/26  IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-172.31.6.128/26  IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-172.31.6.192/26  IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-172.31.7.64/26  IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-172.31.7.128/26  IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-172.31.9.0/26  IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-172.31.10.0/26  IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-172.31.10.64/26  IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-172.31.11.0/26  IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-172.31.11.192/26  IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-172.31.12.64/26  IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-172.31.13.128/26  IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-……<br>
-255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
+172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 
+172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 
+172.31.4.192/26  IBGP    255  0             RD  192.168.120.13  Vlanif120 
+172.31.5.64/26  IBGP    255  0             RD  192.168.120.14  Vlanif120 
+172.31.6.128/26  IBGP    255  0             RD  192.168.120.15  Vlanif120 
+172.31.6.192/26  IBGP    255  0             RD  192.168.120.16  Vlanif120 
+172.31.7.64/26  IBGP    255  0             RD  192.168.120.17  Vlanif120 
+172.31.7.128/26  IBGP    255  0             RD  192.168.120.18  Vlanif120 
+172.31.9.0/26  IBGP    255  0             RD  192.168.120.19  Vlanif120 
+172.31.10.0/26  IBGP    255  0             RD  192.168.120.20  Vlanif120 
+172.31.10.64/26  IBGP    255  0             RD  192.168.120.21  Vlanif120 
+172.31.11.0/26  IBGP    255  0             RD  192.168.120.22  Vlanif120 
+172.31.11.192/26  IBGP    255  0             RD  192.168.120.23  Vlanif120 
+172.31.12.64/26  IBGP    255  0             RD  192.168.120.24  Vlanif120 
+172.31.13.128/26  IBGP    255  0             RD  192.168.120.25  Vlanif120 
+172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 
+……
+255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 
 [Router2] 
 ```
 
@@ -879,18 +879,18 @@ Using "kubectl get service", you can see that the white font part is the newly a
 
 ```
 [root@k8s-master ~]# kubectl get service --all-namespaces
-NAMESPACE     NAME                                TYPE         CLUSTER-IP        EXTERNAL-IP   PORT(S)                   AGE<br>
-ci            jenkins                            ClusterIP     172.30.2.11        <none>        80/TCP,50000/TCP         34d<br>
-db            data-comp                          ClusterIP     172.30.5.27        <none>        80/TCP                   43d<br>
-db            redis                              ClusterIP     172.30.47.53       <none>        6379/TCP                 145d<br>
-coredns       corednsdev                         ClusterIP     172.30.0.2         <none>        53/UDP,53/TCP,9153/TCP   93d<br>
-default       guestbook-ui                       ClusterIP     172.30.12.213      <none>        80/TCP                   145d<br>
-default       kubernetes                         ClusterIP     172.30.0.1         <none>        443/TCP                  145d<br>
-default       nginx01                            ClusterIP     172.30.28.176      <none>        80/TCP                   143d<br>
+NAMESPACE     NAME                                TYPE         CLUSTER-IP        EXTERNAL-IP   PORT(S)                   AGE
+ci            jenkins                            ClusterIP     172.30.2.11        <none>        80/TCP,50000/TCP         34d
+db            data-comp                          ClusterIP     172.30.5.27        <none>        80/TCP                   43d
+db            redis                              ClusterIP     172.30.47.53       <none>        6379/TCP                 145d
+coredns       corednsdev                         ClusterIP     172.30.0.2         <none>        53/UDP,53/TCP,9153/TCP   93d
+default       guestbook-ui                       ClusterIP     172.30.12.213      <none>        80/TCP                   145d
+default       kubernetes                         ClusterIP     172.30.0.1         <none>        443/TCP                  145d
+default       nginx01                            ClusterIP     172.30.28.176      <none>        80/TCP                   143d
 
-default       test-1                             ClusterIP     172.30.99.97       <none>        80/TCP                   1h<br>
-default       test-2                             ClusterIP     172.30.99.98       <none>        80/TCP                   1h<br>
-default       test-3                             ClusterIP     172.30.99.99       <none>        80/TCP                   1h<br>
+default       test-1                             ClusterIP     172.30.99.97       <none>        80/TCP                   1h
+default       test-2                             ClusterIP     172.30.99.98       <none>        80/TCP                   1h
+default       test-3                             ClusterIP     172.30.99.99       <none>        80/TCP                   1h
 
  [root@k8s-master ~]#
 ```
@@ -904,171 +904,171 @@ Next,Look at Router1's routing table again:
 
 ```
 [Router1] show ip route 
-Proto: Protocol        Pre: Preference<br>
-Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
-------------------------------------------------------------------------------<br>
-Routing Table : _public_<br>
+Proto: Protocol        Pre: Preference
+Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route
+------------------------------------------------------------------------------
+Routing Table : _public_
 
-Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
-……<br>
-172.30.0.1/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-172.30.0.2/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-172.30.0.9/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-172.30.5.27/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-172.30.12.213/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-172.30.28.176/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-172.30.47.53/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface
+……
+172.30.0.1/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
+172.30.0.2/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
+172.30.0.9/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
+172.30.5.27/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
+172.30.12.213/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
+172.30.28.176/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
+172.30.47.53/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.30.99.97/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-172.30.99.98/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-172.30.99.99/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+172.30.99.97/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
+172.30.99.98/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
+172.30.99.99/32  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 
-172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-172.31.6.0/26  IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-172.31.6.64/26  IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-172.31.7.0/26  IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-172.31.7.192/26  IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-172.31.8.64/26  IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-172.31.9.64/26  IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-172.31.9.128/26  IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-72.31.17.64/26  IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-172.31.17.128/26  IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-……<br>
-255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
+172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 
+172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 
+172.31.6.0/26  IBGP    255  0             RD  192.168.110.53  Vlanif110 
+172.31.6.64/26  IBGP    255  0             RD  192.168.110.54  Vlanif110 
+172.31.7.0/26  IBGP    255  0             RD  192.168.110.55  Vlanif110 
+172.31.7.192/26  IBGP    255  0             RD  192.168.110.56  Vlanif110 
+172.31.8.64/26  IBGP    255  0             RD  192.168.110.57  Vlanif110 
+172.31.9.64/26  IBGP    255  0             RD  192.168.110.58  Vlanif110 
+172.31.9.128/26  IBGP    255  0             RD  192.168.110.59  Vlanif110 
+172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 
+72.31.17.64/26  IBGP    255  0             RD  192.168.110.81  Vlanif110 
+172.31.17.128/26  IBGP    255  0             RD  192.168.110.82  Vlanif110 
+172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 
+……
+255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 
 [Router1] 
 ```
 
@@ -1085,234 +1085,234 @@ Next,Look at Router2's routing table again:
 
 ```
 [Router2] show ip route 
-Proto: Protocol        Pre: Preference<br>
-Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
-------------------------------------------------------------------------------<br>
-Routing Table : _public_<br>
+Proto: Protocol        Pre: Preference
+Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route
+------------------------------------------------------------------------------
+Routing Table : _public_
 
-Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
+Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface
+……
+172.30.0.1/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+172.30.0.2/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+172.30.0.9/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+172.30.5.27/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+172.30.12.213/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+172.30.28.176/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+172.30.47.53/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+
+172.30.99.97/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+172.30.99.98/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+172.30.99.99/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+
+172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 
+172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 
+172.31.4.192/26  IBGP    255  0             RD  192.168.120.13  Vlanif120 
+172.31.5.64/26  IBGP    255  0             RD  192.168.120.14  Vlanif120 
+172.31.6.128/26  IBGP    255  0             RD  192.168.120.15  Vlanif120 
+172.31.6.192/26  IBGP    255  0             RD  192.168.120.16  Vlanif120 
+172.31.7.64/26  IBGP    255  0             RD  192.168.120.17  Vlanif120 
+172.31.7.128/26  IBGP    255  0             RD  192.168.120.18  Vlanif120 
+172.31.9.0/26  IBGP    255  0             RD  192.168.120.19  Vlanif120 
+172.31.10.0/26  IBGP    255  0             RD  192.168.120.20  Vlanif120 
+172.31.10.64/26  IBGP    255  0             RD  192.168.120.21  Vlanif120 
+172.31.11.0/26  IBGP    255  0             RD  192.168.120.22  Vlanif120 
+172.31.11.192/26  IBGP    255  0             RD  192.168.120.23  Vlanif120 
+172.31.12.64/26  IBGP    255  0             RD  192.168.120.24  Vlanif120 
+172.31.13.128/26  IBGP    255  0             RD  192.168.120.25  Vlanif120 
+172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 
 ……<br>
-172.30.0.1/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-172.30.0.2/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-172.30.0.9/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-172.30.5.27/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-172.30.12.213/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-172.30.28.176/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-172.30.47.53/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-
-172.30.99.97/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-172.30.99.98/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-172.30.99.99/32  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-
-172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-172.31.4.192/26  IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-172.31.5.64/26  IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-172.31.6.128/26  IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-172.31.6.192/26  IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-172.31.7.64/26  IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-172.31.7.128/26  IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-172.31.9.0/26  IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-172.31.10.0/26  IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-172.31.10.64/26  IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-172.31.11.0/26  IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-172.31.11.192/26  IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-172.31.12.64/26  IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-172.31.13.128/26  IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-……<br>
-255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
+255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 
 [Router2] 
 ```
 
@@ -1408,41 +1408,41 @@ Use "kubectl get pod" to see that kube-router pod is working properly:
 
 ```
 [root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system          
-NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES<br>
-kube-system-kube-router-new-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none><br>
-kube-system-kube-router-new-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none><br>
-kube-system-kube-router-new-7f2qq    1/1      Running    0          73s     192.168.120.12    192.168.120.12      <none>             <none><br>
-kube-system-kube-router-new-9tz2w     1/1     Running    0          73s     192.168.120.13    192.168.120.13      <none>             <none><br>
-kube-system-kube-router-new-7f2qe    1/1      Running    0          73s     192.168.120.14    192.168.120.14      <none>             <none><br>
-kube-system-kube-router-new-9tz2r     1/1     Running    0          73s     192.168.120.15    192.168.120.15      <none>             <none><br>
-kube-system-kube-router-new-7f2qt    1/1      Running    0          73s     192.168.120.16    192.168.120.16      <none>             <none><br>
-kube-system-kube-router-new-9tz2y     1/1     Running    0          73s     192.168.120.17    192.168.120.17      <none>             <none><br>
-kube-system-kube-router-new-7f2qu    1/1      Running    0          73s     192.168.120.18    192.168.120.18      <none>             <none><br>
-kube-system-kube-router-new-9tz2i     1/1     Running    0          73s     192.168.120.19    192.168.120.19      <none>             <none><br>
-kube-system-kube-router-new-7f2qo    1/1      Running    0          73s     192.168.120.20    192.168.120.20      <none>             <none><br>
-kube-system-kube-router-new-9tz2p     1/1     Running    0          73s     192.168.120.21    192.168.120.21      <none>             <none><br>
-kube-system-kube-router-new-7f2qa    1/1      Running    0          73s     192.168.120.22    192.168.120.22      <none>             <none><br>
-kube-system-kube-router-new-9tz2s     1/1     Running    0          73s     192.168.120.23    192.168.120.23      <none>             <none><br>
-kube-system-kube-router-new-7f2qd    1/1      Running    0          73s     192.168.120.24    192.168.120.24      <none>             <none><br>
-kube-system-kube-router-new-9tz2f     1/1     Running    0          73s     192.168.120.25    192.168.120.25      <none>             <none><br>
-kube-system-kube-router-new-7f2qg    1/1      Running    0          73s     192.168.120.26    192.168.120.26      <none>             <none><br>
-kube-system-kube-router-new-qf2q1    1/1      Running    0          73s     192.168.120.81    192.168.120.81      <none>             <none><br>
-kube-system-kube-router-new-wtz22     1/1     Running    0          73s     192.168.120.82    192.168.120.82      <none>             <none><br>
-kube-system-kube-router-new-ef2qe    1/1      Running    0          73s     192.168.120.83    192.168.120.83      <none>             <none><br>
-kube-system-kube-router-new-9tz2h     1/1     Running    0          73s     192.168.110.50    192.168.110.50      <none>             <none><br>
-kube-system-kube-router-new-9tz2j     1/1     Running    0          73s     192.168.110.51    192.168.110.51      <none>             <none><br>
-kube-system-kube-router-new-9tz2k     1/1     Running    0          73s     192.168.110.52    192.168.110.52      <none>             <none><br>
-kube-system-kube-router-new-9tz2l     1/1     Running    0          73s     192.168.110.53    192.168.110.53      <none>             <none><br>
-kube-system-kube-router-new-9tz2z     1/1     Running    0          73s     192.168.110.54    192.168.110.54      <none>             <none><br>
-kube-system-kube-router-new-9tzxx     1/1     Running    0          73s     192.168.110.55    192.168.110.55      <none>             <none><br>
-kube-system-kube-router-new-9tz2c     1/1     Running    0          73s     192.168.110.56    192.168.110.56      <none>             <none><br>
-kube-system-kube-router-new-9tz2v     1/1     Running    0          73s     192.168.110.57    192.168.110.57      <none>             <none><br>
-kube-system-kube-router-new-9tz2n     1/1     Running    0          73s     192.168.110.58    192.168.110.58      <none>             <none><br>
-kube-system-kube-router-new-9tzkk     1/1     Running    0          73s     192.168.110.59    192.168.110.59      <none>             <none><br>
-kube-system-kube-router-new-9tzsd     1/1     Running    0          73s     192.168.110.60    192.168.110.60      <none>             <none><br>
-kube-system-kube-router-new-rtz2g     1/1     Running    0          73s     192.168.110.81    192.168.110.81      <none>             <none><br>
-kube-system-kube-router-new-ttz2p     1/1     Running    0          73s     192.168.110.82    192.168.110.82      <none>             <none><br>
-kube-system-kube-router-new-ytz2o     1/1     Running    0          73s     192.168.110.83    192.168.110.83      <none>             <none><br>
+NAME                                          READY   STATUS    RESTARTS   AGE    IP               NODE             NOMINATED NODE   READINESS GATES
+kube-system-kube-router-new-7f2qm    1/1      Running    0          73s     192.168.120.10    192.168.120.10      <none>             <none>
+kube-system-kube-router-new-9tz2b     1/1     Running    0          73s     192.168.120.11    192.168.120.11      <none>             <none>
+kube-system-kube-router-new-7f2qq    1/1      Running    0          73s     192.168.120.12    192.168.120.12      <none>             <none>
+kube-system-kube-router-new-9tz2w     1/1     Running    0          73s     192.168.120.13    192.168.120.13      <none>             <none>
+kube-system-kube-router-new-7f2qe    1/1      Running    0          73s     192.168.120.14    192.168.120.14      <none>             <none>
+kube-system-kube-router-new-9tz2r     1/1     Running    0          73s     192.168.120.15    192.168.120.15      <none>             <none>
+kube-system-kube-router-new-7f2qt    1/1      Running    0          73s     192.168.120.16    192.168.120.16      <none>             <none>
+kube-system-kube-router-new-9tz2y     1/1     Running    0          73s     192.168.120.17    192.168.120.17      <none>             <none>
+kube-system-kube-router-new-7f2qu    1/1      Running    0          73s     192.168.120.18    192.168.120.18      <none>             <none>
+kube-system-kube-router-new-9tz2i     1/1     Running    0          73s     192.168.120.19    192.168.120.19      <none>             <none>
+kube-system-kube-router-new-7f2qo    1/1      Running    0          73s     192.168.120.20    192.168.120.20      <none>             <none>
+kube-system-kube-router-new-9tz2p     1/1     Running    0          73s     192.168.120.21    192.168.120.21      <none>             <none>
+kube-system-kube-router-new-7f2qa    1/1      Running    0          73s     192.168.120.22    192.168.120.22      <none>             <none>
+kube-system-kube-router-new-9tz2s     1/1     Running    0          73s     192.168.120.23    192.168.120.23      <none>             <none>
+kube-system-kube-router-new-7f2qd    1/1      Running    0          73s     192.168.120.24    192.168.120.24      <none>             <none>
+kube-system-kube-router-new-9tz2f     1/1     Running    0          73s     192.168.120.25    192.168.120.25      <none>             <none>
+kube-system-kube-router-new-7f2qg    1/1      Running    0          73s     192.168.120.26    192.168.120.26      <none>             <none>
+kube-system-kube-router-new-qf2q1    1/1      Running    0          73s     192.168.120.81    192.168.120.81      <none>             <none>
+kube-system-kube-router-new-wtz22     1/1     Running    0          73s     192.168.120.82    192.168.120.82      <none>             <none>
+kube-system-kube-router-new-ef2qe    1/1      Running    0          73s     192.168.120.83    192.168.120.83      <none>             <none>
+kube-system-kube-router-new-9tz2h     1/1     Running    0          73s     192.168.110.50    192.168.110.50      <none>             <none>
+kube-system-kube-router-new-9tz2j     1/1     Running    0          73s     192.168.110.51    192.168.110.51      <none>             <none>
+kube-system-kube-router-new-9tz2k     1/1     Running    0          73s     192.168.110.52    192.168.110.52      <none>             <none>
+kube-system-kube-router-new-9tz2l     1/1     Running    0          73s     192.168.110.53    192.168.110.53      <none>             <none>
+kube-system-kube-router-new-9tz2z     1/1     Running    0          73s     192.168.110.54    192.168.110.54      <none>             <none>
+kube-system-kube-router-new-9tzxx     1/1     Running    0          73s     192.168.110.55    192.168.110.55      <none>             <none>
+kube-system-kube-router-new-9tz2c     1/1     Running    0          73s     192.168.110.56    192.168.110.56      <none>             <none>
+kube-system-kube-router-new-9tz2v     1/1     Running    0          73s     192.168.110.57    192.168.110.57      <none>             <none>
+kube-system-kube-router-new-9tz2n     1/1     Running    0          73s     192.168.110.58    192.168.110.58      <none>             <none>
+kube-system-kube-router-new-9tzkk     1/1     Running    0          73s     192.168.110.59    192.168.110.59      <none>             <none>
+kube-system-kube-router-new-9tzsd     1/1     Running    0          73s     192.168.110.60    192.168.110.60      <none>             <none>
+kube-system-kube-router-new-rtz2g     1/1     Running    0          73s     192.168.110.81    192.168.110.81      <none>             <none>
+kube-system-kube-router-new-ttz2p     1/1     Running    0          73s     192.168.110.82    192.168.110.82      <none>             <none>
+kube-system-kube-router-new-ytz2o     1/1     Running    0          73s     192.168.110.83    192.168.110.83      <none>             <none>
 [root@k8s-master kube-router]#
 ```
 
@@ -1457,45 +1457,45 @@ Look at Router1's routing table again:
 
 ```
 [Router1] show ip route
-Proto: Protocol        Pre: Preference<br>
-Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
-------------------------------------------------------------------------------<br>
-Routing Table : _public_<br>
+Proto: Protocol        Pre: Preference
+Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route
+------------------------------------------------------------------------------
+Routing Table : _public_
 
-Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
+Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface
 ……<br>
 
-172.30.0.0/16  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-                                IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
+172.30.0.0/16  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.51  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.52  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.53  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.54  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.55  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.56  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.57  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.58  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.59  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.60  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.81  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.82  Vlanif110 
+                                IBGP    255  0             RD  192.168.110.83  Vlanif110 
 </font><font color=#F0E68C>
-172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 <br>
-172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 <br>
-172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 <br>
-172.31.6.0/26  IBGP    255  0             RD  192.168.110.53  Vlanif110 <br>
-172.31.6.64/26  IBGP    255  0             RD  192.168.110.54  Vlanif110 <br>
-172.31.7.0/26  IBGP    255  0             RD  192.168.110.55  Vlanif110 <br>
-172.31.7.192/26  IBGP    255  0             RD  192.168.110.56  Vlanif110 <br>
-172.31.8.64/26  IBGP    255  0             RD  192.168.110.57  Vlanif110 <br>
-172.31.9.64/26  IBGP    255  0             RD  192.168.110.58  Vlanif110 <br>
-172.31.9.128/26  IBGP    255  0             RD  192.168.110.59  Vlanif110 <br>
-172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 <br>
-72.31.17.64/26  IBGP    255  0             RD  192.168.110.81  Vlanif110 <br>
-172.31.17.128/26  IBGP    255  0             RD  192.168.110.82  Vlanif110 <br>
-172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 <br>
-……<br>
-255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
+172.31.0.64/26  IBGP    255  0             RD  192.168.110.50  Vlanif110 
+172.31.3.128/26  IBGP    255  0             RD  192.168.110.51  Vlanif110 
+172.31.5.192/26  IBGP    255  0             RD  192.168.110.52  Vlanif110 
+172.31.6.0/26  IBGP    255  0             RD  192.168.110.53  Vlanif110 
+172.31.6.64/26  IBGP    255  0             RD  192.168.110.54  Vlanif110 
+172.31.7.0/26  IBGP    255  0             RD  192.168.110.55  Vlanif110 
+172.31.7.192/26  IBGP    255  0             RD  192.168.110.56  Vlanif110 
+172.31.8.64/26  IBGP    255  0             RD  192.168.110.57  Vlanif110 
+172.31.9.64/26  IBGP    255  0             RD  192.168.110.58  Vlanif110 
+172.31.9.128/26  IBGP    255  0             RD  192.168.110.59  Vlanif110 
+172.31.16.64/26  IBGP    255  0             RD  192.168.110.60  Vlanif110 
+72.31.17.64/26  IBGP    255  0             RD  192.168.110.81  Vlanif110 
+172.31.17.128/26  IBGP    255  0             RD  192.168.110.82  Vlanif110 
+172.31.17.64/26  IBGP    255  0             RD  192.168.110.83  Vlanif110 
+……
+255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 
 [Router1] 
 ```
 
@@ -1513,54 +1513,54 @@ Next,Look at Router2's routing table again:
 
 ```
 [Router2] show ip route
-Proto: Protocol        Pre: Preference<br>
-Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route<br>
-------------------------------------------------------------------------------<br>
-Routing Table : _public_<br>
+Proto: Protocol        Pre: Preference
+Route Flags: R - relay, D - download to fib, T - to vpn-instance, B - black hole route
+------------------------------------------------------------------------------
+Routing Table : _public_
 
-Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface<br>
+Destination/Mask    Proto   Pre  Cost        Flags NextHop         Interface
+……
+
+172.30.0.0/16  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.11  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.12  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.13  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.14  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.15  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.16  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.17  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.18  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.19  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.20  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.21  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.22  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.23  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.24  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.25  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.26  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.81  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.82  Vlanif120 
+                                IBGP    255  0             RD  192.168.120.83  Vlanif120 
+
+172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 
+172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 
+172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 
+172.31.4.192/26  IBGP    255  0             RD  192.168.120.13  Vlanif120 
+172.31.5.64/26  IBGP    255  0             RD  192.168.120.14  Vlanif120 
+172.31.6.128/26  IBGP    255  0             RD  192.168.120.15  Vlanif120 
+172.31.6.192/26  IBGP    255  0             RD  192.168.120.16  Vlanif120 
+172.31.7.64/26  IBGP    255  0             RD  192.168.120.17  Vlanif120 
+172.31.7.128/26  IBGP    255  0             RD  192.168.120.18  Vlanif120 
+172.31.9.0/26  IBGP    255  0             RD  192.168.120.19  Vlanif120 
+172.31.10.0/26  IBGP    255  0             RD  192.168.120.20  Vlanif120 
+172.31.10.64/26  IBGP    255  0             RD  192.168.120.21  Vlanif120 
+172.31.11.0/26  IBGP    255  0             RD  192.168.120.22  Vlanif120 
+172.31.11.192/26  IBGP    255  0             RD  192.168.120.23  Vlanif120 
+172.31.12.64/26  IBGP    255  0             RD  192.168.120.24  Vlanif120 
+172.31.13.128/26  IBGP    255  0             RD  192.168.120.25  Vlanif120 
+172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 
 ……<br>
-
-172.30.0.0/16  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.81  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.82  Vlanif120 <br>
-                                IBGP    255  0             RD  192.168.120.83  Vlanif120 <br>
-
-172.31.0.0/26  IBGP    255  0             RD  192.168.120.10  Vlanif120 <br>
-172.31.2.64/26  IBGP    255  0             RD  192.168.120.11  Vlanif120 <br>
-172.31.3.0/26  IBGP    255  0             RD  192.168.120.12  Vlanif120 <br>
-172.31.4.192/26  IBGP    255  0             RD  192.168.120.13  Vlanif120 <br>
-172.31.5.64/26  IBGP    255  0             RD  192.168.120.14  Vlanif120 <br>
-172.31.6.128/26  IBGP    255  0             RD  192.168.120.15  Vlanif120 <br>
-172.31.6.192/26  IBGP    255  0             RD  192.168.120.16  Vlanif120 <br>
-172.31.7.64/26  IBGP    255  0             RD  192.168.120.17  Vlanif120 <br>
-172.31.7.128/26  IBGP    255  0             RD  192.168.120.18  Vlanif120 <br>
-172.31.9.0/26  IBGP    255  0             RD  192.168.120.19  Vlanif120 <br>
-172.31.10.0/26  IBGP    255  0             RD  192.168.120.20  Vlanif120 <br>
-172.31.10.64/26  IBGP    255  0             RD  192.168.120.21  Vlanif120 <br>
-172.31.11.0/26  IBGP    255  0             RD  192.168.120.22  Vlanif120 <br>
-172.31.11.192/26  IBGP    255  0             RD  192.168.120.23  Vlanif120 <br>
-172.31.12.64/26  IBGP    255  0             RD  192.168.120.24  Vlanif120 <br>
-172.31.13.128/26  IBGP    255  0             RD  192.168.120.25  Vlanif120 <br>
-172.31.14.0/26  IBGP    255  0             RD  192.168.120.26  Vlanif120 <br>
-……<br>
-255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 <br>
+255.255.255.255/32  Direct  0    0             D   127.0.0.1       InLoopBack0 
 [Router2] 
 ```
 
