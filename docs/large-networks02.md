@@ -18,14 +18,14 @@ View on k8s-node-1:
 
 ```
 [k8s-node-1 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.14  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.15  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.12  64558 17:17:28 Establ      |        0         0
+192.168.120.13  64558 17:17:28 Establ      |        0         0
+192.168.120.14  64558 17:17:28 Establ      |        0         0
+192.168.130.15  64558 17:17:28 Establ      |        0         0
+192.168.130.16  64558 17:17:28 Establ      |        0         0
+192.168.140.17  64558 17:17:28 Establ      |        0         0
+192.168.140.18  64558 17:17:28 Establ      |        0         0
 [k8s-node-1 ~]#
 ```
 
@@ -33,14 +33,14 @@ View on k8s-node-2:
 
 ```
 [k8s-node-2 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.14  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.15  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.11  64558 17:17:28 Establ      |        0         0
+192.168.120.13  64558 17:17:28 Establ      |        0         0
+192.168.120.14  64558 17:17:28 Establ      |        0         0
+192.168.130.15  64558 17:17:28 Establ      |        0         0
+192.168.130.16  64558 17:17:28 Establ      |        0         0
+192.168.140.17  64558 17:17:28 Establ      |        0         0
+192.168.140.18  64558 17:17:28 Establ      |        0         0
 [k8s-node-2 ~]#
 ```
 
@@ -48,14 +48,14 @@ View on k8s-node-3:
 
 ```
 [k8s-node-3 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
-192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.14  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.15  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.11  64558 17:17:28 Establ      |        0         0
+192.168.110.12  64558 17:17:28 Establ      |        0         0
+192.168.120.14  64558 17:17:28 Establ      |        0         0
+192.168.130.15  64558 17:17:28 Establ      |        0         0
+192.168.130.16  64558 17:17:28 Establ      |        0         0
+192.168.140.17  64558 17:17:28 Establ      |        0         0
+192.168.140.18  64558 17:17:28 Establ      |        0         0
 [k8s-node-3 ~]#
 ```
 
@@ -63,14 +63,14 @@ View on k8s-node-4:
 
 ```
 [k8s-node-4 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
-192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.15  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.11  64558 17:17:28 Establ      |        0         0
+192.168.110.12  64558 17:17:28 Establ      |        0         0
+192.168.120.13  64558 17:17:28 Establ      |        0         0
+192.168.130.15  64558 17:17:28 Establ      |        0         0
+192.168.130.16  64558 17:17:28 Establ      |        0         0
+192.168.140.17  64558 17:17:28 Establ      |        0         0
+192.168.140.18  64558 17:17:28 Establ      |        0         0
 [k8s-node-4 ~]#
 ```
 
@@ -78,14 +78,14 @@ View on k8s-node-5:
 
 ```
 [k8s-node-5 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
-192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.14  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.11  64558 17:17:28 Establ      |        0         0
+192.168.110.12  64558 17:17:28 Establ      |        0         0
+192.168.120.13  64558 17:17:28 Establ      |        0         0
+192.168.120.14  64558 17:17:28 Establ      |        0         0
+192.168.130.16  64558 17:17:28 Establ      |        0         0
+192.168.140.17  64558 17:17:28 Establ      |        0         0
+192.168.140.18  64558 17:17:28 Establ      |        0         0
 [k8s-node-5 ~]#
 ```
 
@@ -93,14 +93,14 @@ View on k8s-node-6:
 
 ```
 [k8s-node-6 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
-192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.14  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.15  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.11  64558 17:17:28 Establ      |        0         0
+192.168.110.12  64558 17:17:28 Establ      |        0         0
+192.168.120.13  64558 17:17:28 Establ      |        0         0
+192.168.120.14  64558 17:17:28 Establ      |        0         0
+192.168.130.15  64558 17:17:28 Establ      |        0         0
+192.168.140.17  64558 17:17:28 Establ      |        0         0
+192.168.140.18  64558 17:17:28 Establ      |        0         0
 [k8s-node-6 ~]#
 ```
 
@@ -108,14 +108,14 @@ View on k8s-node-7:
 
 ```
 [k8s-node-7 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
-192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.14  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.15  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.18  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.11  64558 17:17:28 Establ      |        0         0
+192.168.110.12  64558 17:17:28 Establ      |        0         0
+192.168.120.13  64558 17:17:28 Establ      |        0         0
+192.168.120.14  64558 17:17:28 Establ      |        0         0
+192.168.130.15  64558 17:17:28 Establ      |        0         0
+192.168.130.16  64558 17:17:28 Establ      |        0         0
+192.168.140.18  64558 17:17:28 Establ      |        0         0
 [k8s-node-7 ~]#
 ```
 
@@ -123,14 +123,14 @@ View on k8s-node-8:
 
 ```
 [k8s-node-8 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.11  64558 17:17:28 Establ      |        0         0<br>
-192.168.110.12  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.13  64558 17:17:28 Establ      |        0         0<br>
-192.168.120.14  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.15  64558 17:17:28 Establ      |        0         0<br>
-192.168.130.16  64558 17:17:28 Establ      |        0         0<br>
-192.168.140.17  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.11  64558 17:17:28 Establ      |        0         0
+192.168.110.12  64558 17:17:28 Establ      |        0         0
+192.168.120.13  64558 17:17:28 Establ      |        0         0
+192.168.120.14  64558 17:17:28 Establ      |        0         0
+192.168.130.15  64558 17:17:28 Establ      |        0         0
+192.168.130.16  64558 17:17:28 Establ      |        0         0
+192.168.140.17  64558 17:17:28 Establ      |        0         0
  [k8s-node-8 ~]#
 ```
 
@@ -185,14 +185,14 @@ View on router1:
 
 ```
 <router1>show bgp peer
- BGP local router ID        : 192.168.110.1<br>
- Local AS number            : 64558<br>
- Total number of peers      : 2        <br>        
- Peers in established state : 2<br>
+ BGP local router ID        : 192.168.110.1
+ Local AS number            : 64558
+ Total number of peers      : 2        
+ Peers in established state : 2
 
-  Peer            V          AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv<br>
-  192.168.110.11  4       64558     2203     2524     0 17:57:52 Established        1<br>
-  192.168.110.12  4       64558     2203     2524     0 17:57:57 Established        1<br>
+  Peer            V          AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv
+  192.168.110.11  4       64558     2203     2524     0 17:57:52 Established        1
+  192.168.110.12  4       64558     2203     2524     0 17:57:57 Established        1
 <router1>
 ```
 
@@ -200,14 +200,14 @@ View on router2:
 
 ```
 <router2>show bgp peer
- BGP local router ID        : 192.168.120.1<br>
- Local AS number            : 64558<br>
- Total number of peers      : 2        <br>        
- Peers in established state : 2<br>
+ BGP local router ID        : 192.168.120.1
+ Local AS number            : 64558
+ Total number of peers      : 2       
+ Peers in established state : 2
 
-  Peer            V          AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv<br>
-  192.168.120.13  4       64558     2203     2524     0 17:57:52 Established        1<br>
-  192.168.120.14  4       64558     2203     2524     0 17:57:57 Established        1<br>
+  Peer            V          AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv
+  192.168.120.13  4       64558     2203     2524     0 17:57:52 Established        1
+  192.168.120.14  4       64558     2203     2524     0 17:57:57 Established        1
 <router2>
 ```
 
@@ -215,14 +215,14 @@ View on router3:
 
 ```
 <router3>show bgp peer
- BGP local router ID        : 192.168.130.1<br>
- Local AS number            : 64558<br>
- Total number of peers      : 2            <br>    
- Peers in established state : 2<br>
+ BGP local router ID        : 192.168.130.1
+ Local AS number            : 64558
+ Total number of peers      : 2   
+ Peers in established state : 2
 
-  Peer            V          AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv<br>
-  192.168.130.15  4       64558     2203     2524     0 17:57:52 Established        1<br>
-  192.168.130.16  4       64558     2203     2524     0 17:57:57 Established        1<br>
+  Peer            V          AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv
+  192.168.130.15  4       64558     2203     2524     0 17:57:52 Established        1
+  192.168.130.16  4       64558     2203     2524     0 17:57:57 Established        1
 <router3>
 ```
 
@@ -230,14 +230,14 @@ View on router4:
 
 ```
 <router4>show bgp peer
- BGP local router ID        : 192.168.140.1<br>
- Local AS number            : 64558<br>
- Total number of peers      : 2                <br>
- Peers in established state : 2<br>
+ BGP local router ID        : 192.168.140.1
+ Local AS number            : 64558
+ Total number of peers      : 2    
+ Peers in established state : 2
 
-  Peer            V          AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv<br>
-  192.168.140.17  4       64558     2203     2524     0 17:57:52 Established        1<br>
-  192.168.140.18  4       64558     2203     2524     0 17:57:57 Established        1<br>
+  Peer            V          AS  MsgRcvd  MsgSent  OutQ  Up/Down       State  PrefRcv
+  192.168.140.17  4       64558     2203     2524     0 17:57:52 Established        1
+  192.168.140.18  4       64558     2203     2524     0 17:57:57 Established        1
 <router1>
 ```
 
@@ -246,8 +246,8 @@ View on k8s-node-1:
 
 ```
 [k8s-node-1 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.1  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.1  64558 17:17:28 Establ      |        0         0
 [k8s-node-1 ~]#
 ```
 
@@ -255,8 +255,8 @@ View on k8s-node-2:
 
 ```
 [k8s-node-2 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.110.1  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.110.1  64558 17:17:28 Establ      |        0         0
 [k8s-node-2 ~]#
 ```
 
@@ -264,8 +264,8 @@ View on k8s-node-3:
 
 ```
 [k8s-node-3 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.120.1  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.120.1  64558 17:17:28 Establ      |        0         0
 [k8s-node-3~]#
 ```
 
@@ -273,8 +273,8 @@ View on k8s-node-4:
 
 ```
 [k8s-node-4 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.120.1  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.120.1  64558 17:17:28 Establ      |        0         0
 [k8s-node-4 ~]#
 ```
 
@@ -282,8 +282,8 @@ View on k8s-node-5:
 
 ```
 [k8s-node-5 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.130.1  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.130.1  64558 17:17:28 Establ      |        0         0
 [k8s-node-5 ~]#
 ```
 
@@ -291,8 +291,8 @@ View on k8s-node-6:
 
 ```
 [k8s-node-6 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.130.1  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.130.1  64558 17:17:28 Establ      |        0         0
 [k8s-node-6 ~]#
 ```
 
@@ -300,8 +300,8 @@ View on k8s-node-7:
 
 ```
 [k8s-node-7 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.140.1  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.140.1  64558 17:17:28 Establ      |        0         0
 [k8s-node-7 ~]#
 ```
 
@@ -309,8 +309,8 @@ View on k8s-node-8:
 
 ```
 [k8s-node-8 ~]# gobgp neighbor
-Peer             AS  Up/Down State       |#Received  Accepted<br>
-192.168.140.1  64558 17:17:28 Establ      |        0         0<br>
+Peer             AS  Up/Down State       |#Received  Accepted
+192.168.140.1  64558 17:17:28 Establ      |        0         0
 [k8s-node-8 ~]#
 ```
 
