@@ -1348,14 +1348,19 @@ Although in the actual production environment, because of the number of interfac
 
 <br>
 <br>
+<br>
 
-<font size="4">**3  Adjusting "advertise-service-cluster-ip-range" parameters to optimize network routing**</font><br>
+<font size="4">**3  Adjusting "advertise-service-cluster-ip-range" parameters to optimize network routing**</font>
 
-<font size="3">**3.1  How to set "advertise-service-cluster-ip-range" parameter correctly**</font><br>
+<br>
+
+<font size="3">**3.1  How to set "advertise-service-cluster-ip-range" parameter correctly**</font>
+
+<br>
 
 You need to set both "--advertise-cluster-IP=true" and "--advertise-service-cluster-ip-range=ip_range_cidr" parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.Please continue reading the following.
 
-
+<br>
 
 <font size="3">**3.2  Configure kube-router run parameters**</font>
 
@@ -1439,6 +1444,7 @@ kube-system-kube-router-new-ytz2o     1/1     Running    0          73s     192.
 ```
 
 
+<br>
 
 <font size="3">**3.3  View the optimized results**</font>
 
@@ -1567,7 +1573,7 @@ This aggregate route balances the load of the ECMP function to 20 next hop route
 
 Similarly, we look at the kubernetes service routing on Router3, and the results are the same as those on Router1 and Router2.
 
-
+<br>
 
 <font size="3">**3.4 Summary**</font>
 
