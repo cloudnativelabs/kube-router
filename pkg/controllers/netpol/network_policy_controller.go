@@ -5,7 +5,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"net"
 	"regexp"
@@ -110,7 +110,7 @@ type ingressRule struct {
 	namedPorts     []endPoints
 	matchAllSource bool
 	srcPods        []podInfo
-	srcIPBlocks    [][]string
+	srcIPBlocks    []IPBlockInfo
 }
 
 // internal structure to represent NetworkPolicyEgressRule in the spec
@@ -120,7 +120,7 @@ type egressRule struct {
 	namedPorts           []endPoints
 	matchAllDestinations bool
 	dstPods              []podInfo
-	dstIPBlocks          [][]string
+	dstIPBlocks          []IPBlockInfo
 }
 
 type protocolAndPort struct {
@@ -131,6 +131,12 @@ type protocolAndPort struct {
 type endPoints struct {
 	ips []string
 	protocolAndPort
+}
+
+// internal structure to represent IPBlock
+type IPBlockInfo struct {
+	cidr   string
+	except bool
 }
 
 type numericPort2eps map[string]*endPoints
@@ -388,7 +394,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 			}
-			err = targetDestPodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
+			err = targetDestPodIpSet.Refresh(currnetPodIps)
 			if err != nil {
 				glog.Errorf("failed to refresh targetDestPodIpSet,: " + err.Error())
 			}
@@ -406,7 +412,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
 			}
-			err = targetSourcePodIpSet.Refresh(currnetPodIps, utils.OptionTimeout, "0")
+			err = targetSourcePodIpSet.Refresh(currnetPodIps)
 			if err != nil {
 				glog.Errorf("failed to refresh targetSourcePodIpSet: " + err.Error())
 			}
@@ -457,7 +463,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			for _, pod := range ingressRule.srcPods {
 				ingressRuleSrcPodIps = append(ingressRuleSrcPodIps, pod.ip)
 			}
-			err = srcPodIpSet.Refresh(ingressRuleSrcPodIps, utils.OptionTimeout, "0")
+			err = srcPodIpSet.Refresh(ingressRuleSrcPodIps)
 			if err != nil {
 				glog.Errorf("failed to refresh srcPodIpSet: " + err.Error())
 			}
@@ -482,7 +488,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 						return fmt.Errorf("failed to create ipset: %s", err.Error())
 					}
 					activePolicyIpSets[namedPortIpSet.Name] = true
-					err = namedPortIpSet.Refresh(endPoints.ips, utils.OptionTimeout, "0")
+					err = namedPortIpSet.Refresh(endPoints.ips)
 					if err != nil {
 						glog.Errorf("failed to refresh namedPortIpSet: " + err.Error())
 					}
@@ -525,7 +531,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 				activePolicyIpSets[namedPortIpSet.Name] = true
 
-				err = namedPortIpSet.Refresh(endPoints.ips, utils.OptionTimeout, "0")
+				err = namedPortIpSet.Refresh(endPoints.ips)
 				if err != nil {
 					glog.Errorf("failed to refresh namedPortIpSet: " + err.Error())
 				}
@@ -554,7 +560,15 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
 			}
 			activePolicyIpSets[srcIpBlockIpSet.Name] = true
-			err = srcIpBlockIpSet.RefreshWithBuiltinOptions(ingressRule.srcIPBlocks)
+			ingressRuleSrcIPBlocks := make([][]string, 0, len(ingressRule.srcIPBlocks))
+			for _, IPBlock := range ingressRule.srcIPBlocks {
+				if !IPBlock.except {
+					ingressRuleSrcIPBlocks = append(ingressRuleSrcIPBlocks, []string{IPBlock.cidr})
+				} else {
+					ingressRuleSrcIPBlocks = append(ingressRuleSrcIPBlocks, []string{IPBlock.cidr, utils.OptionNoMatch})
+				}
+			}
+			err = srcIpBlockIpSet.RefreshWithBuiltinOptions(ingressRuleSrcIPBlocks)
 			if err != nil {
 				glog.Errorf("failed to refresh srcIpBlockIpSet: " + err.Error())
 			}
@@ -576,7 +590,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 					activePolicyIpSets[namedPortIpSet.Name] = true
 
-					err = namedPortIpSet.Refresh(endPoints.ips, utils.OptionTimeout, "0")
+					err = namedPortIpSet.Refresh(endPoints.ips)
 					if err != nil {
 						glog.Errorf("failed to refresh namedPortIpSet: " + err.Error())
 					}
@@ -633,7 +647,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			for _, pod := range egressRule.dstPods {
 				egressRuleDstPodIps = append(egressRuleDstPodIps, pod.ip)
 			}
-			err = dstPodIpSet.Refresh(egressRuleDstPodIps, utils.OptionTimeout, "0")
+			err = dstPodIpSet.Refresh(egressRuleDstPodIps)
 			if err != nil {
 				glog.Errorf("failed to refresh dstPodIpSet: " + err.Error())
 			}
@@ -659,7 +673,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 
 					activePolicyIpSets[namedPortIpSet.Name] = true
 
-					err = namedPortIpSet.Refresh(endPoints.ips, utils.OptionTimeout, "0")
+					err = namedPortIpSet.Refresh(endPoints.ips)
 					if err != nil {
 						glog.Errorf("failed to refresh namedPortIpSet: " + err.Error())
 					}
@@ -711,7 +725,15 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
 			}
 			activePolicyIpSets[dstIpBlockIpSet.Name] = true
-			err = dstIpBlockIpSet.RefreshWithBuiltinOptions(egressRule.dstIPBlocks)
+			egressRuleDstIPBlocks := make([][]string, 0, len(egressRule.dstIPBlocks))
+			for _, IPBlock := range egressRule.dstIPBlocks {
+				if !IPBlock.except {
+					egressRuleDstIPBlocks = append(egressRuleDstIPBlocks, []string{IPBlock.cidr})
+				} else {
+					egressRuleDstIPBlocks = append(egressRuleDstIPBlocks, []string{IPBlock.cidr, utils.OptionNoMatch})
+				}
+			}
+			err = dstIpBlockIpSet.RefreshWithBuiltinOptions(egressRuleDstIPBlocks)
 			if err != nil {
 				glog.Errorf("failed to refresh dstIpBlockIpSet: " + err.Error())
 			}
@@ -1322,7 +1344,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 		for _, specIngressRule := range policy.Spec.Ingress {
 			ingressRule := ingressRule{}
 			ingressRule.srcPods = make([]podInfo, 0)
-			ingressRule.srcIPBlocks = make([][]string, 0)
+			ingressRule.srcIPBlocks = make([]IPBlockInfo, 0)
 
 			// If this field is empty or missing in the spec, this rule matches all sources
 			if len(specIngressRule.From) == 0 {
@@ -1362,7 +1384,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 		for _, specEgressRule := range policy.Spec.Egress {
 			egressRule := egressRule{}
 			egressRule.dstPods = make([]podInfo, 0)
-			egressRule.dstIPBlocks = make([][]string, 0)
+			egressRule.dstIPBlocks = make([]IPBlockInfo, 0)
 			namedPort2EgressEps := make(namedPort2eps)
 
 			// If this field is empty or missing in the spec, this rule matches all sources
@@ -1457,19 +1479,19 @@ func (npc *NetworkPolicyController) ListNamespaceByLabels(namespaceSelector labe
 	return matchedNamespaces, nil
 }
 
-func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolicyPeer) [][]string {
-	ipBlock := make([][]string, 0)
+func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolicyPeer) []IPBlockInfo {
+	ipBlock := make([]IPBlockInfo, 0)
 	if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
 		if cidr := peer.IPBlock.CIDR; strings.HasSuffix(cidr, "/0") {
-			ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0"}, []string{"128.0.0.0/1", utils.OptionTimeout, "0"})
+			ipBlock = append(ipBlock, IPBlockInfo{"0.0.0.0/1", false}, IPBlockInfo{"128.0.0.0/1", false})
 		} else {
-			ipBlock = append(ipBlock, []string{cidr, utils.OptionTimeout, "0"})
+			ipBlock = append(ipBlock, IPBlockInfo{cidr, false})
 		}
 		for _, except := range peer.IPBlock.Except {
 			if strings.HasSuffix(except, "/0") {
-				ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch}, []string{"128.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch})
+				ipBlock = append(ipBlock, IPBlockInfo{"0.0.0.0/1", true}, IPBlockInfo{"128.0.0.0/1", true})
 			} else {
-				ipBlock = append(ipBlock, []string{except, utils.OptionTimeout, "0", utils.OptionNoMatch})
+				ipBlock = append(ipBlock, IPBlockInfo{except, true})
 			}
 		}
 	}
