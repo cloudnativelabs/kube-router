@@ -1324,27 +1324,20 @@ As can be seen from the routing table on Router1, there are 200 service IP 32-bi
 </table>
 
 
-
 Similarly, we look at the kubernetes service routing on Router3 and Router4, and the results are the same as those on Router1 and Router2.
-
-
-
-
-
 
 
 <font size="3">**2.4 Summary**</font>
 
 <br>
 
-
 At first, there were only seven services in the kubernetes cluster:<br>
-&nbsp;&nbsp;&oplus;&nbsp;Router 1 has only 11 k8s-nodes and Router 1 has 7 X11 = 77 service 32-bit host routes.<br>
-&nbsp;&nbsp;&oplus;&nbsp;There are only 11 k8s-nodes on Router 2, and 7 x17 = 119 service 32-bit host routes on Router 1.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&oplus;&nbsp;Router 1 has only 11 k8s-nodes and Router 1 has 7 X11 = 77 service 32-bit host routes.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&oplus;&nbsp;There are only 11 k8s-nodes on Router 2, and 7 x17 = 119 service 32-bit host routes on Router 1.<br>
 
 By adding nodes and services, the kubernetes cluster grew to 10 services:<br>
-&nbsp;&nbsp;&oplus;&nbsp;Router 1 has 14 k8s-nodes, Router 1 has 12-bit host routes with 10 x14 = 140 services, and 63 routes have been added.<br>
-&nbsp;&nbsp;&oplus;&nbsp;Router 2 is increased to 20 k8s-nodes, Router 1 has 12-bit host routes with 10 x 20 = 200 services, and 81 routes are added.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&oplus;&nbsp;Router 1 has 14 k8s-nodes, Router 1 has 12-bit host routes with 10 x14 = 140 services, and 63 routes have been added.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&oplus;&nbsp;Router 2 is increased to 20 k8s-nodes, Router 1 has 12-bit host routes with 10 x 20 = 200 services, and 81 routes are added.<br>
 
 By analogy, if our kubernetes cluster grows to 1000 services and k8s-nodes on each router grow to 40, there will be 400,000 32-bit host routes on each router.<br>
 
