@@ -367,6 +367,9 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	for {
 		select {
 		case <-stopCh:
+			nsc.mu.Lock()
+			nsc.readyForUpdates = false
+			nsc.mu.Unlock()
 			glog.Info("Shutting down network services controller")
 			return
 
@@ -446,8 +449,10 @@ func (nsc *NetworkServicesController) doSync() error {
 
 	if nsc.MetricsEnabled {
 		err = nsc.publishMetrics(nsc.serviceMap)
-		glog.Errorf("Error publishing metrics: %s", err.Error())
-		return err
+		if err != nil {
+			glog.Errorf("Error publishing metrics: %v", err)
+			return err
+		}
 	}
 	return nil
 }
@@ -789,13 +794,13 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 		return
 	}
 
-	glog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
-	if !nsc.readyForUpdates {
-		glog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
-		return
-	}
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
+	glog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
+	if !nsc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to endpoint: %s/%s as controller is not ready to process service and endpoints updates", ep.Namespace, ep.Name)
+		return
+	}
 
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
@@ -813,13 +818,15 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 
 // OnServiceUpdate handle change in service update from the API server
 func (nsc *NetworkServicesController) OnServiceUpdate(svc *api.Service) {
-	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
-	if !nsc.readyForUpdates {
-		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
-		return
-	}
+
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
+
+	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
+	if !nsc.readyForUpdates {
+		glog.V(3).Infof("Skipping update to service: %s/%s as controller is not ready to process service and endpoints updates", svc.Namespace, svc.Name)
+		return
+	}
 
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()

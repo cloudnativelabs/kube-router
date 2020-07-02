@@ -238,6 +238,13 @@ assign the external IP to the VIP.
 
 For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirements enabled.
 
+## SNATing Service Traffic
+By default, as traffic ingresses into the cluster, kube-router will source nat the traffic to ensure symmetric routing if it needs to proxy that traffic to ensure it gets to a node that has a service pod that is capable of servicing the traffic. This has a potential to cause issues when network policies are applied to that service since now the traffic will appear to be coming from a node in your cluster instead of the traffic originator.
+
+This is an issue that is common to all proxy's and all Kubernetes service proxies in general. You can read more information about this issue here: https://kubernetes.io/docs/tutorials/services/source-ip/#source-ip-for-services-with-type-nodeport
+
+In addition to the fix mentioned in the linked upstream documentation (using `service.spec.externalTrafficPolicy`), kube-router also provides DSR, which by its nature preserves the source IP, to solve this problem. For more information see the section above.
+
 ## Load balancing Scheduling Algorithms
 
 Kube-router uses LVS for service proxy. LVS support rich set of [scheduling alogirthms](http://kb.linuxvirtualserver.org/wiki/IPVS#Job_Scheduling_Algorithms). You can annotate 
