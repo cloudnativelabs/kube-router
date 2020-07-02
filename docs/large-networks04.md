@@ -20,6 +20,7 @@ The network topology is as follows:
 After optimization, network traffic will be balanced to all network devices and nodes.
 <br>
 The network topology is as follows:
+
 ![largenetwork](../docs/img/large-networks09.jpg)
 
 <br>
