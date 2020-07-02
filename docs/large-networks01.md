@@ -40,7 +40,7 @@ In order for your architecture to support a larger network, you need to do the f
 
 <br>
 
-For the YAML source files used in this document, please click on <a href="../daemonset/kube-router-daemonset-advertise-cluster-ip-range.yaml">this link</a> to view them.
+For the YAML source files used in this document, please <a href="../daemonset/kube-router-daemonset-advertise-cluster-ip-range.yaml">click on this link</a> to view them.
 <br>
 <br>
 <br>
