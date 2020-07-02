@@ -53,7 +53,7 @@ NAME             STATUS   ROLES    AGE    VERSION
 192.168.110.58   Ready    <none>   49d    v1.14.0
 192.168.110.59   Ready    <none>   282d   v1.14.0
 192.168.110.60   Ready    <none>   282d   v1.14.0
- [root@k8s-master ~]#
+[root@k8s-master ~]#
  ```
 
 Look at all the services in the cluster as follows:
@@ -68,7 +68,7 @@ coredns       corednsdev                         ClusterIP     172.30.0.2       
 default       guestbook-ui                       ClusterIP     172.30.12.213      <none>        80/TCP                   145d
 default       kubernetes                         ClusterIP     172.30.0.1         <none>        443/TCP                  145d
 default       nginx01                            ClusterIP     172.30.28.176      <none>        80/TCP                   143d
- [root@k8s-master ~]#
+[root@k8s-master ~]#
 ```
 
 <br>
@@ -466,7 +466,7 @@ NAME             STATUS   ROLES    AGE    VERSION
 192.168.110.81   Ready    <none>   49d    v1.14.0
 192.168.110.82   Ready    <none>   282d   v1.14.0
 192.168.110.83   Ready    <none>   282d   v1.14.0
- [root@k8s-master ~]#
+[root@k8s-master ~]#
 ```
 
 Using the "kubectl get pod" command, you can see that the white font part is the three new kube-router pods:
@@ -892,7 +892,7 @@ default       test-1                             ClusterIP     172.30.99.97     
 default       test-2                             ClusterIP     172.30.99.98       <none>        80/TCP                   1h
 default       test-3                             ClusterIP     172.30.99.99       <none>        80/TCP                   1h
 
- [root@k8s-master ~]#
+[root@k8s-master ~]#
 ```
 
 
@@ -1339,13 +1339,12 @@ Similarly, we look at the kubernetes service routing on Router3 and Router4, and
 
 
 At first, there were only seven services in the kubernetes cluster:<br>
-Router 1 has only 11 k8s-nodes and Router 1 has 7 X11 = 77 service 32-bit host routes.<br>
-There are only 11 k8s-nodes on Router 2, and 7 x17 = 119 service 32-bit host routes on Router 1.<br>
-
+&nbsp;&nbsp;&oplus;&nbsp;Router 1 has only 11 k8s-nodes and Router 1 has 7 X11 = 77 service 32-bit host routes.<br>
+&nbsp;&nbsp;&oplus;&nbsp;There are only 11 k8s-nodes on Router 2, and 7 x17 = 119 service 32-bit host routes on Router 1.<br>
 
 By adding nodes and services, the kubernetes cluster grew to 10 services:<br>
-Router 1 has 14 k8s-nodes, Router 1 has 12-bit host routes with 10 x14 = 140 services, and 63 routes have been added.<br>
-Router 2 is increased to 20 k8s-nodes, Router 1 has 12-bit host routes with 10 x 20 = 200 services, and 81 routes are added.<br>
+&nbsp;&nbsp;&oplus;&nbsp;Router 1 has 14 k8s-nodes, Router 1 has 12-bit host routes with 10 x14 = 140 services, and 63 routes have been added.<br>
+&nbsp;&nbsp;&oplus;&nbsp;Router 2 is increased to 20 k8s-nodes, Router 1 has 12-bit host routes with 10 x 20 = 200 services, and 81 routes are added.<br>
 
 By analogy, if our kubernetes cluster grows to 1000 services and k8s-nodes on each router grow to 40, there will be 400,000 32-bit host routes on each router.<br>
 
