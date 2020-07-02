@@ -4,8 +4,9 @@
 <br>
 
 
+<font size="4">**1 Introduction of cluster BGP network environment**</font>
 
-<font size="4">**1 Introduction of cluster BGP network environment**</font><br>
+<br>
 <table>
 <tr><td> Item </td><td> Content </td></tr>
 <tr><td>Version of kube-router</td><td>Modified based on version 0.3.2</td></tr>
@@ -18,6 +19,7 @@
 
 
 The network topology is as follows:
+
 ![largenetwork](../docs/img/large-networks05.jpg)
 
 Look at all nodes in the cluster as follows:
@@ -71,6 +73,7 @@ default       nginx01                            ClusterIP     172.30.28.176    
 [root@k8s-master ~]#
 ```
 
+<br>
 <br>
 <br>
 
@@ -420,11 +423,14 @@ As can be seen from the routing table on Router2, there are 77 service IP 32-bit
 
 Similarly, we look at the kubernetes service routing on Router3 and Router4, and the results are the same as those on Router1 and Router2.
 
+<br>
 
+<font size="3">**2.2 Problems after adding kubernetes node nodes：**</font>
 
-<font size="3">**2.2 Problems after adding kubernetes node nodes：**</font><br>
+<br>
 
 At this time, we will add three kubernetes nodes to Router1, Router2 and Router3 devices respectively.
+
 ![largenetwork](../docs/img/large-networks06.jpg)
 
 Using the "kubectl get node" command, you can see three new kubernetes nodes in the white font section:
@@ -864,15 +870,15 @@ As can be seen from the routing table on Router2, there are 140 service IP 32-bi
 Similarly, we look at the kubernetes service routing on Router3, and the results are the same as those on Router1 and Router2.
 
 
+<br>
 
+<font size="3">**2.3 Questions after adding kubernetes service nodes:**</font>
 
-
-
-
-<font size="3">**2.3 Questions after adding kubernetes service nodes:**</font><br>
+<br>
 
 
 Let's add three more kubernetes services to the k8s cluster to see what's wrong.
+
 ![largenetwork](../docs/img/large-networks07.jpg)
 
 Using "kubectl get service", you can see that the white font part is the newly added test-1 (172.30.99.97), test-1 (172.30.99.97), test-1 (172.30.99.97), and TEST-1 (172.99.97). The three kubernetes services are also "CLUSTER-IP".
