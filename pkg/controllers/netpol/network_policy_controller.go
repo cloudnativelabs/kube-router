@@ -562,10 +562,18 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			activePolicyIpSets[srcIpBlockIpSet.Name] = true
 			ingressRuleSrcIPBlocks := make([][]string, 0, len(ingressRule.srcIPBlocks))
 			for _, IPBlock := range ingressRule.srcIPBlocks {
-				if !IPBlock.except {
-					ingressRuleSrcIPBlocks = append(ingressRuleSrcIPBlocks, []string{IPBlock.cidr})
+				if strings.HasSuffix(IPBlock.cidr, "/0") {
+					if !IPBlock.except {
+						ingressRuleSrcIPBlocks = append(ingressRuleSrcIPBlocks, []string{"0.0.0.0/1"}, []string{"128.0.0.0/1"})
+					} else {
+						ingressRuleSrcIPBlocks = append(ingressRuleSrcIPBlocks, []string{"0.0.0.0/1", utils.OptionNoMatch}, []string{"128.0.0.0/1", utils.OptionNoMatch})
+					}
 				} else {
-					ingressRuleSrcIPBlocks = append(ingressRuleSrcIPBlocks, []string{IPBlock.cidr, utils.OptionNoMatch})
+					if !IPBlock.except {
+						ingressRuleSrcIPBlocks = append(ingressRuleSrcIPBlocks, []string{IPBlock.cidr})
+					} else {
+						ingressRuleSrcIPBlocks = append(ingressRuleSrcIPBlocks, []string{IPBlock.cidr, utils.OptionNoMatch})
+					}
 				}
 			}
 			err = srcIpBlockIpSet.RefreshWithBuiltinOptions(ingressRuleSrcIPBlocks)
@@ -727,10 +735,18 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			activePolicyIpSets[dstIpBlockIpSet.Name] = true
 			egressRuleDstIPBlocks := make([][]string, 0, len(egressRule.dstIPBlocks))
 			for _, IPBlock := range egressRule.dstIPBlocks {
-				if !IPBlock.except {
-					egressRuleDstIPBlocks = append(egressRuleDstIPBlocks, []string{IPBlock.cidr})
+				if strings.HasSuffix(IPBlock.cidr, "/0") {
+					if !IPBlock.except {
+						egressRuleDstIPBlocks = append(egressRuleDstIPBlocks, []string{"0.0.0.0/1"}, []string{"128.0.0.0/1"})
+					} else {
+						egressRuleDstIPBlocks = append(egressRuleDstIPBlocks, []string{"0.0.0.0/1", utils.OptionNoMatch}, []string{"128.0.0.0/1", utils.OptionNoMatch})
+					}
 				} else {
-					egressRuleDstIPBlocks = append(egressRuleDstIPBlocks, []string{IPBlock.cidr, utils.OptionNoMatch})
+					if !IPBlock.except {
+						egressRuleDstIPBlocks = append(egressRuleDstIPBlocks, []string{IPBlock.cidr})
+					} else {
+						egressRuleDstIPBlocks = append(egressRuleDstIPBlocks, []string{IPBlock.cidr, utils.OptionNoMatch})
+					}
 				}
 			}
 			err = dstIpBlockIpSet.RefreshWithBuiltinOptions(egressRuleDstIPBlocks)
@@ -1482,17 +1498,9 @@ func (npc *NetworkPolicyController) ListNamespaceByLabels(namespaceSelector labe
 func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolicyPeer) []IPBlockInfo {
 	ipBlock := make([]IPBlockInfo, 0)
 	if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
-		if cidr := peer.IPBlock.CIDR; strings.HasSuffix(cidr, "/0") {
-			ipBlock = append(ipBlock, IPBlockInfo{"0.0.0.0/1", false}, IPBlockInfo{"128.0.0.0/1", false})
-		} else {
-			ipBlock = append(ipBlock, IPBlockInfo{cidr, false})
-		}
+		ipBlock = append(ipBlock, IPBlockInfo{peer.IPBlock.CIDR, false})
 		for _, except := range peer.IPBlock.Except {
-			if strings.HasSuffix(except, "/0") {
-				ipBlock = append(ipBlock, IPBlockInfo{"0.0.0.0/1", true}, IPBlockInfo{"128.0.0.0/1", true})
-			} else {
-				ipBlock = append(ipBlock, IPBlockInfo{except, true})
-			}
+			ipBlock = append(ipBlock, IPBlockInfo{except, true})
 		}
 	}
 	return ipBlock
