@@ -5,7 +5,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"net"
 	"regexp"
@@ -383,7 +383,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 
 		if policy.policyType == "both" || policy.policyType == "ingress" {
 			// create a ipset for all destination pod ip's matched by the policy spec PodSelector
-			targetDestPodIpSetName := policyDestinationPodIpSetName(policy.namespace, policy.name)
+			targetDestPodIpSetName := policyDestinationPodIpSetName(policy.namespace, policy.name, version)
 			targetDestPodIpSet, err := npc.ipSetHandler.Create(targetDestPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -401,7 +401,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 
 		if policy.policyType == "both" || policy.policyType == "egress" {
 			// create a ipset for all source pod ip's matched by the policy spec PodSelector
-			targetSourcePodIpSetName := policySourcePodIpSetName(policy.namespace, policy.name)
+			targetSourcePodIpSetName := policySourcePodIpSetName(policy.namespace, policy.name, version)
 			targetSourcePodIpSet, err := npc.ipSetHandler.Create(targetSourcePodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -445,7 +445,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 	for i, ingressRule := range policy.ingressRules {
 
 		if len(ingressRule.srcPods) != 0 {
-			srcPodIpSetName := policyIndexedSourcePodIpSetName(policy.namespace, policy.name, i)
+			srcPodIpSetName := policyIndexedSourcePodIpSetName(policy.namespace, policy.name, i, version)
 			srcPodIpSet, err := npc.ipSetHandler.Create(srcPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 			if err != nil {
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -476,7 +476,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 			if len(ingressRule.namedPorts) != 0 {
 				for j, endPoints := range ingressRule.namedPorts {
-					namedPortIpSetName := policyIndexedIngressNamedPortIpSetName(policy.namespace, policy.name, i, j)
+					namedPortIpSetName := policyIndexedIngressNamedPortIpSetName(policy.namespace, policy.name, i, j, version)
 					namedPortIpSet, err := npc.ipSetHandler.Create(namedPortIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 					if err != nil {
 						return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -517,7 +517,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			}
 
 			for j, endPoints := range ingressRule.namedPorts {
-				namedPortIpSetName := policyIndexedIngressNamedPortIpSetName(policy.namespace, policy.name, i, j)
+				namedPortIpSetName := policyIndexedIngressNamedPortIpSetName(policy.namespace, policy.name, i, j, version)
 				namedPortIpSet, err := npc.ipSetHandler.Create(namedPortIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 				if err != nil {
 					return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -548,7 +548,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 		}
 
 		if len(ingressRule.srcIPBlocks) != 0 {
-			srcIpBlockIpSetName := policyIndexedSourceIpBlockIpSetName(policy.namespace, policy.name, i)
+			srcIpBlockIpSetName := policyIndexedSourceIpBlockIpSetName(policy.namespace, policy.name, i, version)
 			srcIpBlockIpSet, err := npc.ipSetHandler.Create(srcIpBlockIpSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
 			if err != nil {
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -568,7 +568,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				}
 
 				for j, endPoints := range ingressRule.namedPorts {
-					namedPortIpSetName := policyIndexedIngressNamedPortIpSetName(policy.namespace, policy.name, i, j)
+					namedPortIpSetName := policyIndexedIngressNamedPortIpSetName(policy.namespace, policy.name, i, j, version)
 					namedPortIpSet, err := npc.ipSetHandler.Create(namedPortIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 					if err != nil {
 						return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -621,7 +621,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 	for i, egressRule := range policy.egressRules {
 
 		if len(egressRule.dstPods) != 0 {
-			dstPodIpSetName := policyIndexedDestinationPodIpSetName(policy.namespace, policy.name, i)
+			dstPodIpSetName := policyIndexedDestinationPodIpSetName(policy.namespace, policy.name, i, version)
 			dstPodIpSet, err := npc.ipSetHandler.Create(dstPodIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 			if err != nil {
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -651,7 +651,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 
 			if len(egressRule.namedPorts) != 0 {
 				for j, endPoints := range egressRule.namedPorts {
-					namedPortIpSetName := policyIndexedEgressNamedPortIpSetName(policy.namespace, policy.name, i, j)
+					namedPortIpSetName := policyIndexedEgressNamedPortIpSetName(policy.namespace, policy.name, i, j, version)
 					namedPortIpSet, err := npc.ipSetHandler.Create(namedPortIpSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 					if err != nil {
 						return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -705,7 +705,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			}
 		}
 		if len(egressRule.dstIPBlocks) != 0 {
-			dstIpBlockIpSetName := policyIndexedDestinationIpBlockIpSetName(policy.namespace, policy.name, i)
+			dstIpBlockIpSetName := policyIndexedDestinationIpBlockIpSetName(policy.namespace, policy.name, i, version)
 			dstIpBlockIpSet, err := npc.ipSetHandler.Create(dstIpBlockIpSetName, utils.TypeHashNet, utils.OptionTimeout, "0")
 			if err != nil {
 				return fmt.Errorf("failed to create ipset: %s", err.Error())
@@ -1577,50 +1577,50 @@ func networkPolicyChainName(namespace, policyName string, version string) string
 	return kubeNetworkPolicyChainPrefix + encoded[:16]
 }
 
-func policySourcePodIpSetName(namespace, policyName string) string {
-	hash := sha256.Sum256([]byte(namespace + policyName))
+func policySourcePodIpSetName(namespace, policyName string, version string) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeSourceIpSetPrefix + encoded[:16]
 }
 
-func policyDestinationPodIpSetName(namespace, policyName string) string {
-	hash := sha256.Sum256([]byte(namespace + policyName))
+func policyDestinationPodIpSetName(namespace, policyName string, version string) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIpSetPrefix + encoded[:16]
 }
 
-func policyIndexedSourcePodIpSetName(namespace, policyName string, ingressRuleNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + "pod"))
+func policyIndexedSourcePodIpSetName(namespace, policyName string, ingressRuleNo int, version string) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + "pod" + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeSourceIpSetPrefix + encoded[:16]
 }
 
-func policyIndexedDestinationPodIpSetName(namespace, policyName string, egressRuleNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + "pod"))
+func policyIndexedDestinationPodIpSetName(namespace, policyName string, egressRuleNo int, version string) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + "pod" + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIpSetPrefix + encoded[:16]
 }
 
-func policyIndexedSourceIpBlockIpSetName(namespace, policyName string, ingressRuleNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + "ipblock"))
+func policyIndexedSourceIpBlockIpSetName(namespace, policyName string, ingressRuleNo int, version string) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + "ipblock" + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeSourceIpSetPrefix + encoded[:16]
 }
 
-func policyIndexedDestinationIpBlockIpSetName(namespace, policyName string, egressRuleNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + "ipblock"))
+func policyIndexedDestinationIpBlockIpSetName(namespace, policyName string, egressRuleNo int, version string) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + "ipblock" + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIpSetPrefix + encoded[:16]
 }
 
-func policyIndexedIngressNamedPortIpSetName(namespace, policyName string, ingressRuleNo, namedPortNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + strconv.Itoa(namedPortNo) + "namedport"))
+func policyIndexedIngressNamedPortIpSetName(namespace, policyName string, ingressRuleNo, namedPortNo int, version string) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + strconv.Itoa(namedPortNo) + "namedport" + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIpSetPrefix + encoded[:16]
 }
 
-func policyIndexedEgressNamedPortIpSetName(namespace, policyName string, egressRuleNo, namedPortNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + strconv.Itoa(namedPortNo) + "namedport"))
+func policyIndexedEgressNamedPortIpSetName(namespace, policyName string, egressRuleNo, namedPortNo int, version string) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + strconv.Itoa(namedPortNo) + "namedport" + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIpSetPrefix + encoded[:16]
 }
