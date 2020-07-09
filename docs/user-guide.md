@@ -40,7 +40,7 @@ Usage of kube-router:
       --advertise-external-ip                         Add External IP of service to the RIB so that it gets advertised to the BGP peers.
       --advertise-loadbalancer-ip                     Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr                            Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
-      --advertise-service-cluster-ip-range string     If this parameter is set, Kube-router will add the service cluster IP range set by this parameter to the RIB, and send the routing advertisement of the service cluster IP range to the BGP peer. The purpose of this parameter is to reduce the number of service route entries sent by the Kube-router to the uplink network device. (Please configure "advertise-cluster-ip=true" at the same time to ensure that the "advertise-service-cluster-ip-range" parameter takes effect.)
+      --advertise-service-cluster-ip-range string     Add Cluster IP range of the service to the rib so that it advertises the IP range to BGP peers. (make sure that the "advertise-cluster-ip=true" flag is also set.)
       --bgp-graceful-restart                          Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
       --bgp-graceful-restart-deferral-time duration   BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h. (default 6m0s)
       --bgp-port uint16                               The port open for incoming BGP connections and to use for connecting with other BGP peers. (default 179)
@@ -151,6 +151,8 @@ It does this by:
 
 To set the default for all services use the `--advertise-cluster-ip`,
 `--advertise-external-ip` and `--advertise-loadbalancer-ip` flags.
+
+If you want to advertise the Cluster IP range of the service to BGP peers to reduce the number of routes on the network devices, you can try to set the flags of `advertise-cluster-ip=true` and `advertise-service-cluster-ip-range=ip_range_cidr` at the same time. When this flags is set, Kube-router will add the service cluster IP range set by this parameter to the RIB, and send the routing advertisement of the service cluster IP range to the BGP peer. The purpose of this parameter is to reduce the number of service route entries sent by the Kube-router to the uplink network device. 
 
 To selectively enable or disable this feature per-service use the
 `kube-router.io/service.advertise.clusterip`, `kube-router.io/service.advertise.externalip`

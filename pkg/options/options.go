@@ -120,7 +120,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
 		"Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.")
 	fs.StringVar(&s.AdvertiseServiceClusterIpRange, "advertise-service-cluster-ip-range", s.AdvertiseServiceClusterIpRange,
-		"If this parameter is set, Kube-router will add the service cluster IP range set by this parameter to the RIB, and send the routing advertisement of the service cluster IP range to the BGP peer. The purpose of this parameter is to reduce the number of service route entries sent by the Kube-router to the uplink network device. (Please configure \"advertise-cluster-ip=true\" at the same time to ensure that the \"advertise-service-cluster-ip-range\" parameter takes effect.)")
+		"Add Cluster IP range of the service to the rib so that it advertises the IP range to BGP peers. (make sure that the \"advertise-cluster-ip=true\" flag is also set.)")
 	fs.BoolVar(&s.AdvertiseExternalIp, "advertise-external-ip", false,
 		"Add External IP of service to the RIB so that it gets advertised to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseLoadBalancerIp, "advertise-loadbalancer-ip", false,
