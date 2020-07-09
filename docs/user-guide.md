@@ -152,7 +152,7 @@ It does this by:
 To set the default for all services use the `--advertise-cluster-ip`,
 `--advertise-external-ip` and `--advertise-loadbalancer-ip` flags.
 
-If you want to advertise the Cluster IP range of the service to BGP peers to reduce the number of routes on the network devices, you can try to set the flags of `advertise-cluster-ip=true` and `advertise-service-cluster-ip-range=ip_range_cidr` at the same time. When this flags is set, Kube-router will add the service cluster IP range set by this parameter to the RIB, and send the routing advertisement of the service cluster IP range to the BGP peer. The purpose of this parameter is to reduce the number of service route entries sent by the Kube-router to the uplink network device. 
+If you want to advertise the Cluster IP range of the service to BGP peers to reduce the number of routes on the network devices, you can try to set the flags of `advertise-cluster-ip=true` and `advertise-service-cluster-ip-range=ip_range_cidr` at the same time. When this flags is set, Kube-router will add the service cluster IP range set by this parameter to the RIB, and send the routing advertisement of the service cluster IP range to the BGP peer. The purpose of this parameter is to reduce the number of service route entries sent by the Kube-router to the uplink network device. See <a href="large-networks03.md">large-networks03 documentation</a> for details.
 
 To selectively enable or disable this feature per-service use the
 `kube-router.io/service.advertise.clusterip`, `kube-router.io/service.advertise.externalip`
