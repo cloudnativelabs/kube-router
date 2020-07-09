@@ -8,7 +8,7 @@
 
 <font size="4">**The number growth of BGP neighbors before optimization**</font><br>
 
-When "--enable-ibgp=true" is set by default by kube-router, all kubernetes nodes establish BGP neighborhood relationships with each other. Suppose there are eight k8s-nodes in our network. Their topological relationships are as follows:
+When `--enable-ibgp=true` is set by default by kube-router, all kubernetes nodes establish BGP neighborhood relationships with each other. Suppose there are eight k8s-nodes in our network. Their topological relationships are as follows:
 
 ![largenetwork](../docs/img/large-networks02.jpg)
 
@@ -150,7 +150,7 @@ You will find that the number of BGP peers per kubernetes node is n-1 (n is the 
 
 <br>
 
-To solve this problem, you need to turn on the BGP function of the router device on the node server. Moreover, hardware router devices have special chips to handle BGP routing forwarding, and its performance is better. At the same time, you need to set the parameter "--enable-ibgp=false" of kube-router. 
+To solve this problem, you need to turn on the BGP function of the router device on the node server. Moreover, hardware router devices have special chips to handle BGP routing forwarding, and its performance is better. At the same time, you need to set the parameter `--enable-ibgp=false` of kube-router. 
 <br>
 <br>
 For example：
@@ -321,7 +321,7 @@ We present the neighborhood relationships between all kubernetes nodes in red do
 
 You will find that no matter how many kubernetes nodes you have in your k8s cluster, there is only one BGP neighbor on each kubernetes node. Each router has only BGP neighbors to the downlink kubernetes node and a small number of BGP neighbors to the downlink. In the actual production environment, due to the number of interfaces of router devices, the number of kubernetes nodes that can be connected to each router is very limited, generally less than 100.
 <br>
-By setting the parameter "--enable-ibgp=false", we achieve the effect of BGP neighbor control on each kubernetes node in the same AS. This reduces the pressure on the kubernetes node server.
+By setting the parameter `--enable-ibgp=false` , we achieve the effect of BGP neighbor control on each kubernetes node in the same AS. This reduces the pressure on the kubernetes node server.
 <br>
 <br>
 
