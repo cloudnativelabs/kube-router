@@ -77,7 +77,7 @@ default       nginx01                            ClusterIP     172.30.28.176    
 <br>
 <br>
 
-<font size="4">**2  Bad conditions before optimization using the "advertise-service-cluster-ip-range" parameter**</font>
+<font size="4">**2  Bad conditions before optimization using the `advertise-service-cluster-ip-range` parameter**</font>
 
 <br>
 
@@ -106,15 +106,15 @@ The configuration parameters of kube-router are as follows:
         ......
 ```
 
-Create kube-router daemonset using "kubectl create":
+Create kube-router daemonset using `kubectl apply` :
 
 ```
-[root@k8s-master kube-router]# kubectl create -f kube-router-daemonset-old.yaml
+[root@k8s-master kube-router]# kubectl apply -f kube-router-daemonset-old.yaml
 daemonset.extensions/kube-system-kube-router-old created
 [root@k8s-master kube-router]# 
 ```
 
-After creation, use "kubectl get" to view kube-router pod:
+After creation, use `kubectl get` to view kube-router pod:
 
 ```
 [root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system  
@@ -433,7 +433,7 @@ At this time, we will add three kubernetes nodes to Router1, Router2 and Router3
 
 ![largenetwork](../docs/img/large-networks06.jpg)
 
-Using the "kubectl get node" command, you can see three new kubernetes nodes in the white font section:
+Using the `kubectl get node` command, you can see three new kubernetes nodes in the white font section:
 
 ```
 [root@k8s-master ~]# kubectl get node
@@ -475,7 +475,7 @@ NAME             STATUS   ROLES    AGE    VERSION
 [root@k8s-master ~]#
 ```
 
-Using the "kubectl get pod" command, you can see that the white font part is the three new kube-router pods:
+Using the `kubectl get pod` command, you can see that the white font part is the three new kube-router pods:
 
 ```
 [root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system         
@@ -881,7 +881,7 @@ Let's add three more kubernetes services to the k8s cluster to see what's wrong.
 
 ![largenetwork](../docs/img/large-networks07.jpg)
 
-Using "kubectl get service", you can see that the white font part is the newly added test-1 (172.30.99.97), test-1 (172.30.99.97), test-1 (172.30.99.97), and TEST-1 (172.99.97). The three kubernetes services are also "CLUSTER-IP".
+Using `kubectl get service` , you can see that the white font part is the newly added test-1 (172.30.99.97), test-1 (172.30.99.97), test-1 (172.30.99.97), and TEST-1 (172.99.97). The three kubernetes services are also "CLUSTER-IP".
 
 ```
 [root@k8s-master ~]# kubectl get service --all-namespaces
@@ -900,8 +900,6 @@ default       test-3                             ClusterIP     172.30.99.99     
 
 [root@k8s-master ~]#
 ```
-
-
 
 
 Next,Look at Router1's routing table again:
@@ -1356,15 +1354,15 @@ Although in the actual production environment, because of the number of interfac
 <br>
 <br>
 
-<font size="4">**3  Adjusting "advertise-service-cluster-ip-range" parameters to optimize network routing**</font>
+<font size="4">**3  Adjusting `advertise-service-cluster-ip-range` parameters to optimize network routing**</font>
 
 <br>
 
-<font size="3">**3.1  How to set "advertise-service-cluster-ip-range" parameter correctly**</font>
+<font size="3">**3.1  How to set `advertise-service-cluster-ip-range` parameter correctly**</font>
 
 <br>
 
-You need to set both "--advertise-cluster-IP=true" and "--advertise-service-cluster-ip-range=ip_range_cidr" parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.Please continue reading the following.
+You need to set both `--advertise-cluster-IP=true` and `--advertise-service-cluster-ip-range=ip_range_cidr` parameters.Let k8s node only notify k8s service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.Please continue reading the following.
 
 <br>
 
@@ -1396,7 +1394,7 @@ You can set the following parameters in the white font section:
         ......
 ```
 
-Note: Look at the two parameters in the white font section above - - advertise - cluster - IP = true and - - advertise - cluster - subnet = subnet.
+Note: Look at the two parameters in the white font section above `--advertise-cluster-IP=true` and `--advertise-service-cluster-ip-range=ip_range_cidr` .
 <br>
 
 Update kube-router daemonset using kubectl apply:
@@ -1407,7 +1405,7 @@ daemonset.extensions/kube-system-kube-router-new created
 [root@k8s-master kube-router]# 
 ```
 
-Use "kubectl get pod" to see that kube-router pod is working properly:
+Use `kubectl get pod` to see that kube-router pod is working properly:
 
 ```
 [root@k8s-master kube-router]# kubectl get pod -o wide -n kube-system          
