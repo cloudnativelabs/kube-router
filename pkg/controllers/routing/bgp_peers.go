@@ -105,7 +105,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		if nrc.bgpGracefulRestart {
 			n.GracefulRestart = config.GracefulRestart{
 				Config: config.GracefulRestartConfig{
-					Enabled: true,
+					Enabled:      true,
 					RestartTime:  uint16(nrc.bgpGracefulRestartTime.Seconds()),
 					DeferralTime: uint16(nrc.bgpGracefulRestartDeferralTime.Seconds()),
 				},
