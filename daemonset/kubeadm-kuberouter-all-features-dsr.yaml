@@ -115,13 +115,11 @@ spec:
       hostIPC: true
       hostPID: true
       tolerations:
+      - effect: NoSchedule
+        operator: Exists
       - key: CriticalAddonsOnly
         operator: Exists
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/master
-        operator: Exists
-      - effect: NoSchedule
-        key: node.kubernetes.io/not-ready
+      - effect: NoExecute
         operator: Exists
       volumes:
       - name: lib-modules
