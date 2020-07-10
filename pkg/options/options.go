@@ -18,6 +18,7 @@ type KubeRouterConfig struct {
 	AdvertiseNodePodCidr           bool
 	AdvertiseLoadBalancerIp        bool
 	BGPGracefulRestart             bool
+	BGPGracefulRestartTime         time.Duration
 	BGPGracefulRestartDeferralTime time.Duration
 	BGPHoldtime                    float64
 	BGPPort                        uint16
@@ -25,6 +26,8 @@ type KubeRouterConfig struct {
 	CleanupConfig                  bool
 	ClusterAsn                     uint
 	ClusterCIDR                    string
+	ClusterIPCIDR                  string
+	NodePortRange                  string
 	DisableSrcDstCheck             bool
 	EnableCNI                      bool
 	EnableiBGP                     bool
@@ -73,9 +76,12 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IPTablesSyncPeriod:             5 * time.Minute,
 		IpvsGracefulPeriod:             30 * time.Second,
 		RoutesSyncPeriod:               5 * time.Minute,
+		BGPGracefulRestartTime:         90 * time.Second,
 		BGPGracefulRestartDeferralTime: 360 * time.Second,
 		EnableOverlay:                  true,
 		OverlayType:                    "subnet",
+		ClusterIPCIDR:                  "10.96.0.0/12",
+		NodePortRange:                  "30000:32767",
 	}
 }
 
@@ -104,6 +110,10 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"CIDR range of pods in the cluster. It is used to identify traffic originating from and destinated to pods.")
 	fs.StringSliceVar(&s.ExcludedCidrs, "excluded-cidrs", s.ExcludedCidrs,
 		"Excluded CIDRs are used to exclude IPVS rules from deletion.")
+	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
+		"CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12")
+	fs.StringVar(&s.NodePortRange, "service-node-port-range", s.NodePortRange,
+		"NodePort range. Default: 30000-32767")
 	fs.BoolVar(&s.EnablePodEgress, "enable-pod-egress", true,
 		"SNAT traffic from Pods to destinations outside the cluster.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
@@ -140,6 +150,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
+	fs.DurationVar(&s.BGPGracefulRestartTime, "bgp-graceful-restart-time", s.BGPGracefulRestartTime,
+		"BGP Graceful restart time according to RFC4724 3, maximum 4095s.")
 	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time", s.BGPGracefulRestartDeferralTime,
 		"BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h.")
 	fs.Float64Var(&s.BGPHoldtime, "bgp-holdtime", DEFAULT_BGP_HOLDTIME,

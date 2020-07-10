@@ -337,7 +337,12 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				externalIpServiceId = generateIpPortId(externalIP, svc.protocol, strconv.Itoa(svc.port))
 
 				// ensure there is NO iptables mangle table rule to FWMARK the packet
-				fwMark := fmt.Sprint(generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port)))
+				fwmark, err := generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port))
+				if err != nil {
+					glog.Errorf("Failed to generate a fwmark due to " + err.Error())
+					continue
+				}
+				fwMark := fmt.Sprint(fwmark)
 				err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMark)
 				if err != nil {
 					glog.Errorf("Failed to verify and cleanup any mangle table rule to FMWARD the traffic to external IP due to " + err.Error())
