@@ -1615,10 +1615,6 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 				svc.Timeout != uint32(persistentTimeout) {
 				ipvsSetPersistence(svc, persistent, persistentTimeout)
 
-				if changedIpvsSchedFlags(svc, flags) {
-					ipvsSetSchedFlags(svc, flags)
-				}
-
 				err = ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, err
