@@ -889,10 +889,10 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
-	if kubeRouterConfig.BGPHoldtime <= 65536 && kubeRouterConfig.BGPHoldtime >= 3 {
-		nrc.bgpHoldtime = kubeRouterConfig.BGPHoldtime
-	} else {
-		return nil, errors.New("This is an incorrect BGP holdtime range, holdtime must be in the range 3 to 65536.")
+
+	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldtime.Seconds()
+	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {
+		return nil, errors.New("This is an incorrect BGP holdtime range, holdtime must be in the range 3s to 18h12m16s.")
 	}
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
