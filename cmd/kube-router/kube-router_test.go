@@ -53,4 +53,5 @@ func TestMainHelp(t *testing.T) {
 		t.Errorf("docs/user-guide.md 'command line options' section does not match `kube-router --help`.\nExpected:\n%s", exp)
 		t.Errorf("\nGot:\n%s", docBuf.Bytes())
 	}
+
 }

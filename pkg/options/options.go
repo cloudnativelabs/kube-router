@@ -10,6 +10,7 @@ import (
 )
 
 const DEFAULT_BGP_PORT = 179
+const DEFAULT_BGP_HOLDTIME time.Duration = 90 * time.Second
 
 type KubeRouterConfig struct {
 	AdvertiseClusterIp             bool
@@ -19,6 +20,7 @@ type KubeRouterConfig struct {
 	BGPGracefulRestart             bool
 	BGPGracefulRestartTime         time.Duration
 	BGPGracefulRestartDeferralTime time.Duration
+	BGPHoldtime                    time.Duration
 	BGPPort                        uint16
 	CacheSyncTimeout               time.Duration
 	CleanupConfig                  bool
@@ -75,6 +77,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IpvsGracefulPeriod:             30 * time.Second,
 		RoutesSyncPeriod:               5 * time.Minute,
 		BGPGracefulRestartTime:         90 * time.Second,
+		BGPHoldtime:                    90 * time.Second,
 		BGPGracefulRestartDeferralTime: 360 * time.Second,
 		EnableOverlay:                  true,
 		OverlayType:                    "subnet",
@@ -152,6 +155,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"BGP Graceful restart time according to RFC4724 3, maximum 4095s.")
 	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time", s.BGPGracefulRestartDeferralTime,
 		"BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h.")
+	fs.DurationVar(&s.BGPHoldtime, "bgp-holdtime", DEFAULT_BGP_HOLDTIME,
+		"This parameter is mainly used to modify the holdtime declared to BGP peer. When Kube-router goes down abnormally, the local saving time of BGP route will be affected.Holdtime must be in the range 3s to 18h12m16s.")
 	fs.Uint16Var(&s.BGPPort, "bgp-port", DEFAULT_BGP_PORT,
 		"The port open for incoming BGP connections and to use for connecting with other BGP peers.")
 	fs.StringVar(&s.RouterId, "router-id", "", "BGP router-id. Must be specified in a ipv6 only cluster.")
