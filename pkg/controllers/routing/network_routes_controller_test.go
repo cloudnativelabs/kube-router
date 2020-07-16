@@ -1347,6 +1347,208 @@ func Test_syncInternalPeers(t *testing.T) {
 	}
 }
 
+func Test_routeReflectorConfiguration(t *testing.T) {
+	testcases := []struct {
+		name               string
+		nrc                *NetworkRoutingController
+		node               *v1core.Node
+		expectedRRServer   bool
+		expectedRRClient   bool
+		expectedClusterId  string
+		expectedBgpToStart bool
+	}{
+		{
+			"RR server with int cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrServerAnnotation:        "1",
+					},
+				},
+			},
+			true,
+			false,
+			"1",
+			true,
+		},
+		{
+			"RR server with IPv4 cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrServerAnnotation:        "10.0.0.1",
+					},
+				},
+			},
+			true,
+			false,
+			"10.0.0.1",
+			true,
+		},
+		{
+			"RR client with int cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrClientAnnotation:        "1",
+					},
+				},
+			},
+			false,
+			true,
+			"1",
+			true,
+		},
+		{
+			"RR client with IPv4 cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrClientAnnotation:        "10.0.0.1",
+					},
+				},
+			},
+			false,
+			true,
+			"10.0.0.1",
+			true,
+		},
+		{
+			"RR server with unparseable cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrServerAnnotation:        "10_0_0_1",
+					},
+				},
+			},
+			false,
+			false,
+			"",
+			false,
+		},
+		{
+			"RR client with unparseable cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrClientAnnotation:        "10_0_0_1",
+					},
+				},
+			},
+			false,
+			false,
+			"",
+			false,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			if err := createNodes(testcase.nrc.clientset, []*v1core.Node{testcase.node}); err != nil {
+				t.Errorf("failed to create existing nodes: %v", err)
+			}
+
+			err := testcase.nrc.startBgpServer()
+			if err == nil {
+				defer testcase.nrc.bgpServer.Stop()
+			}
+
+			if testcase.expectedBgpToStart {
+				if err != nil {
+					t.Fatalf("failed to start BGP server: %v", err)
+				}
+				if testcase.expectedRRServer != testcase.nrc.bgpRRServer {
+					t.Error("Node suppose to be RR server")
+				}
+				if testcase.expectedRRClient != testcase.nrc.bgpRRClient {
+					t.Error("Node suppose to be RR client")
+				}
+				if testcase.expectedClusterId != testcase.nrc.bgpClusterID {
+					t.Errorf("Node suppose to have cluster id '%s' but got %s", testcase.expectedClusterId, testcase.nrc.bgpClusterID)
+				}
+			} else {
+				if err == nil {
+					t.Fatal("misconfigured BGP server not suppose to start")
+				}
+			}
+		})
+	}
+
+}
+
 /* Disabling test for now. OnNodeUpdate() behaviour is changed. test needs to be adopted.
 func Test_OnNodeUpdate(t *testing.T) {
 	testcases := []struct {
