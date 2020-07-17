@@ -1523,7 +1523,11 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 
 			err := testcase.nrc.startBgpServer()
 			if err == nil {
-				defer testcase.nrc.bgpServer.Stop()
+				defer func() {
+					if err := testcase.nrc.bgpServer.Stop(); err != nil {
+						t.Fatalf("failed to stop BGP server : %s", err)
+					}
+				}()
 			}
 
 			if testcase.expectedBgpToStart {
