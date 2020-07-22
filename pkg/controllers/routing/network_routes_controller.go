@@ -718,8 +718,11 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 
 	nrc.bgpServer = gobgp.NewBgpServer()
 	go nrc.bgpServer.Serve()
-
-	g := bgpapi.NewGrpcServer(nrc.bgpServer, nrc.nodeIP.String()+":50051"+","+"127.0.0.1:50051")
+	ip := nrc.nodeIP.String()
+	if len(strings.Split(ip, ":")) >= 0 {
+		ip = "[" + ip + "]"
+	}
+	g := bgpapi.NewGrpcServer(nrc.bgpServer, ip+":50051"+","+"127.0.0.1:50051")
 
 	// TODO: Re-evaluate error-handling when upgrading gobgp
 	go func() {
