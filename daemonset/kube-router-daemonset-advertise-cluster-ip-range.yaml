@@ -70,7 +70,6 @@ spec:
             memory: 8Gi
         securityContext:
           privileged: true
-        imagePullPolicy: Always
         env:
         - name: NODE_NAME
           valueFrom:
@@ -96,7 +95,7 @@ spec:
       initContainers:
       - name: install-cni
         image: busybox
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         command:
         - /bin/sh
         - -c
