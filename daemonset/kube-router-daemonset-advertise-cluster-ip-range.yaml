@@ -60,6 +60,14 @@ spec:
           - --cluster-asn=64558
           - --peer-router-ips=192.168.110.1
           - --peer-router-asns=64558
+        imagePullPolicy: IfNotPresent
+        resources:
+          limits:
+            cpu: 4
+            memory: 12Gi
+          requests:
+            cpu: 2
+            memory: 8Gi
         securityContext:
           privileged: true
         imagePullPolicy: Always
