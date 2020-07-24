@@ -60,7 +60,7 @@ func GetNodeIP(node *apiv1.Node) (net.IP, error) {
 	return nil, errors.New("host IP unknown")
 }
 
-//GetNodeWeight returns the node's weight based on the node's annotations
+// GetNodeWeight returns the node's weight based on the node's annotations
 func GetNodeWeight(node *apiv1.Node, weightAnnotation string) (int, error) {
 	var weight int
 	var err error
