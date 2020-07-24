@@ -2259,7 +2259,6 @@ func (nsc *NetworkServicesController) newSvcEventHandler() cache.ResourceEventHa
 		},
 	}
 }
-}
 
 func (nsc *NetworkServicesController) handleServiceAdd(obj interface{}) {
 	service, ok := obj.(*api.Service)
@@ -2282,6 +2281,8 @@ func (nsc *NetworkServicesController) newNodeEventHandler() cache.ResourceEventH
 			nsc.OnNodeUpdate(obj)
 		},
 	}
+}
+
 func (nsc *NetworkServicesController) handleServiceUpdate(oldObj, newObj interface{}) {
 	_, ok := oldObj.(*api.Service)
 	if !ok {

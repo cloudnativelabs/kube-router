@@ -123,7 +123,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 				Address:       net.ParseIP(endpoint.ip),
 				AddressFamily: syscall.AF_INET,
 				Port:          uint16(endpoint.port),
-				Weight:        1,
+				Weight:        endpoint.weight,
 			}
 			// Conditions on which to add an endpoint on this node:
 			// 1) Service is not a local service
@@ -223,7 +223,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 				Address:       net.ParseIP(endpoint.ip),
 				AddressFamily: syscall.AF_INET,
 				Port:          uint16(endpoint.port),
-				Weight:        1,
+				Weight:        endpoint.weight,
 			}
 			for i := 0; i < len(ipvsNodeportSvcs); i++ {
 				if !svc.local || (svc.local && endpoint.isLocal) {
@@ -364,7 +364,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				Address:       net.ParseIP(endpoint.ip),
 				AddressFamily: syscall.AF_INET,
 				Port:          uint16(endpoint.port),
-				Weight:        1,
+				Weight:        endpoint.weight,
 			}
 
 			for _, externalIpService := range externalIpServices {
