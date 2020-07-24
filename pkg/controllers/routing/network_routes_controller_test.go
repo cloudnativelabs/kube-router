@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"errors"
 	"net"
 	"os"
 	"reflect"
@@ -170,7 +169,11 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -484,7 +487,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
+
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -641,7 +649,12 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
+
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -830,7 +843,12 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
+
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -1003,6 +1021,7 @@ func Test_advertisePodRoute(t *testing.T) {
 			"add bgp path for pod cidr using NODE_NAME",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
+				podCidr:   "172.20.0.0/24",
 			},
 			"node-1",
 			&v1core.Node{
@@ -1023,6 +1042,7 @@ func Test_advertisePodRoute(t *testing.T) {
 			&NetworkRoutingController{
 				bgpServer:        gobgp.NewBgpServer(),
 				hostnameOverride: "node-1",
+				podCidr:          "172.20.0.0/24",
 			},
 			"",
 			&v1core.Node{
@@ -1038,40 +1058,43 @@ func Test_advertisePodRoute(t *testing.T) {
 			},
 			nil,
 		},
-		{
-			"add bgp path for pod cidr without NODE_NAME or hostname override",
-			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
-			},
-			"",
-			&v1core.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "node-1",
+		/* disabling tests for now, as node POD cidr is read just once at the starting of the program
+		   Tests needs to be adopted to catch the errors when NetworkRoutingController starts
+			{
+				"add bgp path for pod cidr without NODE_NAME or hostname override",
+				&NetworkRoutingController{
+					bgpServer: gobgp.NewBgpServer(),
 				},
-				Spec: v1core.NodeSpec{
-					PodCIDR: "172.20.0.0/24",
+				"",
+				&v1core.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+					},
+					Spec: v1core.NodeSpec{
+						PodCIDR: "172.20.0.0/24",
+					},
 				},
+				map[string]bool{},
+				errors.New("Failed to get pod CIDR allocated for the node due to: Failed to identify the node by NODE_NAME, hostname or --hostname-override"),
 			},
-			map[string]bool{},
-			errors.New("Failed to get pod CIDR allocated for the node due to: Failed to identify the node by NODE_NAME, hostname or --hostname-override"),
-		},
-		{
-			"node does not have pod cidr set",
-			&NetworkRoutingController{
-				bgpServer: gobgp.NewBgpServer(),
-			},
-			"node-1",
-			&v1core.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "node-1",
+			{
+				"node does not have pod cidr set",
+				&NetworkRoutingController{
+					bgpServer: gobgp.NewBgpServer(),
 				},
-				Spec: v1core.NodeSpec{
-					PodCIDR: "",
+				"node-1",
+				&v1core.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+					},
+					Spec: v1core.NodeSpec{
+						PodCIDR: "",
+					},
 				},
+				map[string]bool{},
+				errors.New("node.Spec.PodCIDR not set for node: node-1"),
 			},
-			map[string]bool{},
-			errors.New("node.Spec.PodCIDR not set for node: node-1"),
-		},
+		*/
 	}
 
 	for _, testcase := range testcases {
@@ -1087,7 +1110,12 @@ func Test_advertisePodRoute(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
+
 			w := testcase.nrc.bgpServer.Watch(gobgp.WatchBestPath(false))
 
 			clientset := fake.NewSimpleClientset()
@@ -1288,11 +1316,17 @@ func Test_syncInternalPeers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
 
+			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
 			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
 				t.Errorf("failed to create existing nodes: %v", err)
 			}
+			waitForListerWithTimeout(testcase.nrc.nodeLister, time.Second*10, t)
 
 			testcase.nrc.syncInternalPeers()
 
@@ -1311,6 +1345,212 @@ func Test_syncInternalPeers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_routeReflectorConfiguration(t *testing.T) {
+	testcases := []struct {
+		name               string
+		nrc                *NetworkRoutingController
+		node               *v1core.Node
+		expectedRRServer   bool
+		expectedRRClient   bool
+		expectedClusterId  string
+		expectedBgpToStart bool
+	}{
+		{
+			"RR server with int cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrServerAnnotation:        "1",
+					},
+				},
+			},
+			true,
+			false,
+			"1",
+			true,
+		},
+		{
+			"RR server with IPv4 cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrServerAnnotation:        "10.0.0.1",
+					},
+				},
+			},
+			true,
+			false,
+			"10.0.0.1",
+			true,
+		},
+		{
+			"RR client with int cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrClientAnnotation:        "1",
+					},
+				},
+			},
+			false,
+			true,
+			"1",
+			true,
+		},
+		{
+			"RR client with IPv4 cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrClientAnnotation:        "10.0.0.1",
+					},
+				},
+			},
+			false,
+			true,
+			"10.0.0.1",
+			true,
+		},
+		{
+			"RR server with unparseable cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrServerAnnotation:        "10_0_0_1",
+					},
+				},
+			},
+			false,
+			false,
+			"",
+			false,
+		},
+		{
+			"RR client with unparseable cluster id",
+			&NetworkRoutingController{
+				bgpFullMeshMode:  false,
+				bgpPort:          10000,
+				clientset:        fake.NewSimpleClientset(),
+				nodeIP:           net.ParseIP("10.0.0.0"),
+				bgpServer:        gobgp.NewBgpServer(),
+				activeNodes:      make(map[string]bool),
+				nodeAsnNumber:    100,
+				hostnameOverride: "node-1",
+			},
+			&v1core.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node-1",
+					Annotations: map[string]string{
+						"kube-router.io/node.asn": "100",
+						rrClientAnnotation:        "10_0_0_1",
+					},
+				},
+			},
+			false,
+			false,
+			"",
+			false,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			if err := createNodes(testcase.nrc.clientset, []*v1core.Node{testcase.node}); err != nil {
+				t.Errorf("failed to create existing nodes: %v", err)
+			}
+
+			err := testcase.nrc.startBgpServer()
+			if err == nil {
+				defer func() {
+					if err := testcase.nrc.bgpServer.Stop(); err != nil {
+						t.Fatalf("failed to stop BGP server : %s", err)
+					}
+				}()
+			}
+
+			if testcase.expectedBgpToStart {
+				if err != nil {
+					t.Fatalf("failed to start BGP server: %v", err)
+				}
+				if testcase.expectedRRServer != testcase.nrc.bgpRRServer {
+					t.Error("Node suppose to be RR server")
+				}
+				if testcase.expectedRRClient != testcase.nrc.bgpRRClient {
+					t.Error("Node suppose to be RR client")
+				}
+				if testcase.expectedClusterId != testcase.nrc.bgpClusterID {
+					t.Errorf("Node suppose to have cluster id '%s' but got %s", testcase.expectedClusterId, testcase.nrc.bgpClusterID)
+				}
+			} else {
+				if err == nil {
+					t.Fatal("misconfigured BGP server not suppose to start")
+				}
+			}
+		})
+	}
+
 }
 
 /* Disabling test for now. OnNodeUpdate() behaviour is changed. test needs to be adopted.
@@ -1508,6 +1748,7 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				nodeAsnNumber:     100,
+				podCidr:           "172.20.0.0/24",
 			},
 			[]*v1core.Node{
 				{
@@ -1637,6 +1878,7 @@ func Test_AddPolicies(t *testing.T) {
 				bgpEnableInternal: true,
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
+				podCidr:           "172.20.0.0/24",
 				globalPeerRouters: []*config.Neighbor{
 					{
 						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
@@ -1801,6 +2043,7 @@ func Test_AddPolicies(t *testing.T) {
 				bgpEnableInternal: false,
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
+				podCidr:           "172.20.0.0/24",
 				globalPeerRouters: []*config.Neighbor{
 					{
 						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
@@ -1952,6 +2195,7 @@ func Test_AddPolicies(t *testing.T) {
 				pathPrependAS:     "65100",
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
+				podCidr:           "172.20.0.0/24",
 				globalPeerRouters: []*config.Neighbor{
 					{
 						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
@@ -2124,6 +2368,7 @@ func Test_AddPolicies(t *testing.T) {
 				pathPrependAS:     "65100",
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
+				podCidr:           "172.20.0.0/24",
 				globalPeerRouters: []*config.Neighbor{
 					{
 						Config: config.NeighborConfig{NeighborAddress: "10.10.0.1"},
@@ -2294,7 +2539,11 @@ func Test_AddPolicies(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
+			defer func() {
+				if err := testcase.nrc.bgpServer.Stop(); err != nil {
+					t.Fatalf("failed to stop BGP server : %s", err)
+				}
+			}()
 
 			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
 
@@ -2477,12 +2726,14 @@ func startInformersForRoutes(nrc *NetworkRoutingController, clientset kubernetes
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
 	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 
 	go informerFactory.Start(nil)
 	informerFactory.WaitForCacheSync(nil)
 
 	nrc.svcLister = svcInformer.GetIndexer()
 	nrc.epLister = epInformer.GetIndexer()
+	nrc.nodeLister = nodeInformer.GetIndexer()
 }
 
 func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *testing.T) {

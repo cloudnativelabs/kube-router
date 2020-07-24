@@ -28,10 +28,18 @@ func Main() error {
 
 	// Workaround for this issue:
 	// https://github.com/kubernetes/kubernetes/issues/17162
-	flag.CommandLine.Parse([]string{})
-
-	flag.Set("logtostderr", "true")
-	flag.Set("v", config.VLevel)
+	err := flag.CommandLine.Parse([]string{})
+	if err != nil {
+		return fmt.Errorf("Failed to parse flags: %s", err)
+	}
+	err = flag.Set("logtostderr", "true")
+	if err != nil {
+		return fmt.Errorf("Failed to set flag: %s", err)
+	}
+	err = flag.Set("v", config.VLevel)
+	if err != nil {
+		return fmt.Errorf("Failed to set flag: %s", err)
+	}
 
 	if config.HelpRequested {
 		pflag.Usage()
@@ -59,7 +67,7 @@ func Main() error {
 
 	if config.EnablePprof {
 		go func() {
-			fmt.Fprintf(os.Stdout, http.ListenAndServe("0.0.0.0:6060", nil).Error())
+			fmt.Fprintf(os.Stdout, "%s\n", http.ListenAndServe("0.0.0.0:6060", nil).Error())
 		}()
 	}
 

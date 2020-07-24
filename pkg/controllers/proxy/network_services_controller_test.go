@@ -52,7 +52,7 @@ func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr string, a
 func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 	svc := &ipvs.Service{
 		Address:  vip,
 		Protocol: protocol,
@@ -77,9 +77,6 @@ func (lnm *LinuxNetworkingMockImpl) cleanupMangleTableRule(ip string, protocol s
 	return nil
 }
 
-func logf(format string, a ...interface{}) {
-	fmt.Fprintf(GinkgoWriter, "INFO: "+format+"\n", a...)
-}
 func fatalf(format string, a ...interface{}) {
 	msg := fmt.Sprintf("FATAL: "+format+"\n", a...)
 	Fail(msg)
@@ -179,20 +176,22 @@ var _ = Describe("NetworkServicesController", func() {
 		})
 		JustBeforeEach(func() {
 			// pre-inject some foo ipvs Service to verify its deletion
-			fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, "rr", schedFlags{})
-			fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, "rr", schedFlags{true, true, false})
+			fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, 0, "rr", schedFlags{})
+			fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, 0, "rr", schedFlags{true, true, false})
 			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
 		})
 		It("Should have called cleanupMangleTableRule for ExternalIPs", func() {
+			fwmark1, _ := generateFwmark("1.1.1.1", "tcp", "8080")
+			fwmark2, _ := generateFwmark("2.2.2.2", "tcp", "8080")
 			Expect(
 				fmt.Sprintf("%v", mockedLinuxNetworking.cleanupMangleTableRuleCalls())).To(
 				Equal(
 					fmt.Sprintf("[{1.1.1.1 tcp 8080 %d} {2.2.2.2 tcp 8080 %d}]",
-						generateFwmark("1.1.1.1", "tcp", "8080"),
-						generateFwmark("2.2.2.2", "tcp", "8080"))))
+						fwmark1,
+						fwmark2)))
 		})
 		It("Should have called setupPolicyRoutingForDSR", func() {
 			Expect(

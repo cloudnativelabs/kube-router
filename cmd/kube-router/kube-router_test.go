@@ -18,8 +18,11 @@ func TestMainHelp(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		io.Copy(stderrBuf, stderrR)
-		wg.Done()
+		defer wg.Done()
+		_, err := io.Copy(stderrBuf, stderrR)
+		if err != nil {
+			panic(err)
+		}
 	}()
 
 	origArgs := os.Args
@@ -37,14 +40,18 @@ func TestMainHelp(t *testing.T) {
 		t.Fatalf("could not open docs/user-guide.md: %s\n", err)
 	}
 	docBuf := bytes.NewBuffer(nil)
-	docBuf.ReadFrom(docF)
+	_, err = docBuf.ReadFrom(docF)
+	if err != nil {
+		t.Fatalf("could not read from buffer: %s\n", err)
+	}
 	docF.Close()
 
 	exp := append([]byte("```\n"), stderrBuf.Bytes()...)
 	exp = append(exp, []byte("```\n")...)
 
 	if !bytes.Contains(docBuf.Bytes(), exp) {
-		t.Errorf("docs/README.md 'command line options' section does not match `kube-router --help`.\nExpected:\n%s", exp)
+		t.Errorf("docs/user-guide.md 'command line options' section does not match `kube-router --help`.\nExpected:\n%s", exp)
 		t.Errorf("\nGot:\n%s", docBuf.Bytes())
 	}
+
 }
