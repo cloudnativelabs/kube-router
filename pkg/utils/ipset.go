@@ -240,7 +240,10 @@ func (entry *Entry) Del() error {
 	if err != nil {
 		return err
 	}
-	entry.Set.Parent.Save()
+	err = entry.Set.Parent.Save()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

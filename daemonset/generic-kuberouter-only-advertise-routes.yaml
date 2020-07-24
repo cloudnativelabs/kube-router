@@ -17,9 +17,8 @@ spec:
       labels:
         k8s-app: kube-router
         tier: node
-      annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
+      priorityClassName: system-node-critical
       serviceAccountName: kube-router
       containers:
       - name: kube-router
@@ -29,6 +28,7 @@ spec:
         - "--run-router=true"
         - "--run-firewall=false"
         - "--run-service-proxy=false"
+        - "--bgp-graceful-restart=true"
         - "--enable-cni=false"
         - "--enable-ibgp=false"
         - "--enable-overlay=false"
@@ -55,17 +55,23 @@ spec:
             memory: 250Mi
         securityContext:
           privileged: true
+        volumeMounts:
+        - name: xtables-lock
+          mountPath: /run/xtables.lock
+          readOnly: false
       hostNetwork: true
       tolerations:
+      - effect: NoSchedule
+        operator: Exists
       - key: CriticalAddonsOnly
         operator: Exists
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/master
+      - effect: NoExecute
         operator: Exists
-      - effect: NoSchedule
-        key: node.kubernetes.io/not-ready
-        operator: Exists
-
+      volumes:
+        - name: xtables-lock
+          hostPath:
+            path: /run/xtables.lock
+            type: FileOrCreate
 ---
 apiVersion: v1
 kind: ServiceAccount

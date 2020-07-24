@@ -1,4 +1,4 @@
-FROM alpine:3.9
+FROM alpine:3.11
 
 RUN apk add --no-cache \
       iptables \
@@ -14,13 +14,11 @@ RUN apk add --no-cache \
     curl -L -o /usr/local/share/bash-completion/bash-completion \
         https://raw.githubusercontent.com/scop/bash-completion/master/bash_completion
 
-ADD build/image-assets/bashrc /root/.bashrc
-ADD build/image-assets/profile /root/.profile
-ADD build/image-assets/vimrc /root/.vimrc
-ADD build/image-assets/motd-kube-router.sh /etc/motd-kube-router.sh
-ADD kube-router gobgp /usr/local/bin/
-RUN cd && \
-    /usr/local/bin/gobgp --gen-cmpl --bash-cmpl-file /var/lib/gobgp/gobgp-completion.bash
+COPY build/image-assets/bashrc /root/.bashrc
+COPY build/image-assets/profile /root/.profile
+COPY build/image-assets/vimrc /root/.vimrc
+COPY build/image-assets/motd-kube-router.sh /etc/motd-kube-router.sh
+COPY kube-router gobgp /usr/local/bin/
 
-WORKDIR "/root"
+WORKDIR /root
 ENTRYPOINT ["/usr/local/bin/kube-router"]

@@ -12,9 +12,8 @@ spec:
       labels:
         k8s-app: kube-router
         tier: node
-      annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
+      priorityClassName: system-node-critical
       containers:
       - name: kube-router
         image: cloudnativelabs/kube-router

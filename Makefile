@@ -8,6 +8,7 @@ IMG_NAMESPACE?=cloudnativelabs
 GIT_COMMIT=$(shell git describe --tags --dirty)
 GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 IMG_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(if $(ARCH_TAG_PREFIX),$(ARCH_TAG_PREFIX)-)$(GIT_BRANCH)
+MANIFEST_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(GIT_BRANCH)
 RELEASE_TAG?=$(GOARCH)-$(shell build/get-git-tag.sh)
 REGISTRY?=$(if $(IMG_FQDN),$(IMG_FQDN)/$(IMG_NAMESPACE)/$(NAME),$(IMG_NAMESPACE)/$(NAME))
 REGISTRY_DEV?=$(REGISTRY)$(DEV_SUFFIX)
@@ -16,20 +17,26 @@ IS_ROOT=$(filter 0,$(shell id -u))
 DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
-BUILD_IN_DOCKER?=false
+BUILD_IN_DOCKER?=true
 DOCKER_BUILD_IMAGE?=golang:1.10.8-alpine3.9
+DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.27.0
+QEMU_IMAGE?=multiarch/qemu-user-static
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
-DOCKERFILE_SED_EXPR?=
+DOCKERFILE_SED_EXPR?=s,FROM alpine,FROM arm32v6/alpine,
 else ifeq ($(GOARCH), arm64)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM aarch64
-DOCKERFILE_SED_EXPR?=
+DOCKERFILE_SED_EXPR?=s,FROM alpine,FROM arm64v8/alpine,
 else ifeq ($(GOARCH), s390x)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=IBM S/390
-DOCKERFILE_SED_EXPR?=
+DOCKERFILE_SED_EXPR?=s,FROM alpine,FROM s390x/alpine,
+else ifeq ($(GOARCH), ppc64le)
+ARCH_TAG_PREFIX=$(GOARCH)
+FILE_ARCH=64-bit PowerPC
+DOCKERFILE_SED_EXPR?=s,FROM alpine,FROM ppc64le/alpine,
 else
 ARCH_TAG_PREFIX=amd64
 DOCKERFILE_SED_EXPR?=
@@ -51,12 +58,20 @@ else
 	GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)' -o kube-router cmd/kube-router/kube-router.go
 endif
 
-test: gofmt gomoqs ## Runs code quality pipelines (gofmt, tests, coverage, lint, etc)
+test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c 'go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
 else
 		go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...
+endif
+
+lint: gofmt
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_LINT_IMAGE) \
+	     sh -c 'golangci-lint run ./...'
+else
+	golangci-lint run ./...
 endif
 
 vagrant-up: export docker=$(DOCKER)
@@ -87,8 +102,12 @@ run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
 container: Dockerfile.$(GOARCH).run kube-router gobgp multiarch-binverify ## Builds a Docker container image.
-	@echo Starting kube-router container image build.
-	$(DOCKER) build -t "$(REGISTRY_DEV):$(IMG_TAG)" -f Dockerfile.$(GOARCH).run .
+	@echo Starting kube-router container image build for $(GOARCH) on $(shell go env GOHOSTARCH)
+	@if [ "$(GOARCH)" != "$(shell go env GOHOSTARCH)" ]; then \
+	    echo "Using qemu to build non-native container"; \
+	    $(DOCKER) run --rm --privileged $(QEMU_IMAGE) --reset -p yes; \
+	fi
+	$(DOCKER) build -t "$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))" -f Dockerfile.$(GOARCH).run .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
 	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
 	fi
@@ -117,6 +136,13 @@ push: container docker-login ## Pushes a Docker container image to a registry.
 	$(DOCKER) push "$(REGISTRY_DEV):$(IMG_TAG)"
 	@echo Finished kube-router container image push.
 
+push-manifest:
+	@echo Starting kube-router manifest push.
+	./manifest-tool push from-args \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
+		--template "$(REGISTRY_DEV):ARCH-$(MANIFEST_TAG)" \
+		--target "$(REGISTRY_DEV):$(MANIFEST_TAG)"
+
 push-release: push
 	@echo Starting kube-router release container image push.
 	@test -n "$(RELEASE_TAG)"
@@ -124,15 +150,15 @@ push-release: push
 	$(DOCKER) push "$(REGISTRY)"
 	@echo Finished kube-router release container image push.
 
-push-manifest:
+push-manifest-release:
 	@echo Starting kube-router manifest push.
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
 		--template "$(REGISTRY):ARCH-${RELEASE_TAG}" \
 		--target "$(REGISTRY):$(RELEASE_TAG)"
 
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
 		--template "$(REGISTRY):ARCH-${RELEASE_TAG}" \
 		--target "$(REGISTRY):latest"
 
@@ -148,8 +174,11 @@ release: push-release github-release ## Pushes a release to DockerHub and GitHub
 
 clean: ## Removes the kube-router binary and Docker images
 	rm -f kube-router
-	$(DOCKER) rmi $(REGISTRY_DEV)
-
+	rm -f gobgp
+	rm -f Dockerfile.$(GOARCH).run
+	if [ $(shell $(DOCKER) images -q $(REGISTRY_DEV):$(IMG_TAG) 2> /dev/null) ]; then \
+		 $(DOCKER) rmi $(REGISTRY_DEV):$(IMG_TAG); \
+	fi
 gofmt: ## Tells you what files need to be gofmt'd.
 	@build/verify-gofmt.sh
 
@@ -244,8 +273,8 @@ ifeq (vagrant,$(firstword $(MAKECMDGOALS)))
 endif
 
 .PHONY: build clean container run release goreleaser push gofmt gofmt-fix gomoqs
-.PHONY: update-glide test docker-login push-release github-release help
-.PHONY: gopath gopath-fix vagrant-up-single-node
+.PHONY: update-glide test lint docker-login push-manifest push-manifest-release
+.PHONY: push-release github-release help gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
 .PHONY: multiarch-binverify
 

@@ -39,9 +39,8 @@ spec:
     metadata:
       labels:
         k8s-app: kube-router
-      annotations:
-        scheduler.alpha.kubernetes.io/critical-pod: ''
     spec:
+      priorityClassName: system-node-critical
       containers:
       - name: kube-router
         image: docker.io/cloudnativelabs/kube-router
@@ -49,6 +48,7 @@ spec:
           - "--run-router=true"
           - "--run-firewall=true"
           - "--run-service-proxy=true"
+          - "--bgp-graceful-restart=true"
           - "--kubeconfig=/var/lib/kube-router/kubeconfig"
           - "--advertise-cluster-ip=true"
           - "--cluster-asn=64512"
@@ -79,9 +79,12 @@ spec:
         - name: kubeconfig
           mountPath: /var/lib/kube-router/kubeconfig
           readOnly: true
+        - name: xtables-lock
+          mountPath: /run/xtables.lock
+          readOnly: false
       initContainers:
       - name: install-cni
-        image: busybox
+        image: docker.io/cloudnativelabs/kube-router
         imagePullPolicy: Always
         command:
         - /bin/sh
@@ -102,13 +105,11 @@ spec:
           mountPath: /etc/kube-router
       hostNetwork: true
       tolerations:
+      - effect: NoSchedule
+        operator: Exists
       - key: CriticalAddonsOnly
         operator: Exists
-      - effect: NoSchedule
-        key: node-role.kubernetes.io/master
-        operator: Exists
-      - effect: NoSchedule
-        key: node.kubernetes.io/not-ready
+      - effect: NoExecute
         operator: Exists
       volumes:
       - name: lib-modules
@@ -123,3 +124,7 @@ spec:
       - name: kubeconfig
         hostPath:
           path: /var/lib/kube-router/kubeconfig
+      - name: xtables-lock
+        hostPath:
+          path: /run/xtables.lock
+          type: FileOrCreate

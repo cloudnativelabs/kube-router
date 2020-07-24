@@ -42,6 +42,8 @@ Usage of kube-router:
       --advertise-pod-cidr                            Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
       --bgp-graceful-restart                          Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
       --bgp-graceful-restart-deferral-time duration   BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h. (default 6m0s)
+      --bgp-graceful-restart-time duration            BGP Graceful restart time according to RFC4724 3, maximum 4095s. (default 1m30s)
+      --bgp-holdtime duration                         This parameter is mainly used to modify the holdtime declared to BGP peer. When Kube-router goes down abnormally, the local saving time of BGP route will be affected.Holdtime must be in the range 3s to 18h12m16s. (default 1m30s)
       --bgp-port uint16                               The port open for incoming BGP connections and to use for connecting with other BGP peers. (default 179)
       --cache-sync-timeout duration                   The timeout for cache synchronization (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
       --cleanup-config                                Cleanup iptables rules, ipvs, ipset configuration and exit.
@@ -53,6 +55,7 @@ Usage of kube-router:
       --enable-overlay                                When enable-overlay is set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. When set to false no tunneling is used and routing infrastructure is expected to route traffic for pod-to-pod networking across nodes in different subnets (default true)
       --enable-pod-egress                             SNAT traffic from Pods to destinations outside the cluster. (default true)
       --enable-pprof                                  Enables pprof for debugging performance and memory leak issues.
+      --excluded-cidrs strings                        Excluded CIDRs are used to exclude IPVS rules from deletion.
       --hairpin-mode                                  Add iptables rules for every Service Endpoint to support hairpin traffic.
       --health-port uint16                            Health check port, 0 = Disabled (default 20244)
   -h, --help                                          Print usage information.
@@ -60,6 +63,7 @@ Usage of kube-router:
       --iptables-sync-period duration                 The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
       --ipvs-graceful-period duration                 The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 30s)
       --ipvs-graceful-termination                     Enables the experimental IPVS graceful terminaton capability
+      --ipvs-permit-all                               Enables rule to accept all incoming traffic to service VIP's on the node. (default true)
       --ipvs-sync-period duration                     The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --kubeconfig string                             Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --masquerade-all                                SNAT all traffic to cluster IP/node port.
@@ -82,6 +86,8 @@ Usage of kube-router:
       --run-firewall                                  Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-router                                    Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
       --run-service-proxy                             Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
+      --service-cluster-ip-range string               CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12 (default "10.96.0.0/12")
+      --service-node-port-range string                NodePort range. Default: 30000-32767 (default "30000:32767")
   -v, --v string                                      log level for V logs (default "0")
   -V, --version                                       Print version information.
 ```
@@ -94,13 +100,13 @@ Usage of kube-router:
 
 - If you choose to use kube-router for pod-to-pod network connectivity then Kubernetes controller manager need to be configured to allocate pod CIDRs by passing `--allocate-node-cidrs=true` flag and providing a `cluster-cidr` (i.e. by passing --cluster-cidr=10.1.0.0/16 for e.g.)
 
-- If you choose to run kube-router as daemonset, then both kube-apiserver and kubelet must be run with `--allow-privileged=true` option
+- If you choose to run kube-router as daemonset in Kubernetes version below v1.15, both kube-apiserver and kubelet must be run with `--allow-privileged=true` option. In later Kubernetes versions, only kube-apiserver must be run with `--allow-privileged=true` option and if PodSecurityPolicy admission controller is enabled, you should create PodSecurityPolicy, allowing privileged kube-router pods.
 
 - If you choose to use kube-router for pod-to-pod network connecitvity then Kubernetes cluster must be configured to use CNI network plugins. On each node CNI conf file is expected to be present as /etc/cni/net.d/10-kuberouter.conf .`bridge` CNI plugin and `host-local` for IPAM should be used. A sample conf file that can be downloaded as `wget -O /etc/cni/net.d/10-kuberouter.conf https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/cni/10-kuberouter.conf`
 
 ## running as daemonset
 
-This is quickest way to deploy kube-router (**dont forget to ensure the requirements**). Just run
+This is quickest way to deploy kube-router in Kubernetes v1.8+ (**dont forget to ensure the requirements**). Just run
 
 ```
 kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kube-router-all-service-daemonset.yaml
@@ -235,6 +241,13 @@ Above changes are required for kube-router to enter pod namespeace and create ip
 assign the external IP to the VIP. 
 
 For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirements enabled.
+
+## SNATing Service Traffic
+By default, as traffic ingresses into the cluster, kube-router will source nat the traffic to ensure symmetric routing if it needs to proxy that traffic to ensure it gets to a node that has a service pod that is capable of servicing the traffic. This has a potential to cause issues when network policies are applied to that service since now the traffic will appear to be coming from a node in your cluster instead of the traffic originator.
+
+This is an issue that is common to all proxy's and all Kubernetes service proxies in general. You can read more information about this issue here: https://kubernetes.io/docs/tutorials/services/source-ip/#source-ip-for-services-with-type-nodeport
+
+In addition to the fix mentioned in the linked upstream documentation (using `service.spec.externalTrafficPolicy`), kube-router also provides DSR, which by its nature preserves the source IP, to solve this problem. For more information see the section above.
 
 ## Load balancing Scheduling Algorithms
 

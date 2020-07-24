@@ -15,7 +15,6 @@ import (
 	"github.com/osrg/gobgp/config"
 	gobgp "github.com/osrg/gobgp/server"
 	v1core "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -37,18 +36,20 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	}()
 
 	// get the current list of the nodes from API server
-	nodes, err := nrc.clientset.CoreV1().Nodes().List(metav1.ListOptions{})
-	if err != nil {
-		glog.Errorf("Failed to list nodes from API server due to: %s. Cannot perform BGP peer sync", err.Error())
-		return
-	}
+	nodes := nrc.nodeLister.List()
+
 	if nrc.MetricsEnabled {
-		metrics.ControllerBPGpeers.Set(float64(len(nodes.Items)))
+		metrics.ControllerBPGpeers.Set(float64(len(nodes)))
 	}
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
-	for _, node := range nodes.Items {
-		nodeIP, _ := utils.GetNodeIP(&node)
+	for _, obj := range nodes {
+		node := obj.(*v1core.Node)
+		nodeIP, err := utils.GetNodeIP(node)
+		if err != nil {
+			glog.Errorf("Failed to find a node IP and therefore cannot sync internal BGP Peer: %v", err)
+			continue
+		}
 
 		// skip self
 		if nodeIP.String() == nrc.nodeIP.String() {
@@ -105,6 +106,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			n.GracefulRestart = config.GracefulRestart{
 				Config: config.GracefulRestartConfig{
 					Enabled:      true,
+					RestartTime:  uint16(nrc.bgpGracefulRestartTime.Seconds()),
 					DeferralTime: uint16(nrc.bgpGracefulRestartDeferralTime.Seconds()),
 				},
 				State: config.GracefulRestartState{
@@ -146,11 +148,11 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				n.RouteReflector = config.RouteReflector{
 					Config: config.RouteReflectorConfig{
 						RouteReflectorClient:    true,
-						RouteReflectorClusterId: config.RrClusterIdType(fmt.Sprint(nrc.bgpClusterID)),
+						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterID),
 					},
 					State: config.RouteReflectorState{
 						RouteReflectorClient:    true,
-						RouteReflectorClusterId: config.RrClusterIdType(fmt.Sprint(nrc.bgpClusterID)),
+						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterID),
 					},
 				}
 			}
@@ -195,13 +197,15 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 }
 
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
-func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.Neighbor, bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration, peerMultihopTtl uint8) error {
+func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.Neighbor, bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration,
+	bgpGracefulRestartTime time.Duration, peerMultihopTtl uint8) error {
 	for _, n := range peerNeighbors {
 
 		if bgpGracefulRestart {
 			n.GracefulRestart = config.GracefulRestart{
 				Config: config.GracefulRestartConfig{
 					Enabled:      true,
+					RestartTime:  uint16(bgpGracefulRestartTime.Seconds()),
 					DeferralTime: uint16(bgpGracefulRestartDeferralTime.Seconds()),
 				},
 				State: config.GracefulRestartState{
@@ -259,7 +263,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.
 }
 
 // Does validation and returns neighbor configs
-func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []string) (
+func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []string, holdtime float64) (
 	[]*config.Neighbor, error) {
 	peers := make([]*config.Neighbor, 0)
 
@@ -299,6 +303,7 @@ func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []str
 				NeighborAddress: ips[i].String(),
 				PeerAs:          asns[i],
 			},
+			Timers: config.Timers{Config: config.TimersConfig{HoldTime: holdtime}},
 			Transport: config.Transport{
 				Config: config.TransportConfig{
 					RemotePort: options.DEFAULT_BGP_PORT,
@@ -324,21 +329,40 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			node := obj.(*v1core.Node)
-			nodeIP, _ := utils.GetNodeIP(node)
+			nodeIP, err := utils.GetNodeIP(node)
+			if err != nil {
+				glog.Errorf("New node received, but we were unable to add it as we were couldn't find it's node IP: %v", err)
+				return
+			}
 
 			glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
 			nrc.OnNodeUpdate(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			// we are interested only node add/delete, so skip update
-			return
-
+			// we are only interested in node add/delete, so skip update
 		},
 		DeleteFunc: func(obj interface{}) {
-			node := obj.(*v1core.Node)
-			nodeIP, _ := utils.GetNodeIP(node)
+			node, ok := obj.(*v1core.Node)
+			if !ok {
+				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+				if !ok {
+					glog.Errorf("unexpected object type: %v", obj)
+					return
+				}
+				if node, ok = tombstone.Obj.(*v1core.Node); !ok {
+					glog.Errorf("unexpected object type: %v", obj)
+					return
+				}
+			}
+			nodeIP, err := utils.GetNodeIP(node)
+			// In this case even if we can't get the NodeIP that's alright as the node is being removed anyway and
+			// future node lister operations that happen in OnNodeUpdate won't be affected as the node won't be returned
+			if err == nil {
+				glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
+			} else {
+				glog.Infof("Received node (IP unavailable) removed update from watch API, so remove node from peer")
+			}
 
-			glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
 			nrc.OnNodeUpdate(obj)
 		},
 	}

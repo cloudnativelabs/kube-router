@@ -4,11 +4,10 @@
 package proxy
 
 import (
-	"net"
-	"sync"
-
 	"github.com/docker/libnetwork/ipvs"
 	"github.com/vishvananda/netlink"
+	"net"
+	"sync"
 )
 
 var (
@@ -54,13 +53,13 @@ var _ LinuxNetworking = &LinuxNetworkingMock{}
 //             ipAddrDelFunc: func(iface netlink.Link, ip string) error {
 // 	               panic("mock out the ipAddrDel method")
 //             },
-//             ipvsAddFWMarkServiceFunc: func(vip net.IP, protocol uint16, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+//             ipvsAddFWMarkServiceFunc: func(vip net.IP, protocol uint16, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 // 	               panic("mock out the ipvsAddFWMarkService method")
 //             },
 //             ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 // 	               panic("mock out the ipvsAddServer method")
 //             },
-//             ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+//             ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 // 	               panic("mock out the ipvsAddService method")
 //             },
 //             ipvsDelDestinationFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
@@ -116,13 +115,13 @@ type LinuxNetworkingMock struct {
 	ipAddrDelFunc func(iface netlink.Link, ip string) error
 
 	// ipvsAddFWMarkServiceFunc mocks the ipvsAddFWMarkService method.
-	ipvsAddFWMarkServiceFunc func(vip net.IP, protocol uint16, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error)
+	ipvsAddFWMarkServiceFunc func(vip net.IP, protocol uint16, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
 
 	// ipvsAddServerFunc mocks the ipvsAddServer method.
 	ipvsAddServerFunc func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
 
 	// ipvsAddServiceFunc mocks the ipvsAddService method.
-	ipvsAddServiceFunc func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error)
+	ipvsAddServiceFunc func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
 
 	// ipvsDelDestinationFunc mocks the ipvsDelDestination method.
 	ipvsDelDestinationFunc func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
@@ -199,6 +198,8 @@ type LinuxNetworkingMock struct {
 			Port uint16
 			// Persistent is the persistent argument value.
 			Persistent bool
+			// PersistentTimeout is the persistentTimeout argument value.
+			PersistentTimeout int32
 			// Scheduler is the scheduler argument value.
 			Scheduler string
 			// Flags is the flags argument value.
@@ -223,6 +224,8 @@ type LinuxNetworkingMock struct {
 			Port uint16
 			// Persistent is the persistent argument value.
 			Persistent bool
+			// PersistentTimeout is the persistentTimeout argument value.
+			PersistentTimeout int32
 			// Scheduler is the scheduler argument value.
 			Scheduler string
 			// Flags is the flags argument value.
@@ -436,49 +439,53 @@ func (mock *LinuxNetworkingMock) ipAddrDelCalls() []struct {
 }
 
 // ipvsAddFWMarkService calls ipvsAddFWMarkServiceFunc.
-func (mock *LinuxNetworkingMock) ipvsAddFWMarkService(vip net.IP, protocol uint16, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (mock *LinuxNetworkingMock) ipvsAddFWMarkService(vip net.IP, protocol uint16, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 	if mock.ipvsAddFWMarkServiceFunc == nil {
 		panic("LinuxNetworkingMock.ipvsAddFWMarkServiceFunc: method is nil but LinuxNetworking.ipvsAddFWMarkService was just called")
 	}
 	callInfo := struct {
-		Vip        net.IP
-		Protocol   uint16
-		Port       uint16
-		Persistent bool
-		Scheduler  string
-		Flags      schedFlags
+		Vip               net.IP
+		Protocol          uint16
+		Port              uint16
+		Persistent        bool
+		PersistentTimeout int32
+		Scheduler         string
+		Flags             schedFlags
 	}{
-		Vip:        vip,
-		Protocol:   protocol,
-		Port:       port,
-		Persistent: persistent,
-		Scheduler:  scheduler,
-		Flags:      flags,
+		Vip:               vip,
+		Protocol:          protocol,
+		Port:              port,
+		Persistent:        persistent,
+		PersistentTimeout: persistentTimeout,
+		Scheduler:         scheduler,
+		Flags:             flags,
 	}
 	lockLinuxNetworkingMockipvsAddFWMarkService.Lock()
 	mock.calls.ipvsAddFWMarkService = append(mock.calls.ipvsAddFWMarkService, callInfo)
 	lockLinuxNetworkingMockipvsAddFWMarkService.Unlock()
-	return mock.ipvsAddFWMarkServiceFunc(vip, protocol, port, persistent, scheduler, flags)
+	return mock.ipvsAddFWMarkServiceFunc(vip, protocol, port, persistent, persistentTimeout, scheduler, flags)
 }
 
 // ipvsAddFWMarkServiceCalls gets all the calls that were made to ipvsAddFWMarkService.
 // Check the length with:
 //     len(mockedLinuxNetworking.ipvsAddFWMarkServiceCalls())
 func (mock *LinuxNetworkingMock) ipvsAddFWMarkServiceCalls() []struct {
-	Vip        net.IP
-	Protocol   uint16
-	Port       uint16
-	Persistent bool
-	Scheduler  string
-	Flags      schedFlags
+	Vip               net.IP
+	Protocol          uint16
+	Port              uint16
+	Persistent        bool
+	PersistentTimeout int32
+	Scheduler         string
+	Flags             schedFlags
 } {
 	var calls []struct {
-		Vip        net.IP
-		Protocol   uint16
-		Port       uint16
-		Persistent bool
-		Scheduler  string
-		Flags      schedFlags
+		Vip               net.IP
+		Protocol          uint16
+		Port              uint16
+		Persistent        bool
+		PersistentTimeout int32
+		Scheduler         string
+		Flags             schedFlags
 	}
 	lockLinuxNetworkingMockipvsAddFWMarkService.RLock()
 	calls = mock.calls.ipvsAddFWMarkService
@@ -522,53 +529,57 @@ func (mock *LinuxNetworkingMock) ipvsAddServerCalls() []struct {
 }
 
 // ipvsAddService calls ipvsAddServiceFunc.
-func (mock *LinuxNetworkingMock) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16, persistent bool, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (mock *LinuxNetworkingMock) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 	if mock.ipvsAddServiceFunc == nil {
 		panic("LinuxNetworkingMock.ipvsAddServiceFunc: method is nil but LinuxNetworking.ipvsAddService was just called")
 	}
 	callInfo := struct {
-		Svcs       []*ipvs.Service
-		Vip        net.IP
-		Protocol   uint16
-		Port       uint16
-		Persistent bool
-		Scheduler  string
-		Flags      schedFlags
+		Svcs              []*ipvs.Service
+		Vip               net.IP
+		Protocol          uint16
+		Port              uint16
+		Persistent        bool
+		PersistentTimeout int32
+		Scheduler         string
+		Flags             schedFlags
 	}{
-		Svcs:       svcs,
-		Vip:        vip,
-		Protocol:   protocol,
-		Port:       port,
-		Persistent: persistent,
-		Scheduler:  scheduler,
-		Flags:      flags,
+		Svcs:              svcs,
+		Vip:               vip,
+		Protocol:          protocol,
+		Port:              port,
+		Persistent:        persistent,
+		PersistentTimeout: persistentTimeout,
+		Scheduler:         scheduler,
+		Flags:             flags,
 	}
 	lockLinuxNetworkingMockipvsAddService.Lock()
 	mock.calls.ipvsAddService = append(mock.calls.ipvsAddService, callInfo)
 	lockLinuxNetworkingMockipvsAddService.Unlock()
-	return mock.ipvsAddServiceFunc(svcs, vip, protocol, port, persistent, scheduler, flags)
+	return mock.ipvsAddServiceFunc(svcs, vip, protocol, port, persistent, persistentTimeout, scheduler, flags)
 }
 
 // ipvsAddServiceCalls gets all the calls that were made to ipvsAddService.
 // Check the length with:
 //     len(mockedLinuxNetworking.ipvsAddServiceCalls())
 func (mock *LinuxNetworkingMock) ipvsAddServiceCalls() []struct {
-	Svcs       []*ipvs.Service
-	Vip        net.IP
-	Protocol   uint16
-	Port       uint16
-	Persistent bool
-	Scheduler  string
-	Flags      schedFlags
+	Svcs              []*ipvs.Service
+	Vip               net.IP
+	Protocol          uint16
+	Port              uint16
+	Persistent        bool
+	PersistentTimeout int32
+	Scheduler         string
+	Flags             schedFlags
 } {
 	var calls []struct {
-		Svcs       []*ipvs.Service
-		Vip        net.IP
-		Protocol   uint16
-		Port       uint16
-		Persistent bool
-		Scheduler  string
-		Flags      schedFlags
+		Svcs              []*ipvs.Service
+		Vip               net.IP
+		Protocol          uint16
+		Port              uint16
+		Persistent        bool
+		PersistentTimeout int32
+		Scheduler         string
+		Flags             schedFlags
 	}
 	lockLinuxNetworkingMockipvsAddService.RLock()
 	calls = mock.calls.ipvsAddService
