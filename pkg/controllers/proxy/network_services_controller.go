@@ -877,13 +877,7 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *api.Service) {
 }
 
 // OnNodeUpdate handle change in node update from the API server
-func (nsc *NetworkServicesController) OnNodeUpdate(obj interface{}) {
-	node, ok := obj.(*api.Node)
-	if !ok {
-		glog.Error("could not convert node update object to *v1.Node")
-		return
-	}
-
+func (nsc *NetworkServicesController) OnNodeUpdate(node *api.Node) {
 	glog.V(1).Infof("Received update to node: %s from watch API", node.Name)
 	if !nsc.readyForUpdates {
 		glog.V(3).Infof("Skipping update to node: %s, controller still performing bootup full-sync", node.Name)
@@ -2269,20 +2263,6 @@ func (nsc *NetworkServicesController) handleServiceAdd(obj interface{}) {
 	nsc.OnServiceUpdate(service)
 }
 
-func (nsc *NetworkServicesController) newNodeEventHandler() cache.ResourceEventHandler {
-	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			nsc.OnNodeUpdate(obj)
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			nsc.OnNodeUpdate(newObj)
-		},
-		DeleteFunc: func(obj interface{}) {
-			nsc.OnNodeUpdate(obj)
-		},
-	}
-}
-
 func (nsc *NetworkServicesController) handleServiceUpdate(oldObj, newObj interface{}) {
 	_, ok := oldObj.(*api.Service)
 	if !ok {
@@ -2311,6 +2291,59 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 		}
 	}
 	nsc.OnServiceUpdate(service)
+}
+
+func (nsc *NetworkServicesController) newNodeEventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			nsc.handleNodeAdd(obj)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			nsc.handleNodeUpdate(oldObj, newObj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			nsc.handleNodeDelete(obj)
+		},
+	}
+}
+
+func (nsc *NetworkServicesController) handleNodeAdd(obj interface{}) {
+	node, ok := obj.(*api.Node)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", obj)
+		return
+	}
+	nsc.OnNodeUpdate(node)
+}
+
+func (nsc *NetworkServicesController) handleNodeUpdate(oldObj, newObj interface{}) {
+	_, ok := oldObj.(*api.Node)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", oldObj)
+		return
+	}
+	newNode, ok := newObj.(*api.Node)
+	if !ok {
+		glog.Errorf("unexpected object type: %v", newObj)
+		return
+	}
+	nsc.OnNodeUpdate(newNode)
+}
+
+func (nsc *NetworkServicesController) handleNodeDelete(obj interface{}) {
+	node, ok := obj.(*api.Node)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+		if node, ok = tombstone.Obj.(*api.Node); !ok {
+			glog.Errorf("unexpected object type: %v", obj)
+			return
+		}
+	}
+	nsc.OnNodeUpdate(node)
 }
 
 // NewNetworkServicesController returns NetworkServicesController object
