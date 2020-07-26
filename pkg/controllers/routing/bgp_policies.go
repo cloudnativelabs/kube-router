@@ -142,7 +142,7 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 
 // BGP export policies are added so that following conditions are met:
 //
-// - by default export of all routes from the RIB to the neighbour's is denied, and explicity statements are added i
+// - by default export of all routes from the RIB to the neighbour's is denied, and explicitly statements are added i
 //   to permit the desired routes to be exported
 // - each node is allowed to advertise its assigned pod CIDR's to all of its iBGP peer neighbours with same ASN if --enable-ibgp=true
 // - each node is allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours

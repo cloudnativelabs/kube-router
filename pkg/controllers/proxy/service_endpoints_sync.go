@@ -310,7 +310,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				// ensure VIP less director. we dont assign VIP to any interface
 				err = nsc.ln.ipAddrDel(dummyVipInterface, externalIP)
 				if err != nil {
-					glog.Errorf("Failed to delete external ip adress from dummyVipInterface due to %s", err)
+					glog.Errorf("Failed to delete external ip address from dummyVipInterface due to %s", err)
 					continue
 				}
 				// do policy routing to deliver the packet locally so that IPVS can pick the packet
