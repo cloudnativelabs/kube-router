@@ -17,11 +17,12 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/golang/glog"
 
+	"time"
+
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"time"
 )
 
 // These get set at build time via -ldflags magic

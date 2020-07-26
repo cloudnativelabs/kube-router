@@ -5,14 +5,15 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"net"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"

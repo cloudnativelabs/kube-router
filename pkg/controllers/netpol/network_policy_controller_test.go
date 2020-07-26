@@ -2,13 +2,14 @@ package netpol
 
 import (
 	"context"
-	netv1 "k8s.io/api/networking/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/client-go/tools/cache"
 	"net"
 	"strings"
 	"testing"
 	"time"
+
+	netv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/client-go/tools/cache"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
