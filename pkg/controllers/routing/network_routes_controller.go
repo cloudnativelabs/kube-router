@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	IFACE_NOT_FOUND = "Link not found"
+	IfaceNotFound = "Link not found"
 
 	customRouteTableID   = "77"
 	customRouteTableName = "kube-router"
@@ -67,7 +67,7 @@ type NetworkRoutingController struct {
 	nodeName                       string
 	nodeSubnet                     net.IPNet
 	nodeInterface                  string
-	routerId                       string
+	routerID                       string
 	isIpv6                         bool
 	activeNodes                    map[string]bool
 	mu                             sync.Mutex
@@ -189,7 +189,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 
 	// create 'kube-bridge' interface to which pods will be connected
 	_, err = netlink.LinkByName("kube-bridge")
-	if err != nil && err.Error() == IFACE_NOT_FOUND {
+	if err != nil && err.Error() == IfaceNotFound {
 		linkAttrs := netlink.NewLinkAttrs()
 		linkAttrs.Name = "kube-bridge"
 		bridge := &netlink.Bridge{LinkAttrs: linkAttrs}
@@ -594,9 +594,8 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 func (nrc *NetworkRoutingController) newIptablesCmdHandler() (*iptables.IPTables, error) {
 	if nrc.isIpv6 {
 		return iptables.NewWithProtocol(iptables.ProtocolIPv6)
-	} else {
-		return iptables.NewWithProtocol(iptables.ProtocolIPv4)
 	}
+	return iptables.NewWithProtocol(iptables.ProtocolIPv4)
 }
 
 // ensure there is rule in filter table and FORWARD chain to permit in/out traffic from pods
@@ -741,7 +740,7 @@ func (nrc *NetworkRoutingController) startBgpServer() error {
 	global := &config.Global{
 		Config: config.GlobalConfig{
 			As:               nodeAsnNumber,
-			RouterId:         nrc.routerId,
+			RouterId:         nrc.routerID,
 			LocalAddressList: localAddressList,
 			Port:             int32(nrc.bgpPort),
 		},
@@ -882,7 +881,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
 	nrc.bgpGracefulRestartDeferralTime = kubeRouterConfig.BGPGracefulRestartDeferralTime
 	nrc.bgpGracefulRestartTime = kubeRouterConfig.BGPGracefulRestartTime
-	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTtl
+	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTTL
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
 	nrc.overrideNextHop = kubeRouterConfig.OverrideNextHop
@@ -894,9 +893,9 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
 
-	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldtime.Seconds()
+	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldTime.Seconds()
 	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {
-		return nil, errors.New("This is an incorrect BGP holdtime range, holdtime must be in the range 3s to 18h12m16s.")
+		return nil, errors.New("this is an incorrect BGP holdtime range, holdtime must be in the range 3s to 18h12m16s")
 	}
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
@@ -914,13 +913,13 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.nodeIP = nodeIP
 	nrc.isIpv6 = nodeIP.To4() == nil
 
-	if kubeRouterConfig.RouterId != "" {
-		nrc.routerId = kubeRouterConfig.RouterId
+	if kubeRouterConfig.RouterID != "" {
+		nrc.routerID = kubeRouterConfig.RouterID
 	} else {
 		if nrc.isIpv6 {
 			return nil, errors.New("Router-id must be specified in ipv6 operation")
 		}
-		nrc.routerId = nrc.nodeIP.String()
+		nrc.routerID = nrc.nodeIP.String()
 	}
 
 	// lets start with assumption we hace necessary IAM creds to access EC2 api
@@ -972,9 +971,9 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		nrc.defaultNodeAsnNumber = 64512 // this magic number is first of the private ASN range, use it as default
 	}
 
-	nrc.advertiseClusterIP = kubeRouterConfig.AdvertiseClusterIp
-	nrc.advertiseExternalIP = kubeRouterConfig.AdvertiseExternalIp
-	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIp
+	nrc.advertiseClusterIP = kubeRouterConfig.AdvertiseClusterIP
+	nrc.advertiseExternalIP = kubeRouterConfig.AdvertiseExternalIP
+	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIP
 	nrc.advertisePodCidr = kubeRouterConfig.AdvertiseNodePodCidr
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 	nrc.overlayType = kubeRouterConfig.OverlayType

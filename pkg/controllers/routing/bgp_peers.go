@@ -198,7 +198,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
 func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.Neighbor, bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration,
-	bgpGracefulRestartTime time.Duration, peerMultihopTtl uint8) error {
+	bgpGracefulRestartTime time.Duration, peerMultihopTTL uint8) error {
 	for _, n := range peerNeighbors {
 
 		if bgpGracefulRestart {
@@ -238,15 +238,15 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.
 				},
 			}
 		}
-		if peerMultihopTtl > 1 {
+		if peerMultihopTTL > 1 {
 			n.EbgpMultihop = config.EbgpMultihop{
 				Config: config.EbgpMultihopConfig{
 					Enabled:     true,
-					MultihopTtl: peerMultihopTtl,
+					MultihopTtl: peerMultihopTTL,
 				},
 				State: config.EbgpMultihopState{
 					Enabled:     true,
-					MultihopTtl: peerMultihopTtl,
+					MultihopTtl: peerMultihopTTL,
 				},
 			}
 		}
@@ -284,7 +284,7 @@ func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []str
 		return nil, errors.New("Invalid peer router config. " +
 			"The number of ports should either be zero, or one per peer router." +
 			" If blank items are used, it will default to standard BGP port, " +
-			strconv.Itoa(options.DEFAULT_BGP_PORT) + "\n" +
+			strconv.Itoa(options.DefaultBgpPort) + "\n" +
 			"Example: \"port,,port\" OR [\"port\",\"\",\"port\"].")
 	}
 
@@ -306,7 +306,7 @@ func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []str
 			Timers: config.Timers{Config: config.TimersConfig{HoldTime: holdtime}},
 			Transport: config.Transport{
 				Config: config.TransportConfig{
-					RemotePort: options.DEFAULT_BGP_PORT,
+					RemotePort: options.DefaultBgpPort,
 				},
 			},
 		}

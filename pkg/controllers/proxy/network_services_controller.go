@@ -35,16 +35,16 @@ import (
 )
 
 const (
-	KUBE_DUMMY_IF       = "kube-dummy-if"
-	KUBE_TUNNEL_IF      = "kube-tunnel-if"
-	IFACE_NOT_FOUND     = "Link not found"
-	IFACE_HAS_ADDR      = "file exists"
-	IFACE_HAS_NO_ADDR   = "cannot assign requested address"
-	IPVS_SERVER_EXISTS  = "file exists"
-	IPVS_MAGLEV_HASHING = "mh"
-	IPVS_SVC_F_SCHED1   = "flag-1"
-	IPVS_SVC_F_SCHED2   = "flag-2"
-	IPVS_SVC_F_SCHED3   = "flag-3"
+	KubeDummyIf       = "kube-dummy-if"
+	KubeTunnelIf      = "kube-tunnel-if"
+	IfaceNotFound     = "Link not found"
+	IfaceHasAddr      = "file exists"
+	IfaceHasNoAddr    = "cannot assign requested address"
+	IpvsServerExists  = "file exists"
+	IpvsMaglevHashing = "mh"
+	IpvsSvcFSched1    = "flag-1"
+	IpvsSvcFSched2    = "flag-2"
+	IpvsSvcFSched3    = "flag-3"
 
 	svcDSRAnnotation        = "kube-router.io/service.dsr"
 	svcSchedulerAnnotation  = "kube-router.io/service.scheduler"
@@ -83,7 +83,7 @@ type ipvsCalls interface {
 type netlinkCalls interface {
 	ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error
 	ipAddrDel(iface netlink.Link, ip string) error
-	prepareEndpointForDsr(containerId string, endpointIP string, vip string) error
+	prepareEndpointForDsr(containerID string, endpointIP string, vip string) error
 	getKubeDummyInterface() (netlink.Link, error)
 	setupRoutesForExternalIPForDSR(serviceInfoMap) error
 	setupPolicyRoutingForDSR() error
@@ -104,16 +104,16 @@ type linuxNetworking struct {
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrDel(iface, naddr)
-	if err != nil && err.Error() != IFACE_HAS_NO_ADDR {
+	if err != nil && err.Error() != IfaceHasNoAddr {
 		glog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
-			naddr.IPNet.IP.String(), KUBE_DUMMY_IF, err.Error())
+			naddr.IPNet.IP.String(), KubeDummyIf, err.Error())
 	}
 	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
 	if err == nil {
-		out, err := exec.Command("ip", "route", "delete", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
+		out, err := exec.Command("ip", "route", "delete", "local", ip, "dev", KubeDummyIf, "table", "local", "proto", "kernel", "scope", "host", "src",
 			NodeIP.String(), "table", "local").CombinedOutput()
 		if err != nil && !strings.Contains(string(out), "No such process") {
-			glog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
+			glog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KubeDummyIf, err, out)
 		}
 	}
 	return err
@@ -125,7 +125,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error {
 	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrAdd(iface, naddr)
-	if err != nil && err.Error() != IFACE_HAS_ADDR {
+	if err != nil && err.Error() != IfaceHasAddr {
 		glog.Errorf("Failed to assign cluster ip %s to dummy interface: %s",
 			naddr.IPNet.IP.String(), err.Error())
 		return err
@@ -142,10 +142,10 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 
 	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
 	// route is not replaced. For now do it with command.
-	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KUBE_DUMMY_IF, "table", "local", "proto", "kernel", "scope", "host", "src",
+	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KubeDummyIf, "table", "local", "proto", "kernel", "scope", "host", "src",
 		NodeIP.String(), "table", "local").CombinedOutput()
 	if err != nil {
-		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KUBE_DUMMY_IF, err, out)
+		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KubeDummyIf, err, out)
 	}
 	return nil
 }
@@ -213,7 +213,7 @@ type NetworkServicesController struct {
 	globalHairpin       bool
 	ipvsPermitAll       bool
 	client              kubernetes.Interface
-	nodeportBindOnAllIp bool
+	nodeportBindOnAllIP bool
 	MetricsEnabled      bool
 	ln                  LinuxNetworking
 	readyForUpdates     bool
@@ -843,7 +843,7 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *api.Service) {
 
 type externalIPService struct {
 	ipvsSvc    *ipvs.Service
-	externalIp string
+	externalIP string
 }
 
 func hasActiveEndpoints(svc *serviceInfo, endpoints []endpointsInfo) bool {
@@ -872,7 +872,7 @@ func (nsc *NetworkServicesController) getPodObjectForEndpoint(endpointIP string)
 // - enter process network namespace and create ipip tunnel
 // - add VIP to the tunnel interface
 // - disable rp_filter
-func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP string, vip string) error {
+func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP string, vip string) error {
 
 	// FIXME: its possible switch namespaces may never work safely in GO without hacks.
 	//	 https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion
@@ -904,7 +904,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	}
 	defer dockerClient.Close()
 
-	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerId)
+	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerID)
 	if err != nil {
 		return errors.New("Failed to get docker container spec due to " + err.Error())
 	}
@@ -932,9 +932,9 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 	// way to switch back to old namespace, pretty much all things will go wrong if we dont switch back
 
 	// create a ipip tunnel interface inside the endpoint container
-	tunIf, err := netlink.LinkByName(KUBE_TUNNEL_IF)
+	tunIf, err := netlink.LinkByName(KubeTunnelIf)
 	if err != nil {
-		if err.Error() != IFACE_NOT_FOUND {
+		if err.Error() != IfaceNotFound {
 			err = netns.Set(hostNetworkNamespaceHandle)
 			if err != nil {
 				return errors.New("Failed to get hostNetworkNamespace due to " + err.Error())
@@ -945,9 +945,9 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 			return errors.New("Failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
 		}
 
-		glog.V(2).Infof("Could not find tunnel interface " + KUBE_TUNNEL_IF + " in endpoint " + endpointIP + " so creating one.")
+		glog.V(2).Infof("Could not find tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + " so creating one.")
 		ipTunLink := netlink.Iptun{
-			LinkAttrs: netlink.LinkAttrs{Name: KUBE_TUNNEL_IF},
+			LinkAttrs: netlink.LinkAttrs{Name: KubeTunnelIf},
 			Local:     net.ParseIP(endpointIP),
 		}
 		err = netlink.LinkAdd(&ipTunLink)
@@ -966,12 +966,12 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 		// need to find the root cause
 		for retry := 0; retry < 60; retry++ {
 			time.Sleep(100 * time.Millisecond)
-			tunIf, err = netlink.LinkByName(KUBE_TUNNEL_IF)
+			tunIf, err = netlink.LinkByName(KubeTunnelIf)
 			if err == nil {
 				break
 			}
-			if err != nil && err.Error() == IFACE_NOT_FOUND {
-				glog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KUBE_TUNNEL_IF)
+			if err != nil && err.Error() == IfaceNotFound {
+				glog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KubeTunnelIf)
 				continue
 			} else {
 				break
@@ -986,10 +986,10 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 			activeNetworkNamespaceHandle, err = netns.Get()
 			glog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
 			activeNetworkNamespaceHandle.Close()
-			return errors.New("Failed to get " + KUBE_TUNNEL_IF + " tunnel interface handle due to " + err.Error())
+			return errors.New("Failed to get " + KubeTunnelIf + " tunnel interface handle due to " + err.Error())
 		}
 
-		glog.V(2).Infof("Successfully created tunnel interface " + KUBE_TUNNEL_IF + " in endpoint " + endpointIP + ".")
+		glog.V(2).Infof("Successfully created tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + ".")
 	}
 
 	// bring the tunnel interface up
@@ -1007,7 +1007,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerId string, endpointIP 
 
 	// assign VIP to the KUBE_TUNNEL_IF interface
 	err = ln.ipAddrAdd(tunIf, vip, false)
-	if err != nil && err.Error() != IFACE_HAS_ADDR {
+	if err != nil && err.Error() != IfaceHasAddr {
 		err = netns.Set(hostNetworkNamespaceHandle)
 		if err != nil {
 			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
@@ -1128,13 +1128,13 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 					svcInfo.scheduler = ipvs.DestinationHashing
 				} else if schedulingMethod == ipvs.SourceHashing {
 					svcInfo.scheduler = ipvs.SourceHashing
-				} else if schedulingMethod == IPVS_MAGLEV_HASHING {
-					svcInfo.scheduler = IPVS_MAGLEV_HASHING
+				} else if schedulingMethod == IpvsMaglevHashing {
+					svcInfo.scheduler = IpvsMaglevHashing
 				}
 			}
 
 			flags, ok := svc.ObjectMeta.Annotations[svcSchedFlagsAnnotation]
-			if ok && svcInfo.scheduler == IPVS_MAGLEV_HASHING {
+			if ok && svcInfo.scheduler == IpvsMaglevHashing {
 				svcInfo.flags = parseSchedFlags(flags)
 			}
 
@@ -1158,8 +1158,8 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 				svcInfo.local = true
 			}
 
-			svcId := generateServiceId(svc.Namespace, svc.Name, port.Name)
-			serviceMap[svcId] = &svcInfo
+			svcID := generateServiceID(svc.Namespace, svc.Name, port.Name)
+			serviceMap[svcID] = &svcInfo
 		}
 	}
 	return serviceMap
@@ -1175,11 +1175,11 @@ func parseSchedFlags(value string) schedFlags {
 	flags := strings.Split(value, ",")
 	for _, flag := range flags {
 		switch strings.Trim(flag, " ") {
-		case IPVS_SVC_F_SCHED1:
+		case IpvsSvcFSched1:
 			flag1 = true
-		case IPVS_SVC_F_SCHED2:
+		case IpvsSvcFSched2:
 			flag2 = true
-		case IPVS_SVC_F_SCHED3:
+		case IpvsSvcFSched3:
 			flag3 = true
 		default:
 		}
@@ -1203,13 +1203,13 @@ func (nsc *NetworkServicesController) buildEndpointsInfo() endpointsInfoMap {
 
 		for _, epSubset := range ep.Subsets {
 			for _, port := range epSubset.Ports {
-				svcId := generateServiceId(ep.Namespace, ep.Name, port.Name)
+				svcID := generateServiceID(ep.Namespace, ep.Name, port.Name)
 				endpoints := make([]endpointsInfo, 0)
 				for _, addr := range epSubset.Addresses {
 					isLocal := addr.NodeName != nil && *addr.NodeName == nsc.nodeHostName
 					endpoints = append(endpoints, endpointsInfo{ip: addr.IP, port: int(port.Port), isLocal: isLocal})
 				}
-				endpointsMap[svcId] = shuffle(endpoints)
+				endpointsMap[svcID] = shuffle(endpoints)
 			}
 		}
 	}
@@ -1771,7 +1771,7 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 		return nil
 	}
 
-	if strings.Contains(err.Error(), IPVS_SERVER_EXISTS) {
+	if strings.Contains(err.Error(), IpvsServerExists) {
 		err = ln.ipvsUpdateDestination(service, dest)
 		if err != nil {
 			return fmt.Errorf("Failed to update ipvs destination %s to the ipvs service %s due to : %s",
@@ -1790,7 +1790,7 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 const (
 	customDSRRouteTableID    = "78"
 	customDSRRouteTableName  = "kube-router-dsr"
-	externalIPRouteTableId   = "79"
+	externalIPRouteTableID   = "79"
 	externalIPRouteTableName = "external_ip"
 )
 
@@ -1906,7 +1906,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
 		}
 		defer f.Close()
-		if _, err = f.WriteString(externalIPRouteTableId + " " + externalIPRouteTableName + "\n"); err != nil {
+		if _, err = f.WriteString(externalIPRouteTableID + " " + externalIPRouteTableName + "\n"); err != nil {
 			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
 		}
 	}
@@ -1916,15 +1916,15 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		return errors.New("Failed to verify if `ip rule add prio 32765 from all lookup external_ip` exists due to: " + err.Error())
 	}
 
-	if !(strings.Contains(string(out), externalIPRouteTableName) || strings.Contains(string(out), externalIPRouteTableId)) {
-		err = exec.Command("ip", "rule", "add", "prio", "32765", "from", "all", "lookup", externalIPRouteTableId).Run()
+	if !(strings.Contains(string(out), externalIPRouteTableName) || strings.Contains(string(out), externalIPRouteTableID)) {
+		err = exec.Command("ip", "rule", "add", "prio", "32765", "from", "all", "lookup", externalIPRouteTableID).Run()
 		if err != nil {
 			glog.Infof("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to " + err.Error())
 			return errors.New("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to " + err.Error())
 		}
 	}
 
-	out, _ = exec.Command("ip", "route", "list", "table", externalIPRouteTableId).Output()
+	out, _ = exec.Command("ip", "route", "list", "table", externalIPRouteTableID).Output()
 	outStr := string(out)
 	activeExternalIPs := make(map[string]bool)
 	for _, svc := range serviceInfoMap {
@@ -1938,7 +1938,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 
 			if !strings.Contains(outStr, externalIP) {
 				if err = exec.Command("ip", "route", "add", externalIP, "dev", "kube-bridge", "table",
-					externalIPRouteTableId).Run(); err != nil {
+					externalIPRouteTableID).Run(); err != nil {
 					glog.Error("Failed to add route for " + externalIP + " in custom route table for external IP's due to: " + err.Error())
 					continue
 				}
@@ -1946,14 +1946,14 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 	}
 
-	// check if there are any pbr in externalIPRouteTableId for external IP's
+	// check if there are any pbr in externalIPRouteTableID for external IP's
 	if len(outStr) > 0 {
 		// clean up stale external IPs
 		for _, line := range strings.Split(strings.Trim(outStr, "\n"), "\n") {
 			route := strings.Split(strings.Trim(line, " "), " ")
 			ip := route[0]
 			if !activeExternalIPs[ip] {
-				args := []string{"route", "del", "table", externalIPRouteTableId}
+				args := []string{"route", "del", "table", externalIPRouteTableID}
 				args = append(args, route...)
 				if err = exec.Command("ip", args...).Run(); err != nil {
 					glog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s", ip, err)
@@ -1972,16 +1972,16 @@ func isEndpointsForLeaderElection(ep *api.Endpoints) bool {
 }
 
 // unique identifier for a load-balanced service (namespace + name + portname)
-func generateServiceId(namespace, svcName, port string) string {
+func generateServiceID(namespace, svcName, port string) string {
 	return namespace + "-" + svcName + "-" + port
 }
 
 // unique identifier for a load-balanced service (namespace + name + portname)
-func generateIpPortId(ip, protocol, port string) string {
+func generateIPPortID(ip, protocol, port string) string {
 	return ip + "-" + protocol + "-" + port
 }
 
-func generateEndpointId(ip, port string) string {
+func generateEndpointID(ip, port string) string {
 	return ip + ":" + port
 }
 
@@ -2017,14 +2017,14 @@ func getAllLocalIPs() ([]netlink.Addr, error) {
 
 func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 	var dummyVipInterface netlink.Link
-	dummyVipInterface, err := netlink.LinkByName(KUBE_DUMMY_IF)
-	if err != nil && err.Error() == IFACE_NOT_FOUND {
-		glog.V(1).Infof("Could not find dummy interface: " + KUBE_DUMMY_IF + " to assign cluster ip's, creating one")
-		err = netlink.LinkAdd(&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: KUBE_DUMMY_IF}})
+	dummyVipInterface, err := netlink.LinkByName(KubeDummyIf)
+	if err != nil && err.Error() == IfaceNotFound {
+		glog.V(1).Infof("Could not find dummy interface: " + KubeDummyIf + " to assign cluster ip's, creating one")
+		err = netlink.LinkAdd(&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: KubeDummyIf}})
 		if err != nil {
 			return nil, errors.New("Failed to add dummy interface:  " + err.Error())
 		}
-		dummyVipInterface, err = netlink.LinkByName(KUBE_DUMMY_IF)
+		dummyVipInterface, err = netlink.LinkByName(KubeDummyIf)
 		if err != nil {
 			return nil, errors.New("Failed to get dummy interface: " + err.Error())
 		}
@@ -2066,15 +2066,15 @@ func (nsc *NetworkServicesController) Cleanup() {
 	nsc.cleanupIpvsFirewall()
 
 	// delete dummy interface used to assign cluster IP's
-	dummyVipInterface, err := netlink.LinkByName(KUBE_DUMMY_IF)
+	dummyVipInterface, err := netlink.LinkByName(KubeDummyIf)
 	if err != nil {
-		if err.Error() != IFACE_NOT_FOUND {
-			glog.Infof("Dummy interface: " + KUBE_DUMMY_IF + " does not exist")
+		if err.Error() != IfaceNotFound {
+			glog.Infof("Dummy interface: " + KubeDummyIf + " does not exist")
 		}
 	} else {
 		err = netlink.LinkDel(dummyVipInterface)
 		if err != nil {
-			glog.Errorf("Could not delete dummy interface " + KUBE_DUMMY_IF + " due to " + err.Error())
+			glog.Errorf("Could not delete dummy interface " + KubeDummyIf + " due to " + err.Error())
 			return
 		}
 	}
@@ -2235,8 +2235,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		nsc.masqueradeAll = true
 	}
 
-	if config.NodePortBindOnAllIp {
-		nsc.nodeportBindOnAllIp = true
+	if config.NodePortBindOnAllIP {
+		nsc.nodeportBindOnAllIP = true
 	}
 
 	if config.RunRouter {

@@ -313,9 +313,8 @@ func (set *Set) IsActive() (bool, error) {
 func (set *Set) name() string {
 	if set.Parent.isIpv6 {
 		return "inet6:" + set.Name
-	} else {
-		return set.Name
 	}
+	return set.Name
 }
 
 // Parse ipset save stdout.

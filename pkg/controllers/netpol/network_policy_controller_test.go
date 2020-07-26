@@ -147,15 +147,15 @@ func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInfo
 		{name: "nsC", labels: labels.Set{"name": "c"}},
 		{name: "nsD", labels: labels.Set{"name": "d"}},
 	}
-	ips_used := make(map[string]bool)
+	ipsUsed := make(map[string]bool)
 	for _, pod := range pods {
 		podNamespaceMap.addPod(pod)
 		ipaddr := "1.1." + pod.ip
-		if ips_used[ipaddr] {
+		if ipsUsed[ipaddr] {
 			t.Fatalf("there is another pod with the same Ip address %s as this pod %s namespace %s",
 				ipaddr, pod.name, pod.name)
 		}
-		ips_used[ipaddr] = true
+		ipsUsed[ipaddr] = true
 		tAddToInformerStore(t, podInformer,
 			&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pod.name, Labels: pod.labels, Namespace: pod.namespace},
 				Status: v1.PodStatus{PodIP: ipaddr}})
