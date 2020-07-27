@@ -20,5 +20,9 @@ COPY build/image-assets/vimrc /root/.vimrc
 COPY build/image-assets/motd-kube-router.sh /etc/motd-kube-router.sh
 COPY kube-router gobgp /usr/local/bin/
 
+# Since alpine image doesn't contain /etc/nsswitch.conf, the hosts in /etc/hosts (e.g. localhost)
+# cannot be used. So manually add /etc/nsswitch.conf to work around this issue.
+RUN echo "hosts: files dns" > /etc/nsswitch.conf
+
 WORKDIR /root
 ENTRYPOINT ["/usr/local/bin/kube-router"]
