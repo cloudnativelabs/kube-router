@@ -36,6 +36,10 @@ func (nrc *NetworkRoutingController) createPodEgressRule() error {
 	if nrc.isIpv6 {
 		podEgressArgs = podEgressArgs6
 	}
+	if iptablesCmdHandler.HasRandomFully() {
+		podEgressArgs = append(podEgressArgs, "--random-fully")
+	}
+
 	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", podEgressArgs...)
 	if err != nil {
 		return errors.New("Failed to add iptables rule to masquerade outbound traffic from pods: " +
