@@ -33,6 +33,8 @@ In order for your architecture to support a larger network, you need to do the f
 <br>
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(3) You need to set both `--advertise-cluster-IP=true` and `--advertise-service-cluster-ip-range=ip_range_cidr` parameters.Let kubernetes node only notify service aggregate routes to the upstream routers, reducing the service routing entries of the upstream routers.See <a href="../docs/large-networks03.md">large-networks03 documentation</a> for details.
 <br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(4) In large-scale environment, load balancing of network traffic is very important. However, the configuration of `externalTrafficPolicy=Local` will lead to unbalanced network traffic load, so our production environment uses the default `externalTrafficPolicy=Cluster` . `externalTrafficPolicy` can only be used when the service is set to `loadbalancer` or `nodeport` . If the service is set to `loadbalancer` or `nodeport` , `externalTrafficPolicy=Cluster` should also be set.
+<br>
 <br>
 <br>
 
