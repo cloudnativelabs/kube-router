@@ -37,7 +37,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 
 [[constraint]]
   name = "github.com/coreos/go-iptables"
-  version = "0.2.0"
+  version = "0.4.1"
 
 [[constraint]]
   branch = "master"
