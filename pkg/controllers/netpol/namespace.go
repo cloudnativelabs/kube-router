@@ -1,10 +1,11 @@
 package netpol
 
 import (
+	"reflect"
+
 	"github.com/golang/glog"
 	api "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
-	"reflect"
 )
 
 func (npc *NetworkPolicyController) newNamespaceEventHandler() cache.ResourceEventHandler {

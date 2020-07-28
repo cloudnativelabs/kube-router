@@ -1354,7 +1354,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		node               *v1core.Node
 		expectedRRServer   bool
 		expectedRRClient   bool
-		expectedClusterId  string
+		expectedClusterID  string
 		expectedBgpToStart bool
 	}{
 		{
@@ -1540,8 +1540,8 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				if testcase.expectedRRClient != testcase.nrc.bgpRRClient {
 					t.Error("Node suppose to be RR client")
 				}
-				if testcase.expectedClusterId != testcase.nrc.bgpClusterID {
-					t.Errorf("Node suppose to have cluster id '%s' but got %s", testcase.expectedClusterId, testcase.nrc.bgpClusterID)
+				if testcase.expectedClusterID != testcase.nrc.bgpClusterID {
+					t.Errorf("Node suppose to have cluster id '%s' but got %s", testcase.expectedClusterID, testcase.nrc.bgpClusterID)
 				}
 			} else {
 				if err == nil {

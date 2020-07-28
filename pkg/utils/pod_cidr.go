@@ -85,7 +85,7 @@ func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 		}
 
 		if !updatedCidr {
-			return fmt.Errorf("Failed to insert subnet cidr into CNI conf file: %s as CNI file is invalid.", cniConfFilePath)
+			return fmt.Errorf("failed to insert subnet cidr into CNI conf file: %s as CNI file is invalid", cniConfFilePath)
 		}
 
 	} else {

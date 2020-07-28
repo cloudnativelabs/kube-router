@@ -9,18 +9,18 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const DEFAULT_BGP_PORT = 179
-const DEFAULT_BGP_HOLDTIME time.Duration = 90 * time.Second
+const DefaultBgpPort = 179
+const DefaultBgpHoldTime time.Duration = 90 * time.Second
 
 type KubeRouterConfig struct {
-	AdvertiseClusterIp             bool
-	AdvertiseExternalIp            bool
+	AdvertiseClusterIP             bool
+	AdvertiseExternalIP            bool
 	AdvertiseNodePodCidr           bool
-	AdvertiseLoadBalancerIp        bool
+	AdvertiseLoadBalancerIP        bool
 	BGPGracefulRestart             bool
 	BGPGracefulRestartTime         time.Duration
 	BGPGracefulRestartDeferralTime time.Duration
-	BGPHoldtime                    time.Duration
+	BGPHoldTime                    time.Duration
 	BGPPort                        uint16
 	CacheSyncTimeout               time.Duration
 	CleanupConfig                  bool
@@ -52,14 +52,14 @@ type KubeRouterConfig struct {
 	MetricsEnabled                 bool
 	MetricsPath                    string
 	MetricsPort                    uint16
-	NodePortBindOnAllIp            bool
+	NodePortBindOnAllIP            bool
 	OverrideNextHop                bool
 	PeerASNs                       []uint
-	PeerMultihopTtl                uint8
+	PeerMultihopTTL                uint8
 	PeerPasswords                  []string
 	PeerPorts                      []uint
 	PeerRouters                    []net.IP
-	RouterId                       string
+	RouterID                       string
 	RoutesSyncPeriod               time.Duration
 	RunFirewall                    bool
 	RunRouter                      bool
@@ -77,7 +77,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IpvsGracefulPeriod:             30 * time.Second,
 		RoutesSyncPeriod:               5 * time.Minute,
 		BGPGracefulRestartTime:         90 * time.Second,
-		BGPHoldtime:                    90 * time.Second,
+		BGPHoldTime:                    90 * time.Second,
 		BGPGracefulRestartDeferralTime: 360 * time.Second,
 		EnableOverlay:                  true,
 		OverlayType:                    "subnet",
@@ -129,23 +129,23 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enables rule to accept all incoming traffic to service VIP's on the node.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
-	fs.BoolVar(&s.AdvertiseClusterIp, "advertise-cluster-ip", false,
+	fs.BoolVar(&s.AdvertiseClusterIP, "advertise-cluster-ip", false,
 		"Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.")
-	fs.BoolVar(&s.AdvertiseExternalIp, "advertise-external-ip", false,
+	fs.BoolVar(&s.AdvertiseExternalIP, "advertise-external-ip", false,
 		"Add External IP of service to the RIB so that it gets advertised to the BGP peers.")
-	fs.BoolVar(&s.AdvertiseLoadBalancerIp, "advertise-loadbalancer-ip", false,
+	fs.BoolVar(&s.AdvertiseLoadBalancerIP, "advertise-loadbalancer-ip", false,
 		"Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseNodePodCidr, "advertise-pod-cidr", true,
 		"Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers.")
 	fs.IPSliceVar(&s.PeerRouters, "peer-router-ips", s.PeerRouters,
 		"The ip address of the external router to which all nodes will peer and advertise the cluster ip and pod cidr's.")
 	fs.UintSliceVar(&s.PeerPorts, "peer-router-ports", s.PeerPorts,
-		"The remote port of the external BGP to which all nodes will peer. If not set, default BGP port ("+strconv.Itoa(DEFAULT_BGP_PORT)+") will be used.")
+		"The remote port of the external BGP to which all nodes will peer. If not set, default BGP port ("+strconv.Itoa(DefaultBgpPort)+") will be used.")
 	fs.UintVar(&s.ClusterAsn, "cluster-asn", s.ClusterAsn,
 		"ASN number under which cluster nodes will run iBGP.")
 	fs.UintSliceVar(&s.PeerASNs, "peer-router-asns", s.PeerASNs,
 		"ASN numbers of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr.")
-	fs.Uint8Var(&s.PeerMultihopTtl, "peer-router-multihop-ttl", s.PeerMultihopTtl,
+	fs.Uint8Var(&s.PeerMultihopTTL, "peer-router-multihop-ttl", s.PeerMultihopTTL,
 		"Enable eBGP multihop supports -- sets multihop-ttl. (Relevant only if ttl >= 2)")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
@@ -155,11 +155,11 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"BGP Graceful restart time according to RFC4724 3, maximum 4095s.")
 	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time", s.BGPGracefulRestartDeferralTime,
 		"BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h.")
-	fs.DurationVar(&s.BGPHoldtime, "bgp-holdtime", DEFAULT_BGP_HOLDTIME,
+	fs.DurationVar(&s.BGPHoldTime, "bgp-holdtime", DefaultBgpHoldTime,
 		"This parameter is mainly used to modify the holdtime declared to BGP peer. When Kube-router goes down abnormally, the local saving time of BGP route will be affected.Holdtime must be in the range 3s to 18h12m16s.")
-	fs.Uint16Var(&s.BGPPort, "bgp-port", DEFAULT_BGP_PORT,
+	fs.Uint16Var(&s.BGPPort, "bgp-port", DefaultBgpPort,
 		"The port open for incoming BGP connections and to use for connecting with other BGP peers.")
-	fs.StringVar(&s.RouterId, "router-id", "", "BGP router-id. Must be specified in a ipv6 only cluster.")
+	fs.StringVar(&s.RouterID, "router-id", "", "BGP router-id. Must be specified in a ipv6 only cluster.")
 	fs.BoolVar(&s.EnableCNI, "enable-cni", true,
 		"Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin.")
 	fs.BoolVar(&s.EnableiBGP, "enable-ibgp", true,
@@ -168,7 +168,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.")
 	fs.BoolVar(&s.GlobalHairpinMode, "hairpin-mode", false,
 		"Add iptables rules for every Service Endpoint to support hairpin traffic.")
-	fs.BoolVar(&s.NodePortBindOnAllIp, "nodeport-bindon-all-ip", false,
+	fs.BoolVar(&s.NodePortBindOnAllIP, "nodeport-bindon-all-ip", false,
 		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
 	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,
 		"When enable-overlay is set to true, IP-in-IP tunneling is used for pod-to-pod networking across nodes in different subnets. "+

@@ -174,7 +174,7 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(objNew interface{}, objOld 
 
 func (nrc *NetworkRoutingController) getWithdraw(svcOld, svcNew *v1core.Service) (out []string) {
 	if svcOld != nil && svcNew != nil {
-		out = getMissingPrevGen(nrc.getExternalIps(svcOld), nrc.getExternalIps(svcNew))
+		out = getMissingPrevGen(nrc.getExternalIPs(svcOld), nrc.getExternalIPs(svcNew))
 	}
 	return
 }
@@ -273,43 +273,43 @@ func (nrc *NetworkRoutingController) serviceForEndpoints(ep *v1core.Endpoints) (
 	return item, nil
 }
 
-func (nrc *NetworkRoutingController) getClusterIp(svc *v1core.Service) string {
-	clusterIp := ""
+func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) string {
+	clusterIP := ""
 	if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
 
 		// skip headless services
 		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
-			clusterIp = svc.Spec.ClusterIP
+			clusterIP = svc.Spec.ClusterIP
 		}
 	}
-	return clusterIp
+	return clusterIP
 }
 
-func (nrc *NetworkRoutingController) getExternalIps(svc *v1core.Service) []string {
-	externalIpList := make([]string, 0)
+func (nrc *NetworkRoutingController) getExternalIPs(svc *v1core.Service) []string {
+	externalIPList := make([]string, 0)
 	if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
 
 		// skip headless services
 		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
-			externalIpList = append(externalIpList, svc.Spec.ExternalIPs...)
+			externalIPList = append(externalIPList, svc.Spec.ExternalIPs...)
 		}
 	}
-	return externalIpList
+	return externalIPList
 }
 
-func (nrc *NetworkRoutingController) getLoadBalancerIps(svc *v1core.Service) []string {
-	loadBalancerIpList := make([]string, 0)
+func (nrc *NetworkRoutingController) getLoadBalancerIPs(svc *v1core.Service) []string {
+	loadBalancerIPList := make([]string, 0)
 	if svc.Spec.Type == "LoadBalancer" {
 		// skip headless services
 		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {
 			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
 				if len(lbIngress.IP) > 0 {
-					loadBalancerIpList = append(loadBalancerIpList, lbIngress.IP)
+					loadBalancerIPList = append(loadBalancerIPList, lbIngress.IP)
 				}
 			}
 		}
 	}
-	return loadBalancerIpList
+	return loadBalancerIPList
 }
 
 func (nrc *NetworkRoutingController) getAllVIPs() ([]string, []string, error) {
@@ -384,21 +384,21 @@ func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) [
 	ipList := make([]string, 0)
 
 	if nrc.shouldAdvertiseService(svc, svcAdvertiseClusterAnnotation, nrc.advertiseClusterIP) {
-		clusterIP := nrc.getClusterIp(svc)
+		clusterIP := nrc.getClusterIP(svc)
 		if clusterIP != "" {
 			ipList = append(ipList, clusterIP)
 		}
 	}
 
 	if nrc.shouldAdvertiseService(svc, svcAdvertiseExternalAnnotation, nrc.advertiseExternalIP) {
-		ipList = append(ipList, nrc.getExternalIps(svc)...)
+		ipList = append(ipList, nrc.getExternalIPs(svc)...)
 	}
 
 	// Deprecated: Use service.advertise.loadbalancer=false instead of service.skiplbips.
 	_, skiplbips := svc.Annotations[svcSkipLbIpsAnnotation]
 	advertiseLoadBalancer := nrc.shouldAdvertiseService(svc, svcAdvertiseLoadBalancerAnnotation, nrc.advertiseLoadBalancerIP)
 	if advertiseLoadBalancer && !skiplbips {
-		ipList = append(ipList, nrc.getLoadBalancerIps(svc)...)
+		ipList = append(ipList, nrc.getLoadBalancerIPs(svc)...)
 	}
 
 	return ipList
