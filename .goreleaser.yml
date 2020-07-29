@@ -15,6 +15,10 @@ builds:
   - 7
   env:
   - CGO_ENABLED=0
+  ldflags:
+  - "-X github.com/cloudnativelabs/kube-router/pkg/cmd.version={{.Version}}"
+  - "-X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate={{.Date}}"
+
 archives:
   -
     format: tar.gz
