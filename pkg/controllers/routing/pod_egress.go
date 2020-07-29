@@ -91,6 +91,16 @@ func (nrc *NetworkRoutingController) deleteBadPodEgressRules() error {
 	if nrc.isIpv6 {
 		podEgressArgsBad = podEgressArgsBad6
 	}
+
+	// If random fully is supported remove the original rule as well
+	if iptablesCmdHandler.HasRandomFully() {
+		if !nrc.isIpv6 {
+			podEgressArgsBad = append(podEgressArgsBad, podEgressArgs4)
+		} else {
+			podEgressArgsBad = append(podEgressArgsBad, podEgressArgs6)
+		}
+	}
+
 	for _, args := range podEgressArgsBad {
 		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {

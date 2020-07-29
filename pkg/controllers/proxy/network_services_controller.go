@@ -1276,6 +1276,16 @@ func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
 		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "MASQUERADE"},
 	}
 
+	// If random fully is supported remove the original rules as well
+	if iptablesCmdHandler.HasRandomFully() {
+		argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()})
+
+		if len(nsc.podCidr) > 0 {
+			argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
+				"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()})
+		}
+	}
+
 	for _, args := range argsBad {
 		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {
