@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -28,15 +27,15 @@ func Main() error {
 
 	// Workaround for this issue:
 	// https://github.com/kubernetes/kubernetes/issues/17162
-	err := flag.CommandLine.Parse([]string{})
+	err := pflag.CommandLine.Parse([]string{})
 	if err != nil {
 		return fmt.Errorf("Failed to parse flags: %s", err)
 	}
-	err = flag.Set("logtostderr", "true")
+	err = pflag.Set("logtostderr", "true")
 	if err != nil {
 		return fmt.Errorf("Failed to set flag: %s", err)
 	}
-	err = flag.Set("v", config.VLevel)
+	err = pflag.Set("v", config.VLevel)
 	if err != nil {
 		return fmt.Errorf("Failed to set flag: %s", err)
 	}
