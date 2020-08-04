@@ -1225,6 +1225,9 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
 	}
 	var args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
+	if iptablesCmdHandler.HasRandomFully() {
+		args = append(args, "--random-fully")
+	}
 	if nsc.masqueradeAll {
 		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
@@ -1248,6 +1251,10 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 		//TODO: ipset should be used for destination podCidr(s) match after multiple podCidr(s) per node get supported
 		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
 			"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
+		if iptablesCmdHandler.HasRandomFully() {
+			args = append(args, "--random-fully")
+		}
+
 		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to run iptables command" + err.Error())
@@ -1267,6 +1274,16 @@ func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
 	var argsBad = [][]string{
 		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"},
 		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "MASQUERADE"},
+	}
+
+	// If random fully is supported remove the original rules as well
+	if iptablesCmdHandler.HasRandomFully() {
+		argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()})
+
+		if len(nsc.podCidr) > 0 {
+			argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
+				"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()})
+		}
 	}
 
 	for _, args := range argsBad {

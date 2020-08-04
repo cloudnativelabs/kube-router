@@ -36,6 +36,10 @@ func (nrc *NetworkRoutingController) createPodEgressRule() error {
 	if nrc.isIpv6 {
 		podEgressArgs = podEgressArgs6
 	}
+	if iptablesCmdHandler.HasRandomFully() {
+		podEgressArgs = append(podEgressArgs, "--random-fully")
+	}
+
 	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", podEgressArgs...)
 	if err != nil {
 		return errors.New("Failed to add iptables rule to masquerade outbound traffic from pods: " +
@@ -57,6 +61,10 @@ func (nrc *NetworkRoutingController) deletePodEgressRule() error {
 	if nrc.isIpv6 {
 		podEgressArgs = podEgressArgs6
 	}
+	if iptablesCmdHandler.HasRandomFully() {
+		podEgressArgs = append(podEgressArgs, "--random-fully")
+	}
+
 	exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", podEgressArgs...)
 	if err != nil {
 		return errors.New("Failed to lookup iptables rule to masquerade outbound traffic from pods: " + err.Error())
@@ -83,6 +91,16 @@ func (nrc *NetworkRoutingController) deleteBadPodEgressRules() error {
 	if nrc.isIpv6 {
 		podEgressArgsBad = podEgressArgsBad6
 	}
+
+	// If random fully is supported remove the original rule as well
+	if iptablesCmdHandler.HasRandomFully() {
+		if !nrc.isIpv6 {
+			podEgressArgsBad = append(podEgressArgsBad, podEgressArgs4)
+		} else {
+			podEgressArgsBad = append(podEgressArgsBad, podEgressArgs6)
+		}
+	}
+
 	for _, args := range podEgressArgsBad {
 		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {
