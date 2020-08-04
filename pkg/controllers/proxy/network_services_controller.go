@@ -47,12 +47,13 @@ const (
 	IpvsSvcFSched2    = "flag-2"
 	IpvsSvcFSched3    = "flag-3"
 
-	svcDSRAnnotation        = "kube-router.io/service.dsr"
-	svcSchedulerAnnotation  = "kube-router.io/service.scheduler"
-	svcHairpinAnnotation    = "kube-router.io/service.hairpin"
-	svcLocalAnnotation      = "kube-router.io/service.local"
-	svcSkipLbIpsAnnotation  = "kube-router.io/service.skiplbips"
-	svcSchedFlagsAnnotation = "kube-router.io/service.schedflags"
+	svcDSRAnnotation                = "kube-router.io/service.dsr"
+	svcSchedulerAnnotation          = "kube-router.io/service.scheduler"
+	svcHairpinAnnotation            = "kube-router.io/service.hairpin"
+	svcHairpinExternalIPsAnnotation = "kube-router.io/service.hairpin.externalips"
+	svcLocalAnnotation              = "kube-router.io/service.local"
+	svcSkipLbIpsAnnotation          = "kube-router.io/service.skiplbips"
+	svcSchedFlagsAnnotation         = "kube-router.io/service.schedflags"
 
 	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
 	localIPsIPSetName                 = "kube-router-local-ips"
@@ -257,6 +258,7 @@ type serviceInfo struct {
 	scheduler                     string
 	directServerReturnMethod      string
 	hairpin                       bool
+	hairpinExternalIPs            bool
 	skipLbIps                     bool
 	externalIPs                   []string
 	loadBalancerIPs               []string
@@ -1399,6 +1401,7 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 				svcInfo.sessionAffinityTimeoutSeconds = *svc.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds
 			}
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations[svcHairpinAnnotation]
+			_, svcInfo.hairpinExternalIPs = svc.ObjectMeta.Annotations[svcHairpinExternalIPsAnnotation]
 			_, svcInfo.local = svc.ObjectMeta.Annotations[svcLocalAnnotation]
 			_, svcInfo.skipLbIps = svc.ObjectMeta.Annotations[svcSkipLbIpsAnnotation]
 			if svc.Spec.ExternalTrafficPolicy == api.ServiceExternalTrafficPolicyTypeLocal {
@@ -1573,6 +1576,14 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 				// Handle ClusterIP Service
 				rule, ruleArgs := hairpinRuleFrom(svcInfo.clusterIP.String(), ep.ip, svcInfo.port)
 				rulesNeeded[rule] = ruleArgs
+
+				// Handle ExternalIPs if requested
+				if svcInfo.hairpinExternalIPs {
+					for _, extip := range svcInfo.externalIPs {
+						rule, ruleArgs := hairpinRuleFrom(extip, ep.ip, svcInfo.port)
+						rulesNeeded[rule] = ruleArgs
+					}
+				}
 
 				// Handle NodePort Service
 				if svcInfo.nodePort != 0 {

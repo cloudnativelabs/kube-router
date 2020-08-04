@@ -216,6 +216,11 @@ To enable hairpin traffic for Service `my-service`:
 kubectl annotate service my-service "kube-router.io/service.hairpin="
 ```
 
+If you want hairpin also apply on externalIPs declared for Service `my-service`:
+```
+kubectl annotate service my-service "kube-router.io/service.hairpin.externalips="
+```
+
 ## Direct server return
 
 Please read below blog on how to user DSR in combination with `--advertise-external-ip` to build highly scalable and available ingress.
