@@ -1,3 +1,12 @@
+---
+name: Feature request
+about: Suggest an idea for kube-router
+title: ''
+labels: feature
+assignees: ''
+
+---
+
 **Is your feature request related to a problem? Please describe.**
 A clear and concise description of what the problem is and what the feature provides.
 

@@ -1,3 +1,12 @@
+---
+name: Report a bug
+about: Create a bug report to help us improve kube-router
+title: ''
+labels: bug
+assignees: ''
+
+---
+
 **What happened?**
 A clear and concise description of what the bug is.
 
