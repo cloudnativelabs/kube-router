@@ -15,18 +15,17 @@ const DefaultBgpHoldTime time.Duration = 90 * time.Second
 type KubeRouterConfig struct {
 	AdvertiseClusterIP             bool
 	AdvertiseExternalIP            bool
-	AdvertiseNodePodCidr           bool
 	AdvertiseLoadBalancerIP        bool
+	AdvertiseNodePodCidr           bool
 	BGPGracefulRestart             bool
-	BGPGracefulRestartTime         time.Duration
 	BGPGracefulRestartDeferralTime time.Duration
+	BGPGracefulRestartTime         time.Duration
 	BGPHoldTime                    time.Duration
 	BGPPort                        uint16
 	CacheSyncTimeout               time.Duration
 	CleanupConfig                  bool
 	ClusterAsn                     uint
 	ClusterIPCIDR                  string
-	NodePortRange                  string
 	DisableSrcDstCheck             bool
 	EnableCNI                      bool
 	EnableiBGP                     bool
@@ -35,16 +34,15 @@ type KubeRouterConfig struct {
 	EnablePprof                    bool
 	ExcludedCidrs                  []string
 	FullMeshMode                   bool
-	OverlayType                    string
 	GlobalHairpinMode              bool
 	HealthPort                     uint16
 	HelpRequested                  bool
 	HostnameOverride               string
 	IPTablesSyncPeriod             time.Duration
-	IpvsSyncPeriod                 time.Duration
 	IpvsGracefulPeriod             time.Duration
 	IpvsGracefulTermination        bool
 	IpvsPermitAll                  bool
+	IpvsSyncPeriod                 time.Duration
 	Kubeconfig                     string
 	MasqueradeAll                  bool
 	Master                         string
@@ -52,6 +50,8 @@ type KubeRouterConfig struct {
 	MetricsPath                    string
 	MetricsPort                    uint16
 	NodePortBindOnAllIP            bool
+	NodePortRange                  string
+	OverlayType                    string
 	OverrideNextHop                bool
 	PeerASNs                       []uint
 	PeerMultihopTTL                uint8
@@ -70,18 +70,18 @@ type KubeRouterConfig struct {
 
 func NewKubeRouterConfig() *KubeRouterConfig {
 	return &KubeRouterConfig{
-		CacheSyncTimeout:               1 * time.Minute,
-		IpvsSyncPeriod:                 5 * time.Minute,
-		IPTablesSyncPeriod:             5 * time.Minute,
-		IpvsGracefulPeriod:             30 * time.Second,
-		RoutesSyncPeriod:               5 * time.Minute,
+		BGPGracefulRestartDeferralTime: 360 * time.Second,
 		BGPGracefulRestartTime:         90 * time.Second,
 		BGPHoldTime:                    90 * time.Second,
-		BGPGracefulRestartDeferralTime: 360 * time.Second,
-		EnableOverlay:                  true,
-		OverlayType:                    "subnet",
+		CacheSyncTimeout:               1 * time.Minute,
 		ClusterIPCIDR:                  "10.96.0.0/12",
+		EnableOverlay:                  true,
+		IPTablesSyncPeriod:             5 * time.Minute,
+		IpvsGracefulPeriod:             30 * time.Second,
+		IpvsSyncPeriod:                 5 * time.Minute,
 		NodePortRange:                  "30000:32767",
+		OverlayType:                    "subnet",
+		RoutesSyncPeriod:               5 * time.Minute,
 	}
 }
 
