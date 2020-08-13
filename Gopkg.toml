@@ -25,7 +25,7 @@
 #   unused-packages = true
 
 
-required = ["github.com/osrg/gobgp/gobgp"]
+required = ["github.com/osrg/gobgp/cmd/gobgp"]
 
 [[constraint]]
   name = "github.com/aws/aws-sdk-go"
@@ -57,7 +57,7 @@ required = ["github.com/osrg/gobgp/gobgp"]
 
 [[constraint]]
   name = "github.com/osrg/gobgp"
-  revision = "v1.33"
+  revision = "v2.19.0"
 
 [[constraint]]
   name = "github.com/prometheus/client_golang"
@@ -66,10 +66,6 @@ required = ["github.com/osrg/gobgp/gobgp"]
 [[constraint]]
   branch = "master"
   name = "github.com/spf13/pflag"
-
-[[override]]
-  name = "github.com/vishvananda/netlink"
-  revision = "f504738125a57f35f87fc30fb69b8df75237ccde"
 
 [[constraint]]
   branch = "master"
@@ -86,10 +82,6 @@ required = ["github.com/osrg/gobgp/gobgp"]
 [[constraint]]
   branch = "release-5.0"
   name = "k8s.io/client-go"
-
-[[constraint]]
-  name = "github.com/docker/libnetwork"
-  revision = "48f846327bbe6a0dce0c556e8dc9f5bb939d5c16"
 
 [[override]]
   revision = "1e2f10eb65743fed02f573d31a4587de09afb20e"

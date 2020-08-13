@@ -26,14 +26,6 @@
   revision = "de5bf2ad457846296e2031421a34e2568e304e35"
 
 [[projects]]
-  branch = "master"
-  digest = "1:9fd3a6ab34bb103ba228eefd044d3f9aa476237ea95a46d12e8cccd3abf3fea2"
-  name = "github.com/armon/go-radix"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "1fca145dffbcaa8fe914309b1ec0cfc67500fe61"
-
-[[projects]]
   digest = "1:220c8689d516e36f763897aaee8db751f30cbc7f2b87536e44555019796ef191"
   name = "github.com/aws/aws-sdk-go"
   packages = [
@@ -178,13 +170,6 @@
   version = "v0.3.3"
 
 [[projects]]
-  digest = "1:ac5ec8249d02dc101ed000889d1890304e3da1b5180547ec4a19e335e6550f03"
-  name = "github.com/docker/libnetwork"
-  packages = ["ipvs"]
-  pruneopts = "UT"
-  revision = "48f846327bbe6a0dce0c556e8dc9f5bb939d5c16"
-
-[[projects]]
   digest = "1:975a4480c40f2d0b95e1f83d3ec1aa29a2774e80179e08a9a4ba2aab86721b23"
   name = "github.com/eapache/channels"
   packages = ["."]
@@ -296,13 +281,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:0f56223de1ca49228034f96a18d3659415404c986426290b9761935f02894755"
+  digest = "1:d065eaf4a4a4a84927e32c5f8fb76e0c304607deda28152d3856d3afc5f2e2c2"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
     "ptypes",
     "ptypes/any",
     "ptypes/duration",
+    "ptypes/empty",
     "ptypes/timestamp",
   ]
   pruneopts = "UT"
@@ -323,6 +309,14 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "24818f796faf91cd76ec7bddd72458fbced7a6c1"
+
+[[projects]]
+  digest = "1:582b704bebaa06b48c29b0cec224a6058a09c86883aaddabde889cd1a5f73e1b"
+  name = "github.com/google/uuid"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "0cd6bf5da1e1c83f8b45653022c74f71af0538a4"
+  version = "v1.1.1"
 
 [[projects]]
   digest = "1:5e031a35b76ee001fa9ca9d598298054a123d080e00d13a8dafcfc5e3ecd5b58"
@@ -402,18 +396,6 @@
   version = "v1.0"
 
 [[projects]]
-  digest = "1:ce530152667dc8ba823a586c1c81175aff2c4e15500520883a2727d0ed17c6f1"
-  name = "github.com/influxdata/influxdb"
-  packages = [
-    "client/v2",
-    "models",
-    "pkg/escape",
-  ]
-  pruneopts = "UT"
-  revision = "02d7d4f043b34ecb4e9b2dbec298c6f9450c2a32"
-  version = "v1.5.2"
-
-[[projects]]
   digest = "1:e22af8c7518e1eab6f2eab2b7d7558927f816262586cd6ed9f349c97a6c285c4"
   name = "github.com/jmespath/go-jmespath"
   packages = ["."]
@@ -435,6 +417,14 @@
   pruneopts = "UT"
   revision = "59fac5042749a5afb9af70e813da1dd5474f0167"
   version = "1.0.1"
+
+[[projects]]
+  digest = "1:ccc618903d74d6f16ab36c64b2fe0e177cb38ff2c6309ea3d6ba02319432826f"
+  name = "github.com/k-sone/critbitgo"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "4536a49cdb164af1fc76e276ebeaf004338d2044"
+  version = "v1.4.0"
 
 [[projects]]
   digest = "1:5149009cc36718234a9ad2896b04b04716808b8d72143b5687c0a15b53132b27"
@@ -471,6 +461,14 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "00c29f56e2386353d58c599509e8dc3801b0d716"
+
+[[projects]]
+  digest = "1:292743fa9707fd5e20f2e1b8b98a6fe39c856d26d186dcf35fd557c750f75136"
+  name = "github.com/moby/ipvs"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "4566ccea0e08d68e9614c3e7a64a23b850c4bb35"
+  version = "v1.0.1"
 
 [[projects]]
   digest = "1:33422d238f147d247752996a26574ac48dcf472976eda7f5134015f06bf16563"
@@ -556,24 +554,25 @@
   version = "v1.0.1"
 
 [[projects]]
-  digest = "1:653b5223cbe73bc57d2fc74881c6d77e67a056b7c886973cff7d9522d7c04eab"
+  digest = "1:994e0bb0e1583fe3862d5fb2be62383d79aafe5169ba534b47148d47614a4706"
   name = "github.com/osrg/gobgp"
   packages = [
     "api",
-    "client",
-    "config",
-    "gobgp",
-    "gobgp/cmd",
-    "packet/bgp",
-    "packet/bmp",
-    "packet/mrt",
-    "packet/rtr",
-    "server",
-    "table",
-    "zebra",
+    "cmd/gobgp",
+    "internal/pkg/apiutil",
+    "internal/pkg/config",
+    "internal/pkg/table",
+    "internal/pkg/version",
+    "internal/pkg/zebra",
+    "pkg/config",
+    "pkg/packet/bgp",
+    "pkg/packet/bmp",
+    "pkg/packet/mrt",
+    "pkg/packet/rtr",
+    "pkg/server",
   ]
   pruneopts = "UT"
-  revision = "v1.33"
+  revision = "v2.19.0"
 
 [[projects]]
   digest = "1:7231124c9669dfb54b82ef8b89f2735cf5d5d2529a23c6ac93a8c4b8bbb28b28"
@@ -652,14 +651,6 @@
   revision = "8b1c2da0d56deffdbb9e48d4414b4e674bd8083e"
 
 [[projects]]
-  branch = "master"
-  digest = "1:ff6b0586c0621a76832cf783eee58cbb9d9795d2ce8acbc199a4131db11c42a9"
-  name = "github.com/satori/go.uuid"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "36e9d2ebbde5e3f13ab2e25625fd453271d6522e"
-
-[[projects]]
   digest = "1:9e9193aa51197513b3abcb108970d831fbcf40ef96aa845c4f03276e1fa316d2"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -719,14 +710,15 @@
   revision = "8dc2790b029dc41e2b8ff772c63c26adbb1db70d"
 
 [[projects]]
-  digest = "1:7a2aba84d53fb903d985b8a1ae09fb3fa4aca20e305828c18b678e576a0005bf"
+  digest = "1:1314b5ef1c0b25257ea02e454291bf042478a48407cfe3ffea7e20323bbf5fdf"
   name = "github.com/vishvananda/netlink"
   packages = [
     ".",
     "nl",
   ]
   pruneopts = "UT"
-  revision = "f504738125a57f35f87fc30fb69b8df75237ccde"
+  revision = "f049be6f391489d3f374498fe0c8df8449258372"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
@@ -768,14 +760,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:4d0a3e91e65c614186d6f0e9a65b7a1c0f80ff233634585c6f8eed728fabf4cb"
+  digest = "1:b3702c4f3ba83ef5ac12217b0b5919dc40be5ac4c6be25f791b3b3bddf4dab76"
   name = "golang.org/x/sys"
   packages = [
+    "internal/unsafeheader",
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "2281fa97ef7b0c26324634d5a22f04babdac8713"
+  revision = "6a926be9bd1de9da2007a5071f42528afca90858"
 
 [[projects]]
   digest = "1:bb8277a2ca2bcad6ff7f413b939375924099be908cedd1314baa21ecd08df477"
@@ -860,14 +853,6 @@
   pruneopts = "UT"
   revision = "d2d2541c53f18d2a059457998ce2876cc8e67cbf"
   version = "v0.9.1"
-
-[[projects]]
-  branch = "v2"
-  digest = "1:5bb148b78468350091db2ffbb2370f35cc6dcd74d9378a31b1c7b86ff7528f08"
-  name = "gopkg.in/tomb.v2"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "d5d1b5820637886def9eef33e03a27a9f166942c"
 
 [[projects]]
   digest = "1:342378ac4dcb378a5448dd723f0784ae519383532f5e70ade24132c4c8693202"
@@ -1115,16 +1100,17 @@
     "github.com/containernetworking/cni/plugins/ipam/host-local/backend/allocator",
     "github.com/coreos/go-iptables/iptables",
     "github.com/docker/docker/client",
-    "github.com/docker/libnetwork/ipvs",
     "github.com/golang/glog",
+    "github.com/golang/protobuf/ptypes",
+    "github.com/golang/protobuf/ptypes/any",
+    "github.com/moby/ipvs",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
     "github.com/osrg/gobgp/api",
-    "github.com/osrg/gobgp/config",
-    "github.com/osrg/gobgp/gobgp",
-    "github.com/osrg/gobgp/packet/bgp",
-    "github.com/osrg/gobgp/server",
-    "github.com/osrg/gobgp/table",
+    "github.com/osrg/gobgp/cmd/gobgp",
+    "github.com/osrg/gobgp/internal/pkg/table",
+    "github.com/osrg/gobgp/pkg/config",
+    "github.com/osrg/gobgp/pkg/server",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",
     "github.com/spf13/pflag",
@@ -1135,6 +1121,7 @@
     "k8s.io/api/core/v1",
     "k8s.io/api/extensions/v1beta1",
     "k8s.io/api/networking/v1",
+    "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/util/intstr",
