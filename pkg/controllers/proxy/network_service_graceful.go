@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/docker/libnetwork/ipvs"
+	"github.com/moby/ipvs"
 	"github.com/golang/glog"
 )
 

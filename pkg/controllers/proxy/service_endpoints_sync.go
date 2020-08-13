@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
-	"github.com/docker/libnetwork/ipvs"
+	"github.com/moby/ipvs"
 	"github.com/golang/glog"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/util/sets"

@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/docker/libnetwork/ipvs"
+	"github.com/moby/ipvs"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"

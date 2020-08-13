@@ -4,7 +4,7 @@
 package proxy
 
 import (
-	"github.com/docker/libnetwork/ipvs"
+	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
 	"net"
 	"sync"
