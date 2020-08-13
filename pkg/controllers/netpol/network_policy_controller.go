@@ -201,7 +201,19 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		glog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
 	}
 
-	ensureRuleAtposition := func(chain string, ruleSpec []string, position int) {
+	addUuidForRuleSpec := func(chain string, ruleSpec *[]string) (string, error) {
+		hash := sha256.Sum256([]byte(chain + strings.Join(*ruleSpec, "")))
+		encoded := base32.StdEncoding.EncodeToString(hash[:])[:16]
+		for idx, part := range *ruleSpec {
+			if "--comment" == part {
+				(*ruleSpec)[idx+1] = (*ruleSpec)[idx+1] + " - " + encoded
+				return encoded, nil
+			}
+		}
+		return "", fmt.Errorf("could not find a comment in the ruleSpec string given: %s", strings.Join(*ruleSpec, " "))
+	}
+
+	ensureRuleAtPosition := func(chain string, ruleSpec []string, uuid string, position int) {
 		exists, err := iptablesCmdHandler.Exists("filter", chain, ruleSpec...)
 		if err != nil {
 			glog.Fatalf("Failed to verify rule exists in %s chain due to %s", chain, err.Error())
@@ -253,23 +265,43 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			glog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
 		}
 		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
-		ensureRuleAtposition(builtinChain, args, 1)
+		uuid, err := addUuidForRuleSpec(builtinChain, &args)
+		if err != nil {
+			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		ensureRuleAtPosition(builtinChain, args, uuid,1)
 	}
 
 	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange.String(), "-j", "RETURN"}
-	ensureRuleAtposition(kubeInputChainName, whitelistServiceVips, 1)
+	uuid, err := addUuidForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+	if err != nil {
+		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, 1)
 
-	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment", "allow LOCAL traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment", "allow LOCAL TCP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
-	ensureRuleAtposition(kubeInputChainName, whitelistTCPNodeports, 2)
+	uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistTCPNodeports)
+	if err != nil {
+		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	ensureRuleAtPosition(kubeInputChainName, whitelistTCPNodeports, uuid, 2)
 
-	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment", "allow LOCAL traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment", "allow LOCAL UDP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
-	ensureRuleAtposition(kubeInputChainName, whitelistUDPNodeports, 3)
+	uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistUDPNodeports)
+	if err != nil {
+		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	ensureRuleAtPosition(kubeInputChainName, whitelistUDPNodeports, uuid, 3)
 
 	for externalIPIndex, externalIPRange := range npc.serviceExternalIPRanges {
-		whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", externalIPRange.String(), "-j", "RETURN"}
-		ensureRuleAtposition(kubeInputChainName, whitelistServiceVips, externalIPIndex+3)
+		whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to external IP range: " + externalIPRange.String(), "-d", externalIPRange.String(), "-j", "RETURN"}
+		uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+		if err != nil {
+			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, externalIPIndex+4)
 	}
 
 }
