@@ -57,7 +57,7 @@ const (
 type NetworkPolicyController struct {
 	nodeIP                net.IP
 	nodeHostName          string
-	serviceClusterIPRange string
+	serviceClusterIPRange net.IPNet
 	serviceNodePortRange  string
 	mu                    sync.Mutex
 	syncPeriod            time.Duration
@@ -248,7 +248,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		ensureRuleAtposition(builtinChain, args, 1)
 	}
 
-	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange, "-j", "RETURN"}
+	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange.String(), "-j", "RETURN"}
 	ensureRuleAtposition(kubeInputChainName, whitelistServiceVips, 1)
 
 	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment", "allow LOCAL traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
@@ -1815,7 +1815,11 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	// be up to date with all of the policy changes from any enqueued request after that
 	npc.fullSyncRequestChan = make(chan struct{}, 1)
 
-	npc.serviceClusterIPRange = config.ClusterIPCIDR
+	_, ipnet, err := net.ParseCIDR(config.ClusterIPCIDR)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %s", err.Error())
+	}
+	npc.serviceClusterIPRange = *ipnet
 	npc.serviceNodePortRange = config.NodePortRange
 
 	if config.MetricsEnabled {
