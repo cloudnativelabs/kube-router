@@ -32,6 +32,7 @@ type KubeRouterConfig struct {
 	EnablePodEgress                bool
 	EnablePprof                    bool
 	ExcludedCidrs                  []string
+	ExternalIPCIDRs                []string
 	FullMeshMode                   bool
 	GlobalHairpinMode              bool
 	HealthPort                     uint16
@@ -179,6 +180,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enables Service Proxy -- sets up IPVS for Kubernetes Services.")
 	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
 		"CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12")
+	fs.StringSliceVar(&s.ExternalIPCIDRs, "service-external-ip-range", s.ExternalIPCIDRs,
+		"Specify external IP CIDRs that are used for inter-cluster communication (can be specified multiple times)")
 	fs.StringVar(&s.NodePortRange, "service-node-port-range", s.NodePortRange,
 		"NodePort range specified with either a hyphen or colon")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")

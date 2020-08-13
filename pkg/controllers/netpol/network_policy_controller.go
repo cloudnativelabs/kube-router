@@ -55,16 +55,17 @@ const (
 
 // NetworkPolicyController strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	nodeIP                net.IP
-	nodeHostName          string
-	serviceClusterIPRange net.IPNet
-	serviceNodePortRange  string
-	mu                    sync.Mutex
-	syncPeriod            time.Duration
-	MetricsEnabled        bool
-	v1NetworkPolicy       bool
-	healthChan            chan<- *healthcheck.ControllerHeartbeat
-	fullSyncRequestChan   chan struct{}
+	nodeIP                  net.IP
+	nodeHostName            string
+	serviceClusterIPRange   net.IPNet
+	serviceExternalIPRanges []net.IPNet
+	serviceNodePortRange    string
+	mu                      sync.Mutex
+	syncPeriod              time.Duration
+	MetricsEnabled          bool
+	v1NetworkPolicy         bool
+	healthChan              chan<- *healthcheck.ControllerHeartbeat
+	fullSyncRequestChan     chan struct{}
 
 	ipSetHandler *utils.IPSet
 
@@ -258,6 +259,11 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment", "allow LOCAL traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
 	ensureRuleAtposition(kubeInputChainName, whitelistUDPNodeports, 3)
+
+	for externalIPIndex, externalIPRange := range npc.serviceExternalIPRanges {
+		whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", externalIPRange.String(), "-j", "RETURN"}
+		ensureRuleAtposition(kubeInputChainName, whitelistServiceVips, externalIPIndex+3)
+	}
 
 }
 
@@ -1815,12 +1821,14 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	// be up to date with all of the policy changes from any enqueued request after that
 	npc.fullSyncRequestChan = make(chan struct{}, 1)
 
+	// Validate and parse ClusterIP service range
 	_, ipnet, err := net.ParseCIDR(config.ClusterIPCIDR)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %s", err.Error())
 	}
 	npc.serviceClusterIPRange = *ipnet
 
+	// Validate and parse NodePort range
 	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]{1}([0-9]+)$`)
 	if matched := nodePortValidator.MatchString(config.NodePortRange); !matched {
 		return nil, fmt.Errorf("failed to parse node port range given: '%s' please see specification in help text", config.NodePortRange)
@@ -1841,6 +1849,15 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		return nil, fmt.Errorf("port 1 is greater than or equal to port 2 in range given: '%s'", config.NodePortRange)
 	}
 	npc.serviceNodePortRange = fmt.Sprintf("%d:%d", port1, port2)
+
+	// Validate and parse ExternalIP service range
+	for _, externalIPRange := range config.ExternalIPCIDRs {
+		_, ipnet, err := net.ParseCIDR(externalIPRange)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parse --service-external-ip-range parameter: '%s'. Error: %s", externalIPRange, err.Error())
+		}
+		npc.serviceExternalIPRanges = append(npc.serviceExternalIPRanges, *ipnet)
+	}
 
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
