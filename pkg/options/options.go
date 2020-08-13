@@ -78,7 +78,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IPTablesSyncPeriod:             5 * time.Minute,
 		IpvsGracefulPeriod:             30 * time.Second,
 		IpvsSyncPeriod:                 5 * time.Minute,
-		NodePortRange:                  "30000:32767",
+		NodePortRange:                  "30000-32767",
 		OverlayType:                    "subnet",
 		RoutesSyncPeriod:               5 * time.Minute,
 	}
@@ -180,7 +180,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
 		"CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12")
 	fs.StringVar(&s.NodePortRange, "service-node-port-range", s.NodePortRange,
-		"NodePort range. Default: 30000-32767")
+		"NodePort range specified with either a hyphen or colon")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
 	fs.BoolVarP(&s.Version, "version", "V", false,
 		"Print version information.")
