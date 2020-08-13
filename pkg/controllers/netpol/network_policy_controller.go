@@ -218,11 +218,18 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			glog.Fatalf("failed to list rules in filter table %s chain due to %s", chain, err.Error())
 		}
 
-		var ruleNo int
+		var ruleNo, ruleIndexOffset int
 		for i, rule := range rules {
 			rule = strings.Replace(rule, "\"", "", 2) //removes quote from comment string
-			if strings.Contains(rule, strings.Join(ruleSpec, " ")) {
-				ruleNo = i
+			if strings.HasPrefix(rule, "-P") || strings.HasPrefix(rule, "-N") {
+				// if this chain has a default policy, then it will show as rule #1 from iptablesCmdHandler.List so we
+				// need to account for this offset
+				ruleIndexOffset += 1
+				continue
+			}
+			if strings.Contains(rule, uuid) {
+				// range uses a 0 index, but iptables uses a 1 index so we need to increase ruleNo by 1
+				ruleNo = i+1-ruleIndexOffset
 				break
 			}
 		}
