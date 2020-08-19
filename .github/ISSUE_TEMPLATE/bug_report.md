@@ -25,6 +25,7 @@ If applicable, add those here to help explain your problem.
 
 ** System Information (please complete the following information):**
  - Kube-Router Version (`kube-router --version`): [e.g. 1.0.1]
+ - Kube-Router Parameters: [e.g. --run-router --run-service-proxy --enable-overlay --overlay-type=full etc.]
  - Kubernetes Version (`kubectl version`) : [e.g. 1.18.3]
  - Cloud Type: [e.g. AWS, GCP, Azure, on premise]
  - Kubernetes Deployment Type: [e.g. EKS, GKE, Kops, Kubeadm, etc.]
