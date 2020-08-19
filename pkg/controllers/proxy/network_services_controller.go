@@ -658,7 +658,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	for _, addr := range addrs {
 		localIPsSets = append(localIPsSets, addr.IP.String())
 	}
-	err = localIPsIPSet.Refresh(localIPsSets, utils.OptionTimeout, "0")
+	err = localIPsIPSet.Refresh(localIPsSets)
 	if err != nil {
 		return fmt.Errorf("failed to sync ipset: %s", err.Error())
 	}
@@ -702,13 +702,13 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	}
 
 	serviceIPsIPSet := nsc.ipsetMap[serviceIPsIPSetName]
-	err = serviceIPsIPSet.Refresh(serviceIPsSets, utils.OptionTimeout, "0")
+	err = serviceIPsIPSet.Refresh(serviceIPsSets)
 	if err != nil {
 		return fmt.Errorf("failed to sync ipset: %s", err.Error())
 	}
 
 	ipvsServicesIPSet := nsc.ipsetMap[ipvsServicesIPSetName]
-	err = ipvsServicesIPSet.Refresh(ipvsServicesSets, utils.OptionTimeout, "0")
+	err = ipvsServicesIPSet.Refresh(ipvsServicesSets)
 	if err != nil {
 		return fmt.Errorf("failed to sync ipset: %s", err.Error())
 	}
