@@ -213,7 +213,10 @@ func (ipset *IPSet) Add(set *Set) error {
 		options[index] = entry.Options
 	}
 
-	ipset.Get(set.Name).BatchAdd(options)
+	err = ipset.Get(set.Name).BatchAdd(options)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
