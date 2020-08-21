@@ -110,7 +110,7 @@ func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 // CheckHealth evaluates the time since last heartbeat to decide if the controller is running or not
 func (hc *HealthController) CheckHealth() bool {
 	health := true
-	graceTime := time.Duration(1500 * time.Millisecond)
+	graceTime := time.Duration(1500) * time.Millisecond
 
 	if hc.Config.RunFirewall {
 		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
