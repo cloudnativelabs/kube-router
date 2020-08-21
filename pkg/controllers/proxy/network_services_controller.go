@@ -722,7 +722,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		endTime := time.Since(start)
 		glog.V(2).Infof("Publishing IPVS metrics took %v", endTime)
 		if nsc.MetricsEnabled {
-			metrics.ControllerIpvsMetricsExportTime.Observe(float64(endTime.Seconds()))
+			metrics.ControllerIpvsMetricsExportTime.Observe(endTime.Seconds())
 		}
 	}()
 
