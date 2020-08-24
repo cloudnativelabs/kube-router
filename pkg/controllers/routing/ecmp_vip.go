@@ -1,16 +1,17 @@
 package routing
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"strings"
 
 	"github.com/golang/glog"
-	"github.com/osrg/gobgp/packet/bgp"
-	"github.com/osrg/gobgp/table"
+	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/any"
+	gobgpapi "github.com/osrg/gobgp/api"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -18,15 +19,26 @@ import (
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
 func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
-	attrs := []bgp.PathAttributeInterface{
-		bgp.NewPathAttributeOrigin(0),
-		bgp.NewPathAttributeNextHop(nrc.nodeIP.String()),
-	}
-
 	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
-	_, err := nrc.bgpServer.AddPath("", []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		vip), false, attrs, time.Now(), false)})
+	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
+		Origin: 0,
+	})
+	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
+		NextHop: nrc.nodeIP.String(),
+	})
+	attrs := []*any.Any{a1, a2}
+	nlri1, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
+		Prefix:    vip,
+		PrefixLen: 32,
+	})
+	_, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
+		Path: &gobgpapi.Path{
+			Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+			Nlri:   nlri1,
+			Pattrs: attrs,
+		},
+	})
 
 	return err
 }
@@ -35,10 +47,26 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 	glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
-	pathList := []*table.Path{table.NewPath(nil, bgp.NewIPAddrPrefix(uint8(32),
-		vip), true, nil, time.Now(), false)}
-
-	err := nrc.bgpServer.DeletePath([]byte(nil), 0, "", pathList)
+	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
+		Origin: 0,
+	})
+	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
+		NextHop: nrc.nodeIP.String(),
+	})
+	attrs := []*any.Any{a1, a2}
+	nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
+		Prefix:    vip,
+		PrefixLen: 32,
+	})
+	path := gobgpapi.Path{
+		Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+		Nlri:   nlri,
+		Pattrs: attrs,
+	}
+	err := nrc.bgpServer.DeletePath(context.Background(), &gobgpapi.DeletePathRequest{
+		TableType: gobgpapi.TableType_GLOBAL,
+		Path:      &path,
+	})
 
 	return err
 }

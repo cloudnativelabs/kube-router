@@ -18,7 +18,7 @@ type KubeRouterConfig struct {
 	AdvertiseLoadBalancerIp        bool
 	BGPGracefulRestart             bool
 	BGPGracefulRestartDeferralTime time.Duration
-	BGPPort                        uint16
+	BGPPort                        uint32
 	CacheSyncTimeout               time.Duration
 	CleanupConfig                  bool
 	ClusterAsn                     uint
@@ -148,7 +148,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
 	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time", s.BGPGracefulRestartDeferralTime,
 		"BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h.")
-	fs.Uint16Var(&s.BGPPort, "bgp-port", DEFAULT_BGP_PORT,
+	fs.Uint32Var(&s.BGPPort, "bgp-port", DEFAULT_BGP_PORT,
 		"The port open for incoming BGP connections and to use for connecting with other BGP peers.")
 	fs.StringVar(&s.RouterId, "router-id", "", "BGP router-id. Must be specified in a ipv6 only cluster.")
 	fs.BoolVar(&s.EnableCNI, "enable-cni", true,
