@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/moby/ipvs"
 	"github.com/golang/glog"
+	"github.com/moby/ipvs"
 )
 
 type gracefulQueue struct {
