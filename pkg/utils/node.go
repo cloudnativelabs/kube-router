@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -16,7 +17,7 @@ func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*ap
 	// assuming kube-router is running as pod, first check env NODE_NAME
 	nodeName := os.Getenv("NODE_NAME")
 	if nodeName != "" {
-		node, err := clientset.CoreV1().Nodes().Get(nodeName, metav1.GetOptions{})
+		node, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		if err == nil {
 			return node, nil
 		}
@@ -24,14 +25,14 @@ func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*ap
 
 	// if env NODE_NAME is not set then check if node is register with hostname
 	hostName, _ := os.Hostname()
-	node, err := clientset.CoreV1().Nodes().Get(hostName, metav1.GetOptions{})
+	node, err := clientset.CoreV1().Nodes().Get(context.Background(), hostName, metav1.GetOptions{})
 	if err == nil {
 		return node, nil
 	}
 
 	// if env NODE_NAME is not set and node is not registered with hostname, then use host name override
 	if hostnameOverride != "" {
-		node, err = clientset.CoreV1().Nodes().Get(hostnameOverride, metav1.GetOptions{})
+		node, err = clientset.CoreV1().Nodes().Get(context.Background(), hostnameOverride, metav1.GetOptions{})
 		if err == nil {
 			return node, nil
 		}
