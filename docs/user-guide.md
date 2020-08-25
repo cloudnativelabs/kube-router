@@ -84,7 +84,8 @@ Usage of kube-router:
       --run-router                                    Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
       --run-service-proxy                             Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
       --service-cluster-ip-range string               CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12 (default "10.96.0.0/12")
-      --service-node-port-range string                NodePort range. Default: 30000-32767 (default "30000:32767")
+      --service-external-ip-range strings             Specify external IP CIDRs that are used for inter-cluster communication (can be specified multiple times)
+      --service-node-port-range string                NodePort range specified with either a hyphen or colon (default "30000-32767")
   -v, --v string                                      log level for V logs (default "0")
   -V, --version                                       Print version information.
 ```

@@ -55,16 +55,17 @@ const (
 
 // NetworkPolicyController strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	nodeIP                net.IP
-	nodeHostName          string
-	serviceClusterIPRange string
-	serviceNodePortRange  string
-	mu                    sync.Mutex
-	syncPeriod            time.Duration
-	MetricsEnabled        bool
-	v1NetworkPolicy       bool
-	healthChan            chan<- *healthcheck.ControllerHeartbeat
-	fullSyncRequestChan   chan struct{}
+	nodeIP                  net.IP
+	nodeHostName            string
+	serviceClusterIPRange   net.IPNet
+	serviceExternalIPRanges []net.IPNet
+	serviceNodePortRange    string
+	mu                      sync.Mutex
+	syncPeriod              time.Duration
+	MetricsEnabled          bool
+	v1NetworkPolicy         bool
+	healthChan              chan<- *healthcheck.ControllerHeartbeat
+	fullSyncRequestChan     chan struct{}
 
 	ipSetHandler *utils.IPSet
 
@@ -200,7 +201,19 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		glog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
 	}
 
-	ensureRuleAtposition := func(chain string, ruleSpec []string, position int) {
+	addUuidForRuleSpec := func(chain string, ruleSpec *[]string) (string, error) {
+		hash := sha256.Sum256([]byte(chain + strings.Join(*ruleSpec, "")))
+		encoded := base32.StdEncoding.EncodeToString(hash[:])[:16]
+		for idx, part := range *ruleSpec {
+			if "--comment" == part {
+				(*ruleSpec)[idx+1] = (*ruleSpec)[idx+1] + " - " + encoded
+				return encoded, nil
+			}
+		}
+		return "", fmt.Errorf("could not find a comment in the ruleSpec string given: %s", strings.Join(*ruleSpec, " "))
+	}
+
+	ensureRuleAtPosition := func(chain string, ruleSpec []string, uuid string, position int) {
 		exists, err := iptablesCmdHandler.Exists("filter", chain, ruleSpec...)
 		if err != nil {
 			glog.Fatalf("Failed to verify rule exists in %s chain due to %s", chain, err.Error())
@@ -217,11 +230,18 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			glog.Fatalf("failed to list rules in filter table %s chain due to %s", chain, err.Error())
 		}
 
-		var ruleNo int
+		var ruleNo, ruleIndexOffset int
 		for i, rule := range rules {
 			rule = strings.Replace(rule, "\"", "", 2) //removes quote from comment string
-			if strings.Contains(rule, strings.Join(ruleSpec, " ")) {
-				ruleNo = i
+			if strings.HasPrefix(rule, "-P") || strings.HasPrefix(rule, "-N") {
+				// if this chain has a default policy, then it will show as rule #1 from iptablesCmdHandler.List so we
+				// need to account for this offset
+				ruleIndexOffset += 1
+				continue
+			}
+			if strings.Contains(rule, uuid) {
+				// range uses a 0 index, but iptables uses a 1 index so we need to increase ruleNo by 1
+				ruleNo = i+1-ruleIndexOffset
 				break
 			}
 		}
@@ -245,19 +265,44 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			glog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
 		}
 		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
-		ensureRuleAtposition(builtinChain, args, 1)
+		uuid, err := addUuidForRuleSpec(builtinChain, &args)
+		if err != nil {
+			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		ensureRuleAtPosition(builtinChain, args, uuid,1)
 	}
 
-	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange, "-j", "RETURN"}
-	ensureRuleAtposition(kubeInputChainName, whitelistServiceVips, 1)
+	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange.String(), "-j", "RETURN"}
+	uuid, err := addUuidForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+	if err != nil {
+		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, 1)
 
-	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment", "allow LOCAL traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment", "allow LOCAL TCP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
-	ensureRuleAtposition(kubeInputChainName, whitelistTCPNodeports, 2)
+	uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistTCPNodeports)
+	if err != nil {
+		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	ensureRuleAtPosition(kubeInputChainName, whitelistTCPNodeports, uuid, 2)
 
-	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment", "allow LOCAL traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment", "allow LOCAL UDP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
-	ensureRuleAtposition(kubeInputChainName, whitelistUDPNodeports, 3)
+	uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistUDPNodeports)
+	if err != nil {
+		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	ensureRuleAtPosition(kubeInputChainName, whitelistUDPNodeports, uuid, 3)
+
+	for externalIPIndex, externalIPRange := range npc.serviceExternalIPRanges {
+		whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to external IP range: " + externalIPRange.String(), "-d", externalIPRange.String(), "-j", "RETURN"}
+		uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+		if err != nil {
+			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, externalIPIndex+4)
+	}
 
 }
 
@@ -1815,8 +1860,43 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	// be up to date with all of the policy changes from any enqueued request after that
 	npc.fullSyncRequestChan = make(chan struct{}, 1)
 
-	npc.serviceClusterIPRange = config.ClusterIPCIDR
-	npc.serviceNodePortRange = config.NodePortRange
+	// Validate and parse ClusterIP service range
+	_, ipnet, err := net.ParseCIDR(config.ClusterIPCIDR)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %s", err.Error())
+	}
+	npc.serviceClusterIPRange = *ipnet
+
+	// Validate and parse NodePort range
+	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]{1}([0-9]+)$`)
+	if matched := nodePortValidator.MatchString(config.NodePortRange); !matched {
+		return nil, fmt.Errorf("failed to parse node port range given: '%s' please see specification in help text", config.NodePortRange)
+	}
+	matches := nodePortValidator.FindStringSubmatch(config.NodePortRange)
+	if len(matches) != 3 {
+		return nil, fmt.Errorf("could not parse port number from range given: '%s'", config.NodePortRange)
+	}
+	port1, err := strconv.ParseInt(matches[1], 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse first port number from range given: '%s'", config.NodePortRange)
+	}
+	port2, err := strconv.ParseInt(matches[2], 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse second port number from range given: '%s'", config.NodePortRange)
+	}
+	if port1 >= port2 {
+		return nil, fmt.Errorf("port 1 is greater than or equal to port 2 in range given: '%s'", config.NodePortRange)
+	}
+	npc.serviceNodePortRange = fmt.Sprintf("%d:%d", port1, port2)
+
+	// Validate and parse ExternalIP service range
+	for _, externalIPRange := range config.ExternalIPCIDRs {
+		_, ipnet, err := net.ParseCIDR(externalIPRange)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parse --service-external-ip-range parameter: '%s'. Error: %s", externalIPRange, err.Error())
+		}
+		npc.serviceExternalIPRanges = append(npc.serviceExternalIPRanges, *ipnet)
+	}
 
 	if config.MetricsEnabled {
 		//Register the metrics for this controller
