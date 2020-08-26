@@ -241,7 +241,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			}
 			if strings.Contains(rule, uuid) {
 				// range uses a 0 index, but iptables uses a 1 index so we need to increase ruleNo by 1
-				ruleNo = i+1-ruleIndexOffset
+				ruleNo = i + 1 - ruleIndexOffset
 				break
 			}
 		}
@@ -269,7 +269,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		if err != nil {
 			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 		}
-		ensureRuleAtPosition(builtinChain, args, uuid,1)
+		ensureRuleAtPosition(builtinChain, args, uuid, 1)
 	}
 
 	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange.String(), "-j", "RETURN"}
