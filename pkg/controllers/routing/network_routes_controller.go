@@ -426,7 +426,28 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 }
 
 func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
-	nexthop := path.NeighborIp
+	glog.V(2).Infof("injectRoute Path Looks Like: %s", path.String())
+	var nextHop net.IP
+out:
+	for _, pAttr := range path.GetPattrs() {
+		var value ptypes.DynamicAny
+		if err := ptypes.UnmarshalAny(pAttr, &value); err != nil {
+			return fmt.Errorf("failed to unmarshal path attribute: %s", err)
+		}
+		switch a := value.Message.(type) {
+		case *gobgpapi.NextHopAttribute:
+			nextHop = net.ParseIP(a.NextHop).To4()
+			if nextHop == nil {
+				if nextHop = net.ParseIP(a.NextHop).To16(); nextHop == nil {
+					return fmt.Errorf("invalid nextHop address: %s", a.NextHop)
+				}
+			}
+			break out
+		}
+	}
+	if nextHop == nil {
+		return fmt.Errorf("could not parse next hop received from GoBGP for path: %s", path)
+	}
 	nlri := path.GetNlri()
 	var prefix gobgpapi.IPAddressPrefix
 	err := ptypes.UnmarshalAny(nlri, &prefix)
@@ -439,8 +460,8 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	}
 	var route *netlink.Route
 
-	tunnelName := generateTunnelName(nexthop)
-	sameSubnet := nrc.nodeSubnet.Contains(net.ParseIP(nexthop))
+	tunnelName := generateTunnelName(nextHop.String())
+	sameSubnet := nrc.nodeSubnet.Contains(nextHop)
 
 	// cleanup route and tunnel if overlay is disabled or node is in same subnet and overlay-type is set to 'subnet'
 	if !nrc.enableOverlays || (sameSubnet && nrc.overlayType == "subnet") {
@@ -467,7 +488,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	}
 
 	// create IPIP tunnels only when node is not in same subnet or overlay-type is set to 'full'
-	// prevent creation when --override-nexthop=true as well
+	// prevent creation when --override-nextHop=true as well
 	// if the user has disabled overlays, don't create tunnels
 	if (!sameSubnet || nrc.overlayType == "full") && !nrc.overrideNextHop && nrc.enableOverlays {
 		// create ip-in-ip tunnel and inject route as overlay is enabled
@@ -476,11 +497,11 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 		link, err = netlink.LinkByName(tunnelName)
 		if err != nil {
 			out, err := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
-				"remote", nexthop, "dev", nrc.nodeInterface).CombinedOutput()
+				"remote", nextHop.String(), "dev", nrc.nodeInterface).CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("Route not injected for the route advertised by the node %s "+
 					"Failed to create tunnel interface %s. error: %s, output: %s",
-					nexthop, tunnelName, err, string(out))
+					nextHop, tunnelName, err, string(out))
 			}
 
 			link, err = netlink.LinkByName(tunnelName)
@@ -496,12 +517,12 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 				return errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
 			}
 		} else {
-			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nexthop + " already exists.")
+			glog.Infof("Tunnel interface: " + tunnelName + " for the node " + nextHop.String() + " already exists.")
 		}
 
 		out, err := exec.Command("ip", "route", "list", "table", customRouteTableID).CombinedOutput()
 		if err != nil || !strings.Contains(string(out), "dev "+tunnelName+" scope") {
-			if out, err = exec.Command("ip", "route", "add", nexthop, "dev", tunnelName, "table",
+			if out, err = exec.Command("ip", "route", "add", nextHop.String(), "dev", tunnelName, "table",
 				customRouteTableID).CombinedOutput(); err != nil {
 				return fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
 			}
@@ -516,7 +537,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	} else if sameSubnet {
 		route = &netlink.Route{
 			Dst:      dst,
-			Gw:       net.ParseIP(nexthop),
+			Gw:       nextHop,
 			Protocol: 0x11,
 		}
 	} else {
@@ -524,10 +545,10 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	}
 
 	if path.IsWithdraw {
-		glog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nexthop)
+		glog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nextHop)
 		return netlink.RouteDel(route)
 	}
-	glog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nexthop)
+	glog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nextHop)
 	return netlink.RouteReplace(route)
 }
 
