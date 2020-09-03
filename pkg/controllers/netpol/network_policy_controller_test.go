@@ -2,7 +2,6 @@ package netpol
 
 import (
 	"context"
-	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"net"
 	"strings"
 	"testing"
@@ -18,6 +17,8 @@ import (
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/cloudnativelabs/kube-router/pkg/options"
 )
 
 // newFakeInformersFromClient creates the different informers used in the uneventful network policy controller
