@@ -18,7 +18,7 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
-DOCKER_BUILD_IMAGE?=golang:1.10.8-alpine3.9
+DOCKER_BUILD_IMAGE?=golang:1.13.13-alpine3.12
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.27.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 ifeq ($(GOARCH), arm)
@@ -50,18 +50,18 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Starting kube-router binary build.
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c ' \
-	    GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
+	    GOARCH=$(GOARCH) CGO_ENABLED=0 go build -mod vendor \
 		-ldflags "-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)" \
 		-o kube-router cmd/kube-router/kube-router.go'
 	@echo Finished kube-router binary build.
 else
-	GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags '-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)' -o kube-router cmd/kube-router/kube-router.go
+	GOARCH=$(GOARCH) CGO_ENABLED=0 go build -mod vendor -ldflags '-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)' -o kube-router cmd/kube-router/kube-router.go
 endif
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-	    sh -c 'go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
+	    sh -c 'CGO_ENABLED=0 go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
 else
 		go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...
 endif
@@ -239,14 +239,14 @@ endif
 gobgp:
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Building gobgp
-	$(DOCKER) run -v $(PWD)/vendor:/go/src -w /go/src/github.com/osrg/gobgp/gobgp $(DOCKER_BUILD_IMAGE) \
+	$(DOCKER) run -v $(PWD)/vendor:/go/src -w /go/src/github.com/osrg/gobgp/cmd/gobgp $(DOCKER_BUILD_IMAGE) \
     sh -c 'GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o gobgp'
 	@echo Finished building gobgp.
 else
 	cd vendor/github.com/osrg/gobgp/gobgp && \
 	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go build -o gobgp
 endif
-	cp -f vendor/github.com/osrg/gobgp/gobgp/gobgp gobgp
+	cp -f vendor/github.com/osrg/gobgp/cmd/gobgp/gobgp gobgp
 
 multiarch-binverify:
 	@echo 'Verifying kube-router gobgp for ARCH=$(FILE_ARCH) ...'

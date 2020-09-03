@@ -1,11 +1,12 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
 
-	"github.com/docker/libnetwork/ipvs"
+	"github.com/moby/ipvs"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
@@ -131,12 +132,12 @@ var _ = Describe("NetworkServicesController", func() {
 	JustBeforeEach(func() {
 		clientset := fake.NewSimpleClientset()
 
-		_, err := clientset.CoreV1().Endpoints("default").Create(testcase.existingEndpoint)
+		_, err := clientset.CoreV1().Endpoints("default").Create(context.Background(), testcase.existingEndpoint, metav1.CreateOptions{})
 		if err != nil {
 			fatalf("failed to create existing endpoints: %v", err)
 		}
 
-		_, err = clientset.CoreV1().Services("default").Create(testcase.existingService)
+		_, err = clientset.CoreV1().Services("default").Create(context.Background(), testcase.existingService, metav1.CreateOptions{})
 		if err != nil {
 			fatalf("failed to create existing services: %v", err)
 		}

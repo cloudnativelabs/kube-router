@@ -41,15 +41,16 @@ func (self *ResourceList) Memory() *resource.Quantity {
 	return &resource.Quantity{Format: resource.BinarySI}
 }
 
-func (self *ResourceList) Pods() *resource.Quantity {
-	if val, ok := (*self)[ResourcePods]; ok {
+// Returns the Storage limit if specified.
+func (self *ResourceList) Storage() *resource.Quantity {
+	if val, ok := (*self)[ResourceStorage]; ok {
 		return &val
 	}
-	return &resource.Quantity{}
+	return &resource.Quantity{Format: resource.BinarySI}
 }
 
-func (self *ResourceList) NvidiaGPU() *resource.Quantity {
-	if val, ok := (*self)[ResourceNvidiaGPU]; ok {
+func (self *ResourceList) Pods() *resource.Quantity {
+	if val, ok := (*self)[ResourcePods]; ok {
 		return &val
 	}
 	return &resource.Quantity{}
