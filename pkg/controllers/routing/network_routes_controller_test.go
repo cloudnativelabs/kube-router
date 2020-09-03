@@ -194,14 +194,16 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			pathWatch := func(path *gobgpapi.Path) {
 				events = append(events, path)
 			}
-			testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
+			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
 				TableType: gobgpapi.TableType_GLOBAL,
 				Family: &gobgpapi.Family{
 					Afi:  gobgpapi.Family_AFI_IP,
 					Safi: gobgpapi.Family_SAFI_UNICAST,
 				},
 			}, pathWatch)
-
+			if err != nil {
+				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
+			}
 			// ClusterIPs
 			testcase.nrc.advertiseClusterIP = true
 			testcase.nrc.advertiseExternalIP = false
@@ -535,14 +537,16 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			pathWatch := func(path *gobgpapi.Path) {
 				events = append(events, path)
 			}
-			testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
+			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
 				TableType: gobgpapi.TableType_GLOBAL,
 				Family: &gobgpapi.Family{
 					Afi:  gobgpapi.Family_AFI_IP,
 					Safi: gobgpapi.Family_SAFI_UNICAST,
 				},
 			}, pathWatch)
-
+			if err != nil {
+				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
+			}
 			clientset := fake.NewSimpleClientset()
 			startInformersForRoutes(testcase.nrc, clientset)
 
@@ -723,13 +727,16 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			pathWatch := func(path *gobgpapi.Path) {
 				events = append(events, path)
 			}
-			testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
+			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
 				TableType: gobgpapi.TableType_GLOBAL,
 				Family: &gobgpapi.Family{
 					Afi:  gobgpapi.Family_AFI_IP,
 					Safi: gobgpapi.Family_SAFI_UNICAST,
 				},
 			}, pathWatch)
+			if err != nil {
+				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
+			}
 
 			clientset := fake.NewSimpleClientset()
 			startInformersForRoutes(testcase.nrc, clientset)
@@ -943,13 +950,16 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			pathWatch := func(path *gobgpapi.Path) {
 				events = append(events, path)
 			}
-			testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
+			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
 				TableType: gobgpapi.TableType_GLOBAL,
 				Family: &gobgpapi.Family{
 					Afi:  gobgpapi.Family_AFI_IP,
 					Safi: gobgpapi.Family_SAFI_UNICAST,
 				},
 			}, pathWatch)
+			if err != nil {
+				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
+			}
 
 			clientset := fake.NewSimpleClientset()
 			startInformersForRoutes(testcase.nrc, clientset)
@@ -1094,12 +1104,12 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 			clientset := fake.NewSimpleClientset()
 			startInformersForRoutes(testcase.nrc, clientset)
 
-			_, err := clientset.CoreV1().Endpoints("default").Create(testcase.existingEndpoint)
+			_, err := clientset.CoreV1().Endpoints("default").Create(context.Background(), testcase.existingEndpoint, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("failed to create existing endpoints: %v", err)
 			}
 
-			_, err = clientset.CoreV1().Services("default").Create(testcase.existingService)
+			_, err = clientset.CoreV1().Services("default").Create(context.Background(), testcase.existingService, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
@@ -1237,16 +1247,19 @@ func Test_advertisePodRoute(t *testing.T) {
 			pathWatch := func(path *gobgpapi.Path) {
 				events = append(events, path)
 			}
-			testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
+			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
 				TableType: gobgpapi.TableType_GLOBAL,
 				Family: &gobgpapi.Family{
 					Afi:  gobgpapi.Family_AFI_IP,
 					Safi: gobgpapi.Family_SAFI_UNICAST,
 				},
 			}, pathWatch)
+			if err != nil {
+				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
+			}
 
 			clientset := fake.NewSimpleClientset()
-			_, err = clientset.CoreV1().Nodes().Create(testcase.node)
+			_, err = clientset.CoreV1().Nodes().Create(context.Background(), testcase.node, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("failed to create node: %v", err)
 			}
@@ -1473,12 +1486,15 @@ func Test_syncInternalPeers(t *testing.T) {
 			testcase.nrc.syncInternalPeers()
 
 			neighbors := make(map[string]bool)
-			testcase.nrc.bgpServer.ListPeer(context.Background(), &gobgpapi.ListPeerRequest{}, func(peer *gobgpapi.Peer) {
+			err = testcase.nrc.bgpServer.ListPeer(context.Background(), &gobgpapi.ListPeerRequest{}, func(peer *gobgpapi.Peer) {
 				if peer.Conf.NeighborAddress == "" {
 					return
 				}
 				neighbors[peer.Conf.NeighborAddress] = true
 			})
+			if err != nil {
+				t.Errorf("error listing BGP peers: %v", err)
+			}
 			if !reflect.DeepEqual(testcase.neighbors, neighbors) {
 				t.Logf("actual neighbors: %v", neighbors)
 				t.Logf("expected neighbors: %v", testcase.neighbors)
@@ -2789,7 +2805,7 @@ func Test_generateTunnelName(t *testing.T) {
 
 func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) error {
 	for _, svc := range svcs {
-		_, err := clientset.CoreV1().Services("default").Create(svc)
+		_, err := clientset.CoreV1().Services("default").Create(context.Background(), svc, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -2800,7 +2816,7 @@ func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) erro
 
 func createNodes(clientset kubernetes.Interface, nodes []*v1core.Node) error {
 	for _, node := range nodes {
-		_, err := clientset.CoreV1().Nodes().Create(node)
+		_, err := clientset.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}

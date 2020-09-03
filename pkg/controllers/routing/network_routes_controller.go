@@ -245,7 +245,12 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 
 	nrc.bgpServerStarted = true
 	if !nrc.bgpGracefulRestart {
-		defer nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
+		defer func() {
+			err := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
+			if err != nil {
+				glog.Errorf("error shutting down BGP server: %s", err)
+			}
+		}()
 	}
 
 	// loop forever till notified to stop on stopCh
@@ -349,13 +354,16 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 			glog.Errorf("Failed to inject routes due to: " + err.Error())
 		}
 	}
-	nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
+	err := nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
 		TableType: gobgpapi.TableType_GLOBAL,
 		Family: &gobgpapi.Family{
 			Afi:  gobgpapi.Family_AFI_IP,
 			Safi: gobgpapi.Family_SAFI_UNICAST,
 		},
 	}, pathWatch)
+	if err != nil {
+		glog.Errorf("failed to register monitor global routing table callback due to : " + err.Error())
+	}
 }
 
 func (nrc *NetworkRoutingController) advertisePodRoute() error {

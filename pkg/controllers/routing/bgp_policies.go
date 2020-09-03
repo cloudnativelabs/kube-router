@@ -62,11 +62,14 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 // create a defined set to represent just the pod CIDR associated with the node
 func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
-	nrc.bgpServer.ListDefinedSet(context.Background(),
+	err := nrc.bgpServer.ListDefinedSet(context.Background(),
 		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "podcidrdefinedset"},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
+	if err != nil {
+		return err
+	}
 	if currentDefinedSet == nil {
 		cidrLen, _ := strconv.Atoi(strings.Split(nrc.podCidr, "/")[1])
 		podCidrDefinedSet := &gobgpapi.DefinedSet{
@@ -88,11 +91,14 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 // create a defined set to represent all the advertisable IP associated with the services
 func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
-	nrc.bgpServer.ListDefinedSet(context.Background(),
+	err := nrc.bgpServer.ListDefinedSet(context.Background(),
 		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "servicevipsdefinedset"},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
+	if err != nil {
+		return err
+	}
 	advIPPrefixList := make([]*gobgpapi.Prefix, 0)
 	advIps, _, _ := nrc.getAllVIPs()
 	for _, ip := range advIps {
@@ -139,7 +145,7 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 		Name:        "servicevipsdefinedset",
 		Prefixes:    toAdd,
 	}
-	err := nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: clusterIPPrefixSet})
+	err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: clusterIPPrefixSet})
 	if err != nil {
 		return err
 	}
@@ -175,19 +181,21 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 	}
 
 	var currentDefinedSet *gobgpapi.DefinedSet
-	nrc.bgpServer.ListDefinedSet(context.Background(),
+	err := nrc.bgpServer.ListDefinedSet(context.Background(),
 		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: "iBGPpeerset"},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
-
+	if err != nil {
+		return iBGPPeerCIDRs, err
+	}
 	if currentDefinedSet == nil {
 		iBGPPeerNS := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 			Name:        "iBGPpeerset",
 			List:        iBGPPeerCIDRs,
 		}
-		err := nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
+		err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
 		return iBGPPeerCIDRs, err
 	}
 
@@ -223,7 +231,7 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 		Name:        "iBGPpeerset",
 		List:        toAdd,
 	}
-	err := nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
+	err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
 	if err != nil {
 		return iBGPPeerCIDRs, err
 	}
@@ -242,23 +250,23 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() ([]string, error) {
 
 	var currentDefinedSet *gobgpapi.DefinedSet
-	nrc.bgpServer.ListDefinedSet(context.Background(),
+	externalBgpPeers := make([]string, 0)
+	externalBGPPeerCIDRs := make([]string, 0)
+	err := nrc.bgpServer.ListDefinedSet(context.Background(),
 		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: "externalpeerset"},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
-
-	externalBgpPeers := make([]string, 0)
-	externalBGPPeerCIDRs := make([]string, 0)
+	if err != nil {
+		return externalBGPPeerCIDRs, err
+	}
 	if len(nrc.globalPeerRouters) > 0 {
 		for _, peer := range nrc.globalPeerRouters {
 			externalBgpPeers = append(externalBgpPeers, peer.Conf.NeighborAddress)
 		}
 	}
 	if len(nrc.nodePeerRouters) > 0 {
-		for _, peer := range nrc.nodePeerRouters {
-			externalBgpPeers = append(externalBgpPeers, peer)
-		}
+		externalBgpPeers = append(externalBgpPeers, nrc.nodePeerRouters...)
 	}
 	if len(externalBgpPeers) == 0 {
 		return externalBGPPeerCIDRs, nil
@@ -272,7 +280,7 @@ func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() ([]string, 
 			Name:        "externalpeerset",
 			List:        externalBGPPeerCIDRs,
 		}
-		err := nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: eBGPPeerNS})
+		err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: eBGPPeerNS})
 		return externalBGPPeerCIDRs, err
 	}
 
@@ -282,12 +290,14 @@ func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() ([]string, 
 // a slice of all peers is used as a match condition for reject statement of servicevipsdefinedset import polcy
 func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, externalBGPPeerCIDRs []string) error {
 	var currentDefinedSet *gobgpapi.DefinedSet
-	nrc.bgpServer.ListDefinedSet(context.Background(),
+	err := nrc.bgpServer.ListDefinedSet(context.Background(),
 		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: "allpeerset"},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
-
+	if err != nil {
+		return err
+	}
 	allBgpPeers := append(externalBGPPeerCIDRs, iBGPPeerCIDRs...)
 	if currentDefinedSet == nil {
 		allPeerNS := &gobgpapi.DefinedSet{
@@ -327,7 +337,7 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, ext
 		Name:        "allpeerset",
 		List:        toAdd,
 	}
-	err := nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: allPeerNS})
+	err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: allPeerNS})
 	if err != nil {
 		return err
 	}
