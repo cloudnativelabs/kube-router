@@ -201,7 +201,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		glog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
 	}
 
-	addUuidForRuleSpec := func(chain string, ruleSpec *[]string) (string, error) {
+	addUUIDForRuleSpec := func(chain string, ruleSpec *[]string) (string, error) {
 		hash := sha256.Sum256([]byte(chain + strings.Join(*ruleSpec, "")))
 		encoded := base32.StdEncoding.EncodeToString(hash[:])[:16]
 		for idx, part := range *ruleSpec {
@@ -236,7 +236,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			if strings.HasPrefix(rule, "-P") || strings.HasPrefix(rule, "-N") {
 				// if this chain has a default policy, then it will show as rule #1 from iptablesCmdHandler.List so we
 				// need to account for this offset
-				ruleIndexOffset += 1
+				ruleIndexOffset++
 				continue
 			}
 			if strings.Contains(rule, uuid) {
@@ -265,7 +265,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			glog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
 		}
 		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
-		uuid, err := addUuidForRuleSpec(builtinChain, &args)
+		uuid, err := addUUIDForRuleSpec(builtinChain, &args)
 		if err != nil {
 			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 		}
@@ -273,7 +273,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	}
 
 	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange.String(), "-j", "RETURN"}
-	uuid, err := addUuidForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+	uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
 	if err != nil {
 		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 	}
@@ -281,7 +281,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 
 	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment", "allow LOCAL TCP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
-	uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistTCPNodeports)
+	uuid, err = addUUIDForRuleSpec(kubeInputChainName, &whitelistTCPNodeports)
 	if err != nil {
 		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 	}
@@ -289,7 +289,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 
 	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment", "allow LOCAL UDP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
-	uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistUDPNodeports)
+	uuid, err = addUUIDForRuleSpec(kubeInputChainName, &whitelistUDPNodeports)
 	if err != nil {
 		glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 	}
@@ -297,7 +297,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 
 	for externalIPIndex, externalIPRange := range npc.serviceExternalIPRanges {
 		whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to external IP range: " + externalIPRange.String(), "-d", externalIPRange.String(), "-j", "RETURN"}
-		uuid, err = addUuidForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+		uuid, err = addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
 		if err != nil {
 			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 		}
