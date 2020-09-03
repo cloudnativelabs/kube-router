@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"context"
 	"testing"
 
 	v1core "k8s.io/api/core/v1"
@@ -360,7 +361,7 @@ func Test_getVIPsForService(t *testing.T) {
 				if serviceAdvertisedIP.annotations != nil {
 					serviceAdvertisedIP.service.ObjectMeta.Annotations = serviceAdvertisedIP.annotations
 				}
-				svc, _ := clientset.CoreV1().Services("default").Create(serviceAdvertisedIP.service)
+				svc, _ := clientset.CoreV1().Services("default").Create(context.Background(), serviceAdvertisedIP.service, metav1.CreateOptions{})
 				advertisedIPs, withdrawnIPs, _ := nrc.getVIPsForService(svc, false)
 				t.Logf("AdvertisedIPs: %v\n", advertisedIPs)
 				t.Logf("WithdrawnIPs: %v\n", withdrawnIPs)

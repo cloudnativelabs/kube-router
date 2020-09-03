@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -12,8 +13,8 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/golang/glog"
-	"github.com/osrg/gobgp/config"
-	gobgp "github.com/osrg/gobgp/server"
+	gobgpapi "github.com/osrg/gobgp/api"
+	gobgp "github.com/osrg/gobgp/pkg/server"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -90,52 +91,47 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		currentNodes = append(currentNodes, nodeIP.String())
 		nrc.activeNodes[nodeIP.String()] = true
-		n := &config.Neighbor{
-			Config: config.NeighborConfig{
+		n := &gobgpapi.Peer{
+			Conf: &gobgpapi.PeerConf{
 				NeighborAddress: nodeIP.String(),
 				PeerAs:          nrc.nodeAsnNumber,
 			},
-			Transport: config.Transport{
-				Config: config.TransportConfig{
-					RemotePort: nrc.bgpPort,
-				},
+			Transport: &gobgpapi.Transport{
+				RemotePort: nrc.bgpPort,
 			},
 		}
 
 		if nrc.bgpGracefulRestart {
-			n.GracefulRestart = config.GracefulRestart{
-				Config: config.GracefulRestartConfig{
-					Enabled:      true,
-					RestartTime:  uint16(nrc.bgpGracefulRestartTime.Seconds()),
-					DeferralTime: uint16(nrc.bgpGracefulRestartDeferralTime.Seconds()),
-				},
-				State: config.GracefulRestartState{
-					LocalRestarting: true,
-					DeferralTime:    uint16(nrc.bgpGracefulRestartDeferralTime.Seconds()),
-				},
+			n.GracefulRestart = &gobgpapi.GracefulRestart{
+				Enabled:         true,
+				RestartTime:     uint32(nrc.bgpGracefulRestartTime.Seconds()),
+				DeferralTime:    uint32(nrc.bgpGracefulRestartDeferralTime.Seconds()),
+				LocalRestarting: true,
 			}
 
-			n.AfiSafis = []config.AfiSafi{
+			n.AfiSafis = []*gobgpapi.AfiSafi{
 				{
-					Config: config.AfiSafiConfig{
-						AfiSafiName: config.AFI_SAFI_TYPE_IPV4_UNICAST,
-						Enabled:     true,
+					Config: &gobgpapi.AfiSafiConfig{
+						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+						Enabled: true,
 					},
-					MpGracefulRestart: config.MpGracefulRestart{
-						Config: config.MpGracefulRestartConfig{
+					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+						Config: &gobgpapi.MpGracefulRestartConfig{
 							Enabled: true,
 						},
+						State: &gobgpapi.MpGracefulRestartState{},
 					},
 				},
 				{
-					Config: config.AfiSafiConfig{
-						AfiSafiName: config.AFI_SAFI_TYPE_IPV6_UNICAST,
-						Enabled:     true,
+					Config: &gobgpapi.AfiSafiConfig{
+						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
+						Enabled: true,
 					},
-					MpGracefulRestart: config.MpGracefulRestart{
-						Config: config.MpGracefulRestartConfig{
+					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+						Config: &gobgpapi.MpGracefulRestartConfig{
 							Enabled: true,
 						},
+						State: &gobgpapi.MpGracefulRestartState{},
 					},
 				},
 			}
@@ -145,22 +141,18 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		if nrc.bgpRRServer {
 			if _, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
 				//add rr options with clusterId
-				n.RouteReflector = config.RouteReflector{
-					Config: config.RouteReflectorConfig{
-						RouteReflectorClient:    true,
-						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterID),
-					},
-					State: config.RouteReflectorState{
-						RouteReflectorClient:    true,
-						RouteReflectorClusterId: config.RrClusterIdType(nrc.bgpClusterID),
-					},
+				n.RouteReflector = &gobgpapi.RouteReflector{
+					RouteReflectorClient:    true,
+					RouteReflectorClusterId: fmt.Sprint(nrc.bgpClusterID),
 				}
 			}
 		}
 
-		// TODO: check if a node is alredy added as nieighbour in a better way than add and catch error
-		if err := nrc.bgpServer.AddNeighbor(n); err != nil {
-			if !strings.Contains(err.Error(), "Can't overwrite the existing peer") {
+		// TODO: check if a node is alredy added as neighbor in a better way than add and catch error
+		if err := nrc.bgpServer.AddPeer(context.Background(), &gobgpapi.AddPeerRequest{
+			Peer: n,
+		}); err != nil {
+			if !strings.Contains(err.Error(), "can't overwrite the existing peer") {
 				glog.Errorf("Failed to add node %s as peer due to %s", nodeIP.String(), err)
 			}
 		}
@@ -183,55 +175,45 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 	// delete the neighbor for the nodes that are removed
 	for _, ip := range removedNodes {
-		n := &config.Neighbor{
-			Config: config.NeighborConfig{
-				NeighborAddress: ip,
-				PeerAs:          nrc.defaultNodeAsnNumber,
-			},
-		}
-		if err := nrc.bgpServer.DeleteNeighbor(n); err != nil {
+		if err := nrc.bgpServer.DeletePeer(context.Background(), &gobgpapi.DeletePeerRequest{Address: ip}); err != nil {
 			glog.Errorf("Failed to remove node %s as peer due to %s", ip, err)
 		}
 		delete(nrc.activeNodes, ip)
 	}
 }
 
-// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
-func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.Neighbor, bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration,
+// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
+func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer, bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration,
 	bgpGracefulRestartTime time.Duration, peerMultihopTTL uint8) error {
 	for _, n := range peerNeighbors {
 
 		if bgpGracefulRestart {
-			n.GracefulRestart = config.GracefulRestart{
-				Config: config.GracefulRestartConfig{
-					Enabled:      true,
-					RestartTime:  uint16(bgpGracefulRestartTime.Seconds()),
-					DeferralTime: uint16(bgpGracefulRestartDeferralTime.Seconds()),
-				},
-				State: config.GracefulRestartState{
-					LocalRestarting: true,
-				},
+			n.GracefulRestart = &gobgpapi.GracefulRestart{
+				Enabled:         true,
+				RestartTime:     uint32(bgpGracefulRestartTime.Seconds()),
+				DeferralTime:    uint32(bgpGracefulRestartDeferralTime.Seconds()),
+				LocalRestarting: true,
 			}
 
-			n.AfiSafis = []config.AfiSafi{
+			n.AfiSafis = []*gobgpapi.AfiSafi{
 				{
-					Config: config.AfiSafiConfig{
-						AfiSafiName: config.AFI_SAFI_TYPE_IPV4_UNICAST,
-						Enabled:     true,
+					Config: &gobgpapi.AfiSafiConfig{
+						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+						Enabled: true,
 					},
-					MpGracefulRestart: config.MpGracefulRestart{
-						Config: config.MpGracefulRestartConfig{
+					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+						Config: &gobgpapi.MpGracefulRestartConfig{
 							Enabled: true,
 						},
 					},
 				},
 				{
-					Config: config.AfiSafiConfig{
-						AfiSafiName: config.AFI_SAFI_TYPE_IPV6_UNICAST,
-						Enabled:     true,
+					Config: &gobgpapi.AfiSafiConfig{
+						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
+						Enabled: true,
 					},
-					MpGracefulRestart: config.MpGracefulRestart{
-						Config: config.MpGracefulRestartConfig{
+					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+						Config: &gobgpapi.MpGracefulRestartConfig{
 							Enabled: true,
 						},
 					},
@@ -239,33 +221,26 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*config.
 			}
 		}
 		if peerMultihopTTL > 1 {
-			n.EbgpMultihop = config.EbgpMultihop{
-				Config: config.EbgpMultihopConfig{
-					Enabled:     true,
-					MultihopTtl: peerMultihopTTL,
-				},
-				State: config.EbgpMultihopState{
-					Enabled:     true,
-					MultihopTtl: peerMultihopTTL,
-				},
+			n.EbgpMultihop = &gobgpapi.EbgpMultihop{
+				Enabled:     true,
+				MultihopTtl: uint32(peerMultihopTTL),
 			}
 		}
-		err := server.AddNeighbor(n)
-		peerConfig := n.Config
+		err := server.AddPeer(context.Background(), &gobgpapi.AddPeerRequest{Peer: n})
 		if err != nil {
 			return fmt.Errorf("Error peering with peer router "+
-				"%q due to: %s", peerConfig.NeighborAddress, err)
+				"%q due to: %s", n.Conf.NeighborAddress, err)
 		}
 		glog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
-			peerConfig.NeighborAddress, peerConfig.PeerAs)
+			n.Conf.NeighborAddress, n.Conf.PeerAs)
 	}
 	return nil
 }
 
 // Does validation and returns neighbor configs
-func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []string, holdtime float64) (
-	[]*config.Neighbor, error) {
-	peers := make([]*config.Neighbor, 0)
+func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []string, holdtime float64) (
+	[]*gobgpapi.Peer, error) {
+	peers := make([]*gobgpapi.Peer, 0)
 
 	// Validations
 	if len(ips) != len(asns) {
@@ -298,25 +273,23 @@ func newGlobalPeers(ips []net.IP, ports []uint16, asns []uint32, passwords []str
 				asns[i])
 		}
 
-		peer := &config.Neighbor{
-			Config: config.NeighborConfig{
+		peer := &gobgpapi.Peer{
+			Conf: &gobgpapi.PeerConf{
 				NeighborAddress: ips[i].String(),
 				PeerAs:          asns[i],
 			},
-			Timers: config.Timers{Config: config.TimersConfig{HoldTime: holdtime}},
-			Transport: config.Transport{
-				Config: config.TransportConfig{
-					RemotePort: options.DefaultBgpPort,
-				},
+			Timers: &gobgpapi.Timers{Config: &gobgpapi.TimersConfig{HoldTime: uint64(holdtime)}},
+			Transport: &gobgpapi.Transport{
+				RemotePort: options.DefaultBgpPort,
 			},
 		}
 
 		if len(ports) != 0 {
-			peer.Transport.Config.RemotePort = ports[i]
+			peer.Transport.RemotePort = ports[i]
 		}
 
 		if len(passwords) != 0 {
-			peer.Config.AuthPassword = passwords[i]
+			peer.Conf.AuthPassword = passwords[i]
 		}
 
 		peers = append(peers, peer)
