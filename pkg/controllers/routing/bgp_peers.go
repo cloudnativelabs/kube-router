@@ -148,7 +148,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			}
 		}
 
-		// TODO: check if a node is alredy added as nieighbour in a better way than add and catch error
+		// TODO: check if a node is alredy added as neighbor in a better way than add and catch error
 		if err := nrc.bgpServer.AddPeer(context.Background(), &gobgpapi.AddPeerRequest{
 			Peer: n,
 		}); err != nil {

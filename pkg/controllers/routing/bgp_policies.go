@@ -287,7 +287,7 @@ func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() ([]string, 
 	return externalBGPPeerCIDRs, nil
 }
 
-// a slice of all peers is used as a match condition for reject statement of servicevipsdefinedset import polcy
+// a slice of all peers is used as a match condition for reject statement of servicevipsdefinedset import policy
 func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, externalBGPPeerCIDRs []string) error {
 	var currentDefinedSet *gobgpapi.DefinedSet
 	err := nrc.bgpServer.ListDefinedSet(context.Background(),

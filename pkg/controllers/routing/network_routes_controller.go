@@ -779,7 +779,6 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		nrc.pathPrependCount = uint8(repeatN)
 	}
 
-	//nrc.bgpServer = gobgp.NewBgpServer()
 	if grpcServer {
 		nrc.bgpServer = gobgp.NewBgpServer(gobgp.GrpcListenAddress(nrc.nodeIP.String() + ":50051" + "," + "127.0.0.1:50051"))
 	} else {
