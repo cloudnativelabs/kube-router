@@ -176,6 +176,7 @@ github.com/opencontainers/image-spec v1.0.1 h1:JMemWkRwHx4Zj+fVxWoMCFm/8sYGGrUVo
 github.com/opencontainers/image-spec v1.0.1/go.mod h1:BtxoFyWECRxE4U/7sNtV5W15zMzWCbyJoFRP3s7yZA0=
 github.com/osrg/gobgp v0.0.0-20200806055634-c6f0eba8f4d8 h1:W41EUpzHmIdRa8uMPxL4nv7+lfZSlVREkHw+ROoQd/I=
 github.com/osrg/gobgp v0.0.0-20200806055634-c6f0eba8f4d8/go.mod h1:IVw8wEHROhX0qrmI8c6j3N8EDXZSC4YkktSzkX/JZ8Q=
+github.com/osrg/gobgp v2.0.0+incompatible h1:91ARQbE1AtO0U4TIxHPJ7wYVZIqduyBwS1+FjlHlmrY=
 github.com/pelletier/go-buffruneio v0.2.0/go.mod h1:JkE26KsDizTr40EUHkXVtNPvgGtbSNq5BcowyYOWdKo=
 github.com/pelletier/go-toml v1.0.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/pelletier/go-toml v1.1.0 h1:cmiOvKzEunMsAxyhXSzpL5Q1CRKpVv0KQsnAIcSEVYM=
