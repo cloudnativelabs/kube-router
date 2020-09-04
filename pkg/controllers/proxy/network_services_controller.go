@@ -233,6 +233,8 @@ type NetworkServicesController struct {
 	gracefulQueue       gracefulQueue
 	gracefulTermination bool
 	syncChan            chan int
+
+	iptablesCmdHandler *iptables.IPTables
 }
 
 // internal representation of kubernetes service
@@ -519,13 +521,8 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 
 	// Setup a custom iptables chain to explicitly allow input traffic to
 	// ipvs services only.
-	iptablesCmdHandler, err := iptables.New()
-	if err != nil {
-		return errors.New("Failed to initialize iptables executor" + err.Error())
-	}
-
 	// ClearChain either clears an existing chain or creates a new one.
-	err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
+	err = nsc.iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
@@ -543,12 +540,12 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	args = []string{"-m", "comment", "--comment", comment,
 		"-m", "set", "--match-set", ipvsServicesIPSetName, "dst,dst",
 		"-j", "ACCEPT"}
-	exists, err = iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
+	exists, err = nsc.iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
-		err := iptablesCmdHandler.Insert("filter", ipvsFirewallChainName, 1, args...)
+		err := nsc.iptablesCmdHandler.Insert("filter", ipvsFirewallChainName, 1, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
@@ -558,7 +555,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	args = []string{"-m", "comment", "--comment", comment,
 		"-p", "icmp", "--icmp-type", "echo-request",
 		"-j", "ACCEPT"}
-	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+	err = nsc.iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
@@ -569,19 +566,19 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	args = []string{"-m", "comment", "--comment", comment,
 		"-m", "set", "!", "--match-set", localIPsIPSetName, "dst",
 		"-j", "REJECT", "--reject-with", "icmp-port-unreachable"}
-	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+	err = nsc.iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 
 	// Pass incomming traffic into our custom chain.
 	ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
-	exists, err = iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
+	exists, err = nsc.iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
 	if err != nil {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
-		err = iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
+		err = nsc.iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
@@ -598,25 +595,20 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 	var err error
 
 	// Clear iptables rules.
-	iptablesCmdHandler, err := iptables.New()
+	ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
+	err = nsc.iptablesCmdHandler.Delete("filter", "INPUT", ipvsFirewallInputChainRule...)
 	if err != nil {
-		glog.Errorf("Failed to initialize iptables executor: %s", err.Error())
-	} else {
-		ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
-		err = iptablesCmdHandler.Delete("filter", "INPUT", ipvsFirewallInputChainRule...)
-		if err != nil {
-			glog.Errorf("Failed to run iptables command: %s", err.Error())
-		}
+		glog.Errorf("Failed to run iptables command: %s", err.Error())
+	}
 
-		err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
-		if err != nil {
-			glog.Errorf("Failed to run iptables command: %s", err.Error())
-		}
+	err = nsc.iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
+	if err != nil {
+		glog.Errorf("Failed to run iptables command: %s", err.Error())
+	}
 
-		err = iptablesCmdHandler.DeleteChain("filter", ipvsFirewallChainName)
-		if err != nil {
-			glog.Errorf("Failed to run iptables command: %s", err.Error())
-		}
+	err = nsc.iptablesCmdHandler.DeleteChain("filter", ipvsFirewallChainName)
+	if err != nil {
+		glog.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 
 	// Clear ipsets.
@@ -1220,26 +1212,22 @@ func (nsc *NetworkServicesController) buildEndpointsInfo() endpointsInfoMap {
 // to go through the director for its functioning. So the masquerade rule ensures source IP is modifed
 // to node ip, so return traffic from real server (endpoint pods) hits the node/lvs director
 func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
-	iptablesCmdHandler, err := iptables.New()
-	if err != nil {
-		return errors.New("Failed to initialize iptables executor" + err.Error())
-	}
 	var args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
-	if iptablesCmdHandler.HasRandomFully() {
+	if nsc.iptablesCmdHandler.HasRandomFully() {
 		args = append(args, "--random-fully")
 	}
 	if nsc.masqueradeAll {
-		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
+		err := nsc.iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to create iptables rule to masquerade all outbound IPVS traffic" + err.Error())
 		}
 	} else {
-		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
+		exists, err := nsc.iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to lookup iptables rule to masquerade all outbound IPVS traffic: " + err.Error())
 		}
 		if exists {
-			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
+			err = nsc.iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
 			if err != nil {
 				return errors.New("Failed to delete iptables rule to masquerade all outbound IPVS traffic: " +
 					err.Error() + ". Masquerade might still work...")
@@ -1251,11 +1239,11 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 		//TODO: ipset should be used for destination podCidr(s) match after multiple podCidr(s) per node get supported
 		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
 			"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
-		if iptablesCmdHandler.HasRandomFully() {
+		if nsc.iptablesCmdHandler.HasRandomFully() {
 			args = append(args, "--random-fully")
 		}
 
-		err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
+		err := nsc.iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to run iptables command" + err.Error())
 		}
@@ -1266,18 +1254,13 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 
 // Delete old/bad iptables rules to masquerade outbound IPVS traffic.
 func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
-	iptablesCmdHandler, err := iptables.New()
-	if err != nil {
-		return errors.New("Failed create iptables handler:" + err.Error())
-	}
-
 	var argsBad = [][]string{
 		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"},
 		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "MASQUERADE"},
 	}
 
 	// If random fully is supported remove the original rules as well
-	if iptablesCmdHandler.HasRandomFully() {
+	if nsc.iptablesCmdHandler.HasRandomFully() {
 		argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()})
 
 		if len(nsc.podCidr) > 0 {
@@ -1287,13 +1270,13 @@ func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
 	}
 
 	for _, args := range argsBad {
-		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
+		exists, err := nsc.iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {
 			return fmt.Errorf("Failed to lookup iptables rule: %s", err.Error())
 		}
 
 		if exists {
-			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
+			err = nsc.iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
 			if err != nil {
 				return fmt.Errorf("Failed to delete old/bad iptables rule to "+
 					"masquerade outbound IVPS traffic: %s.\n"+
@@ -1346,17 +1329,12 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 		return nil
 	}
 
-	iptablesCmdHandler, err := iptables.New()
-	if err != nil {
-		return errors.New("Failed to initialize iptables executor" + err.Error())
-	}
-
 	// TODO: Factor these variables out
 	hairpinChain := "KUBE-ROUTER-HAIRPIN"
 	hasHairpinChain := false
 
 	// TODO: Factor out this code
-	chains, err := iptablesCmdHandler.ListChains("nat")
+	chains, err := nsc.iptablesCmdHandler.ListChains("nat")
 	if err != nil {
 		return errors.New("Failed to list iptables chains: " + err.Error())
 	}
@@ -1370,7 +1348,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 
 	// Create a chain for hairpin rules, if needed
 	if !hasHairpinChain {
-		err = iptablesCmdHandler.NewChain("nat", hairpinChain)
+		err = nsc.iptablesCmdHandler.NewChain("nat", hairpinChain)
 		if err != nil {
 			return errors.New("Failed to create iptables chain \"" + hairpinChain +
 				"\": " + err.Error())
@@ -1380,20 +1358,20 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	// Create a rule that targets our hairpin chain, if needed
 	// TODO: Factor this static rule out
 	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", hairpinChain}
-	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", jumpArgs...)
+	err = nsc.iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", jumpArgs...)
 	if err != nil {
 		return errors.New("Failed to add hairpin iptables jump rule: %s" + err.Error())
 	}
 
 	// Apply the rules we need
 	for _, ruleArgs := range rulesNeeded {
-		err = iptablesCmdHandler.AppendUnique("nat", hairpinChain, ruleArgs...)
+		err = nsc.iptablesCmdHandler.AppendUnique("nat", hairpinChain, ruleArgs...)
 		if err != nil {
 			return errors.New("Failed to apply hairpin iptables rule: " + err.Error())
 		}
 	}
 
-	rulesFromNode, err := iptablesCmdHandler.List("nat", hairpinChain)
+	rulesFromNode, err := nsc.iptablesCmdHandler.List("nat", hairpinChain)
 	if err != nil {
 		return errors.New("Failed to get rules from iptables chain \"" +
 			hairpinChain + "\": " + err.Error())
@@ -1407,7 +1385,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 			if len(args) > 2 {
 				args = args[2:] // Strip "-A CHAIN_NAME"
 
-				err = iptablesCmdHandler.Delete("nat", hairpinChain, args...)
+				err = nsc.iptablesCmdHandler.Delete("nat", hairpinChain, args...)
 				if err != nil {
 					glog.Errorf("Unable to delete hairpin rule \"%s\" from chain %s: %e", ruleFromNode, hairpinChain, err)
 				} else {
@@ -2296,6 +2274,11 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
 
 	rand.Seed(time.Now().UnixNano())
+
+	nsc.iptablesCmdHandler, err = iptables.New()
+	if err != nil {
+		return nil, errors.New("Failed to initialize iptables executor" + err.Error())
+	}
 
 	return &nsc, nil
 }
