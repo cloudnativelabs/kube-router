@@ -240,7 +240,7 @@ gobgp:
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Building gobgp
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-    sh -c 'go get -u github.com/osrg/gobgp && GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o gobgp github.com/osrg/gobgp/cmd/gobgp'
+    sh -c 'apk --no-cache add git && go get -u github.com/osrg/gobgp && GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o gobgp github.com/osrg/gobgp/cmd/gobgp'
 	@echo Finished building gobgp.
 else
 	go get -u github.com/osrg/gobgp && \
