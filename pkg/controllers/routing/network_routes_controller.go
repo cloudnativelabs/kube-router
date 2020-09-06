@@ -1059,11 +1059,11 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	} else if len(kubeRouterConfig.PeerPasswordsFile) != 0 {
 		// Contents of the pw file should be in the same format as pw from CLI arg
-		pwfileBytes, err := ioutil.ReadFile(kubeRouterConfig.PeerPasswordsFile)
+		pwFileBytes, err := ioutil.ReadFile(kubeRouterConfig.PeerPasswordsFile)
 		if err != nil {
 			return nil, fmt.Errorf("Error loading Peer Passwords File : %s", err)
 		}
-		pws := strings.Split(string(pwfileBytes), ",")
+		pws := strings.Split(string(pwFileBytes), ",")
 		peerPasswords, err = stringSliceB64Decode(pws)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to decode CLI Peer Passwords file: %s", err)

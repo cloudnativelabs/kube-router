@@ -169,7 +169,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringSliceVar(&s.PeerPasswords, "peer-router-passwords", s.PeerPasswords,
 		"Password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
 	fs.StringVar(&s.PeerPasswordsFile, "peer-router-passwords-file", s.PeerPasswordsFile,
-		"Path to file containing password for authenticating against the BGP peer defined with \"--peer-router-ips\".")
+		"Path to file containing password for authenticating against the BGP peer defined with \"--peer-router-ips\". --peer-router-passwords will be preferred if both are set.")
 	fs.UintSliceVar(&s.PeerPorts, "peer-router-ports", s.PeerPorts,
 		"The remote port of the external BGP to which all nodes will peer. If not set, default BGP port ("+strconv.Itoa(DefaultBgpPort)+") will be used.")
 	fs.StringVar(&s.RouterID, "router-id", "", "BGP router-id. Must be specified in a ipv6 only cluster.")
