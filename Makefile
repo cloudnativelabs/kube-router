@@ -166,7 +166,7 @@ github-release:
 	@echo Starting kube-router GitHub release creation.
 	@[ -n "$(value GITHUB_TOKEN)" ] && \
 	  GITHUB_TOKEN=$(value GITHUB_TOKEN); \
-	  curl -sL https://git.io/goreleaser | bash
+	  curl -sL https://git.io/goreleaser | VERSION=v0.142.0 bash
 	@echo Finished kube-router GitHub release creation.
 
 release: push-release github-release ## Pushes a release to DockerHub and GitHub
