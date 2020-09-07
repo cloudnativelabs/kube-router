@@ -30,7 +30,7 @@ import (
 
 var (
 	ErrNoContext   = errors.New("no context chosen")
-	ErrEmptyConfig = errors.New("no configuration has been provided")
+	ErrEmptyConfig = errors.New("no configuration has been provided, try setting KUBERNETES_MASTER environment variable")
 	// message is for consistency with old behavior
 	ErrEmptyCluster = errors.New("cluster has no server defined")
 )
@@ -86,9 +86,39 @@ func (e errConfigurationInvalid) Error() string {
 	return fmt.Sprintf("invalid configuration: %v", utilerrors.NewAggregate(e).Error())
 }
 
-// Errors implements the AggregateError interface
+// Errors implements the utilerrors.Aggregate interface
 func (e errConfigurationInvalid) Errors() []error {
 	return e
+}
+
+// Is implements the utilerrors.Aggregate interface
+func (e errConfigurationInvalid) Is(target error) bool {
+	return e.visit(func(err error) bool {
+		return errors.Is(err, target)
+	})
+}
+
+func (e errConfigurationInvalid) visit(f func(err error) bool) bool {
+	for _, err := range e {
+		switch err := err.(type) {
+		case errConfigurationInvalid:
+			if match := err.visit(f); match {
+				return match
+			}
+		case utilerrors.Aggregate:
+			for _, nestedErr := range err.Errors() {
+				if match := f(nestedErr); match {
+					return match
+				}
+			}
+		default:
+			if match := f(err); match {
+				return match
+			}
+		}
+	}
+
+	return false
 }
 
 // IsConfigurationInvalid returns true if the provided error indicates the configuration is invalid.
@@ -185,9 +215,10 @@ func validateClusterInfo(clusterName string, clusterInfo clientcmdapi.Cluster) [
 	}
 	if len(clusterInfo.CertificateAuthority) != 0 {
 		clientCertCA, err := os.Open(clusterInfo.CertificateAuthority)
-		defer clientCertCA.Close()
 		if err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf("unable to read certificate-authority %v for %v due to %v", clusterInfo.CertificateAuthority, clusterName, err))
+		} else {
+			defer clientCertCA.Close()
 		}
 	}
 
@@ -223,16 +254,35 @@ func validateAuthInfo(authInfoName string, authInfo clientcmdapi.AuthInfo) []err
 
 		if len(authInfo.ClientCertificate) != 0 {
 			clientCertFile, err := os.Open(authInfo.ClientCertificate)
-			defer clientCertFile.Close()
 			if err != nil {
 				validationErrors = append(validationErrors, fmt.Errorf("unable to read client-cert %v for %v due to %v", authInfo.ClientCertificate, authInfoName, err))
+			} else {
+				defer clientCertFile.Close()
 			}
 		}
 		if len(authInfo.ClientKey) != 0 {
 			clientKeyFile, err := os.Open(authInfo.ClientKey)
-			defer clientKeyFile.Close()
 			if err != nil {
 				validationErrors = append(validationErrors, fmt.Errorf("unable to read client-key %v for %v due to %v", authInfo.ClientKey, authInfoName, err))
+			} else {
+				defer clientKeyFile.Close()
+			}
+		}
+	}
+
+	if authInfo.Exec != nil {
+		if authInfo.AuthProvider != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("authProvider cannot be provided in combination with an exec plugin for %s", authInfoName))
+		}
+		if len(authInfo.Exec.Command) == 0 {
+			validationErrors = append(validationErrors, fmt.Errorf("command must be specified for %v to use exec authentication plugin", authInfoName))
+		}
+		if len(authInfo.Exec.APIVersion) == 0 {
+			validationErrors = append(validationErrors, fmt.Errorf("apiVersion must be specified for %v to use exec authentication plugin", authInfoName))
+		}
+		for _, v := range authInfo.Exec.Env {
+			if len(v.Name) == 0 {
+				validationErrors = append(validationErrors, fmt.Errorf("env variable name must be specified for %v to use exec authentication plugin", authInfoName))
 			}
 		}
 	}
@@ -252,6 +302,10 @@ func validateAuthInfo(authInfoName string, authInfo clientcmdapi.AuthInfo) []err
 // validateContext looks for errors in the context.  It is not transitive, so errors in the reference authInfo or cluster configs are not included in this return
 func validateContext(contextName string, context clientcmdapi.Context, config clientcmdapi.Config) []error {
 	validationErrors := make([]error, 0)
+
+	if len(contextName) == 0 {
+		validationErrors = append(validationErrors, fmt.Errorf("empty context name for %#v is not allowed", context))
+	}
 
 	if len(context.AuthInfo) == 0 {
 		validationErrors = append(validationErrors, fmt.Errorf("user was not specified for context %q", contextName))

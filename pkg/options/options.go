@@ -20,7 +20,7 @@ type KubeRouterConfig struct {
 	BGPGracefulRestartDeferralTime time.Duration
 	BGPGracefulRestartTime         time.Duration
 	BGPHoldTime                    time.Duration
-	BGPPort                        uint16
+	BGPPort                        uint32
 	CacheSyncTimeout               time.Duration
 	CleanupConfig                  bool
 	ClusterAsn                     uint
@@ -102,7 +102,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"BGP Graceful restart time according to RFC4724 3, maximum 4095s.")
 	fs.DurationVar(&s.BGPHoldTime, "bgp-holdtime", DefaultBgpHoldTime,
 		"This parameter is mainly used to modify the holdtime declared to BGP peer. When Kube-router goes down abnormally, the local saving time of BGP route will be affected.Holdtime must be in the range 3s to 18h12m16s.")
-	fs.Uint16Var(&s.BGPPort, "bgp-port", DefaultBgpPort,
+	fs.Uint32Var(&s.BGPPort, "bgp-port", DefaultBgpPort,
 		"The port open for incoming BGP connections and to use for connecting with other BGP peers.")
 	fs.DurationVar(&s.CacheSyncTimeout, "cache-sync-timeout", s.CacheSyncTimeout,
 		"The timeout for cache synchronization (e.g. '5s', '1m'). Must be greater than 0.")

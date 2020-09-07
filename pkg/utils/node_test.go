@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -74,7 +75,7 @@ func Test_GetNodeObject(t *testing.T) {
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			clientset := fake.NewSimpleClientset()
-			_, err := clientset.Core().Nodes().Create(testcase.existingNode)
+			_, err := clientset.CoreV1().Nodes().Create(context.Background(), testcase.existingNode, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("failed to create existing nodes for test: %v", err)
 			}
