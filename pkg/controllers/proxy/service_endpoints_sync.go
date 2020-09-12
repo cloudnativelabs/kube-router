@@ -103,7 +103,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 			return errors.New("Failed creating dummy interface: " + err.Error())
 		}
 		// assign cluster IP of the service to the dummy interface so that its routable from the pod's on the node
-		err = nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String(), true)
+		err = nsc.ln.ipAddrAdd(dummyVipInterface, svc.clusterIP.String())
 		if err != nil {
 			continue
 		}
@@ -322,7 +322,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				}
 			} else {
 				// ensure director with vip assigned
-				err := nsc.ln.ipAddrAdd(dummyVipInterface, externalIP, true)
+				err := nsc.ln.ipAddrAdd(dummyVipInterface, externalIP)
 				if err != nil && err.Error() != IfaceHasAddr {
 					glog.Errorf("Failed to assign external ip %s to dummy interface %s due to %s", externalIP, KubeDummyIf, err.Error())
 				}

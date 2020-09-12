@@ -26,7 +26,7 @@ var _ LinuxNetworking = &LinuxNetworkingMock{}
 //             getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
 // 	               panic("mock out the getKubeDummyInterface method")
 //             },
-//             ipAddrAddFunc: func(iface netlink.Link, ip string, addRoute bool) error {
+//             ipAddrAddFunc: func(iface netlink.Link, ip string) error {
 // 	               panic("mock out the ipAddrAdd method")
 //             },
 //             ipAddrDelFunc: func(iface netlink.Link, ip string) error {
@@ -88,7 +88,7 @@ type LinuxNetworkingMock struct {
 	getKubeDummyInterfaceFunc func() (netlink.Link, error)
 
 	// ipAddrAddFunc mocks the ipAddrAdd method.
-	ipAddrAddFunc func(iface netlink.Link, ip string, addRoute bool) error
+	ipAddrAddFunc func(iface netlink.Link, ip string) error
 
 	// ipAddrDelFunc mocks the ipAddrDel method.
 	ipAddrDelFunc func(iface netlink.Link, ip string) error
@@ -157,8 +157,6 @@ type LinuxNetworkingMock struct {
 			Iface netlink.Link
 			// IP is the ip argument value.
 			IP string
-			// AddRoute is the addRoute argument value.
-			AddRoute bool
 		}
 		// ipAddrDel holds details about calls to the ipAddrDel method.
 		ipAddrDel []struct {
@@ -362,37 +360,33 @@ func (mock *LinuxNetworkingMock) getKubeDummyInterfaceCalls() []struct {
 }
 
 // ipAddrAdd calls ipAddrAddFunc.
-func (mock *LinuxNetworkingMock) ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error {
+func (mock *LinuxNetworkingMock) ipAddrAdd(iface netlink.Link, ip string) error {
 	if mock.ipAddrAddFunc == nil {
 		panic("LinuxNetworkingMock.ipAddrAddFunc: method is nil but LinuxNetworking.ipAddrAdd was just called")
 	}
 	callInfo := struct {
-		Iface    netlink.Link
-		IP       string
-		AddRoute bool
+		Iface netlink.Link
+		IP    string
 	}{
-		Iface:    iface,
-		IP:       ip,
-		AddRoute: addRoute,
+		Iface: iface,
+		IP:    ip,
 	}
 	mock.lockipAddrAdd.Lock()
 	mock.calls.ipAddrAdd = append(mock.calls.ipAddrAdd, callInfo)
 	mock.lockipAddrAdd.Unlock()
-	return mock.ipAddrAddFunc(iface, ip, addRoute)
+	return mock.ipAddrAddFunc(iface, ip)
 }
 
 // ipAddrAddCalls gets all the calls that were made to ipAddrAdd.
 // Check the length with:
 //     len(mockedLinuxNetworking.ipAddrAddCalls())
 func (mock *LinuxNetworkingMock) ipAddrAddCalls() []struct {
-	Iface    netlink.Link
-	IP       string
-	AddRoute bool
+	Iface netlink.Link
+	IP    string
 } {
 	var calls []struct {
-		Iface    netlink.Link
-		IP       string
-		AddRoute bool
+		Iface netlink.Link
+		IP    string
 	}
 	mock.lockipAddrAdd.RLock()
 	calls = mock.calls.ipAddrAdd

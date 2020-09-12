@@ -81,7 +81,7 @@ type ipvsCalls interface {
 }
 
 type netlinkCalls interface {
-	ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error
+	ipAddrAdd(iface netlink.Link, ip string) error
 	ipAddrDel(iface netlink.Link, ip string) error
 	prepareEndpointForDsr(containerID string, endpointIP string, vip string) error
 	getKubeDummyInterface() (netlink.Link, error)
@@ -122,30 +122,13 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 // utility method to assign an IP to an interface. Mainly used to assign service VIP's
 // to kube-dummy-if. Also when DSR is used, used to assign VIP to dummy interface
 // inside the container.
-func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error {
+func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string) error {
 	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrAdd(iface, naddr)
 	if err != nil && err.Error() != IfaceHasAddr {
 		glog.Errorf("Failed to assign cluster ip %s to dummy interface: %s",
 			naddr.IPNet.IP.String(), err.Error())
 		return err
-	}
-
-	// When a service VIP is assigned to a dummy interface and accessed from host, in some of the
-	// case Linux source IP selection logix selects VIP itself as source leading to problems
-	// to avoid this an explicit entry is added to use node IP as source IP when accessing
-	// VIP from the host. Please see https://github.com/cloudnativelabs/kube-router/issues/376
-
-	if !addRoute {
-		return nil
-	}
-
-	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
-	// route is not replaced. For now do it with command.
-	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KubeDummyIf, "table", "local", "proto", "kernel", "scope", "host", "src",
-		NodeIP.String(), "table", "local").CombinedOutput()
-	if err != nil {
-		glog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KubeDummyIf, err, out)
 	}
 	return nil
 }
@@ -201,23 +184,24 @@ func newLinuxNetworking() (*linuxNetworking, error) {
 
 // NetworkServicesController struct stores information needed by the controller
 type NetworkServicesController struct {
-	nodeIP              net.IP
-	nodeHostName        string
-	syncPeriod          time.Duration
-	mu                  sync.Mutex
-	serviceMap          serviceInfoMap
-	endpointsMap        endpointsInfoMap
-	podCidr             string
-	excludedCidrs       []net.IPNet
-	masqueradeAll       bool
-	globalHairpin       bool
-	ipvsPermitAll       bool
-	client              kubernetes.Interface
-	nodeportBindOnAllIP bool
-	MetricsEnabled      bool
-	ln                  LinuxNetworking
-	readyForUpdates     bool
-	ProxyFirewallSetup  *sync.Cond
+	nodeIP                net.IP
+	nodeHostName          string
+	serviceClusterIPRange string
+	syncPeriod            time.Duration
+	mu                    sync.Mutex
+	serviceMap            serviceInfoMap
+	endpointsMap          endpointsInfoMap
+	podCidr               string
+	excludedCidrs         []net.IPNet
+	masqueradeAll         bool
+	globalHairpin         bool
+	ipvsPermitAll         bool
+	client                kubernetes.Interface
+	nodeportBindOnAllIP   bool
+	MetricsEnabled        bool
+	ln                    LinuxNetworking
+	readyForUpdates       bool
+	ProxyFirewallSetup    *sync.Cond
 
 	// Map of ipsets that we use.
 	ipsetMap map[string]*utils.Set
@@ -346,6 +330,11 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		glog.Error("Error setting up ipvs firewall: " + err.Error())
 	}
 	nsc.ProxyFirewallSetup.Broadcast()
+
+	err = nsc.enforceRightServiceInterface()
+	if err != nil {
+		glog.Error(err.Error())
+	}
 
 	gracefulTicker := time.NewTicker(5 * time.Second)
 	defer gracefulTicker.Stop()
@@ -1006,7 +995,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 	}
 
 	// assign VIP to the KUBE_TUNNEL_IF interface
-	err = ln.ipAddrAdd(tunIf, vip, false)
+	err = ln.ipAddrAdd(tunIf, vip)
 	if err != nil && err.Error() != IfaceHasAddr {
 		err = netns.Set(hostNetworkNamespaceHandle)
 		if err != nil {
@@ -2205,6 +2194,22 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 	nsc.OnServiceUpdate(service)
 }
 
+// When a service VIP is assigned to a dummy interface and accessed from host, in some of the
+// case Linux source IP selection logix selects VIP itself as source leading to problems
+// to avoid this an explicit entry is added to use node IP as source IP when accessing
+// VIP from the host. Please see https://github.com/cloudnativelabs/kube-router/issues/376
+func (nsc *NetworkServicesController) enforceRightServiceInterface() error {
+	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
+	// route is not replaced. (See https://github.com/cloudnativelabs/kube-router/issues/370#issuecomment-379415278.)
+	// For now, do it with command.
+	out, err := exec.Command("ip", "route", "replace", "local", nsc.serviceClusterIPRange, "dev", KubeDummyIf, "table", "local", "proto", "kernel", "scope", "host", "src",
+		NodeIP.String(), "table", "local").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Failed to enforce the right interface for service traffic. Error: %v, Output: %s", err, out)
+	}
+	return nil
+}
+
 // NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
@@ -2240,6 +2245,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.gracefulPeriod = config.IpvsGracefulPeriod
 	nsc.gracefulTermination = config.IpvsGracefulTermination
 	nsc.globalHairpin = config.GlobalHairpinMode
+
+	nsc.serviceClusterIPRange = config.ClusterIPCIDR
 
 	nsc.serviceMap = make(serviceInfoMap)
 	nsc.endpointsMap = make(endpointsInfoMap)
