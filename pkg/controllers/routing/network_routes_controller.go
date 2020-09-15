@@ -351,14 +351,17 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 
 func (nrc *NetworkRoutingController) autoConfigureMTU() error {
 	mtu, err := getMTUFromNodeIP(nrc.nodeIP)
+	if err != nil {
+		return fmt.Errorf("failed to generate MTU: %s", err.Error())
+	}
 	file, err := ioutil.ReadFile(nrc.cniConfFile)
 	if err != nil {
-		return fmt.Errorf("Failed to load CNI conf file: %s", err.Error())
+		return fmt.Errorf("failed to load CNI conf file: %s", err.Error())
 	}
 	var config interface{}
 	err = json.Unmarshal(file, &config)
 	if err != nil {
-		return fmt.Errorf("Failed to parse JSON from CNI conf file: %s", err.Error())
+		return fmt.Errorf("failed to parse JSON from CNI conf file: %s", err.Error())
 	}
 	if strings.HasSuffix(nrc.cniConfFile, ".conflist") {
 		configMap := config.(map[string]interface{})
@@ -379,7 +382,7 @@ func (nrc *NetworkRoutingController) autoConfigureMTU() error {
 	configJSON, _ := json.Marshal(config)
 	err = ioutil.WriteFile(nrc.cniConfFile, configJSON, 0644)
 	if err != nil {
-		return fmt.Errorf("Failed to insert `mtu` into CNI conf file: %s", err.Error())
+		return fmt.Errorf("failed to insert `mtu` into CNI conf file: %s", err.Error())
 	}
 	return nil
 }
