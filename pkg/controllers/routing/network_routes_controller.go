@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -341,6 +342,46 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 			glog.Fatalf("Failed to insert `subnet`(pod CIDR) into CNI conf file: %s", err.Error())
 		}
 	}
+
+	err = nrc.autoConfigureMTU()
+	if err != nil {
+		glog.Fatalf("Failed to auto-configure MTU: %s", err.Error())
+	}
+}
+
+func (nrc *NetworkRoutingController) autoConfigureMTU() error {
+	mtu, err := getMTUFromNodeIP(nrc.nodeIP)
+	file, err := ioutil.ReadFile(nrc.cniConfFile)
+	if err != nil {
+		return fmt.Errorf("Failed to load CNI conf file: %s", err.Error())
+	}
+	var config interface{}
+	err = json.Unmarshal(file, &config)
+	if err != nil {
+		return fmt.Errorf("Failed to parse JSON from CNI conf file: %s", err.Error())
+	}
+	if strings.HasSuffix(nrc.cniConfFile, ".conflist") {
+		configMap := config.(map[string]interface{})
+		for key := range configMap {
+			if key != "plugins" {
+				continue
+			}
+			pluginConfigs := configMap["plugins"].([]interface{})
+			for _, pluginConfig := range pluginConfigs {
+				pluginConfigMap := pluginConfig.(map[string]interface{})
+				pluginConfigMap["mtu"] = mtu
+			}
+		}
+	} else {
+		pluginConfig := config.(map[string]interface{})
+		pluginConfig["mtu"] = mtu
+	}
+	configJSON, _ := json.Marshal(config)
+	err = ioutil.WriteFile(nrc.cniConfFile, configJSON, 0644)
+	if err != nil {
+		return fmt.Errorf("Failed to insert `mtu` into CNI conf file: %s", err.Error())
+	}
+	return nil
 }
 
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
