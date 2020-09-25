@@ -847,7 +847,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		}
 
 		// reset mark to let traffic pass through rest of the chains
-		args = []string{"-j", "MARK", "--set-mark", "0"}
+		args = []string{"-j", "MARK", "--set-mark", "0/0x10000"}
 		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
 		if err != nil {
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
