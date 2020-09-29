@@ -40,6 +40,7 @@ Usage of kube-router:
       --advertise-external-ip                         Add External IP of service to the RIB so that it gets advertised to the BGP peers.
       --advertise-loadbalancer-ip                     Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr                            Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
+      --auto-mtu                                      Auto detect and set the largest possible MTU for pod interfaces. (default true)
       --bgp-graceful-restart                          Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
       --bgp-graceful-restart-deferral-time duration   BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h. (default 6m0s)
       --bgp-graceful-restart-time duration            BGP Graceful restart time according to RFC4724 3, maximum 4095s. (default 1m30s)
@@ -308,6 +309,30 @@ As of 0.2.6 we support experimental graceful termination of IPVS destinations. W
 the fallback period is 30 seconds and can be adjusted with `--ipvs-graceful-period` cli-opt
 
 graceful termination works in such a way that when kube-router receives a delete endpoint notification for a service it's weight is adjusted to 0 before getting deleted after he termination grace period has passed or the Active & Inactive connections goes down to 0.
+
+## MTU
+
+The maximum transmission unit (MTU) determines the largest packet size that can be transmitted through your network. MTU for the pod interfaces should be set appropriately to prevent fragmentation and packet drops thereby achieving maximum performance. If you set `auto-mtu` to true kube-router will determine right MTU for both `kube-bridge` and pod interfaces. If you set `auto-mtu` to false kube-router will not attempt to configure MTU. However you can choose the right MTU and set in the `cni-conf.json` section of the `10-kuberouter.conflist` in the kube-router [daemonsets](../daemonset/). For e.g.
+
+```
+  cni-conf.json: |
+    {
+       "cniVersion":"0.3.0",
+       "name":"mynet",
+       "plugins":[
+          {
+             "name":"kubernetes",
+             "type":"bridge",
+             "mtu": 1400,
+             "bridge":"kube-bridge",
+             "isDefaultGateway":true,
+             "ipam":{
+                "type":"host-local"
+             }
+          }
+       ]
+    }
+```
 
 ## BGP configuration
 

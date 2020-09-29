@@ -83,6 +83,7 @@ type NetworkRoutingController struct {
 	advertiseExternalIP            bool
 	advertiseLoadBalancerIP        bool
 	advertisePodCidr               bool
+	autoMTU                        bool
 	defaultNodeAsnNumber           uint32
 	nodeAsnNumber                  uint32
 	globalPeerRouters              []*gobgpapi.Peer
@@ -190,7 +191,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	// create 'kube-bridge' interface to which pods will be connected
-	_, err = netlink.LinkByName("kube-bridge")
+	kubeBridgeIf, err := netlink.LinkByName("kube-bridge")
 	if err != nil && err.Error() == IfaceNotFound {
 		linkAttrs := netlink.NewLinkAttrs()
 		linkAttrs.Name = "kube-bridge"
@@ -198,7 +199,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		if err = netlink.LinkAdd(bridge); err != nil {
 			glog.Errorf("Failed to create `kube-router` bridge due to %s. Will be created by CNI bridge plugin when pod is launched.", err.Error())
 		}
-		kubeBridgeIf, err := netlink.LinkByName("kube-bridge")
+		kubeBridgeIf, err = netlink.LinkByName("kube-bridge")
 		if err != nil {
 			glog.Errorf("Failed to find created `kube-router` bridge due to %s. Will be created by CNI bridge plugin when pod is launched.", err.Error())
 		}
@@ -208,6 +209,21 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		}
 	}
 
+	if nrc.autoMTU {
+		mtu, err := getMTUFromNodeIP(nrc.nodeIP, nrc.enableOverlays)
+		if err != nil {
+			glog.Errorf("Failed to find MTU for node IP: %s for intelligently setting the kube-bridge MTU due to %s.", nrc.nodeIP, err.Error())
+		}
+		if mtu > 0 {
+			glog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
+			err = netlink.LinkSetMTU(kubeBridgeIf, mtu)
+			if err != nil {
+				glog.Errorf("Failed to set MTU for kube-bridge interface due to: %s", err.Error())
+			}
+		} else {
+			glog.Infof("Not setting MTU of kube-bridge interface")
+		}
+	}
 	// enable netfilter for the bridge
 	if _, err := exec.Command("modprobe", "br_netfilter").CombinedOutput(); err != nil {
 		glog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may not work: %s", err.Error())
@@ -343,14 +359,16 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 		}
 	}
 
-	err = nrc.autoConfigureMTU()
-	if err != nil {
-		glog.Fatalf("Failed to auto-configure MTU: %s", err.Error())
+	if nrc.autoMTU {
+		err = nrc.autoConfigureMTU()
+		if err != nil {
+			glog.Fatalf("Failed to auto-configure MTU: %s", err.Error())
+		}
 	}
 }
 
 func (nrc *NetworkRoutingController) autoConfigureMTU() error {
-	mtu, err := getMTUFromNodeIP(nrc.nodeIP)
+	mtu, err := getMTUFromNodeIP(nrc.nodeIP, nrc.enableOverlays)
 	if err != nil {
 		return fmt.Errorf("failed to generate MTU: %s", err.Error())
 	}
@@ -1077,6 +1095,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.advertiseExternalIP = kubeRouterConfig.AdvertiseExternalIP
 	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIP
 	nrc.advertisePodCidr = kubeRouterConfig.AdvertiseNodePodCidr
+	nrc.autoMTU = kubeRouterConfig.AutoMTU
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 	nrc.overlayType = kubeRouterConfig.OverlayType
 
