@@ -120,7 +120,7 @@ func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 	return net.IPNet{}, "", errors.New("Failed to find interface with specified node ip")
 }
 
-func getMTUFromNodeIP(nodeIP net.IP) (int, error) {
+func getMTUFromNodeIP(nodeIP net.IP, overlayEnabled bool) (int, error) {
 	links, err := netlink.LinkList()
 	if err != nil {
 		return 0, errors.New("Failed to get list of links")
@@ -132,8 +132,11 @@ func getMTUFromNodeIP(nodeIP net.IP) (int, error) {
 		}
 		for _, addr := range addresses {
 			if addr.IPNet.IP.Equal(nodeIP) {
-				lintMTU := link.Attrs().MTU
-				return lintMTU - 20, nil // -20 to accommodate IPIP header
+				linkMTU := link.Attrs().MTU
+				if overlayEnabled {
+					return linkMTU - 20, nil // -20 to accommodate IPIP header
+				}
+				return linkMTU, nil
 			}
 		}
 	}

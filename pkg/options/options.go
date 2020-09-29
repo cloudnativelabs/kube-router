@@ -16,6 +16,7 @@ type KubeRouterConfig struct {
 	AdvertiseExternalIP            bool
 	AdvertiseLoadBalancerIP        bool
 	AdvertiseNodePodCidr           bool
+	AutoMTU                        bool
 	BGPGracefulRestart             bool
 	BGPGracefulRestartDeferralTime time.Duration
 	BGPGracefulRestartTime         time.Duration
@@ -95,6 +96,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseNodePodCidr, "advertise-pod-cidr", true,
 		"Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers.")
+	fs.BoolVar(&s.AutoMTU, "auto-mtu", true,
+		"Auto detect and set the largest possible MTU for pod interfaces.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
 	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time", s.BGPGracefulRestartDeferralTime,
