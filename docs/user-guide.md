@@ -312,7 +312,7 @@ graceful termination works in such a way that when kube-router receives a delete
 
 ## MTU
 
-The maximum transmission unit (MTU) determines the largest packet size that can be transmitted through your network. MTU for the pod interfaces should be set appropriately to prevent fragmentation and packet drops thereby achieving maximum performance. If you set `auto-mtu` to true kube-router will determine right MTU for both `kube-bridge` and pod interfaces. If you set `auto-mtu` to false kube-router will not attempt to configure MTU. However you can choose the right MTU and set in the `cni-conf.json` section of the `10-kuberouter.conflist` in the kube-router [daemonsets](../daemonset/). For e.g.
+The maximum transmission unit (MTU) determines the largest packet size that can be transmitted through your network. MTU for the pod interfaces should be set appropriately to prevent fragmentation and packet drops thereby achieving maximum performance. If `auto-mtu` is set to true (`auto-mtu` is set to true by default as of kube-router 1.1), kube-router will determine right MTU for both `kube-bridge` and pod interfaces. If you set `auto-mtu` to false kube-router will not attempt to configure MTU. However you can choose the right MTU and set in the `cni-conf.json` section of the `10-kuberouter.conflist` in the kube-router [daemonsets](../daemonset/). For e.g.
 
 ```
   cni-conf.json: |
@@ -333,6 +333,8 @@ The maximum transmission unit (MTU) determines the largest packet size that can 
        ]
     }
 ```
+
+ If you set MTU yourself via the CNI config, you'll also need to set MTU of `kube-bridge` manually to the right value to avoid packet fragmentation in case of existing nodes on which `kube-bridge` is already created. On node reboot or in case of new nodes joining the cluster both the pod's interface and `kube-bridge` will be setup with specified MTU value.
 
 ## BGP configuration
 
