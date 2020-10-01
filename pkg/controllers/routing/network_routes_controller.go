@@ -362,7 +362,7 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 	if nrc.autoMTU {
 		err = nrc.autoConfigureMTU()
 		if err != nil {
-			glog.Fatalf("Failed to auto-configure MTU: %s", err.Error())
+			glog.Errorf("Failed to auto-configure MTU due to: %s", err.Error())
 		}
 	}
 }
