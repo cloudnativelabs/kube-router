@@ -65,10 +65,8 @@ func Test_getVIPsForService(t *testing.T) {
 				Name: "svc-loadbalancer",
 			},
 			Spec: v1core.ServiceSpec{
-				Type:      "LoadBalancer",
-				ClusterIP: "10.0.0.1",
-				// External IPs are ignored since LoadBalancer services don't
-				// advertise external IPs.
+				Type:        "LoadBalancer",
+				ClusterIP:   "10.0.0.1",
 				ExternalIPs: []string{"1.1.1.1"},
 			},
 			Status: v1core.ServiceStatus{
@@ -116,7 +114,7 @@ func Test_getVIPsForService(t *testing.T) {
 				},
 				{
 					services["loadbalancer"],
-					[]string{"10.0.0.1", "10.0.255.1", "10.0.255.2"},
+					[]string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
 					[]string{},
 					nil,
 				},
@@ -206,7 +204,7 @@ func Test_getVIPsForService(t *testing.T) {
 				},
 				{
 					services["loadbalancer"],
-					[]string{},
+					[]string{"1.1.1.1"},
 					[]string{},
 					nil,
 				},
@@ -278,7 +276,7 @@ func Test_getVIPsForService(t *testing.T) {
 				},
 				{
 					services["loadbalancer"],
-					[]string{"10.0.0.1", "10.0.255.1", "10.0.255.2"},
+					[]string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
 					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
@@ -289,7 +287,7 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					// Special case to test svcAdvertiseLoadBalancerAnnotation vs legacy svcSkipLbIpsAnnotation
 					services["loadbalancer"],
-					[]string{"10.0.0.1"},
+					[]string{"10.0.0.1", "1.1.1.1"},
 					[]string{},
 					map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
