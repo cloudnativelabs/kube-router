@@ -315,7 +315,7 @@ func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) string {
 
 func (nrc *NetworkRoutingController) getExternalIPs(svc *v1core.Service) []string {
 	externalIPList := make([]string, 0)
-	if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" {
+	if svc.Spec.Type == "ClusterIP" || svc.Spec.Type == "NodePort" || svc.Spec.Type == "LoadBalancer" {
 
 		// skip headless services
 		if svc.Spec.ClusterIP != "None" && svc.Spec.ClusterIP != "" {

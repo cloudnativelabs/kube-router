@@ -295,10 +295,8 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
-						ClusterIP: "10.0.0.2",
-						// ignored since LoadBalancer services don't
-						// advertise external IPs.
+						Type:        "LoadBalancer",
+						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2"},
 					},
 				},
@@ -315,6 +313,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			},
 			map[string]bool{
 				"1.1.1.1/32": true,
+				"2.2.2.2/32": true,
 				"3.3.3.3/32": true,
 				"4.4.4.4/32": true,
 			},
@@ -635,10 +634,8 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 						Name: "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
-						ClusterIP: "10.0.0.3",
-						// ignored since LoadBalancer services don't
-						// advertise external IPs.
+						Type:        "LoadBalancer",
+						ClusterIP:   "10.0.0.3",
 						ExternalIPs: []string{"4.4.4.4"},
 					},
 					Status: v1core.ServiceStatus{
@@ -662,6 +659,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 				"1.1.1.1/32":    true,
 				"2.2.2.2/32":    true,
 				"3.3.3.3/32":    true,
+				"4.4.4.4/32":    true,
 				"10.0.255.1/32": true,
 				"10.0.255.2/32": true,
 			},
@@ -895,10 +893,8 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
-						ClusterIP: "10.0.0.3",
-						// ignored since LoadBalancer services don't
-						// advertise external IPs.
+						Type:        "LoadBalancer",
+						ClusterIP:   "10.0.0.3",
 						ExternalIPs: []string{"4.4.4.4"},
 					},
 					Status: v1core.ServiceStatus{
@@ -922,6 +918,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				"1.1.1.1/32":    true,
 				"2.2.2.2/32":    true,
 				"3.3.3.3/32":    true,
+				"4.4.4.4/32":    true,
 				"10.0.255.1/32": true,
 				"10.0.255.2/32": true,
 			},
