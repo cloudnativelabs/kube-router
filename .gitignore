@@ -9,4 +9,3 @@ Dockerfile.arm64.run
 Dockerfile.s390x.run
 Dockerfile.arm.run
 Dockerfile.ppc64le.run
-vendor/github.com/osrg/gobgp/gobgp/gobgp
