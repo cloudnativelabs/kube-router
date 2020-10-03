@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/containernetworking/cni/libcni"
-	"github.com/containernetworking/cni/plugins/ipam/host-local/backend/allocator"
+	"github.com/containernetworking/plugins/plugins/ipam/host-local/backend/allocator"
 	"k8s.io/client-go/kubernetes"
 )
 
