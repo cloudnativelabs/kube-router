@@ -42,7 +42,7 @@ github.com/containernetworking/cni/pkg/utils/hwaddr
 github.com/containernetworking/cni/pkg/version
 github.com/containernetworking/cni/plugins/ipam/host-local/backend
 github.com/containernetworking/cni/plugins/ipam/host-local/backend/allocator
-# github.com/coreos/go-iptables v0.4.1
+# github.com/coreos/go-iptables v0.4.5
 github.com/coreos/go-iptables/iptables
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew

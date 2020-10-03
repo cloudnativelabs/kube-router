@@ -4,7 +4,7 @@ require (
 	github.com/Microsoft/go-winio v0.4.7 // indirect
 	github.com/aws/aws-sdk-go v1.13.32
 	github.com/containernetworking/cni v0.5.2
-	github.com/coreos/go-iptables v0.4.1
+	github.com/coreos/go-iptables v0.4.5
 	github.com/dgryski/go-farm v0.0.0-20180109070241-2de33835d102 // indirect
 	github.com/docker/distribution v0.0.0-20170524205824-1e2f10eb6574 // indirect
 	github.com/docker/docker v0.0.0-20180414165938-5c2e6064a1c5
