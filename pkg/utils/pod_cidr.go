@@ -44,10 +44,24 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 		}
 		ipamConfig, _, err = allocator.LoadIPAMConfig(netconfig.Bytes, "")
 		if err != nil {
-			return net.IPNet{}, fmt.Errorf("Failed to get IPAM details from the CNI conf file: %s", err.Error())
+			// TODO: Handle this error properly in controllers, if no subnet is specified
+			if err.Error() != "no IP ranges specified" {
+				return net.IPNet{}, fmt.Errorf("Failed to get IPAM details from the CNI conf file: %s", err.Error())
+			}
+			return net.IPNet{}, nil
 		}
 	}
-	podCidr = net.IPNet(ipamConfig.Subnet)
+	// TODO: Support multiple subnet definitions in CNI conf
+	if len(ipamConfig.Ranges) > 0 {
+		for _, rangeset := range ipamConfig.Ranges {
+			for _, item := range rangeset {
+				if item.Subnet.IP != nil {
+					podCidr = net.IPNet(item.Subnet)
+					break
+				}
+			}
+		}
+	}
 	return podCidr, nil
 }
 
