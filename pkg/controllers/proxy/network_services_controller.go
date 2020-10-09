@@ -1946,12 +1946,13 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 	activeExternalIPs := make(map[string]bool)
 	for _, svc := range serviceInfoMap {
 		for _, externalIP := range svc.externalIPs {
-			activeExternalIPs[externalIP] = true
 			// Verify the DSR annotation exists
 			if !svc.directServerReturn {
 				glog.V(1).Infof("Skipping service %s/%s as it does not have DSR annotation\n", svc.namespace, svc.name)
 				continue
 			}
+
+			activeExternalIPs[externalIP] = true
 
 			if !strings.Contains(outStr, externalIP) {
 				if err = exec.Command("ip", "route", "add", externalIP, "dev", "kube-bridge", "table",
