@@ -14,6 +14,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/version"
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"k8s.io/klog/v2"
 
 	"time"
@@ -21,6 +22,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -92,10 +94,10 @@ func (kr *KubeRouter) Run() error {
 	informerFactory := informers.NewSharedInformerFactory(kr.Client, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
 	epInformer := informerFactory.Core().V1().Endpoints().Informer()
-	podInformer := informerFactory.Core().V1().Pods().Informer()
 	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
 	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
+
 	informerFactory.Start(stopCh)
 
 	err = kr.CacheSyncOrTimeout(informerFactory, stopCh)
@@ -161,6 +163,7 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if kr.Config.RunServiceProxy {
+		podInformer, _ := utils.NewCustomPodInformer(kr.Client, cache.ResourceEventHandlerFuncs{})
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
 			svcInformer, epInformer, podInformer)
 		if err != nil {
@@ -183,17 +186,22 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunFirewall {
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
-			kr.Config, podInformer, npInformer, nsInformer)
+			kr.Config, nil, npInformer, nsInformer)
 		if err != nil {
 			return errors.New("Failed to create network policy controller: " + err.Error())
 		}
 
-		podInformer.AddEventHandler(npc.PodEventHandler)
+		// use custom pod informer to reduce the memory footprint in large clusters
+		podIndexer, podController := utils.NewCustomPodInformer(kr.Client, npc.PodEventHandler)
+		npc.SetPodIndexer(podIndexer)
+
 		nsInformer.AddEventHandler(npc.NamespaceEventHandler)
 		npInformer.AddEventHandler(npc.NetworkPolicyEventHandler)
 
 		wg.Add(1)
 		go npc.Run(healthChan, stopCh, &wg)
+
+		podController.Run(stopCh)
 	}
 
 	// Handle SIGINT and SIGTERM
