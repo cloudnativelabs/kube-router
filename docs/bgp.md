@@ -81,7 +81,7 @@ For example:
 
 ### Node Specific External BGP Peers
 
-Alternativley, each node can be configured with one or more node specific BGP
+Alternatively, each node can be configured with one or more node specific BGP
 peers. Information regarding node specific BGP peer is read from node API object
 annotations:
 - `kube-router.io/peer.ips`
