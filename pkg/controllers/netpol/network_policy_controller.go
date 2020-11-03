@@ -63,7 +63,6 @@ type NetworkPolicyController struct {
 	mu                      sync.Mutex
 	syncPeriod              time.Duration
 	MetricsEnabled          bool
-	v1NetworkPolicy         bool
 	healthChan              chan<- *healthcheck.ControllerHeartbeat
 	fullSyncRequestChan     chan struct{}
 
@@ -356,19 +355,10 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	// ensure kube-router specific top level chains and corresponding rules exist
 	npc.ensureTopLevelChains()
 
-	if npc.v1NetworkPolicy {
-		networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
-		if err != nil {
-			glog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
-			return
-		}
-	} else {
-		// TODO remove the Beta support
-		networkPoliciesInfo, err = npc.buildBetaNetworkPoliciesInfo()
-		if err != nil {
-			glog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
-			return
-		}
+	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
+	if err != nil {
+		glog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
+		return
 	}
 
 	activePolicyChains, activePolicyIPSets, err := npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
@@ -1550,67 +1540,6 @@ func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPort
 	}
 }
 
-func (npc *NetworkPolicyController) buildBetaNetworkPoliciesInfo() ([]networkPolicyInfo, error) {
-
-	NetworkPolicies := make([]networkPolicyInfo, 0)
-
-	for _, policyObj := range npc.npLister.List() {
-
-		policy, _ := policyObj.(*apiextensions.NetworkPolicy)
-		podSelector, _ := v1.LabelSelectorAsSelector(&policy.Spec.PodSelector)
-		newPolicy := networkPolicyInfo{
-			name:        policy.Name,
-			namespace:   policy.Namespace,
-			podSelector: podSelector,
-		}
-		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
-		newPolicy.targetPods = make(map[string]podInfo)
-		newPolicy.ingressRules = make([]ingressRule, 0)
-		namedPort2IngressEps := make(namedPort2eps)
-		if err == nil {
-			for _, matchingPod := range matchingPods {
-				if matchingPod.Status.PodIP == "" {
-					continue
-				}
-				newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ip: matchingPod.Status.PodIP,
-					name:      matchingPod.ObjectMeta.Name,
-					namespace: matchingPod.ObjectMeta.Namespace,
-					labels:    matchingPod.ObjectMeta.Labels}
-				npc.grabNamedPortFromPod(matchingPod, &namedPort2IngressEps)
-			}
-		}
-
-		for _, specIngressRule := range policy.Spec.Ingress {
-			ingressRule := ingressRule{}
-
-			ingressRule.ports = make([]protocolAndPort, 0)
-			ingressRule.namedPorts = make([]endPoints, 0)
-			ingressRule.ports, ingressRule.namedPorts = npc.processBetaNetworkPolicyPorts(specIngressRule.Ports, namedPort2IngressEps)
-			ingressRule.srcPods = make([]podInfo, 0)
-			for _, peer := range specIngressRule.From {
-				podSelector, _ := v1.LabelSelectorAsSelector(peer.PodSelector)
-				matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
-				if err == nil {
-					for _, matchingPod := range matchingPods {
-						if matchingPod.Status.PodIP == "" {
-							continue
-						}
-						ingressRule.srcPods = append(ingressRule.srcPods,
-							podInfo{ip: matchingPod.Status.PodIP,
-								name:      matchingPod.ObjectMeta.Name,
-								namespace: matchingPod.ObjectMeta.Namespace,
-								labels:    matchingPod.ObjectMeta.Labels})
-					}
-				}
-			}
-			newPolicy.ingressRules = append(newPolicy.ingressRules, ingressRule)
-		}
-		NetworkPolicies = append(NetworkPolicies, newPolicy)
-	}
-
-	return NetworkPolicies, nil
-}
-
 func podFirewallChainName(namespace, podName string, version string) string {
 	hash := sha256.Sum256([]byte(namespace + podName + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
@@ -1906,15 +1835,6 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 
 	npc.syncPeriod = config.IPTablesSyncPeriod
-
-	npc.v1NetworkPolicy = true
-	v, _ := clientset.Discovery().ServerVersion()
-	valid := regexp.MustCompile("[0-9]")
-	v.Minor = strings.Join(valid.FindAllString(v.Minor, -1), "")
-	minorVer, _ := strconv.Atoi(v.Minor)
-	if v.Major == "1" && minorVer < 7 {
-		npc.v1NetworkPolicy = false
-	}
 
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {
