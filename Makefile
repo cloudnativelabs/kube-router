@@ -18,7 +18,7 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
-DOCKER_BUILD_IMAGE?=golang:1.13.13-alpine3.12
+DOCKER_BUILD_IMAGE?=golang:1.15.5-alpine3.12
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.27.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 ifeq ($(GOARCH), arm)
