@@ -24,7 +24,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	api "k8s.io/api/core/v1"
-	apiextensions "k8s.io/api/extensions/v1beta1"
 	networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
@@ -1253,26 +1252,6 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(networkPol
 }
 
 func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networking.NetworkPolicyPort, namedPort2eps namedPort2eps) (numericPorts []protocolAndPort, namedPorts []endPoints) {
-	numericPorts, namedPorts = make([]protocolAndPort, 0), make([]endPoints, 0)
-	for _, npPort := range npPorts {
-		if npPort.Port == nil {
-			numericPorts = append(numericPorts, protocolAndPort{port: "", protocol: string(*npPort.Protocol)})
-		} else if npPort.Port.Type == intstr.Int {
-			numericPorts = append(numericPorts, protocolAndPort{port: npPort.Port.String(), protocol: string(*npPort.Protocol)})
-		} else {
-			if protocol2eps, ok := namedPort2eps[npPort.Port.String()]; ok {
-				if numericPort2eps, ok := protocol2eps[string(*npPort.Protocol)]; ok {
-					for _, eps := range numericPort2eps {
-						namedPorts = append(namedPorts, *eps)
-					}
-				}
-			}
-		}
-	}
-	return
-}
-
-func (npc *NetworkPolicyController) processBetaNetworkPolicyPorts(npPorts []apiextensions.NetworkPolicyPort, namedPort2eps namedPort2eps) (numericPorts []protocolAndPort, namedPorts []endPoints) {
 	numericPorts, namedPorts = make([]protocolAndPort, 0), make([]endPoints, 0)
 	for _, npPort := range npPorts {
 		if npPort.Port == nil {
