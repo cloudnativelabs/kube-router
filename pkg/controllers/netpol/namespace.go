@@ -34,7 +34,7 @@ func (npc *NetworkPolicyController) newNamespaceEventHandler() cache.ResourceEve
 }
 
 func (npc *NetworkPolicyController) handleNamespaceAdd(obj *api.Namespace) {
-	if npc.v1NetworkPolicy && obj.Labels == nil {
+	if obj.Labels == nil {
 		return
 	}
 	glog.V(2).Infof("Received update for namespace: %s", obj.Name)
@@ -43,7 +43,7 @@ func (npc *NetworkPolicyController) handleNamespaceAdd(obj *api.Namespace) {
 }
 
 func (npc *NetworkPolicyController) handleNamespaceUpdate(oldObj, newObj *api.Namespace) {
-	if npc.v1NetworkPolicy && reflect.DeepEqual(oldObj.Labels, newObj.Labels) {
+	if reflect.DeepEqual(oldObj.Labels, newObj.Labels) {
 		return
 	}
 	glog.V(2).Infof("Received update for namespace: %s", newObj.Name)
@@ -52,7 +52,7 @@ func (npc *NetworkPolicyController) handleNamespaceUpdate(oldObj, newObj *api.Na
 }
 
 func (npc *NetworkPolicyController) handleNamespaceDelete(obj *api.Namespace) {
-	if npc.v1NetworkPolicy && obj.Labels == nil {
+	if obj.Labels == nil {
 		return
 	}
 	glog.V(2).Infof("Received namespace: %s delete event", obj.Name)

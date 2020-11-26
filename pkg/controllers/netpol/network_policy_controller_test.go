@@ -189,7 +189,6 @@ func newUneventfulNetworkPolicyController(podInformer cache.SharedIndexInformer,
 	npc := NetworkPolicyController{}
 	npc.syncPeriod = time.Hour
 
-	npc.v1NetworkPolicy = true
 	npc.nodeHostName = "node"
 	npc.nodeIP = net.IPv4(10, 10, 10, 10)
 	npc.podLister = podInformer.GetIndexer()
