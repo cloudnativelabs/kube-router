@@ -15,7 +15,7 @@ import (
 func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			npc.OnPodUpdate(obj)
+			npc.OnPodAdd(obj)
 
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
@@ -27,20 +27,29 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			npc.handlePodDelete(obj)
+			npc.OnPodDelete(obj)
 		},
 	}
 }
 
-// OnPodUpdate handles updates to pods from the Kubernetes api server
-func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
+// OnPodAdd handles launch of new pod event from the Kubernetes api server
+func (npc *NetworkPolicyController) OnPodAdd(obj interface{}) {
 	pod := obj.(*api.Pod)
-	glog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
+	glog.V(2).Infof("Received pod: %s/%s add event", pod.Namespace, pod.Name)
 
 	npc.RequestFullSync()
 }
 
-func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
+// OnPodUpdate handles updates to pods event from the Kubernetes api server
+func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
+	pod := obj.(*api.Pod)
+	glog.V(2).Infof("Received pod: %s/%s update event", pod.Namespace, pod.Name)
+
+	npc.RequestFullSync()
+}
+
+// OnPodDelete handles delete of a pods event from the Kubernetes api server
+func (npc *NetworkPolicyController) OnPodDelete(obj interface{}) {
 	pod, ok := obj.(*api.Pod)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -67,33 +76,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		glog.Fatalf("Failed to initialize iptables executor: %s", err.Error())
 	}
 
-	dropUnmarkedTrafficRules := func(podName, podNamespace, podFwChainName string) error {
-		// add rule to log the packets that will be dropped due to network policy enforcement
-		comment := "rule to log dropped traffic POD name:" + podName + " namespace: " + podNamespace
-		args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10"}
-		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
-		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-
-		// add rule to DROP if no applicable network policy permits the traffic
-		comment = "rule to REJECT traffic destined for POD name:" + podName + " namespace: " + podNamespace
-		args = []string{"-m", "comment", "--comment", comment, "-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "REJECT"}
-		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
-		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-
-		// reset mark to let traffic pass through rest of the chains
-		args = []string{"-j", "MARK", "--set-mark", "0/0x10000"}
-		err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
-		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-
-		return nil
-	}
-
 	// loop through the pods running on the node which to which ingress network policies to be applied
 	ingressNetworkPolicyEnabledPods, err := npc.getIngressNetworkPolicyEnabledPods(networkPoliciesInfo, npc.nodeIP.String())
 	if err != nil {
@@ -115,101 +97,19 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		}
 		activePodFwChains[podFwChainName] = true
 
-		// add entries in pod firewall to run through required network policies
-		for _, policy := range networkPoliciesInfo {
-			if _, ok := policy.targetPods[pod.ip]; ok {
-				comment := "run through nw policy " + policy.name
-				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
-				args := []string{"-m", "comment", "--comment", comment, "-j", policyChainName}
-				exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
-				if err != nil {
-					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-				}
-				if !exists {
-					err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-					if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-					}
-				}
-			}
-		}
-
-		comment := "rule to permit the traffic traffic to pods when source is the pod's local node"
-		args := []string{"-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT"}
-		exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+		// setup rules to run pod inbound traffic through applicable ingress network policies
+		err = npc.setupPodIngressRules(&pod, podFwChainName, networkPoliciesInfo, iptablesCmdHandler, version)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
+			return nil, err
 		}
 
-		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
-		comment = "rule for stateful firewall for pod"
-		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
-		exists, err = iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+		// setup rules to intercept inbound traffic to the pods
+		err = npc.interceptPodInboundTraffic(&pod, podFwChainName, iptablesCmdHandler)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
+			return nil, err
 		}
 
-		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
-		// this rule applies to the traffic getting routed (coming for other node pods)
-		comment = "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
-			" to chain " + podFwChainName
-		args = []string{"-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName}
-		exists, err = iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
-		}
-
-		// ensure there is rule in filter table and OUTPUT chain to jump to pod specific firewall chain
-		// this rule applies to the traffic from a pod getting routed back to another pod on same node by service proxy
-		exists, err = iptablesCmdHandler.Exists("filter", kubeOutputChainName, args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", kubeOutputChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
-		}
-
-		// ensure there is rule in filter table and forward chain to jump to pod specific firewall chain
-		// this rule applies to the traffic getting switched (coming for same node pods)
-		comment = "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
-			" to chain " + podFwChainName
-		args = []string{"-m", "physdev", "--physdev-is-bridged",
-			"-m", "comment", "--comment", comment,
-			"-d", pod.ip,
-			"-j", podFwChainName}
-		exists, err = iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err = iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
-		}
-
-		err = dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
+		err = npc.dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName, iptablesCmdHandler)
 		if err != nil {
 			return nil, err
 		}
@@ -236,85 +136,237 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		}
 		activePodFwChains[podFwChainName] = true
 
-		// add entries in pod firewall to run through required network policies
-		for _, policy := range networkPoliciesInfo {
-			if _, ok := policy.targetPods[pod.ip]; ok {
-				comment := "run through nw policy " + policy.name
-				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
-				args := []string{"-m", "comment", "--comment", comment, "-j", policyChainName}
-				exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
-				if err != nil {
-					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-				}
-				if !exists {
-					err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-					if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-						return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-					}
-				}
-			}
-		}
-
-		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
-		comment := "rule for stateful firewall for pod"
-		args := []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
-		exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+		// setup rules to run pod outbound traffic through applicable egress network policies
+		err = npc.setupPodEgressRules(&pod, podFwChainName, networkPoliciesInfo, iptablesCmdHandler, version)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
+			return nil, err
 		}
 
-		egressFilterChains := []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName}
-		for _, chain := range egressFilterChains {
-			// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
-			// this rule applies to the traffic getting forwarded/routed (traffic from the pod destinted
-			// to pod on a different node)
-			comment = "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
-				" to chain " + podFwChainName
-			args = []string{"-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName}
-			exists, err = iptablesCmdHandler.Exists("filter", chain, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
-			if !exists {
-				err := iptablesCmdHandler.AppendUnique("filter", chain, args...)
-				if err != nil {
-					return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-				}
-			}
-		}
-
-		// ensure there is rule in filter table and forward chain to jump to pod specific firewall chain
-		// this rule applies to the traffic getting switched (coming for same node pods)
-		comment = "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
-			" to chain " + podFwChainName
-		args = []string{"-m", "physdev", "--physdev-is-bridged",
-			"-m", "comment", "--comment", comment,
-			"-s", pod.ip,
-			"-j", podFwChainName}
-		exists, err = iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
+		// setup rules to intercept inbound traffic to the pods
+		err = npc.interceptPodOutboundTraffic(&pod, podFwChainName, iptablesCmdHandler)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-		}
-		if !exists {
-			err = iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
-			if err != nil {
-				return nil, fmt.Errorf("Failed to run iptables command: %s", err.Error())
-			}
+			return nil, err
 		}
 
-		err = dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
+		err = npc.dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName, iptablesCmdHandler)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return activePodFwChains, nil
+}
+
+// setup iptable rules to intercept inbound traffic to pods and run it across the
+// firewall chain corresponding to the pod so that ingress network policies are enforced
+func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, podFwChainName string, iptablesCmdHandler *iptables.IPTables) error {
+	// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
+	// this rule applies to the traffic getting routed (coming for other node pods)
+	comment := "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
+		" to chain " + podFwChainName
+	args := []string{"-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName}
+	exists, err := iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err := iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	// ensure there is rule in filter table and OUTPUT chain to jump to pod specific firewall chain
+	// this rule applies to the traffic from a pod getting routed back to another pod on same node by service proxy
+	exists, err = iptablesCmdHandler.Exists("filter", kubeOutputChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err := iptablesCmdHandler.Insert("filter", kubeOutputChainName, 1, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	// ensure there is rule in filter table and forward chain to jump to pod specific firewall chain
+	// this rule applies to the traffic getting switched (coming for same node pods)
+	comment = "rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
+		" to chain " + podFwChainName
+	args = []string{"-m", "physdev", "--physdev-is-bridged",
+		"-m", "comment", "--comment", comment,
+		"-d", pod.ip,
+		"-j", podFwChainName}
+	exists, err = iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err = iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+	return nil
+}
+
+// setup iptable rules to intercept outbound traffic from pods and run it across the
+// firewall chain corresponding to the pod so that egress network policies are enforced
+func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, podFwChainName string, iptablesCmdHandler *iptables.IPTables) error {
+	egressFilterChains := []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName}
+	for _, chain := range egressFilterChains {
+		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
+		// this rule applies to the traffic getting forwarded/routed (traffic from the pod destinted
+		// to pod on a different node)
+		comment := "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
+			" to chain " + podFwChainName
+		args := []string{"-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName}
+		exists, err := iptablesCmdHandler.Exists("filter", chain, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+		if !exists {
+			err := iptablesCmdHandler.AppendUnique("filter", chain, args...)
+			if err != nil {
+				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
+		}
+	}
+
+	// ensure there is rule in filter table and forward chain to jump to pod specific firewall chain
+	// this rule applies to the traffic getting switched (coming for same node pods)
+	comment := "rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
+		" to chain " + podFwChainName
+	args := []string{"-m", "physdev", "--physdev-is-bridged",
+		"-m", "comment", "--comment", comment,
+		"-s", pod.ip,
+		"-j", podFwChainName}
+	exists, err := iptablesCmdHandler.Exists("filter", kubeForwardChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err = iptablesCmdHandler.Insert("filter", kubeForwardChainName, 1, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
+// setup rules to jump to applicable network policy chaings for the pod inbound traffic
+func (npc *NetworkPolicyController) setupPodIngressRules(pod *podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, iptablesCmdHandler *iptables.IPTables, version string) error {
+	// add entries in pod firewall to run through required network policies
+	for _, policy := range networkPoliciesInfo {
+		if _, ok := policy.targetPods[pod.ip]; ok {
+			comment := "run through nw policy " + policy.name
+			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
+			args := []string{"-m", "comment", "--comment", comment, "-j", policyChainName}
+			exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+			if err != nil {
+				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
+			if !exists {
+				err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+				if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+				}
+			}
+		}
+	}
+
+	comment := "rule to permit the traffic traffic to pods when source is the pod's local node"
+	args := []string{"-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT"}
+	exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+
+	// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
+	comment = "rule for stateful firewall for pod"
+	args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
+	exists, err = iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+	return nil
+}
+
+// setup rules to jump to applicable network policy chains for the pod outbound traffic
+func (npc *NetworkPolicyController) setupPodEgressRules(pod *podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, iptablesCmdHandler *iptables.IPTables, version string) error {
+	// add entries in pod firewall to run through required network policies
+	for _, policy := range networkPoliciesInfo {
+		if _, ok := policy.targetPods[pod.ip]; ok {
+			comment := "run through nw policy " + policy.name
+			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
+			args := []string{"-m", "comment", "--comment", comment, "-j", policyChainName}
+			exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+			if err != nil {
+				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			}
+			if !exists {
+				err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+				if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+					return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+				}
+			}
+		}
+	}
+
+	// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
+	comment := "rule for stateful firewall for pod"
+	args := []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"}
+	exists, err := iptablesCmdHandler.Exists("filter", podFwChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+	if !exists {
+		err := iptablesCmdHandler.Insert("filter", podFwChainName, 1, args...)
+		if err != nil {
+			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+	return nil
+}
+
+func (npc *NetworkPolicyController) dropUnmarkedTrafficRules(podName, podNamespace, podFwChainName string, iptablesCmdHandler *iptables.IPTables) error {
+	// add rule to log the packets that will be dropped due to network policy enforcement
+	comment := "rule to log dropped traffic POD name:" + podName + " namespace: " + podNamespace
+	args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10"}
+	err := iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	// add rule to DROP if no applicable network policy permits the traffic
+	comment = "rule to REJECT traffic destined for POD name:" + podName + " namespace: " + podNamespace
+	args = []string{"-m", "comment", "--comment", comment, "-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "REJECT"}
+	err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	// reset mark to let traffic pass through rest of the chains
+	args = []string{"-j", "MARK", "--set-mark", "0/0x10000"}
+	err = iptablesCmdHandler.AppendUnique("filter", podFwChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	return nil
 }
 
 func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(networkPoliciesInfo []networkPolicyInfo, nodeIP string) (*map[string]podInfo, error) {
