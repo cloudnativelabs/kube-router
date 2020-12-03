@@ -104,7 +104,7 @@ type ingressRule struct {
 	ports          []protocolAndPort
 	namedPorts     []endPoints
 	matchAllSource bool
-	srcPods        []podInfo
+	srcPods        map[string]podInfo
 	srcIPBlocks    [][]string
 }
 
@@ -114,7 +114,7 @@ type egressRule struct {
 	ports                []protocolAndPort
 	namedPorts           []endPoints
 	matchAllDestinations bool
-	dstPods              []podInfo
+	dstPods              map[string]podInfo
 	dstIPBlocks          [][]string
 }
 
@@ -194,6 +194,8 @@ func (npc *NetworkPolicyController) RequestFullSync() {
 	}
 }
 
+var syncVersion string
+
 // Sync synchronizes iptables to desired state of network policies
 func (npc *NetworkPolicyController) fullPolicySync() {
 
@@ -204,7 +206,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 
 	healthcheck.SendHeartBeat(npc.healthChan, "NPC")
 	start := time.Now()
-	syncVersion := strconv.FormatInt(start.UnixNano(), 10)
+	syncVersion = strconv.FormatInt(start.UnixNano(), 10)
 	defer func() {
 		endTime := time.Since(start)
 		if npc.MetricsEnabled {
@@ -224,13 +226,13 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
-	activePolicyChains, activePolicyIPSets, err := npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
+	activePolicyChains, activePolicyIPSets, err := npc.fullSyncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
 		glog.Errorf("Aborting sync. Failed to sync network policy chains: %v" + err.Error())
 		return
 	}
 
-	activePodFwChains, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+	activePodFwChains, err := npc.fullSyncPodFirewallChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
 		glog.Errorf("Aborting sync. Failed to sync pod firewalls: %v", err.Error())
 		return
