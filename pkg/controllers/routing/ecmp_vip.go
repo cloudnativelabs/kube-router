@@ -116,13 +116,13 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 		return
 	}
 
-	toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, true)
+	toAdvertise, toWithdraw, err := nrc.getActiveVIPs()
 	if err != nil {
-		glog.Errorf("error getting routes for service: %s, err: %s", svc.Name, err)
+		glog.Errorf("error getting routes for services: %s", err)
 		return
 	}
 
-	// update export policies so that new VIP's gets addedd to clusteripprefixsit and vip gets advertised to peers
+	// update export policies so that new VIP's gets added to clusteripprefixset and vip gets advertised to peers
 	err = nrc.AddPolicies()
 	if err != nil {
 		glog.Errorf("Error adding BGP policies: %s", err.Error())
@@ -369,7 +369,22 @@ func (nrc *NetworkRoutingController) getVIPs(onlyActiveEndpoints bool) ([]string
 		}
 	}
 
-	return toAdvertiseList, toWithdrawList, nil
+	// We need to account for the niche case where multiple services may have the same VIP, in this case, one service
+	// might be ready while the other service is not. We still want to advertise the VIP as long as there is at least
+	// one active endpoint on the node or we might introduce a service disruption.
+	finalToWithdrawList := make([]string, 0)
+OUTER:
+	for _, withdrawVIP := range toWithdrawList {
+		for _, advertiseVIP := range toAdvertiseList {
+			if withdrawVIP == advertiseVIP {
+				// if there is a VIP that is set to both be advertised and withdrawn, don't add it to the final withdraw list
+				continue OUTER
+			}
+		}
+		finalToWithdrawList = append(finalToWithdrawList, withdrawVIP)
+	}
+
+	return toAdvertiseList, finalToWithdrawList, nil
 }
 
 func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service, annotation string, defaultValue bool) bool {
