@@ -9,19 +9,27 @@ metadata:
 data:
   cni-conf.json: |
     {
-       "cniVersion":"0.3.0",
-       "name":"mynet",
-       "plugins":[
-          {
-             "name":"kubernetes",
-             "type":"bridge",
-             "bridge":"kube-bridge",
-             "isDefaultGateway":true,
-             "ipam":{
-                "type":"host-local"
-             }
+      "cniVersion":"0.3.0",
+      "name":"mynet",
+      "plugins":[
+        {
+          "name":"kubernetes",
+          "type":"bridge",
+          "bridge":"kube-bridge",
+          "isDefaultGateway":true,
+          "ipam":{
+            "type":"host-local"
           }
-       ]
+        },
+        {
+          "type":"portmap",
+          "conditionsV4": ["!", "-d", "10.43.0.0/16"],
+          "capabilities":{
+            "snat": true,
+            "portMappings":true
+          }
+        }
+      ]
     }
   kubeconfig: |
     apiVersion: v1
@@ -75,6 +83,7 @@ spec:
         - "--run-service-proxy=true"
         - "--bgp-graceful-restart=true"
         - "--kubeconfig=/var/lib/kube-router/kubeconfig"
+        - "--nodeport-bindon-all-ip"
         env:
         - name: NODE_NAME
           valueFrom:

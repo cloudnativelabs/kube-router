@@ -273,7 +273,7 @@ kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
 If you would like to use `HostPort` functionality below changes are required in the manifest.
 
 - By default kube-router assumes CNI conf file to be `/etc/cni/net.d/10-kuberouter.conf`. Add an environment variable `KUBE_ROUTER_CNI_CONF_FILE` to kube-router manifest and set it to `/etc/cni/net.d/10-kuberouter.conflist`
-- Modify `kube-router-cfg` ConfigMap with CNI config that supports `portmap` as additional plug-in
+- Modify `kube-router-cfg` ConfigMap with CNI config that supports `portmap` as additional plug-in. Please modify the `10.43.0.0/16` to represent your service CIDR.
 ```
     {
        "cniVersion":"0.3.0",
@@ -290,6 +290,7 @@ If you would like to use `HostPort` functionality below changes are required in 
           },
           {
              "type":"portmap",
+             "conditionsV4": ["!", "-d", "10.43.0.0/16"],
              "capabilities":{
                 "snat":true,
                 "portMappings":true
