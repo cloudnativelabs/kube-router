@@ -80,6 +80,9 @@ spec:
       labels:
         k8s-app: kube-router
         tier: node
+      annotations:
+        prometheus.io/port: '20245'
+        prometheus.io/scrape: 'true'
     spec:
       priorityClassName: system-node-critical
       serviceAccountName: kube-router
@@ -93,6 +96,7 @@ spec:
         - "--run-service-proxy=true"
         - "--bgp-graceful-restart=true"
         - "--nodeport-bindon-all-ip"
+        - "--metrics-port=20245"
         - "--kubeconfig=/etc/kube-router/kubeconfig"
         env:
         - name: NODE_NAME
