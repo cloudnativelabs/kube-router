@@ -1,3 +1,12 @@
+# - Replace 10.43.0.0/16 with your service CIDR in the portmap cni plugin
+# - Replace 10.42.0.0/16 with your cluster CIDR in the kubeconfig
+# - Replace https://localhost:6443 with a hostname where kubernetes is accessible. This
+#   hostname must not be a service within the cluster as kube-router needs to access
+#   it before any service route is set up.
+# - For production use, you might want to use a fix version when pulling the docker image
+#   image: docker.io/cloudnativelabs/kube-router:v1.1.1
+#   imagePullPolicy: Always
+#
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -31,15 +40,16 @@ data:
         }
       ]
     }
+
   kubeconfig: |
     apiVersion: v1
     kind: Config
-    clusterCIDR: "%CLUSTERCIDR%"
+    clusterCIDR: "10.42.0.0/16"
     clusters:
     - name: cluster
       cluster:
         certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        server: %APISERVER%
+        server: https://localhost:6443
     users:
     - name: kube-router
       user:
@@ -82,8 +92,8 @@ spec:
         - "--run-firewall=true"
         - "--run-service-proxy=true"
         - "--bgp-graceful-restart=true"
-        - "--kubeconfig=/var/lib/kube-router/kubeconfig"
         - "--nodeport-bindon-all-ip"
+        - "--kubeconfig=/etc/kube-router/kubeconfig"
         env:
         - name: NODE_NAME
           valueFrom:
@@ -109,8 +119,8 @@ spec:
           readOnly: true
         - name: cni-conf-dir
           mountPath: /etc/cni/net.d
-        - name: kubeconfig
-          mountPath: /var/lib/kube-router
+        - name: kube-router-cfg
+          mountPath: /etc/kube-router
           readOnly: true
         - name: xtables-lock
           mountPath: /run/xtables.lock
@@ -131,18 +141,11 @@ spec:
             cp /etc/kube-router/cni-conf.json ${TMP};
             mv ${TMP} /etc/cni/net.d/10-kuberouter.conflist;
           fi;
-          if [ ! -f /var/lib/kube-router/kubeconfig ]; then
-            TMP=/var/lib/kube-router/.tmp-kubeconfig;
-            cp /etc/kube-router/kubeconfig ${TMP};
-            mv ${TMP} /var/lib/kube-router/kubeconfig;
-          fi
         volumeMounts:
-        - mountPath: /etc/cni/net.d
-          name: cni-conf-dir
-        - mountPath: /etc/kube-router
-          name: kube-router-cfg
-        - name: kubeconfig
-          mountPath: /var/lib/kube-router
+        - name: cni-conf-dir
+          mountPath: /etc/cni/net.d
+        - name: kube-router-cfg
+          mountPath: /etc/kube-router
       hostNetwork: true
       tolerations:
       - effect: NoSchedule
@@ -161,9 +164,6 @@ spec:
       - name: kube-router-cfg
         configMap:
           name: kube-router-cfg
-      - name: kubeconfig
-        hostPath:
-          path: /var/lib/kube-router
       - name: xtables-lock
         hostPath:
           path: /run/xtables.lock
@@ -211,6 +211,7 @@ rules:
       - get
       - list
       - watch
+
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1beta1
