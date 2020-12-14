@@ -25,13 +25,22 @@ import (
 func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			npc.OnNetworkPolicyUpdate(obj)
 
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			npc.OnNetworkPolicyUpdate(newObj)
 		},
 		DeleteFunc: func(obj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			npc.handleNetworkPolicyDelete(obj)
 
 		},

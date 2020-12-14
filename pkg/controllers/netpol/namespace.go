@@ -11,12 +11,21 @@ import (
 func (npc *NetworkPolicyController) newNamespaceEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			npc.handleNamespaceAdd(obj.(*api.Namespace))
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			npc.handleNamespaceUpdate(oldObj.(*api.Namespace), newObj.(*api.Namespace))
 		},
 		DeleteFunc: func(obj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			switch obj := obj.(type) {
 			case *api.Namespace:
 				npc.handleNamespaceDelete(obj)

@@ -70,6 +70,7 @@ Usage of kube-router:
       --master string                                 The address of the Kubernetes API server (overrides any value in kubeconfig).
       --metrics-path string                           Prometheus metrics path (default "/metrics")
       --metrics-port uint16                           Prometheus metrics port, (Default 0, Disabled)
+      --netpol-allow-pre-check                        Allow ingress and egress traffic from the pod prior the netpol for the pod are enforced. (default true)
       --nodeport-bindon-all-ip                        For service of NodePort type create IPVS service that listens on all IP's of the node.
       --nodes-full-mesh                               Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
       --overlay-type string                           Possible values: subnet,full - When set to "subnet", the default, default "--enable-overlay=true" behavior is used. When set to "full", it changes "--enable-overlay=true" default behavior so that IP-in-IP tunneling is used for pod-to-pod networking across nodes regardless of the subnet the nodes are in. (default "subnet")

@@ -17,11 +17,17 @@ import (
 func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			podObj := obj.(*api.Pod)
 			glog.V(2).Infof("Received pod: %s/%s add event", podObj.Namespace, podObj.Name)
 			npc.processPodAddUpdateEvents(podObj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			newPodObj := newObj.(*api.Pod)
 			oldPodObj := oldObj.(*api.Pod)
 			glog.V(2).Infof("Received pod: %s/%s update event", newPodObj.Namespace, newPodObj.Name)
@@ -34,16 +40,25 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
+			if !npc.readyForUpdates {
+				return
+			}
 			npc.processPodDeleteEvent(obj)
 		},
 	}
 }
 
 func (npc *NetworkPolicyController) processPodAddUpdateEvents(pod *api.Pod) {
+
+	// skip processing update to pods in host network
+	if pod.Spec.HostNetwork {
+		return
+	}
 	// skip pods in trasient state
 	if len(pod.Status.PodIP) == 0 || pod.Status.PodIP == "" {
 		return
 	}
+
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
 	iptablesCmdHandler, err := iptables.New()
@@ -55,10 +70,14 @@ func (npc *NetworkPolicyController) processPodAddUpdateEvents(pod *api.Pod) {
 		namespace: pod.ObjectMeta.Namespace,
 		labels:    pod.ObjectMeta.Labels}
 
-	networkPoliciesInfo, err := npc.buildNetworkPoliciesInfo()
-	npc.syncAffectedNetworkPolicyChains(&podInfo, syncVersion)
-
 	podNamespacedName := pod.ObjectMeta.Namespace + "/" + pod.ObjectMeta.Name
+
+	err = npc.syncAffectedNetworkPolicyChains(&podInfo, syncVersion)
+	if err != nil {
+		glog.Errorf("failed to refresh network policy chains affected by pod %s event due to %s", podNamespacedName, err.Error())
+	}
+
+	networkPoliciesInfo, err := npc.buildNetworkPoliciesInfo()
 	if isLocalPod(pod, npc.nodeIP.String()) {
 		if err != nil {
 			glog.Errorf("Failed to check pod %s is a local pod due to %s", podNamespacedName, err.Error())
@@ -86,11 +105,20 @@ func (npc *NetworkPolicyController) processPodDeleteEvent(obj interface{}) {
 	}
 	glog.V(2).Infof("Received pod: %s/%s delete event", pod.Namespace, pod.Name)
 
+	// skip processing update to pods in host network
+	if pod.Spec.HostNetwork {
+		return
+	}
+
 	podInfo := podInfo{ip: pod.Status.PodIP,
 		name:      pod.ObjectMeta.Name,
 		namespace: pod.ObjectMeta.Namespace,
 		labels:    pod.ObjectMeta.Labels}
-	npc.syncAffectedNetworkPolicyChains(&podInfo, syncVersion)
+
+	err := npc.syncAffectedNetworkPolicyChains(&podInfo, syncVersion)
+	if err != nil {
+		glog.Errorf("failed to refresh network policy chains affected by pod %s/%s delete event due to %s", pod.Namespace, pod.Name, err.Error())
+	}
 
 	if !isLocalPod(pod, npc.nodeIP.String()) {
 		return
@@ -287,7 +315,7 @@ func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, po
 			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 		}
 		if !exists {
-			err := iptablesCmdHandler.AppendUnique("filter", chain, args...)
+			err := iptablesCmdHandler.Insert("filter", chain, 1, args...)
 			if err != nil {
 				return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 			}
@@ -467,6 +495,12 @@ func (npc *NetworkPolicyController) getLocalPods(nodeIP string) (*map[string]pod
 		if !isLocalPod(pod, nodeIP) {
 			continue
 		}
+
+		// skip pods in host network
+		if pod.Spec.HostNetwork {
+			continue
+		}
+
 		// skip pods in trasient state
 		if len(pod.Status.PodIP) == 0 || pod.Status.PodIP == "" {
 			continue
@@ -480,10 +514,7 @@ func (npc *NetworkPolicyController) getLocalPods(nodeIP string) (*map[string]pod
 }
 
 func isLocalPod(pod *api.Pod, nodeIP string) bool {
-	if strings.Compare(pod.Status.HostIP, nodeIP) != 0 {
-		return false
-	}
-	return true
+	return strings.Compare(pod.Status.HostIP, nodeIP) == 0
 }
 
 func podFirewallChainName(namespace, podName string, version string) string {

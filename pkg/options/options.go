@@ -50,6 +50,7 @@ type KubeRouterConfig struct {
 	MetricsEnabled                 bool
 	MetricsPath                    string
 	MetricsPort                    uint16
+	NetpolAllowPreCheck            bool
 	NodePortBindOnAllIP            bool
 	NodePortRange                  string
 	OverlayType                    string
@@ -155,6 +156,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The address of the Kubernetes API server (overrides any value in kubeconfig).")
 	fs.StringVar(&s.MetricsPath, "metrics-path", "/metrics", "Prometheus metrics path")
 	fs.Uint16Var(&s.MetricsPort, "metrics-port", 0, "Prometheus metrics port, (Default 0, Disabled)")
+	fs.BoolVar(&s.NetpolAllowPreCheck, "netpol-allow-pre-check", true,
+		"Allow ingress and egress traffic from the pod prior the netpol for the pod are enforced.")
 	fs.BoolVar(&s.NodePortBindOnAllIP, "nodeport-bindon-all-ip", false,
 		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,

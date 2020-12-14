@@ -34,23 +34,18 @@ const (
 	kubeOutputChainName          = "KUBE-ROUTER-OUTPUT"
 	kubeIngressNetpolChain       = "KUBE-NWPLCY-DEFAULT-INGRESS"
 	kubeEgressNetpolChain        = "KUBE-NWPLCY-DEFAULT-EGRESS"
+	KubeDefaultPodFWChain        = "KUBE-POD-FW-DEFAULT"
 )
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
-// policies. Two different types of iptables chains are used. Each pod running on the node which either
-// requires ingress or egress filtering gets a pod specific chains. Each network policy has a iptables chain, which
-// has rules expressed through ipsets matching source and destination pod ip's. In the FORWARD chain of the
-// filter table a rule is added to jump the traffic originating (in case of egress network policy) from the pod
-// or destined (in case of ingress network policy) to the pod specific iptables chain. Each
-// pod specific iptables chain has rules to jump to the network polices chains, that pod matches. So packet
-// originating/destined from/to pod goes through fitler table's, FORWARD chain, followed by pod specific chain,
-// followed by one or more network policy chains, till there is a match which will accept the packet, or gets
-// dropped by the rule in the pod chain, if there is no match.
+// policies. Please refer to https://github.com/cloudnativelabs/kube-router/blob/maste/docs/design/npc-design.md
+// for the design details
 
 // NetworkPolicyController strcut to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
 	nodeIP                  net.IP
 	nodeHostName            string
+	nodePodIPCIDR           string
 	serviceClusterIPRange   net.IPNet
 	serviceExternalIPRanges []net.IPNet
 	serviceNodePortRange    string
@@ -59,6 +54,8 @@ type NetworkPolicyController struct {
 	MetricsEnabled          bool
 	healthChan              chan<- *healthcheck.ControllerHeartbeat
 	fullSyncRequestChan     chan struct{}
+	readyForUpdates         bool
+	netpolAllowPreCheck     bool
 
 	ipSetHandler *utils.IPSet
 
@@ -141,11 +138,6 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	glog.Info("Starting network policy controller")
 	npc.healthChan = healthChan
 
-	// setup kube-router specific top level cutoms chains
-	npc.ensureTopLevelChains()
-
-	npc.ensureDefaultNetworkPolicyChains()
-
 	// Full syncs of the network policy controller take a lot of time and can only be processed one at a time,
 	// therefore, we start it in it's own goroutine and request a sync through a single item channel
 	glog.Info("Starting network policy controller full sync goroutine")
@@ -166,7 +158,8 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 				return
 			case <-fullSyncRequest:
 				glog.V(3).Info("Received request for a full sync, processing")
-				npc.fullPolicySync() // fullPolicySync() is a blocking request here
+				npc.fullPolicySync()       // fullPolicySync() is a blocking request here
+				npc.readyForUpdates = true // wait till one full sync to happen before processing pod/netpol/namespace events
 			}
 		}
 	}(npc.fullSyncRequestChan, stopCh, wg)
@@ -217,8 +210,14 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 
 	glog.V(1).Infof("Starting sync of iptables with version: %s", syncVersion)
 
+	// setup default pod firewall chain
+	npc.ensureDefaultPodFWChains()
+
 	// ensure kube-router specific top level chains and corresponding rules exist
 	npc.ensureTopLevelChains()
+
+	// ensure default network policies chains
+	npc.ensureDefaultNetworkPolicyChains()
 
 	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 	if err != nil {
@@ -246,10 +245,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 }
 
 // Creates custom chains KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT
-// and following rules in the filter table to jump from builtin chain to custom chain
-// -A INPUT   -m comment --comment "kube-router netpol" -j KUBE-ROUTER-INPUT
-// -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
-// -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
+// and rules in the filter table to jump from builtin chain to custom chain
 func (npc *NetworkPolicyController) ensureTopLevelChains() {
 
 	iptablesCmdHandler, err := iptables.New()
@@ -315,17 +311,61 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 
 	chains := map[string]string{"INPUT": kubeInputChainName, "FORWARD": kubeForwardChainName, "OUTPUT": kubeOutputChainName}
 
-	for builtinChain, customChain := range chains {
-		err = iptablesCmdHandler.NewChain("filter", customChain)
-		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-			glog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
+	if npc.nodePodIPCIDR != "" {
+		// optimize for the case when we know pod CIDR for the node
+		//-A INPUT -s 10.1.2.0/24 -m comment --comment "kube-router netpol - PQPITJNHBPGOWBG3" -j KUBE-ROUTER-INPUT
+		//-A FORWARD -s 10.1.2.0/24 -m comment --comment "kube-router netpol - B54YCUOMUZH6LGXL" -j KUBE-ROUTER-FORWARD
+		//-A FORWARD -d 10.1.2.0/24 -m comment --comment "kube-router netpol - BEVEPCOUQNUZIPVK" -j KUBE-ROUTER-FORWARD
+		//-A OUTPUT -d 10.1.2.0/24 -m comment --comment "kube-router netpol - AFSPBOUT2BJFJDZ3" -j KUBE-ROUTER-OUTPUT
+		for _, customChain := range chains {
+			err = iptablesCmdHandler.NewChain("filter", customChain)
+			if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+				glog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
+			}
 		}
-		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
-		uuid, err := addUUIDForRuleSpec(builtinChain, &args)
+		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-s", npc.nodePodIPCIDR, "-j", kubeInputChainName}
+		uuid, err := addUUIDForRuleSpec("INPUT", &args)
 		if err != nil {
 			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 		}
-		ensureRuleAtPosition(builtinChain, args, uuid, 1)
+		ensureRuleAtPosition("INPUT", args, uuid, 1)
+
+		args = []string{"-m", "comment", "--comment", "kube-router netpol", "-d", npc.nodePodIPCIDR, "-j", kubeOutputChainName}
+		uuid, err = addUUIDForRuleSpec("OUTPUT", &args)
+		if err != nil {
+			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		ensureRuleAtPosition("OUTPUT", args, uuid, 1)
+
+		args = []string{"-m", "comment", "--comment", "kube-router netpol", "-s", npc.nodePodIPCIDR, "-j", kubeForwardChainName}
+		uuid, err = addUUIDForRuleSpec("FORWARD", &args)
+		if err != nil {
+			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		ensureRuleAtPosition("FORWARD", args, uuid, 1)
+
+		args = []string{"-m", "comment", "--comment", "kube-router netpol", "-d", npc.nodePodIPCIDR, "-j", kubeForwardChainName}
+		uuid, err = addUUIDForRuleSpec("FORWARD", &args)
+		if err != nil {
+			glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		ensureRuleAtPosition("FORWARD", args, uuid, 2)
+	} else {
+		// -A INPUT   -m comment --comment "kube-router netpol" -j KUBE-ROUTER-INPUT
+		// -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
+		// -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
+		for builtinChain, customChain := range chains {
+			err = iptablesCmdHandler.NewChain("filter", customChain)
+			if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+				glog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
+			}
+			args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
+			uuid, err := addUUIDForRuleSpec(builtinChain, &args)
+			if err != nil {
+				glog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+			}
+			ensureRuleAtPosition(builtinChain, args, uuid, 1)
+		}
 	}
 
 	whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to cluster IP", "-d", npc.serviceClusterIPRange.String(), "-j", "RETURN"}
@@ -369,6 +409,12 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		if err != nil {
 			glog.Fatalf("Failed to run iptables command: %s", err.Error())
 		}
+		comment = "rule to apply default pod firewall"
+		args = []string{"-m", "comment", "--comment", comment, "-j", KubeDefaultPodFWChain}
+		err = iptablesCmdHandler.AppendUnique("filter", chain, args...)
+		if err != nil {
+			glog.Fatalf("Failed to run iptables command: %s", err.Error())
+		}
 	}
 }
 
@@ -380,6 +426,8 @@ func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChains() {
 		glog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
 	}
 
+	// if there is no matching or applicable network policy to a pod, then these chains set mark
+	// so that both ingress and egress traffic gets ACCEPT
 	markArgs := make([]string, 0)
 	markComment := "rule to mark traffic matching a network policy"
 	markArgs = append(markArgs, "-j", "MARK", "-m", "comment", "--comment", markComment, "--set-xmark", "0x10000/0x10000")
@@ -402,11 +450,54 @@ func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChains() {
 	}
 }
 
+// KUBE-POD-FW-DEFAULT chain will be used to enforce configured action during the
+// window of time when pod gets launched and starts sending the traffic or receiving
+// the traffic to the time when network policy enforcements are in place for the pod
+func (npc *NetworkPolicyController) ensureDefaultPodFWChains() {
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		glog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
+	}
+	err = iptablesCmdHandler.NewChain("filter", KubeDefaultPodFWChain)
+	if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+		glog.Fatalf("Failed to run iptables command to create %s chain due to %s", KubeDefaultPodFWChain, err.Error())
+	}
+	if npc.nodePodIPCIDR == "" {
+		return
+	}
+
+	defaultAction := "REJECT"
+	if npc.netpolAllowPreCheck {
+		defaultAction = "ACCEPT"
+	}
+	// default action for pod ingress traffic
+	comment := "default action for pod ingress traffic"
+	args := []string{"-m", "comment", "--comment", comment, "-d", npc.nodePodIPCIDR, "-j", defaultAction}
+	err = iptablesCmdHandler.AppendUnique("filter", KubeDefaultPodFWChain, args...)
+	if err != nil {
+		glog.Fatalf("Failed to run iptables command: %s", err.Error())
+	}
+	// default action for pod egress traffic
+	comment = "default action for pod egress traffic"
+	args = []string{"-m", "comment", "--comment", comment, "-s", npc.nodePodIPCIDR, "-j", defaultAction}
+	err = iptablesCmdHandler.AppendUnique("filter", KubeDefaultPodFWChain, args...)
+	if err != nil {
+		glog.Fatalf("Failed to run iptables command: %s", err.Error())
+	}
+}
+
 func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets map[string]bool) error {
 
 	cleanupPodFwChains := make([]string, 0)
 	cleanupPolicyChains := make([]string, 0)
 	cleanupPolicyIPSets := make([]*utils.Set, 0)
+
+	// add default network policy chain as active
+	activePolicyChains[kubeIngressNetpolChain] = true
+	activePolicyChains[kubeEgressNetpolChain] = true
+
+	// add default pod FW chain as active
+	activePodFwChains[KubeDefaultPodFWChain] = true
 
 	// initialize tool sets for working with iptables and ipset
 	iptablesCmdHandler, err := iptables.New()
@@ -653,6 +744,15 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 	npc.serviceClusterIPRange = *ipnet
 
+	if config.RunRouter {
+		cidr, err := utils.GetPodCidrFromNodeSpec(clientset, config.HostnameOverride)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to get pod CIDR details from Node.spec: %s", err.Error())
+		}
+		npc.nodePodIPCIDR = cidr
+	}
+
+	npc.netpolAllowPreCheck = config.NetpolAllowPreCheck
 	// Validate and parse NodePort range
 	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]{1}([0-9]+)$`)
 	if matched := nodePortValidator.MatchString(config.NodePortRange); !matched {

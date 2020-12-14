@@ -210,7 +210,7 @@ type tNetpolTestCase struct {
 }
 
 // tGetNotTargetedPods finds set of pods that should not be targeted by netpol selectors
-func tGetNotTargetedPods(podsGot []podInfo, wanted tPodNamespaceMap) []string {
+func tGetNotTargetedPods(podsGot map[string]podInfo, wanted tPodNamespaceMap) []string {
 	unwanted := make(tPodNamespaceMap)
 	for _, pod := range podsGot {
 		if !wanted[pod.namespace][pod.name] {
@@ -221,7 +221,7 @@ func tGetNotTargetedPods(podsGot []podInfo, wanted tPodNamespaceMap) []string {
 }
 
 // tGetTargetPodsMissing returns the set of pods that should have been targeted but were missing by netpol selectors
-func tGetTargetPodsMissing(podsGot []podInfo, wanted tPodNamespaceMap) []string {
+func tGetTargetPodsMissing(podsGot map[string]podInfo, wanted tPodNamespaceMap) []string {
 	missing := wanted.copy()
 	for _, pod := range podsGot {
 		if wanted[pod.namespace][pod.name] {
@@ -231,14 +231,15 @@ func tGetTargetPodsMissing(podsGot []podInfo, wanted tPodNamespaceMap) []string 
 	return missing.toStrSlice()
 }
 
-func tListOfPodsFromTargets(target map[string]podInfo) (r []podInfo) {
+func tListOfPodsFromTargets(target map[string]podInfo) (r map[string]podInfo) {
+	r = make(map[string]podInfo)
 	for _, pod := range target {
-		r = append(r, pod)
+		r[pod.ip] = pod
 	}
 	return
 }
 
-func testForMissingOrUnwanted(t *testing.T, targetMsg string, got []podInfo, wanted tPodNamespaceMap) {
+func testForMissingOrUnwanted(t *testing.T, targetMsg string, got map[string]podInfo, wanted tPodNamespaceMap) {
 	if missing := tGetTargetPodsMissing(got, wanted); len(missing) != 0 {
 		t.Errorf("Some Pods were not selected %s: %s", targetMsg, strings.Join(missing, ", "))
 	}
