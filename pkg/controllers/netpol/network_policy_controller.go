@@ -32,16 +32,16 @@ const (
 	kubeInputChainName           = "KUBE-ROUTER-INPUT"
 	kubeForwardChainName         = "KUBE-ROUTER-FORWARD"
 	kubeOutputChainName          = "KUBE-ROUTER-OUTPUT"
+	KubeDefaultPodFWChain        = "KUBE-POD-FW-DEFAULT"
 	kubeIngressNetpolChain       = "KUBE-NWPLCY-DEFAULT-INGRESS"
 	kubeEgressNetpolChain        = "KUBE-NWPLCY-DEFAULT-EGRESS"
-	KubeDefaultPodFWChain        = "KUBE-POD-FW-DEFAULT"
 )
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
 // policies. Please refer to https://github.com/cloudnativelabs/kube-router/blob/maste/docs/design/npc-design.md
 // for the design details
 
-// NetworkPolicyController strcut to hold information required by NetworkPolicyController
+// NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
 	nodeIP                  net.IP
 	nodeHostName            string
@@ -129,7 +129,7 @@ type numericPort2eps map[string]*endPoints
 type protocol2eps map[string]numericPort2eps
 type namedPort2eps map[string]protocol2eps
 
-// Run runs forver till we receive notification on stopCh
+// Run runs forver till we receive notification on stopCh to shutdown
 func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
@@ -159,7 +159,7 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 			case <-fullSyncRequest:
 				glog.V(3).Info("Received request for a full sync, processing")
 				npc.fullPolicySync()       // fullPolicySync() is a blocking request here
-				npc.readyForUpdates = true // wait till one full sync to happen before processing pod/netpol/namespace events
+				npc.readyForUpdates = true // used to ensure atleast one full sync to happen before processing pod/netpol/namespace events
 			}
 		}
 	}(npc.fullSyncRequestChan, stopCh, wg)
@@ -400,15 +400,18 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, externalIPIndex+4)
 	}
 
-	// for the traffic to/from the local pod's let network policy controller be
-	// authoritative entity to ACCEPT the traffic if it complies to network policies
 	for _, chain := range chains {
+		// for the traffic to/from the local pod's let network policy controller be
+		// authoritative entity to ACCEPT the traffic if it complies to network policies
 		comment := "rule to explicitly ACCEPT traffic that comply to network policies"
 		args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT"}
 		err = iptablesCmdHandler.AppendUnique("filter", chain, args...)
 		if err != nil {
 			glog.Fatalf("Failed to run iptables command: %s", err.Error())
 		}
+
+		// if the traffic comes to this rule, it means that traffic from/to local pod
+		// for which no network policy is setup yet, so run through the default pod firewall
 		comment = "rule to apply default pod firewall"
 		args = []string{"-m", "comment", "--comment", comment, "-j", KubeDefaultPodFWChain}
 		err = iptablesCmdHandler.AppendUnique("filter", chain, args...)
