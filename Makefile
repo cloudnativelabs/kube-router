@@ -256,13 +256,6 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-# TODO: Uncomment this target when all deps are version-pinned in glide.yaml
-# update-glide:
-# 	# go get -d -u github.com/Masterminds/glide
-# 	glide update --strip-vendor
-# 	# go get -d -u github.com/sgotti/glide-vc
-# 	glide vc --only-code --no-tests
-
 # If the first argument is "vagrant"...
 ifeq (vagrant,$(firstword $(MAKECMDGOALS)))
   # use the rest as arguments for "vagrant"
@@ -272,7 +265,7 @@ ifeq (vagrant,$(firstword $(MAKECMDGOALS)))
 endif
 
 .PHONY: build clean container run release goreleaser push gofmt gofmt-fix gomoqs
-.PHONY: update-glide test lint docker-login push-manifest push-manifest-release
+.PHONY: test lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help gopath gopath-fix vagrant-up-single-node
 .PHONY: vagrant-up-multi-node vagrant-destroy vagrant-clean vagrant
 .PHONY: multiarch-binverify
