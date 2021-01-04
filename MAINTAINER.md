@@ -1,9 +1,14 @@
 # Maintainers
 
-## The team
+## maintainers
+
+* Aaron U'Ren [@aauren](https://github.com/aauren)
+* Manuel Rüger [@mrueg](https://github.com/mrueg)
+* Murali Reddy [@murali-reddy](https://github.com/murali-reddy)
+
+## emeritus maintainers
 
 * Andrew Sy Kim [@andrewsykim](https://github.com/andrewsykim)
 * Bryan Zubrod [@bzub](https://github.com/bzub)
 * Joakim Karlsson [@roffe](https://github.com/roffe)
-* Murali Reddy [@murali-reddy](https://github.com/murali-reddy)
 * Jimmy Zhang [@jimmy-zh](https://github.com/jimmy-zh)
