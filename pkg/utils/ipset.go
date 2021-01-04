@@ -208,11 +208,14 @@ func (ipset *IPSet) Add(set *Set) error {
 		return err
 	}
 
-	for _, entry := range set.Entries {
-		_, err := ipset.Get(set.Name).Add(entry.Options...)
-		if err != nil {
-			return err
-		}
+	options := make([][]string, len(set.Entries))
+	for index, entry := range set.Entries {
+		options[index] = entry.Options
+	}
+
+	err = ipset.Get(set.Name).BatchAdd(options)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -220,6 +223,8 @@ func (ipset *IPSet) Add(set *Set) error {
 
 // Add a given entry to the set. If the -exist option is specified, ipset
 // ignores if the entry already added to the set.
+// Note: if you need to add multiple entries (e.g., in a loop), use BatchAdd instead,
+// as it’s much more performant.
 func (set *Set) Add(addOptions ...string) (*Entry, error) {
 	entry := &Entry{
 		Set:     set,
@@ -231,6 +236,35 @@ func (set *Set) Add(addOptions ...string) (*Entry, error) {
 		return nil, err
 	}
 	return entry, nil
+}
+
+// Adds given entries (with their options) to the set.
+// For multiple items, this is much faster than Add().
+func (set *Set) BatchAdd(addOptions [][]string) error {
+	newEntries := make([]*Entry, len(addOptions))
+	for index, options := range addOptions {
+		entry := &Entry{
+			Set:     set,
+			Options: options,
+		}
+		newEntries[index] = entry
+	}
+	set.Entries = append(set.Entries, newEntries...)
+
+	// Build the `restore` command contents
+	var builder strings.Builder
+	for _, options := range addOptions {
+		line := strings.Join(append([]string{"add", "-exist", set.name()}, options...), " ")
+		builder.WriteString(line + "\n")
+	}
+	restoreContents := builder.String()
+
+	// Invoke the command
+	_, err := set.Parent.runWithStdin(bytes.NewBufferString(restoreContents), "restore")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Del an entry from a set. If the -exist option is specified and the entry is
@@ -441,7 +475,19 @@ func (set *Set) Swap(setTo *Set) error {
 
 // Refresh a Set with new entries.
 func (set *Set) Refresh(entries []string, extraOptions ...string) error {
+	entriesWithOptions := make([][]string, len(entries))
+
+	for index, entry := range entries {
+		entriesWithOptions[index] = append([]string{entry}, extraOptions...)
+	}
+
+	return set.RefreshWithBuiltinOptions(entriesWithOptions)
+}
+
+// Refresh a Set with new entries with built-in options.
+func (set *Set) RefreshWithBuiltinOptions(entries [][]string) error {
 	var err error
+
 	// The set-name must be < 32 characters!
 	tempName := set.Name + "-"
 
@@ -456,46 +502,9 @@ func (set *Set) Refresh(entries []string, extraOptions ...string) error {
 		return err
 	}
 
-	for _, entry := range entries {
-		_, err = newSet.Add(entry)
-		if err != nil {
-			return err
-		}
-	}
-
-	err = set.Swap(newSet)
+	err = newSet.BatchAdd(entries)
 	if err != nil {
 		return err
-	}
-
-	err = set.Parent.Destroy(tempName)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Refresh a Set with new entries with built-in options.
-func (set *Set) RefreshWithBuiltinOptions(entries [][]string) error {
-	var err error
-	tempName := set.Name + "-temp"
-	newSet := &Set{
-		Parent:  set.Parent,
-		Name:    tempName,
-		Options: set.Options,
-	}
-
-	err = set.Parent.Add(newSet)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		_, err = newSet.Add(entry...)
-		if err != nil {
-			return err
-		}
 	}
 
 	err = set.Swap(newSet)

@@ -695,7 +695,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 				podSubnetsIPSetName)
 		}
 	}
-	err = psSet.Refresh(currentPodCidrs, psSet.Options...)
+	err = psSet.Refresh(currentPodCidrs)
 	if err != nil {
 		return fmt.Errorf("Failed to sync Pod Subnets ipset: %s", err)
 	}
@@ -710,7 +710,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 				nodeAddrsIPSetName)
 		}
 	}
-	err = naSet.Refresh(currentNodeIPs, naSet.Options...)
+	err = naSet.Refresh(currentNodeIPs)
 	if err != nil {
 		return fmt.Errorf("Failed to sync Node Addresses ipset: %s", err)
 	}
