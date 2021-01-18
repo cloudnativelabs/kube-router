@@ -27,8 +27,8 @@ func Test_GetPodCidrFromCniSpec(t *testing.T) {
 			"CNI config file has subnet",
 			`{"bridge":"kube-bridge","ipam":{"subnet":"172.17.0.0/24","type":"host-local"},"isDefaultGateway":true,"name":"kubernetes","type":"bridge"}`,
 			net.IPNet{
-				IP:   net.IPv4(172, 17, 0, 0),
-				Mask: net.IPv4Mask(255, 255, 255, 0),
+				IP:   net.IP{172, 17, 0, 0},
+				Mask: net.CIDRMask(24, 32),
 			},
 			nil,
 			"10-kuberouter.conf",
@@ -132,7 +132,7 @@ func Test_GetPodCidrFromNodeSpec(t *testing.T) {
 		err              error
 	}{
 		{
-			"node with node.Spec.PoodCIDR",
+			"node with node.Spec.PodCIDR",
 			"test-node",
 			&apiv1.Node{
 				ObjectMeta: metav1.ObjectMeta{
