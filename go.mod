@@ -36,11 +36,13 @@ require (
 	github.com/vishvananda/netlink v1.1.1-0.20201029203352-d40f9887b852
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae
 	golang.org/x/net v0.0.0-20201006153459-a7d1128ccaa0
+	google.golang.org/grpc v1.27.1
 	gopkg.in/ini.v1 v1.61.0 // indirect
 	gotest.tools v2.2.0+incompatible // indirect
 	k8s.io/api v0.18.8
 	k8s.io/apimachinery v0.18.8
 	k8s.io/client-go v0.18.8
+	k8s.io/cri-api v0.20.2
 )
 
 go 1.13

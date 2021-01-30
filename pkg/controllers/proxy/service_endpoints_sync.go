@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/cri"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/golang/glog"
 	"github.com/moby/ipvs"
@@ -396,15 +397,30 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 						continue
 					}
 
-					containerID := strings.TrimPrefix(podObj.Status.ContainerStatuses[0].ContainerID, "docker://")
+					containerURL := podObj.Status.ContainerStatuses[0].ContainerID
+					runtime, containerID, err := cri.EndpointParser(containerURL)
+					if err != nil {
+						glog.Errorf("couldn't get containerID (container=%s, pod=%s). Skipping DSR endpoint set up", podObj.Spec.Containers[0].Name, podObj.Name)
+						continue
+					}
+
 					if containerID == "" {
 						glog.Errorf("Failed to find container id for the endpoint with ip: " + endpoint.ip + " so skipping peparing endpoint for DSR")
 						continue
 					}
 
-					err = nsc.ln.prepareEndpointForDsr(containerID, endpoint.ip, externalIPService.externalIP)
-					if err != nil {
-						glog.Errorf("Failed to prepare endpoint %s to do direct server return due to %s", endpoint.ip, err.Error())
+					if runtime == "docker" {
+						err = nsc.ln.prepareEndpointForDsr(containerID, endpoint.ip, externalIPService.externalIP)
+						if err != nil {
+							glog.Errorf("Failed to prepare endpoint %s to do direct server return due to %s", endpoint.ip, err.Error())
+						}
+					} else {
+						// We expect CRI compliant runtimes here
+						// ugly workaround, refactoryng of pkg/Proxy is required
+						err = nsc.ln.(*linuxNetworking).prepareEndpointForDsrWithCRI(nsc.dsr.runtimeEndpoint, containerID, endpoint.ip, externalIPService.externalIP)
+						if err != nil {
+							glog.Errorf("Failed to prepare endpoint %s to do DSR due to: %s", endpoint.ip, err.Error())
+						}
 					}
 				}
 			}
