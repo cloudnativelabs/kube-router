@@ -1108,20 +1108,12 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	var activeNetworkNamespaceHandle netns.NsHandle
-
 	hostNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
 		return errors.New("failed to get host namespace due to " + err.Error())
 	}
+	glog.V(1).Infof("current network namespace before netns.Set: " + hostNetworkNamespaceHandle.String())
 	defer hostNetworkNamespaceHandle.Close()
-
-	activeNetworkNamespaceHandle, err = netns.Get()
-	if err != nil {
-		return errors.New("failed to get active namespace due to " + err.Error())
-	}
-	glog.V(1).Infof("current network namespace before netns.Set: " + activeNetworkNamespaceHandle.String())
-	activeNetworkNamespaceHandle.Close()
 
 	rs, err := cri.NewRemoteRuntimeService(runtimeEndpoint, cri.DefaultConnectionTimeout)
 	if err != nil {
@@ -1145,7 +1137,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 		return fmt.Errorf("failed to enter endpoint namespace (containerID=%s, pid=%d, error=%s)", containerID, pid, err)
 	}
 
-	activeNetworkNamespaceHandle, err = netns.Get()
+	activeNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
 		return errors.New("Failed to get activeNetworkNamespace due to " + err.Error())
 	}

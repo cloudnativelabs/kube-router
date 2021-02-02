@@ -416,7 +416,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 						}
 					} else {
 						// We expect CRI compliant runtimes here
-						// ugly workaround, refactoryng of pkg/Proxy is required
+						// ugly workaround, refactoring of pkg/Proxy is required
 						err = nsc.ln.(*linuxNetworking).prepareEndpointForDsrWithCRI(nsc.dsr.runtimeEndpoint, containerID, endpoint.ip, externalIPService.externalIP)
 						if err != nil {
 							glog.Errorf("Failed to prepare endpoint %s to do DSR due to: %s", endpoint.ip, err.Error())

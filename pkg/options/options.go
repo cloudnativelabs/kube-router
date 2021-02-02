@@ -186,7 +186,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.RunServiceProxy, "run-service-proxy", true,
 		"Enables Service Proxy -- sets up IPVS for Kubernetes Services.")
 	fs.StringVar(&s.RuntimeEndpoint, "runtime-endpoint", "",
-		"Path to runtime socket. Used only for DSR mode")
+		"Path to CRI compatible container runtime socket (used for DSR mode). Currently known working with containerd.")
 	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
 		"CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12")
 	fs.StringSliceVar(&s.ExternalIPCIDRs, "service-external-ip-range", s.ExternalIPCIDRs,
