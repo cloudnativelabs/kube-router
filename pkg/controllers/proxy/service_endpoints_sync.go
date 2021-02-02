@@ -410,6 +410,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 					}
 
 					if runtime == "docker" {
+						// WARN: This method is deprecated and will be removed once docker-shim is removed from kubelet.
 						err = nsc.ln.prepareEndpointForDsr(containerID, endpoint.ip, externalIPService.externalIP)
 						if err != nil {
 							glog.Errorf("Failed to prepare endpoint %s to do direct server return due to %s", endpoint.ip, err.Error())

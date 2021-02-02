@@ -23,6 +23,7 @@ const (
 type remoteRuntimeService struct {
 	timeout       time.Duration
 	runtimeClient runtimeapi.RuntimeServiceClient
+	conn          *grpc.ClientConn
 }
 
 type containerInfo struct {
@@ -54,6 +55,7 @@ func NewRemoteRuntimeService(endpoint string, connectionTimeout time.Duration) (
 	return &remoteRuntimeService{
 		timeout:       connectionTimeout,
 		runtimeClient: runtimeapi.NewRuntimeServiceClient(conn),
+		conn:          conn,
 	}, nil
 }
 
@@ -77,6 +79,14 @@ func (r *remoteRuntimeService) ContainerInfo(id string) (*containerInfo, error) 
 		return nil, err
 	}
 	return &info, nil
+}
+
+// Close tears down the *grpc.ClientConn and all underlying connections.
+func (r *remoteRuntimeService) Close() error {
+	if err := r.conn.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func dialer(ctx context.Context, addr string) (net.Conn, error) {

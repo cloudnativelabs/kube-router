@@ -879,6 +879,7 @@ func (nsc *NetworkServicesController) getPodObjectForEndpoint(endpointIP string)
 // - enter process network namespace and create ipip tunnel
 // - add VIP to the tunnel interface
 // - disable rp_filter
+// WARN: This method is deprecated and will be removed once docker-shim is removed from kubelet.
 func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP string, vip string) error {
 
 	// FIXME: its possible switch namespaces may never work safely in GO without hacks.
@@ -1092,8 +1093,8 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 	return nil
 }
 
-// The same as prepareEndpointForDsr but using CRI instead of docker
-func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) error {
+// The same as prepareEndpointForDsr but using CRI instead of docker.
+func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) (err error) {
 
 	// FIXME: its possible switch namespaces may never work safely in GO without hacks.
 	//	 https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion
@@ -1119,6 +1120,9 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err = rs.Close()
+	}()
 
 	info, err := rs.ContainerInfo(containerID)
 	if err != nil {
