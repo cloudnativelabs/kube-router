@@ -14,7 +14,6 @@ the cluster).  There is no configuration required in this mode. All the nodes in
 the cluster are associated with private ASN 64512 implicitly (which can be
 configured with `--cluster-asn` flag). Users are transparent to use of iBGP.
 This mode is suitable in public cloud environments or small cluster deployments.
-In this mode all the nodes are expected to be L2 adjacent.
 
 ### Node-To-Node Peering Without Full Mesh
 
