@@ -90,7 +90,9 @@ github.com/fsnotify/fsnotify
 # github.com/go-ini/ini v1.35.0
 github.com/go-ini/ini
 # github.com/gogo/protobuf v1.3.1
+github.com/gogo/protobuf/gogoproto
 github.com/gogo/protobuf/proto
+github.com/gogo/protobuf/protoc-gen-gogo/descriptor
 github.com/gogo/protobuf/sortkeys
 # github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 github.com/golang/glog
@@ -212,7 +214,7 @@ github.com/pkg/errors
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/internal
 github.com/prometheus/client_golang/prometheus/promhttp
-# github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
+# github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.4.1
 github.com/prometheus/common/expfmt
@@ -298,10 +300,12 @@ google.golang.org/appengine/internal/log
 google.golang.org/appengine/internal/remote_api
 google.golang.org/appengine/internal/urlfetch
 google.golang.org/appengine/urlfetch
-# google.golang.org/genproto v0.0.0-20190418145605-e7d98fc518a7
+# google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.19.0
+# google.golang.org/grpc v1.27.1
 google.golang.org/grpc
+google.golang.org/grpc/attributes
+google.golang.org/grpc/backoff
 google.golang.org/grpc/balancer
 google.golang.org/grpc/balancer/base
 google.golang.org/grpc/balancer/roundrobin
@@ -315,11 +319,15 @@ google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/grpclog
 google.golang.org/grpc/internal
 google.golang.org/grpc/internal/backoff
+google.golang.org/grpc/internal/balancerload
 google.golang.org/grpc/internal/binarylog
+google.golang.org/grpc/internal/buffer
 google.golang.org/grpc/internal/channelz
 google.golang.org/grpc/internal/envconfig
 google.golang.org/grpc/internal/grpcrand
 google.golang.org/grpc/internal/grpcsync
+google.golang.org/grpc/internal/resolver/dns
+google.golang.org/grpc/internal/resolver/passthrough
 google.golang.org/grpc/internal/syscall
 google.golang.org/grpc/internal/transport
 google.golang.org/grpc/keepalive
@@ -327,8 +335,7 @@ google.golang.org/grpc/metadata
 google.golang.org/grpc/naming
 google.golang.org/grpc/peer
 google.golang.org/grpc/resolver
-google.golang.org/grpc/resolver/dns
-google.golang.org/grpc/resolver/passthrough
+google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
@@ -657,6 +664,8 @@ k8s.io/client-go/util/flowcontrol
 k8s.io/client-go/util/homedir
 k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/workqueue
+# k8s.io/cri-api v0.18.8
+k8s.io/cri-api/pkg/apis/runtime/v1alpha2
 # k8s.io/klog v1.0.0
 k8s.io/klog
 # k8s.io/kube-openapi v0.0.0-20200410145947-61e04a5be9a6
