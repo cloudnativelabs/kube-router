@@ -160,9 +160,11 @@ By default kube-router populates GoBGP RIB with node IP as next hop for the adve
 
 ## Overriding the next hop and enable IPIP/tuennel
 
- In a scenario there are multiple groups of nodes in different subnets and user wants to peer mulitple upstream routers for each of their node (.e.g., a cluster has seperate public and private networking, and the nodes in this cluster are located into two different racks, which has their own routers. So there would be two upstream routers for each node, and there are two different subnets in this case), The override-nexthop and tunnel cross subnet features need to be used together to achive the goal.
+A common scenario exists where each node in the cluster is connected to two upstream routers that are in two different subnets. For example, one router is connected to a public network subnet and the other router is connected to a private network subnet. Additionally, nodes may be split across different subnets (e.g. different racks) each of which has their own routers.
 
- to support the above case, user need to set `--enable-overlay` and `--override-nexthop` to true together. This configuration would have the following effect.
+In this scenario, `--override-nexthop` can be used to correctly peer with each upstream router, ensuring that the BGP next-hop attribute is correctly set to the node's IP address that faces the upstream router. The `--enable-overlay` option can be set to allow overlay/underlay tunneling across the different subnets to achieve an interconnected pod network.
+ This configuration would have the following effects:
+
 * Peering Outside the Cluster (https://github.com/cloudnativelabs/kube-router/blob/master/docs/bgp.md#peering-outside-the-cluster) via one of the many means that kube-router makes that option available
 * Overriding Next Hop
 * Enabling overlays in either full mode or with nodes in different subnets
