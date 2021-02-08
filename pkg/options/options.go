@@ -65,6 +65,7 @@ type KubeRouterConfig struct {
 	RunFirewall                    bool
 	RunRouter                      bool
 	RunServiceProxy                bool
+	RuntimeEndpoint                string
 	Version                        bool
 	VLevel                         string
 	// FullMeshPassword    string
@@ -184,6 +185,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP.")
 	fs.BoolVar(&s.RunServiceProxy, "run-service-proxy", true,
 		"Enables Service Proxy -- sets up IPVS for Kubernetes Services.")
+	fs.StringVar(&s.RuntimeEndpoint, "runtime-endpoint", "",
+		"Path to CRI compatible container runtime socket (used for DSR mode). Currently known working with containerd.")
 	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
 		"CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12")
 	fs.StringSliceVar(&s.ExternalIPCIDRs, "service-external-ip-range", s.ExternalIPCIDRs,
