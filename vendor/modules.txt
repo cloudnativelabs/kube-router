@@ -31,7 +31,7 @@ github.com/aws/aws-sdk-go/service/ec2
 github.com/aws/aws-sdk-go/service/sts
 # github.com/beorn7/perks v1.0.0
 github.com/beorn7/perks/quantile
-# github.com/containernetworking/cni v0.8.0
+# github.com/containernetworking/cni v0.8.1
 github.com/containernetworking/cni/libcni
 github.com/containernetworking/cni/pkg/invoke
 github.com/containernetworking/cni/pkg/types
@@ -39,14 +39,14 @@ github.com/containernetworking/cni/pkg/types/020
 github.com/containernetworking/cni/pkg/types/current
 github.com/containernetworking/cni/pkg/utils
 github.com/containernetworking/cni/pkg/version
-# github.com/containernetworking/plugins v0.9.0
+# github.com/containernetworking/plugins v0.9.1
 github.com/containernetworking/plugins/pkg/ip
 github.com/containernetworking/plugins/pkg/ns
 github.com/containernetworking/plugins/pkg/utils/hwaddr
 github.com/containernetworking/plugins/pkg/utils/sysctl
 github.com/containernetworking/plugins/plugins/ipam/host-local/backend
 github.com/containernetworking/plugins/plugins/ipam/host-local/backend/allocator
-# github.com/coreos/go-iptables v0.4.5
+# github.com/coreos/go-iptables v0.5.0
 github.com/coreos/go-iptables/iptables
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew

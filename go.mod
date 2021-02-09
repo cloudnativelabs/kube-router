@@ -3,9 +3,9 @@ module github.com/cloudnativelabs/kube-router
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aws/aws-sdk-go v1.13.32
-	github.com/containernetworking/cni v0.8.0
-	github.com/containernetworking/plugins v0.9.0
-	github.com/coreos/go-iptables v0.4.5
+	github.com/containernetworking/cni v0.8.1
+	github.com/containernetworking/plugins v0.9.1
+	github.com/coreos/go-iptables v0.5.0
 	github.com/dgryski/go-farm v0.0.0-20180109070241-2de33835d102 // indirect
 	github.com/docker/distribution v0.0.0-20170524205824-1e2f10eb6574 // indirect
 	github.com/docker/docker v0.0.0-20180414165938-5c2e6064a1c5
