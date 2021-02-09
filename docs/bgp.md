@@ -157,3 +157,17 @@ kubectl annotate node ip-172-20-46-87.us-west-2.compute.internal "kube-router.io
 
 By default kube-router populates GoBGP RIB with node IP as next hop for the advertised pod CIDR's and service VIP. While this works for most cases, overriding the next hop for the advertised rotues is necessary when node has multiple interfaces over which external peers are reached. Next hop need to be as per the interface local IP over which external peer can be reached. `--override-nexthop` let you override the next hop for the advertised route. Setting `--override-nexthop` to true leverages BGP next-hop-self functionality implemented in GoBGP. Next hop will automatically selected appropriately when advertising routes irrespective of the next hop in the RIB. 
 
+## Overriding the next hop and enable IPIP/tuennel
+
+A common scenario exists where each node in the cluster is connected to two upstream routers that are in two different subnets. For example, one router is connected to a public network subnet and the other router is connected to a private network subnet. Additionally, nodes may be split across different subnets (e.g. different racks) each of which has their own routers.
+
+In this scenario, `--override-nexthop` can be used to correctly peer with each upstream router, ensuring that the BGP next-hop attribute is correctly set to the node's IP address that faces the upstream router. The `--enable-overlay` option can be set to allow overlay/underlay tunneling across the different subnets to achieve an interconnected pod network.
+ This configuration would have the following effects:
+
+* Peering Outside the Cluster (https://github.com/cloudnativelabs/kube-router/blob/master/docs/bgp.md#peering-outside-the-cluster) via one of the many means that kube-router makes that option available
+* Overriding Next Hop
+* Enabling overlays in either full mode or with nodes in different subnets
+
+The warning here is that when using `--override-nexthop` in the above scenario, it may cause kube-router to advertise an IP address other than the node IP which is what kube-router connects the tunnel to when the `--enable-overlay` option is given. If this happens it may cause some network flows to become un-routable.
+
+Specifically, people need to take care when combining `--override-nexthop` and `--enable-overlay` and make sure that they understand their network, the flows they desire, how the kube-router logic works, and the possible side-effects that are created from their configuration. Please refer to this PR for the risk and impact discussion https://github.com/cloudnativelabs/kube-router/pull/1025.

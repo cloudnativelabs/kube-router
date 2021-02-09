@@ -560,9 +560,8 @@ out:
 	}
 
 	// create IPIP tunnels only when node is not in same subnet or overlay-type is set to 'full'
-	// prevent creation when --override-nextHop=true as well
 	// if the user has disabled overlays, don't create tunnels
-	if (!sameSubnet || nrc.overlayType == "full") && !nrc.overrideNextHop && nrc.enableOverlays {
+	if (!sameSubnet || nrc.overlayType == "full") && nrc.enableOverlays {
 		// create ip-in-ip tunnel and inject route as overlay is enabled
 		var link netlink.Link
 		var err error
