@@ -51,7 +51,7 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c ' \
 	    GOARCH=$(GOARCH) CGO_ENABLED=0 go build -mod vendor \
-		-ldflags "-X github.com/cloudnativelabs/kube-router/pkg/cmd.version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate=$(BUILD_DATE)" \
+		-ldflags "-X github.com/cloudnativelabs/kube-router/pkg/version.Version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/version.BuildDate=$(BUILD_DATE)" \
 		-o kube-router cmd/kube-router/kube-router.go'
 	@echo Finished kube-router binary build.
 else

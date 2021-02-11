@@ -2,10 +2,8 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
-	"runtime"
 	"sync"
 	"syscall"
 
@@ -15,6 +13,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
+	"github.com/cloudnativelabs/kube-router/pkg/version"
 	"github.com/golang/glog"
 
 	"time"
@@ -24,10 +23,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
-
-// These get set at build time via -ldflags magic
-var version string
-var buildDate string
 
 // KubeRouter holds the information needed to run server
 type KubeRouter struct {
@@ -40,7 +35,7 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 
 	var clientconfig *rest.Config
 	var err error
-	PrintVersion(true)
+	version.PrintVersion(true)
 	// Use out of cluster config if the URL or kubeconfig have been specified. Otherwise use incluster config.
 	if len(config.Master) != 0 || len(config.Kubeconfig) != 0 {
 		clientconfig, err = clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
@@ -219,15 +214,5 @@ func (kr *KubeRouter) CacheSyncOrTimeout(informerFactory informers.SharedInforme
 		return errors.New(kr.Config.CacheSyncTimeout.String() + " timeout")
 	case <-syncOverCh:
 		return nil
-	}
-}
-
-func PrintVersion(logOutput bool) {
-	output := fmt.Sprintf("Running %v version %s, built on %s, %s\n", os.Args[0], version, buildDate, runtime.Version())
-
-	if !logOutput {
-		fmt.Fprintf(os.Stderr, "%s", output)
-	} else {
-		glog.Info(output)
 	}
 }
