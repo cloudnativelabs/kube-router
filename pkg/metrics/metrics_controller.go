@@ -2,12 +2,14 @@ package metrics
 
 import (
 	"net/http"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
+	"github.com/cloudnativelabs/kube-router/pkg/version"
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -20,6 +22,12 @@ const (
 )
 
 var (
+	// BuildInfo Expose version and other build information
+	BuildInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "build_info",
+		Help:      "Expose version and other build information",
+	}, []string{"goversion", "version"})
 	// ServiceTotalConn Total incoming connections made
 	ServiceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -155,6 +163,8 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 	glog.Info("Starting metrics controller")
 
 	// register metrics for this controller
+	BuildInfo.WithLabelValues(runtime.Version(), version.Version).Set(1)
+	prometheus.MustRegister(BuildInfo)
 	prometheus.MustRegister(ControllerIpvsMetricsExportTime)
 
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(mc.MetricsPort)), Handler: http.DefaultServeMux}

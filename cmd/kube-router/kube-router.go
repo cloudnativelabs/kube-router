@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/pkg/cmd"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
+	"github.com/cloudnativelabs/kube-router/pkg/version"
 	"github.com/spf13/pflag"
 )
 
@@ -47,7 +48,7 @@ func Main() error {
 	}
 
 	if config.Version {
-		cmd.PrintVersion(false)
+		version.PrintVersion(false)
 		return nil
 	}
 
