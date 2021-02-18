@@ -8,9 +8,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/glog"
 	api "k8s.io/api/core/v1"
+	networking "k8s.io/api/networking/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -59,8 +64,14 @@ func (npc *NetworkPolicyController) processPodAddUpdateEvents(pod *api.Pod) {
 		return
 	}
 
+	// if there is outstanding full-sync request the skip processing the event
+	if len(npc.fullSyncRequestChan) == cap(npc.fullSyncRequestChan) {
+		return
+	}
+
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
+
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		glog.Fatalf("Failed to initialize iptables executor: %s", err.Error())
@@ -112,6 +123,14 @@ func (npc *NetworkPolicyController) processPodDeleteEvent(obj interface{}) {
 		return
 	}
 
+	// if there is outstanding full-sync request the skip processing the event
+	if len(npc.fullSyncRequestChan) == cap(npc.fullSyncRequestChan) {
+		return
+	}
+
+	npc.mu.Lock()
+	defer npc.mu.Unlock()
+
 	podInfo := podInfo{ip: pod.Status.PodIP,
 		name:      pod.ObjectMeta.Name,
 		namespace: pod.ObjectMeta.Namespace,
@@ -127,8 +146,6 @@ func (npc *NetworkPolicyController) processPodDeleteEvent(obj interface{}) {
 		return
 	}
 
-	npc.mu.Lock()
-	defer npc.mu.Unlock()
 	podFwChainName := podFirewallChainName(pod.Namespace, pod.Name, syncVersion)
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
@@ -160,6 +177,157 @@ func (npc *NetworkPolicyController) processPodDeleteEvent(obj interface{}) {
 	if err != nil {
 		glog.Errorf("Failed to delete the chain %s due to %s", podFwChainName, err.Error())
 	}
+}
+
+// when a new pod added/deleted/updated this function ensures only matching network
+// policies (i.e. pod labels match with one of network policy target pod selector or
+// ingress pod selector or egress pod selector) are synced to reflect the desired state
+func (npc *NetworkPolicyController) syncAffectedNetworkPolicyChains(pod *podInfo, version string) error {
+
+	for _, policyObj := range npc.npLister.List() {
+		policy, ok := policyObj.(*networking.NetworkPolicy)
+		targetPodSelector, _ := v1.LabelSelectorAsSelector(&policy.Spec.PodSelector)
+		if !ok {
+			return fmt.Errorf("Failed to convert network policy pod selector")
+		}
+
+		if policy.ObjectMeta.Namespace == pod.namespace && targetPodSelector.Matches(labels.Set(pod.labels)) {
+			matchingPods, err := npc.listPodsByNamespaceAndLabels(policy.Namespace, targetPodSelector)
+			if err != nil {
+				return err
+			}
+			matchingPodIps := make([]string, 0, len(matchingPods))
+			for _, matchingPod := range matchingPods {
+				if matchingPod.Status.PodIP == "" {
+					continue
+				}
+				matchingPodIps = append(matchingPodIps, matchingPod.Status.PodIP)
+			}
+			if len(policy.Spec.Ingress) > 0 {
+				// create a ipset for all destination pod ip's matched by the policy spec target PodSelector
+				targetDestPodIPSetName := policyDestinationPodIPSetName(policy.Namespace, policy.Name)
+				targetDestPodIPSet, err := npc.ipSetHandler.Create(targetDestPodIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+				if err != nil {
+					return fmt.Errorf("failed to create ipset: %s", err.Error())
+				}
+				err = targetDestPodIPSet.Refresh(matchingPodIps, utils.OptionTimeout, "0")
+				if err != nil {
+					glog.Errorf("failed to refresh targetDestPodIPSet,: " + err.Error())
+				}
+			}
+			if len(policy.Spec.Egress) > 0 {
+				// create a ipset for all source pod ip's matched by the policy spec target PodSelector
+				targetSourcePodIPSetName := policySourcePodIPSetName(policy.Namespace, policy.Name)
+				targetSourcePodIPSet, err := npc.ipSetHandler.Create(targetSourcePodIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+				if err != nil {
+					return fmt.Errorf("failed to create ipset: %s", err.Error())
+				}
+				err = targetSourcePodIPSet.Refresh(matchingPodIps, utils.OptionTimeout, "0")
+				if err != nil {
+					glog.Errorf("failed to refresh targetSourcePodIPSet: " + err.Error())
+				}
+			}
+		}
+
+		for i, specIngressRule := range policy.Spec.Ingress {
+			if len(specIngressRule.From) == 0 {
+				continue
+			}
+			for _, peer := range specIngressRule.From {
+				if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
+					continue
+				}
+				var matchesPodSelector, matchesNamespaceSelector bool
+				if peer.PodSelector == nil {
+					matchesPodSelector = true
+				} else {
+					fromPodSelector, _ := v1.LabelSelectorAsSelector(peer.PodSelector)
+					matchesPodSelector = fromPodSelector.Matches(labels.Set(pod.labels))
+				}
+				if peer.NamespaceSelector == nil {
+					matchesNamespaceSelector = true
+				} else {
+					namespaceSelector, _ := v1.LabelSelectorAsSelector(peer.NamespaceSelector)
+					namespaceLister := listers.NewNamespaceLister(npc.nsLister)
+					namespaceObj, _ := namespaceLister.Get(pod.namespace)
+					matchesNamespaceSelector = namespaceSelector.Matches(labels.Set(namespaceObj.Labels))
+				}
+				if !(matchesNamespaceSelector && matchesPodSelector) {
+					continue
+				}
+				peerPods, err := npc.evalPodPeer(policy, peer)
+				if err == nil {
+					return err
+				}
+				ingressRuleSrcPodIPs := make([]string, 0, len(peerPods))
+				for _, peerPod := range peerPods {
+					if peerPod.Status.PodIP == "" {
+						continue
+					}
+					ingressRuleSrcPodIPs = append(ingressRuleSrcPodIPs, peerPod.Status.PodIP)
+				}
+				srcPodIPSetName := policyIndexedSourcePodIPSetName(policy.Namespace, policy.Name, i)
+				srcPodIPSet, err := npc.ipSetHandler.Create(srcPodIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+				if err != nil {
+					return fmt.Errorf("failed to create ipset: %s", err.Error())
+				}
+				err = srcPodIPSet.Refresh(ingressRuleSrcPodIPs)
+				if err != nil {
+					glog.Errorf("failed to refresh srcPodIPSet: " + err.Error())
+				}
+			}
+		}
+
+		for i, specEgressRule := range policy.Spec.Egress {
+			if len(specEgressRule.To) == 0 {
+				continue
+			}
+			for _, peer := range specEgressRule.To {
+				if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
+					continue
+				}
+				var matchesPodSelector, matchesNamespaceSelector bool
+				if peer.PodSelector == nil {
+					matchesPodSelector = true
+				} else {
+					toPodSelector, _ := v1.LabelSelectorAsSelector(peer.PodSelector)
+					matchesPodSelector = toPodSelector.Matches(labels.Set(pod.labels))
+				}
+				if peer.NamespaceSelector == nil {
+					matchesNamespaceSelector = true
+				} else {
+					namespaceSelector, _ := v1.LabelSelectorAsSelector(peer.NamespaceSelector)
+					namespaceLister := listers.NewNamespaceLister(npc.nsLister)
+					namespaceObj, _ := namespaceLister.Get(pod.namespace)
+					matchesNamespaceSelector = namespaceSelector.Matches(labels.Set(namespaceObj.Labels))
+				}
+				if !(matchesNamespaceSelector && matchesPodSelector) {
+					continue
+				}
+				peerPods, err := npc.evalPodPeer(policy, peer)
+				if err == nil {
+					return err
+				}
+				egressRuleDstPodIps := make([]string, 0, len(peerPods))
+				for _, peerPod := range peerPods {
+					if peerPod.Status.PodIP == "" {
+						continue
+					}
+					egressRuleDstPodIps = append(egressRuleDstPodIps, peerPod.Status.PodIP)
+				}
+				dstPodIPSetName := policyIndexedDestinationPodIPSetName(policy.Namespace, policy.Name, i)
+				dstPodIPSet, err := npc.ipSetHandler.Create(dstPodIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+				if err != nil {
+					return fmt.Errorf("failed to create ipset: %s", err.Error())
+				}
+				err = dstPodIPSet.Refresh(egressRuleDstPodIps)
+				if err != nil {
+					glog.Errorf("failed to refresh srcPodIPSet: " + err.Error())
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (npc *NetworkPolicyController) fullSyncPodFirewallChains(networkPoliciesInfo []networkPolicyInfo, version string) (map[string]bool, error) {

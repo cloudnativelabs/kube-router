@@ -129,7 +129,7 @@ type numericPort2eps map[string]*endPoints
 type protocol2eps map[string]numericPort2eps
 type namedPort2eps map[string]protocol2eps
 
-// Run runs forver till we receive notification on stopCh to shutdown
+// Run runs forever till we receive notification on stopCh to shutdown
 func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
@@ -401,7 +401,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	}
 
 	for _, chain := range chains {
-		// for the traffic to/from the local pod's let network policy controller be
+		// for the traffic to/from the local pods let network policy controller be
 		// authoritative entity to ACCEPT the traffic if it complies to network policies
 		comment := "rule to explicitly ACCEPT traffic that comply to network policies"
 		args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT"}
