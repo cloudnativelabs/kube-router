@@ -362,6 +362,13 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 					return err
 				}
 			}
+			for _, portProtocol := range egressRule.namedPorts {
+				comment := "rule to ACCEPT traffic from source pods to all destinations selected by policy name: " +
+					policy.name + " namespace " + policy.namespace
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, "", portProtocol.protocol, portProtocol.port); err != nil {
+					return err
+				}
+			}
 		}
 
 		// case where nether ports nor from details are speified in the egress rule
@@ -540,6 +547,17 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 			// If this field is empty or missing in the spec, this rule matches all sources
 			if len(specEgressRule.To) == 0 {
 				egressRule.matchAllDestinations = true
+				// if rule.To is empty but rule.Ports not, we must try to grab NamedPort from pods that in same namespace,
+				// so that we can design iptables rule to describe "match all dst but match some named dst-port" egress rule
+				if policyRulePortsHasNamedPort(specEgressRule.Ports) {
+					matchingPeerPods, _ := npc.ListPodsByNamespaceAndLabels(policy.Namespace, labels.Everything())
+					for _, peerPod := range matchingPeerPods {
+						if peerPod.Status.PodIP == "" {
+							continue
+						}
+						npc.grabNamedPortFromPod(peerPod, &namedPort2EgressEps)
+					}
+				}
 			} else {
 				egressRule.matchAllDestinations = false
 				for _, peer := range specEgressRule.To {
@@ -748,4 +766,13 @@ func policyIndexedEgressNamedPortIPSetName(namespace, policyName string, egressR
 	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + strconv.Itoa(namedPortNo) + "namedport"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIPSetPrefix + encoded[:16]
+}
+
+func policyRulePortsHasNamedPort(npPorts []networking.NetworkPolicyPort) bool {
+	for _, npPort := range npPorts {
+		if npPort.Port != nil && npPort.Port.Type == intstr.String {
+			return true
+		}
+	}
+	return false
 }
