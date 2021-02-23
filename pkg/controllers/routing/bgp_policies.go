@@ -32,6 +32,11 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		klog.Errorf("Failed to add `servicevipsdefinedset` defined set: %s", err)
 	}
 
+	err = nrc.addDefaultRouteDefinedSet()
+	if err != nil {
+		klog.Errorf("Failed to add `defaultroutedefinedset` defined set: %s", err)
+	}
+
 	iBGPPeerCIDRs, err := nrc.addiBGPPeersDefinedSet()
 	if err != nil {
 		klog.Errorf("Failed to add `iBGPpeerset` defined set: %s", err)
@@ -163,6 +168,35 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 		return err
 	}
 
+	return nil
+}
+
+// create a defined set to represent just the host default route
+func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
+	var currentDefinedSet *gobgpapi.DefinedSet
+	err := nrc.bgpServer.ListDefinedSet(context.Background(),
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "defaultroutedefinedset"},
+		func(ds *gobgpapi.DefinedSet) {
+			currentDefinedSet = ds
+		})
+	if err != nil {
+		return err
+	}
+	if currentDefinedSet == nil {
+		cidrLen := 0
+		defaultRouteDefinedSet := &gobgpapi.DefinedSet{
+			DefinedType: gobgpapi.DefinedType_PREFIX,
+			Name:        "defaultroutedefinedset",
+			Prefixes: []*gobgpapi.Prefix{
+				{
+					IpPrefix:      "0.0.0.0/0",
+					MaskLengthMin: uint32(cidrLen),
+					MaskLengthMax: uint32(cidrLen),
+				},
+			},
+		}
+		return nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: defaultRouteDefinedSet})
+	}
 	return nil
 }
 
@@ -539,6 +573,20 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 			PrefixSet: &gobgpapi.MatchSet{
 				MatchType: gobgpapi.MatchType_ANY,
 				Name:      "servicevipsdefinedset",
+			},
+			NeighborSet: &gobgpapi.MatchSet{
+				MatchType: gobgpapi.MatchType_ANY,
+				Name:      "allpeerset",
+			},
+		},
+		Actions: &actions,
+	})
+
+	statements = append(statements, &gobgpapi.Statement{
+		Conditions: &gobgpapi.Conditions{
+			PrefixSet: &gobgpapi.MatchSet{
+				MatchType: gobgpapi.MatchType_ANY,
+				Name:      "defaultroutedefinedset",
 			},
 			NeighborSet: &gobgpapi.MatchSet{
 				MatchType: gobgpapi.MatchType_ANY,
