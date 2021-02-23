@@ -150,6 +150,23 @@ func Test_AddPolicies(t *testing.T) {
 						RouteAction: gobgpapi.RouteAction_REJECT,
 					},
 				},
+				{
+					Name: "kube_router_import_stmt1",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							MatchType: gobgpapi.MatchType_ANY,
+							Name:      "defaultroutedefinedset",
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							MatchType: gobgpapi.MatchType_ANY,
+							Name:      "allpeerset",
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						RouteAction: gobgpapi.RouteAction_REJECT,
+					},
+				},
 			},
 			nil,
 			nil,
