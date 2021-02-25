@@ -1,6 +1,7 @@
 package netpol
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
@@ -67,6 +68,8 @@ type NetworkPolicyController struct {
 	PodEventHandler           cache.ResourceEventHandler
 	NamespaceEventHandler     cache.ResourceEventHandler
 	NetworkPolicyEventHandler cache.ResourceEventHandler
+
+	filterTableRules bytes.Buffer
 }
 
 // internal structure to represent a network policy
@@ -220,6 +223,12 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
+	npc.filterTableRules.Reset()
+	if err := utils.SaveInto("filter", &npc.filterTableRules); err != nil {
+		glog.Errorf("Aborting sync. Failed to run iptables-save: %v" + err.Error())
+		return
+	}
+
 	activePolicyChains, activePolicyIPSets, err := npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
 		glog.Errorf("Aborting sync. Failed to sync network policy chains: %v" + err.Error())
@@ -232,9 +241,21 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
-	err = cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets)
+	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets)
 	if err != nil {
 		glog.Errorf("Aborting sync. Failed to cleanup stale iptables rules: %v", err.Error())
+		return
+	}
+
+	fmt.Println(npc.filterTableRules.String())
+	if err := utils.Restore("filter", npc.filterTableRules.Bytes()); err != nil {
+		glog.Errorf("Aborting sync. Failed to run iptables-restore: %v" + err.Error())
+		return
+	}
+
+	err = npc.cleanupStaleIPSets(activePolicyIPSets)
+	if err != nil {
+		glog.Errorf("Failed to cleanup stale ipsets: %v", err.Error())
 		return
 	}
 }
@@ -356,24 +377,15 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 
 }
 
-func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets map[string]bool) error {
+func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets map[string]bool) error {
 
 	cleanupPodFwChains := make([]string, 0)
 	cleanupPolicyChains := make([]string, 0)
-	cleanupPolicyIPSets := make([]*utils.Set, 0)
 
 	// initialize tool sets for working with iptables and ipset
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		glog.Fatalf("failed to initialize iptables command executor due to %s", err.Error())
-	}
-	ipsets, err := utils.NewIPSet(false)
-	if err != nil {
-		glog.Fatalf("failed to create ipsets command executor due to %s", err.Error())
-	}
-	err = ipsets.Save()
-	if err != nil {
-		glog.Fatalf("failed to initialize ipsets command executor due to %s", err.Error())
 	}
 
 	// find iptables chains and ipsets that are no longer used by comparing current to the active maps we were passed
@@ -393,6 +405,58 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 			}
 		}
 	}
+
+	var newChains, newRules, desiredFilterTable bytes.Buffer
+	rules := strings.Split(npc.filterTableRules.String(), "\n")
+	if len(rules) > 0 && rules[len(rules)-1] == "" {
+		rules = rules[:len(rules)-1]
+	}
+	for _, rule := range rules {
+		skipRule := false
+		for _, podFWChainName := range cleanupPodFwChains {
+			if strings.Contains(rule, podFWChainName) {
+				skipRule = true
+				break
+			}
+		}
+		for _, policyChainName := range cleanupPolicyChains {
+			if strings.Contains(rule, policyChainName) {
+				skipRule = true
+				break
+			}
+		}
+		if strings.Contains(rule, "COMMIT") || strings.HasPrefix(rule, "# ") {
+			skipRule = true
+		}
+		if skipRule {
+			continue
+		}
+		if strings.HasPrefix(rule, ":") {
+			newChains.WriteString(rule + " - [0:0]\n")
+		}
+		if strings.HasPrefix(rule, "-") {
+			newRules.WriteString(rule + "\n")
+		}
+	}
+	desiredFilterTable.WriteString("*filter" + "\n")
+	desiredFilterTable.Write(newChains.Bytes())
+	desiredFilterTable.Write(newRules.Bytes())
+	desiredFilterTable.WriteString("COMMIT" + "\n")
+	npc.filterTableRules = desiredFilterTable
+
+	return nil
+}
+
+func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[string]bool) error {
+	cleanupPolicyIPSets := make([]*utils.Set, 0)
+	ipsets, err := utils.NewIPSet(false)
+	if err != nil {
+		glog.Fatalf("failed to create ipsets command executor due to %s", err.Error())
+	}
+	err = ipsets.Save()
+	if err != nil {
+		glog.Fatalf("failed to initialize ipsets command executor due to %s", err.Error())
+	}
 	for _, set := range ipsets.Sets {
 		if strings.HasPrefix(set.Name, kubeSourceIPSetPrefix) ||
 			strings.HasPrefix(set.Name, kubeDestinationIPSetPrefix) {
@@ -401,78 +465,6 @@ func cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets
 			}
 		}
 	}
-
-	// remove stale iptables podFwChain references from the filter table chains
-	for _, podFwChain := range cleanupPodFwChains {
-
-		primaryChains := []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName}
-		for _, egressChain := range primaryChains {
-			forwardChainRules, err := iptablesCmdHandler.List("filter", egressChain)
-			if err != nil {
-				return fmt.Errorf("failed to list rules in filter table, %s podFwChain due to %s", egressChain, err.Error())
-			}
-
-			// TODO delete rule by spec, than rule number to avoid extra loop
-			var realRuleNo int
-			for i, rule := range forwardChainRules {
-				if strings.Contains(rule, podFwChain) {
-					err = iptablesCmdHandler.Delete("filter", egressChain, strconv.Itoa(i-realRuleNo))
-					if err != nil {
-						return fmt.Errorf("failed to delete rule: %s from the %s podFwChain of filter table due to %s", rule, egressChain, err.Error())
-					}
-					realRuleNo++
-				}
-			}
-		}
-	}
-
-	// cleanup pod firewall chain
-	for _, chain := range cleanupPodFwChains {
-		glog.V(2).Infof("Found pod fw chain to cleanup: %s", chain)
-		err = iptablesCmdHandler.ClearChain("filter", chain)
-		if err != nil {
-			return fmt.Errorf("Failed to flush the rules in chain %s due to %s", chain, err.Error())
-		}
-		err = iptablesCmdHandler.DeleteChain("filter", chain)
-		if err != nil {
-			return fmt.Errorf("Failed to delete the chain %s due to %s", chain, err.Error())
-		}
-		glog.V(2).Infof("Deleted pod specific firewall chain: %s from the filter table", chain)
-	}
-
-	// cleanup network policy chains
-	for _, policyChain := range cleanupPolicyChains {
-		glog.V(2).Infof("Found policy chain to cleanup %s", policyChain)
-
-		// first clean up any references from active pod firewall chains
-		for podFwChain := range activePodFwChains {
-			podFwChainRules, err := iptablesCmdHandler.List("filter", podFwChain)
-			if err != nil {
-				return fmt.Errorf("Unable to list rules from the chain %s: %s", podFwChain, err)
-			}
-			for i, rule := range podFwChainRules {
-				if strings.Contains(rule, policyChain) {
-					err = iptablesCmdHandler.Delete("filter", podFwChain, strconv.Itoa(i))
-					if err != nil {
-						return fmt.Errorf("Failed to delete rule %s from the chain %s", rule, podFwChain)
-					}
-					break
-				}
-			}
-		}
-
-		// now that all stale and active references to the network policy chain have been removed, delete the chain
-		err = iptablesCmdHandler.ClearChain("filter", policyChain)
-		if err != nil {
-			return fmt.Errorf("Failed to flush the rules in chain %s due to  %s", policyChain, err)
-		}
-		err = iptablesCmdHandler.DeleteChain("filter", policyChain)
-		if err != nil {
-			return fmt.Errorf("Failed to flush the rules in chain %s due to %s", policyChain, err)
-		}
-		glog.V(2).Infof("Deleted network policy chain: %s from the filter table", policyChain)
-	}
-
 	// cleanup network policy ipsets
 	for _, set := range cleanupPolicyIPSets {
 		err = set.Destroy()
