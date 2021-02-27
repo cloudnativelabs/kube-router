@@ -131,7 +131,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// ensure there is rule in filter table and forward chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting switched (coming for same node pods)
 		comment = "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
-			" to chain " + podFwChainName + "\n"
+			" to chain " + podFwChainName + "\""
 		args = []string{"-I", kubeForwardChainName, "1", "-m", "physdev", "--physdev-is-bridged",
 			"-m", "comment", "--comment", comment,
 			"-d", pod.ip,
@@ -167,7 +167,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// add entries in pod firewall to run through required network policies
 		for _, policy := range networkPoliciesInfo {
 			if _, ok := policy.targetPods[pod.ip]; ok {
-				comment := "\"run through nw policy " + policy.name + "\n"
+				comment := "\"run through nw policy " + policy.name + "\""
 				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
 				args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
 				npc.filterTableRules.WriteString(strings.Join(args, " "))
