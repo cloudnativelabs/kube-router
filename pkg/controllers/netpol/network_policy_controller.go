@@ -247,7 +247,6 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
-	fmt.Println(npc.filterTableRules.String())
 	if err := utils.Restore("filter", npc.filterTableRules.Bytes()); err != nil {
 		glog.Errorf("Aborting sync. Failed to run iptables-restore: %v" + err.Error())
 		return
@@ -651,16 +650,6 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		return nil, err
 	}
 	npc.nodeIP = nodeIP
-
-	ipset, err := utils.NewIPSet(false)
-	if err != nil {
-		return nil, err
-	}
-	err = ipset.Save()
-	if err != nil {
-		return nil, err
-	}
-	npc.ipSetHandler = ipset
 
 	npc.podLister = podInformer.GetIndexer()
 	npc.PodEventHandler = npc.newPodEventHandler()

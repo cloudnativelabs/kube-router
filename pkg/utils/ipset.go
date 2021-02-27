@@ -221,6 +221,22 @@ func (ipset *IPSet) Add(set *Set) error {
 	return nil
 }
 
+// RefreshSet add/update internal Sets with a Set of entries but does not run restore command
+func (ipset *IPSet) RefreshSet(setName string, entriesWithOptions [][]string) {
+	if ipset.Get(setName) == nil {
+		ipset.Sets[setName] = &Set{
+			Name:    setName,
+			Options: []string{TypeHashIP, OptionTimeout, "0"},
+			Parent:  ipset,
+		}
+	}
+	entries := make([]*Entry, len(entriesWithOptions))
+	for i, entry := range entriesWithOptions {
+		entries[i] = &Entry{Set: ipset.Sets[setName], Options: entry}
+	}
+	ipset.Get(setName).Entries = entries
+}
+
 // Add a given entry to the set. If the -exist option is specified, ipset
 // ignores if the entry already added to the set.
 // Note: if you need to add multiple entries (e.g., in a loop), use BatchAdd instead,
