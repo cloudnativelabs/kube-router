@@ -64,6 +64,10 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// add rule to log the packets that will be dropped due to network policy enforcement
 		comment := "\"rule to log dropped traffic POD name:" + podName + " namespace: " + podNamespace + "\""
 		args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment, "-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10", "\n"}
+		// This used to be AppendUnique when we were using iptables directly, this checks to make sure we didn't drop unmarked for this chain already
+		if strings.Contains(npc.filterTableRules.String(), strings.Join(args, " ")) {
+			return nil
+		}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 
 		// add rule to DROP if no applicable network policy permits the traffic
