@@ -18,6 +18,7 @@ type KubeRouterConfig struct {
 	AdvertiseNodePodCidr           bool
 	AutoMTU                        bool
 	BGPGracefulRestart             bool
+	BGPGracefulRestartIpv6         bool
 	BGPGracefulRestartDeferralTime time.Duration
 	BGPGracefulRestartTime         time.Duration
 	BGPHoldTime                    time.Duration
@@ -101,6 +102,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Auto detect and set the largest possible MTU for pod interfaces.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
+	fs.BoolVar(&s.BGPGracefulRestartIpv6, "bgp-graceful-restart-ipv6", true,
+		"Enables the BGP Graceful Restart capability for ipv6 so that routes are preserved on unexpected restarts")
 	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time", s.BGPGracefulRestartDeferralTime,
 		"BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h.")
 	fs.DurationVar(&s.BGPGracefulRestartTime, "bgp-graceful-restart-time", s.BGPGracefulRestartTime,
