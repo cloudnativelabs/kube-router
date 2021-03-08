@@ -92,6 +92,7 @@ type NetworkRoutingController struct {
 	bgpFullMeshMode                bool
 	bgpEnableInternal              bool
 	bgpGracefulRestart             bool
+	bgpGracefulRestartIpv6         bool
 	bgpGracefulRestartTime         time.Duration
 	bgpGracefulRestartDeferralTime time.Duration
 	ipSetHandler                   *utils.IPSet
@@ -957,7 +958,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 	if len(nrc.globalPeerRouters) != 0 {
 		err := connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart,
-			nrc.bgpGracefulRestartDeferralTime, nrc.bgpGracefulRestartTime, nrc.peerMultihopTTL)
+			nrc.bgpGracefulRestartIpv6, nrc.bgpGracefulRestartDeferralTime, nrc.bgpGracefulRestartTime, nrc.peerMultihopTTL)
 		if err != nil {
 			err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
 			if err2 != nil {
@@ -998,6 +999,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.enableCNI = kubeRouterConfig.EnableCNI
 	nrc.bgpEnableInternal = kubeRouterConfig.EnableiBGP
 	nrc.bgpGracefulRestart = kubeRouterConfig.BGPGracefulRestart
+	nrc.bgpGracefulRestartIpv6 = kubeRouterConfig.BGPGracefulRestartIpv6
 	nrc.bgpGracefulRestartDeferralTime = kubeRouterConfig.BGPGracefulRestartDeferralTime
 	nrc.bgpGracefulRestartTime = kubeRouterConfig.BGPGracefulRestartTime
 	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTTL

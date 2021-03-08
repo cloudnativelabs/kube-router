@@ -183,7 +183,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 }
 
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
-func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer, bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration,
+func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer, bgpGracefulRestart bool, bgpGracefulRestartIpv6 bool, bgpGracefulRestartDeferralTime time.Duration,
 	bgpGracefulRestartTime time.Duration, peerMultihopTTL uint8) error {
 	for _, n := range peerNeighbors {
 
@@ -214,7 +214,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpap
 					},
 					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
 						Config: &gobgpapi.MpGracefulRestartConfig{
-							Enabled: true,
+							Enabled: bgpGracefulRestartIpv6,
 						},
 					},
 				},
