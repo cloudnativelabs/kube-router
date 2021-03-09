@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/pkg/cri"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/golang/glog"
 	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
@@ -285,6 +287,13 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 			glog.V(1).Infof("Skipping setting up IPVS service for external IP and LoadBalancer IP for the service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
 			continue
 		}
+		mangleTableRulesDump := bytes.Buffer{}
+		mangleTableRules := []string{}
+		if err := utils.SaveInto("mangle", &mangleTableRulesDump); err != nil {
+			glog.Errorf("Failed to run iptables-save: %s" + err.Error())
+		} else {
+			mangleTableRules = strings.Split(mangleTableRulesDump.String(), "\n")
+		}
 		for _, externalIP := range extIPSet.List() {
 			var externalIPServiceID string
 			if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
@@ -344,10 +353,14 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 					continue
 				}
 				fwMark := fmt.Sprint(fwmark)
-				err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMark)
-				if err != nil {
-					glog.Errorf("Failed to verify and cleanup any mangle table rule to FMWARD the traffic to external IP due to " + err.Error())
-					continue
+				for _, mangleTableRule := range mangleTableRules {
+					if strings.Contains(mangleTableRule, externalIP) && strings.Contains(mangleTableRule, fwMark) {
+						err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMark)
+						if err != nil {
+							glog.Errorf("Failed to verify and cleanup any mangle table rule to FMWARD the traffic to external IP due to " + err.Error())
+							continue
+						}
+					}
 				}
 			}
 

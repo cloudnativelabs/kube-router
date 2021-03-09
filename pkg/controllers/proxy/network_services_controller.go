@@ -1605,18 +1605,27 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 		return errors.New("Failed to add hairpin iptables jump rule: %s" + err.Error())
 	}
 
-	// Apply the rules we need
-	for _, ruleArgs := range rulesNeeded {
-		err = iptablesCmdHandler.AppendUnique("nat", hairpinChain, ruleArgs...)
-		if err != nil {
-			return errors.New("Failed to apply hairpin iptables rule: " + err.Error())
-		}
-	}
-
 	rulesFromNode, err := iptablesCmdHandler.List("nat", hairpinChain)
 	if err != nil {
 		return errors.New("Failed to get rules from iptables chain \"" +
 			hairpinChain + "\": " + err.Error())
+	}
+
+	// Apply the rules we need
+	for _, ruleArgs := range rulesNeeded {
+		ruleExists := false
+		for _, ruleFromNode := range rulesFromNode {
+			_, ruleExists = rulesNeeded[ruleFromNode]
+			if ruleExists {
+				break
+			}
+		}
+		if !ruleExists {
+			err = iptablesCmdHandler.AppendUnique("nat", hairpinChain, ruleArgs...)
+			if err != nil {
+				return errors.New("Failed to apply hairpin iptables rule: " + err.Error())
+			}
+		}
 	}
 
 	// Delete invalid/outdated rules
