@@ -110,7 +110,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			for _, podIP := range currnetPodIps {
 				setEntries = append(setEntries, []string{podIP, utils.OptionTimeout, "0"})
 			}
-			npc.ipSetHandler.RefreshSet(targetDestPodIPSetName, setEntries)
+			npc.ipSetHandler.RefreshSet(targetDestPodIPSetName, setEntries, utils.TypeHashIP)
 			err = npc.processIngressRules(policy, targetDestPodIPSetName, activePolicyIPSets, version)
 			if err != nil {
 				return nil, nil, err
@@ -124,7 +124,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			for _, podIP := range currnetPodIps {
 				setEntries = append(setEntries, []string{podIP, utils.OptionTimeout, "0"})
 			}
-			npc.ipSetHandler.RefreshSet(targetSourcePodIPSetName, setEntries)
+			npc.ipSetHandler.RefreshSet(targetSourcePodIPSetName, setEntries, utils.TypeHashIP)
 			err = npc.processEgressRules(policy, targetSourcePodIPSetName, activePolicyIPSets, version)
 			if err != nil {
 				return nil, nil, err
@@ -165,7 +165,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			for _, pod := range ingressRule.srcPods {
 				setEntries = append(setEntries, []string{pod.ip, utils.OptionTimeout, "0"})
 			}
-			npc.ipSetHandler.RefreshSet(srcPodIPSetName, setEntries)
+			npc.ipSetHandler.RefreshSet(srcPodIPSetName, setEntries, utils.TypeHashIP)
 
 			if len(ingressRule.ports) != 0 {
 				// case where 'ports' details and 'from' details specified in the ingress rule
@@ -187,7 +187,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 					for _, ip := range endPoints.ips {
 						setEntries = append(setEntries, []string{ip, utils.OptionTimeout, "0"})
 					}
-					npc.ipSetHandler.RefreshSet(namedPortIPSetName, setEntries)
+					npc.ipSetHandler.RefreshSet(namedPortIPSetName, setEntries, utils.TypeHashIP)
 
 					comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 						policy.name + " namespace " + policy.namespace
@@ -226,7 +226,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				for _, ip := range endPoints.ips {
 					setEntries = append(setEntries, []string{ip, utils.OptionTimeout, "0"})
 				}
-				npc.ipSetHandler.RefreshSet(namedPortIPSetName, setEntries)
+				npc.ipSetHandler.RefreshSet(namedPortIPSetName, setEntries, utils.TypeHashIP)
 
 				comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
@@ -249,7 +249,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 		if len(ingressRule.srcIPBlocks) != 0 {
 			srcIPBlockIPSetName := policyIndexedSourceIPBlockIPSetName(policy.namespace, policy.name, i)
 			activePolicyIPSets[srcIPBlockIPSetName] = true
-			npc.ipSetHandler.RefreshSet(srcIPBlockIPSetName, ingressRule.srcIPBlocks)
+			npc.ipSetHandler.RefreshSet(srcIPBlockIPSetName, ingressRule.srcIPBlocks, utils.TypeHashNet)
 
 			if !ingressRule.matchAllPorts {
 				for _, portProtocol := range ingressRule.ports {
@@ -267,7 +267,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 					for _, ip := range endPoints.ips {
 						setEntries = append(setEntries, []string{ip, utils.OptionTimeout, "0"})
 					}
-					npc.ipSetHandler.RefreshSet(namedPortIPSetName, setEntries)
+					npc.ipSetHandler.RefreshSet(namedPortIPSetName, setEntries, utils.TypeHashNet)
 					comment := "rule to ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
 					if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcIPBlockIPSetName, namedPortIPSetName, endPoints.protocol, endPoints.port); err != nil {
@@ -310,7 +310,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			for _, pod := range egressRule.dstPods {
 				setEntries = append(setEntries, []string{pod.ip, utils.OptionTimeout, "0"})
 			}
-			npc.ipSetHandler.RefreshSet(dstPodIPSetName, setEntries)
+			npc.ipSetHandler.RefreshSet(dstPodIPSetName, setEntries, utils.TypeHashIP)
 			if len(egressRule.ports) != 0 {
 				// case where 'ports' details and 'from' details specified in the egress rule
 				// so match on specified source and destination ip's and specified port (if any) and protocol
@@ -331,7 +331,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 					for _, ip := range endPoints.ips {
 						setEntries = append(setEntries, []string{ip, utils.OptionTimeout, "0"})
 					}
-					npc.ipSetHandler.RefreshSet(namedPortIPSetName, setEntries)
+					npc.ipSetHandler.RefreshSet(namedPortIPSetName, setEntries, utils.TypeHashIP)
 					comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 						policy.name + " namespace " + policy.namespace
 					if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, namedPortIPSetName, endPoints.protocol, endPoints.port); err != nil {
@@ -376,7 +376,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 		if len(egressRule.dstIPBlocks) != 0 {
 			dstIPBlockIPSetName := policyIndexedDestinationIPBlockIPSetName(policy.namespace, policy.name, i)
 			activePolicyIPSets[dstIPBlockIPSetName] = true
-			npc.ipSetHandler.RefreshSet(dstIPBlockIPSetName, egressRule.dstIPBlocks)
+			npc.ipSetHandler.RefreshSet(dstIPBlockIPSetName, egressRule.dstIPBlocks, utils.TypeHashNet)
 			if !egressRule.matchAllPorts {
 				for _, portProtocol := range egressRule.ports {
 					comment := "rule to ACCEPT traffic from source pods to specified ipBlocks selected by policy name: " +
