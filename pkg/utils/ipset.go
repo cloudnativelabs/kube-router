@@ -222,11 +222,11 @@ func (ipset *IPSet) Add(set *Set) error {
 }
 
 // RefreshSet add/update internal Sets with a Set of entries but does not run restore command
-func (ipset *IPSet) RefreshSet(setName string, entriesWithOptions [][]string) {
+func (ipset *IPSet) RefreshSet(setName string, entriesWithOptions [][]string, setType string) {
 	if ipset.Get(setName) == nil {
 		ipset.Sets[setName] = &Set{
 			Name:    setName,
-			Options: []string{TypeHashIP, OptionTimeout, "0"},
+			Options: []string{setType, OptionTimeout, "0"},
 			Parent:  ipset,
 		}
 	}
