@@ -403,6 +403,7 @@ func buildIPSetRestore(ipset *IPSet) string {
 	ipSetRestore := ""
 	for _, set := range ipset.Sets {
 		ipSetRestore += fmt.Sprintf("create %s %s\n", set.Name, strings.Join(set.Options[:], " "))
+		ipSetRestore += fmt.Sprintf("flush %s\n", set.Name)
 		for _, entry := range set.Entries {
 			ipSetRestore += fmt.Sprintf("add %s %s\n", set.Name, strings.Join(entry.Options[:], " "))
 		}
