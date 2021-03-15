@@ -1,0 +1,10 @@
+nose
+toml
+pyyaml
+fabric == 2.4.0
+netaddr
+nsenter
+docker-py
+ryu
+colored
+invoke == 1.2.0

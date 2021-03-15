@@ -130,7 +130,7 @@ func (n *Neighbor) IsConfederation(g *Global) bool {
 }
 
 func (n *Neighbor) IsEBGPPeer(g *Global) bool {
-	return n.Config.PeerAs != g.Config.As
+	return n.Config.PeerAs != n.Config.LocalAs
 }
 
 func (n *Neighbor) CreateRfMap() map[bgp.RouteFamily]bgp.BGPAddPathMode {
@@ -299,14 +299,22 @@ func newAfiSafiConfigFromConfigStruct(c *AfiSafi) *api.AfiSafiConfig {
 }
 
 func newApplyPolicyFromConfigStruct(c *ApplyPolicy) *api.ApplyPolicy {
+	f := func(t DefaultPolicyType) api.RouteAction {
+		if t == DEFAULT_POLICY_TYPE_ACCEPT_ROUTE {
+			return api.RouteAction_ACCEPT
+		} else if t == DEFAULT_POLICY_TYPE_REJECT_ROUTE {
+			return api.RouteAction_REJECT
+		}
+		return api.RouteAction_NONE
+	}
 	applyPolicy := &api.ApplyPolicy{
 		ImportPolicy: &api.PolicyAssignment{
 			Direction:     api.PolicyDirection_IMPORT,
-			DefaultAction: api.RouteAction(c.Config.DefaultImportPolicy.ToInt()),
+			DefaultAction: f(c.Config.DefaultImportPolicy),
 		},
 		ExportPolicy: &api.PolicyAssignment{
 			Direction:     api.PolicyDirection_EXPORT,
-			DefaultAction: api.RouteAction(c.Config.DefaultExportPolicy.ToInt()),
+			DefaultAction: f(c.Config.DefaultExportPolicy),
 		},
 	}
 
@@ -549,6 +557,8 @@ func NewPeerGroupFromConfigStruct(pconf *PeerGroup) *api.PeerGroup {
 	afiSafis := make([]*api.AfiSafi, 0, len(pconf.AfiSafis))
 	for _, f := range pconf.AfiSafis {
 		if afiSafi := newAfiSafiFromConfigStruct(&f); afiSafi != nil {
+			afiSafi.AddPaths.Config.Receive = pconf.AddPaths.Config.Receive
+			afiSafi.AddPaths.Config.SendMax = uint32(pconf.AddPaths.Config.SendMax)
 			afiSafis = append(afiSafis, afiSafi)
 		}
 	}
