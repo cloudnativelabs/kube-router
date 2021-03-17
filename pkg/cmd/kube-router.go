@@ -151,6 +151,13 @@ func (kr *KubeRouter) Run() error {
 
 		wg.Add(1)
 		go nrc.Run(healthChan, stopCh, &wg)
+
+		// wait for the pod networking related firewall rules to be setup before network policies
+		if kr.Config.RunFirewall {
+			nrc.CNIFirewallSetup.L.Lock()
+			nrc.CNIFirewallSetup.Wait()
+			nrc.CNIFirewallSetup.L.Unlock()
+		}
 	}
 
 	if kr.Config.RunServiceProxy {
