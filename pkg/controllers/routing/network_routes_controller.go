@@ -115,6 +115,7 @@ type NetworkRoutingController struct {
 	localAddressList               []string
 	overrideNextHop                bool
 	podCidr                        string
+	CNIFirewallSetup               *sync.Cond
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -149,6 +150,8 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	if err != nil {
 		glog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
 	}
+
+	nrc.CNIFirewallSetup.Broadcast()
 
 	// Handle ipip tunnel overlay
 	if nrc.enableOverlays {
@@ -1097,6 +1100,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.autoMTU = kubeRouterConfig.AutoMTU
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 	nrc.overlayType = kubeRouterConfig.OverlayType
+	nrc.CNIFirewallSetup = sync.NewCond(&sync.Mutex{})
 
 	nrc.bgpPort = kubeRouterConfig.BGPPort
 
