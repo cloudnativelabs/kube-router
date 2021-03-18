@@ -3,6 +3,7 @@ package netpol
 import (
 	"crypto/sha256"
 	"encoding/base32"
+	"reflect"
 	"strings"
 
 	"github.com/golang/glog"
@@ -17,9 +18,11 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			newPoObj := newObj.(*api.Pod)
-			oldPoObj := oldObj.(*api.Pod)
-			if newPoObj.Status.Phase != oldPoObj.Status.Phase || newPoObj.Status.PodIP != oldPoObj.Status.PodIP {
+			newPodObj := newObj.(*api.Pod)
+			oldPodObj := oldObj.(*api.Pod)
+			if newPodObj.Status.Phase != oldPodObj.Status.Phase ||
+				newPodObj.Status.PodIP != oldPodObj.Status.PodIP ||
+				!reflect.DeepEqual(newPodObj.Labels, oldPodObj.Labels) {
 				// for the network policies, we are only interested in pod status phase change or IP change
 				npc.OnPodUpdate(newObj)
 			}
