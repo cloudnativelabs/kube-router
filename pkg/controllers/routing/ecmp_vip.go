@@ -258,11 +258,6 @@ func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
 		return
 	}
 
-	err := nrc.AddPolicies()
-	if err != nil {
-		glog.Errorf("error adding BGP policies: %s", err)
-	}
-
 	nrc.OnEndpointsUpdate(obj)
 }
 
