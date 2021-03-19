@@ -197,6 +197,7 @@ func (nrc *NetworkRoutingController) tryHandleServiceDelete(obj interface{}, log
 			return
 		}
 	}
+	glog.V(1).Infof(logMsgFormat, svc.Namespace, svc.Name)
 
 	// If the service is headless skip processing as we only work with VIPs in the next section.
 	if utils.ServiceIsHeadless(obj) {
