@@ -197,10 +197,20 @@ func (nrc *NetworkRoutingController) OnServiceCreate(obj interface{}) {
 func (nrc *NetworkRoutingController) OnServiceUpdate(objNew interface{}, objOld interface{}) {
 	nrc.tryHandleServiceUpdate(objNew, "Received update on service: %s/%s from watch API")
 
-	nrc.withdrawVIPs(nrc.getWithdraw(getServiceObject(objOld), getServiceObject(objNew)))
+	// This extra call needs to be here, because during the update the list of externalIPs may have changed and
+	// externalIPs is the only service VIP field that is:
+	// a) mutable after first creation
+	// b) an array
+	//
+	// This means that while we only need to withdraw ClusterIP VIPs and LoadBalancer VIPs on delete, we may need
+	// to withdraw ExternalIPs on update.
+	//
+	// As such, it needs to be handled differently as nrc.handleServiceUpdate only withdraws VIPs if the service
+	// endpoint is no longer scheduled on this node and its a local type service.
+	nrc.withdrawVIPs(nrc.getExternalIPsToWithdraw(getServiceObject(objOld), getServiceObject(objNew)))
 }
 
-func (nrc *NetworkRoutingController) getWithdraw(svcOld, svcNew *v1core.Service) (out []string) {
+func (nrc *NetworkRoutingController) getExternalIPsToWithdraw(svcOld, svcNew *v1core.Service) (out []string) {
 	if svcOld != nil && svcNew != nil {
 		out = getMissingPrevGen(nrc.getExternalIPs(svcOld), nrc.getExternalIPs(svcNew))
 	}
