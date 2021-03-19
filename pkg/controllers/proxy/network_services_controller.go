@@ -808,6 +808,20 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 		return
 	}
 
+	// If the service is headless and the previous version of the service is either non-existent or also headless,
+	// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we don't
+	// need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now, it was a
+	// ClusterIP before.
+	svc, err := utils.ServiceForEndpoints(&nsc.svcLister, ep)
+	if err != nil {
+		glog.Errorf("failed to convert endpoints resource to service: %s", err)
+		return
+	}
+	if utils.ServiceIsHeadless(svc) {
+		glog.V(1).Infof("The service associated with endpoint: %s/%s is headless, skipping...", ep.Namespace, ep.Name)
+		return
+	}
+
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
 	newEndpointsMap := nsc.buildEndpointsInfo()
@@ -831,6 +845,15 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *api.Service) {
 	glog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
 	if !nsc.readyForUpdates {
 		glog.V(3).Infof("Skipping update to service: %s/%s as controller is not ready to process service and endpoints updates", svc.Namespace, svc.Name)
+		return
+	}
+
+	// If the service is headless and the previous version of the service is either non-existent or also headless,
+	// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we don't
+	// need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now, it was a
+	// ClusterIP before.
+	if utils.ServiceIsHeadless(svc) {
+		glog.V(1).Infof("%s/%s is headless, skipping...", svc.Namespace, svc.Name)
 		return
 	}
 
@@ -1310,7 +1333,7 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 	for _, obj := range nsc.svcLister.List() {
 		svc := obj.(*api.Service)
 
-		if svc.Spec.ClusterIP == "None" || svc.Spec.ClusterIP == "" {
+		if utils.ClusterIPIsNoneOrBlank(svc.Spec.ClusterIP) {
 			glog.V(2).Infof("Skipping service name:%s namespace:%s as there is no cluster IP", svc.Name, svc.Namespace)
 			continue
 		}
