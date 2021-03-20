@@ -813,6 +813,48 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	return nil
 }
 
+func endpointsListsEquivalent(a, b []endpointsInfo) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for _, epA := range a {
+	        valid := false
+		for _, epB := range b {
+			if epA == epB {
+				valid = true
+				break
+			}
+		}
+
+		if !valid {
+		    return false
+		}
+	}
+	return true
+}
+
+func endpointsMapsEquivalent(a, b endpointsInfoMap) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Endpoint maps are considered compatible if the lists of services includes same endpoints
+	// Order is not considered.
+	for k, valA := range a {
+		valB, ok := b[k]
+		if !ok {
+			return false
+		}
+
+		if !endpointsListsEquivalent(valA, valB) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // OnEndpointsUpdate handle change in endpoints update from the API server
 func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 
@@ -850,7 +892,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 	newServiceMap := nsc.buildServicesInfo()
 	newEndpointsMap := nsc.buildEndpointsInfo()
 
-	if len(newEndpointsMap) != len(nsc.endpointsMap) || !reflect.DeepEqual(newEndpointsMap, nsc.endpointsMap) {
+	if !endpointsMapsEquivalent(newEndpointsMap, nsc.endpointsMap) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
 		klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
