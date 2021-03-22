@@ -30,8 +30,8 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 	attrs := []*any.Any{a1, a2}
 
 	var nlri1 *any.Any
-	if len(nrc.advertiseServiceClusterIpRange) != 0 {
-		svcCidrStr := strings.Split(nrc.advertiseServiceClusterIpRange, "/")
+	if len(nrc.advertiseServiceClusterIPRange) != 0 {
+		svcCidrStr := strings.Split(nrc.advertiseServiceClusterIPRange, "/")
 		svcCidrPrefixLen, _ := strconv.ParseUint(svcCidrStr[1], 10, 32)
 		nlri1, _ = ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
 			Prefix:    svcCidrStr[0],
@@ -60,7 +60,7 @@ func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 	glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
 	var err error
-	if len(nrc.advertiseServiceClusterIpRange) != 0 {
+	if len(nrc.advertiseServiceClusterIPRange) != 0 {
 		err = nil
 	} else {
 		a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{

@@ -1012,7 +1012,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
-	nrc.advertiseServiceClusterIpRange = kubeRouterConfig.AdvertiseServiceClusterIpRange
+	nrc.advertiseServiceClusterIPRange = kubeRouterConfig.AdvertiseServiceClusterIPRange
 
 	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldTime.Seconds()
 	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {
