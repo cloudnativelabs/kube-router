@@ -40,6 +40,7 @@ Usage of kube-router:
       --advertise-external-ip                         Add External IP of service to the RIB so that it gets advertised to the BGP peers.
       --advertise-loadbalancer-ip                     Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr                            Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
+      --advertise-service-cluster-ip-range string     If this parameter is set, the cluster IP of service will not be put into RIB, but the value set by this parameter will be put into RIB. The main purpose of this parameter is to reduce the number of service routes sent by kube-router to the upper BGP network devices.
       --auto-mtu                                      Auto detect and set the largest possible MTU for pod interfaces. (default true)
       --bgp-graceful-restart                          Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
       --bgp-graceful-restart-deferral-time duration   BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h. (default 6m0s)

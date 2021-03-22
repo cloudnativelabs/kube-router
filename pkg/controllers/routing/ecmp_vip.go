@@ -28,10 +28,22 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 		NextHop: nrc.nodeIP.String(),
 	})
 	attrs := []*any.Any{a1, a2}
-	nlri1, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
-		Prefix:    vip,
-		PrefixLen: 32,
-	})
+
+	var nlri1 *any.Any
+	if len(nrc.advertiseServiceClusterIpRange) != 0 {
+		svcCidrStr := strings.Split(nrc.advertiseServiceClusterIpRange, "/")
+		svcCidrPrefixLen, _ := strconv.ParseUint(svcCidrStr[1], 10, 32)
+		nlri1, _ = ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
+			Prefix:    svcCidrStr[0],
+			PrefixLen: uint32(svcCidrPrefixLen),
+		})
+	} else {
+		nlri1, _ = ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
+			Prefix:    vip,
+			PrefixLen: 32,
+		})
+	}
+
 	_, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
 		Path: &gobgpapi.Path{
 			Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
@@ -47,26 +59,31 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 	glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
-	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
-		Origin: 0,
-	})
-	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.nodeIP.String(),
-	})
-	attrs := []*any.Any{a1, a2}
-	nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
-		Prefix:    vip,
-		PrefixLen: 32,
-	})
-	path := gobgpapi.Path{
-		Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
-		Nlri:   nlri,
-		Pattrs: attrs,
+	var err error
+	if len(nrc.advertiseServiceClusterIpRange) != 0 {
+		err = nil
+	} else {
+		a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
+			Origin: 0,
+		})
+		a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
+			NextHop: nrc.nodeIP.String(),
+		})
+		attrs := []*any.Any{a1, a2}
+		nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
+			Prefix:    vip,
+			PrefixLen: 32,
+		})
+		path := gobgpapi.Path{
+			Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+			Nlri:   nlri,
+			Pattrs: attrs,
+		}
+		err = nrc.bgpServer.DeletePath(context.Background(), &gobgpapi.DeletePathRequest{
+			TableType: gobgpapi.TableType_GLOBAL,
+			Path:      &path,
+		})
 	}
-	err := nrc.bgpServer.DeletePath(context.Background(), &gobgpapi.DeletePathRequest{
-		TableType: gobgpapi.TableType_GLOBAL,
-		Path:      &path,
-	})
 
 	return err
 }
