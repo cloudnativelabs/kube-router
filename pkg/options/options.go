@@ -13,7 +13,7 @@ const DefaultBgpHoldTime time.Duration = 90 * time.Second
 
 type KubeRouterConfig struct {
 	AdvertiseClusterIP             bool
-	AdvertiseServiceClusterIpRange string
+	AdvertiseServiceClusterIPRange string
 	AdvertiseExternalIP            bool
 	AdvertiseLoadBalancerIP        bool
 	AdvertiseNodePodCidr           bool

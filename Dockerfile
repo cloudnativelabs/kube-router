@@ -9,11 +9,10 @@ RUN apk add --no-cache \
       conntrack-tools \
       curl \
       bash && \
-    mkdir -p /var/lib/gobgp && \
-    mkdir -p /usr/local/share/bash-completion && \
-    curl -L -o /usr/local/share/bash-completion/bash-completion \
-        https://raw.githubusercontent.com/scop/bash-completion/master/bash_completion
+      mkdir -p /var/lib/gobgp && \
+      mkdir -p /usr/local/share/bash-completion 
 
+COPY bash-completion /usr/local/share/bash-completion/
 COPY build/image-assets/bashrc /root/.bashrc
 COPY build/image-assets/profile /root/.profile
 COPY build/image-assets/vimrc /root/.vimrc

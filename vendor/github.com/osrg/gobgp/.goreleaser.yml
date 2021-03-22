@@ -1,0 +1,43 @@
+#
+# .goreleaser.yml
+# Build customization
+env:
+  - GO111MODULE=on
+  - CGO_ENABLED=0
+
+builds:
+  - id: gobgp
+    main: ./cmd/gobgp/
+    binary: gobgp
+    flags:
+      - -a
+      - -tags=netgo
+    ldflags: -s
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+
+  - id: gobgpd
+    main: ./cmd/gobgpd/
+    binary: gobgpd
+    flags:
+      - -a
+      - -tags=netgo
+    ldflags: -s
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+
+archives:
+  - id: foo
+    files:
+      - LICENSE
+      - README.md

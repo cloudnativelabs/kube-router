@@ -80,7 +80,7 @@ type NetworkRoutingController struct {
 	enablePodEgress                bool
 	hostnameOverride               string
 	advertiseClusterIP             bool
-	advertiseServiceClusterIpRange string
+	advertiseServiceClusterIPRange string
 	advertiseExternalIP            bool
 	advertiseLoadBalancerIP        bool
 	advertisePodCidr               bool
