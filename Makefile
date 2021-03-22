@@ -61,9 +61,9 @@ endif
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-	    sh -c 'CGO_ENABLED=0 go test -mod vendor -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
+	    sh -c 'CGO_ENABLED=0 go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
 else
-		go test -mod vendor -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...
+		go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...
 endif
 
 lint: gofmt
@@ -240,10 +240,11 @@ gobgp:
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Building gobgp
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-    sh -c 'apk --no-cache add git && GOARCH=$(GOARCH) CGO_ENABLED=0 go build -mod vendor -o gobgp github.com/osrg/gobgp/cmd/gobgp'
+    sh -c 'apk --no-cache add git && go get -u github.com/osrg/gobgp && GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o gobgp github.com/osrg/gobgp/cmd/gobgp'
 	@echo Finished building gobgp.
 else
-	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go build -mod vendor -o gobgp github.com/osrg/gobgp/cmd/gobgp
+	go get -u github.com/osrg/gobgp && \
+	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go build -o gobgp github.com/osrg/gobgp/cmd/gobgp
 endif
 
 multiarch-binverify:

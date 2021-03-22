@@ -79,7 +79,6 @@ const (
 	SAFI_VPLS                     = 65
 	SAFI_EVPN                     = 70
 	SAFI_LS                       = 71
-	SAFI_SRPOLICY                 = 73
 	SAFI_MPLS_VPN                 = 128
 	SAFI_MPLS_VPN_MULTICAST       = 129
 	SAFI_ROUTE_TARGET_CONSTRAINTS = 132
@@ -185,7 +184,6 @@ const (
 	TUNNEL_TYPE_MPLS_IN_GRE TunnelType = 11
 	TUNNEL_TYPE_VXLAN_GRE   TunnelType = 12
 	TUNNEL_TYPE_MPLS_IN_UDP TunnelType = 13
-	TUNNEL_TYPE_SR_POLICY   TunnelType = 15
 )
 
 func (p TunnelType) String() string {
@@ -208,8 +206,6 @@ func (p TunnelType) String() string {
 		return "vxlan-gre"
 	case TUNNEL_TYPE_MPLS_IN_UDP:
 		return "mpls-in-udp"
-	case TUNNEL_TYPE_SR_POLICY:
-		return "sr-policy"
 	default:
 		return fmt.Sprintf("TunnelType(%d)", uint8(p))
 	}
@@ -254,17 +250,9 @@ func (p PmsiTunnelType) String() string {
 type EncapSubTLVType uint8
 
 const (
-	ENCAP_SUBTLV_TYPE_ENCAPSULATION         EncapSubTLVType = 1
-	ENCAP_SUBTLV_TYPE_PROTOCOL              EncapSubTLVType = 2
-	ENCAP_SUBTLV_TYPE_COLOR                 EncapSubTLVType = 4
-	ENCAP_SUBTLV_TYPE_EGRESS_ENDPOINT       EncapSubTLVType = 6
-	ENCAP_SUBTLV_TYPE_UDP_DEST_PORT         EncapSubTLVType = 8
-	ENCAP_SUBTLV_TYPE_SRPREFERENCE          EncapSubTLVType = 12
-	ENCAP_SUBTLV_TYPE_SRBINDING_SID         EncapSubTLVType = 13
-	ENCAP_SUBTLV_TYPE_SRENLP                EncapSubTLVType = 14
-	ENCAP_SUBTLV_TYPE_SRPRIORITY            EncapSubTLVType = 15
-	ENCAP_SUBTLV_TYPE_SRSEGMENT_LIST        EncapSubTLVType = 128
-	ENCAP_SUBTLV_TYPE_SRCANDIDATE_PATH_NAME EncapSubTLVType = 129
+	ENCAP_SUBTLV_TYPE_ENCAPSULATION EncapSubTLVType = 1
+	ENCAP_SUBTLV_TYPE_PROTOCOL      EncapSubTLVType = 2
+	ENCAP_SUBTLV_TYPE_COLOR         EncapSubTLVType = 4
 )
 
 const (
@@ -979,9 +967,6 @@ func (o *OptionParameterCapability) DecodeFromBytes(data []byte) error {
 			return err
 		}
 		o.Capability = append(o.Capability, c)
-		if c.Len() == 0 || len(data) < c.Len() {
-			return NewMessageError(BGP_ERROR_MESSAGE_HEADER_ERROR, BGP_ERROR_SUB_BAD_MESSAGE_LENGTH, nil, "Bad capability length")
-		}
 		data = data[c.Len():]
 	}
 	return nil
@@ -1056,7 +1041,7 @@ func (msg *BGPOpen) DecodeFromBytes(data []byte, options ...*MarshallingOption) 
 		}
 		paramtype := data[0]
 		paramlen := data[1]
-		if paramlen >= 254 || rest < paramlen+2 {
+		if rest < paramlen+2 {
 			return NewMessageError(BGP_ERROR_MESSAGE_HEADER_ERROR, BGP_ERROR_SUB_BAD_MESSAGE_LENGTH, nil, "Malformed BGP Open message")
 		}
 		rest -= paramlen + 2
@@ -1199,11 +1184,6 @@ func (r *IPAddrPrefixDefault) decodePrefix(data []byte, bitlen uint8, addrlen ui
 		eCode := uint8(BGP_ERROR_UPDATE_MESSAGE_ERROR)
 		eSubCode := uint8(BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST)
 		return NewMessageError(eCode, eSubCode, nil, "network bytes is short")
-	}
-	if bitlen > addrlen*8 {
-		eCode := uint8(BGP_ERROR_UPDATE_MESSAGE_ERROR)
-		eSubCode := uint8(BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST)
-		return NewMessageError(eCode, eSubCode, nil, "network bit length is too long")
 	}
 	b := make([]byte, addrlen)
 	copy(b, data[:bytelen])
@@ -1626,8 +1606,10 @@ func (l *MPLSLabelStack) DecodeFromBytes(data []byte, options ...*MarshallingOpt
 	foundBottom := false
 	bottomExpected := true
 	if IsAttributePresent(BGP_ATTR_TYPE_PREFIX_SID, options) {
-		// If Update carries Prefix SID attribute then one should not rely on BoS for the label stack processing,
-		// the first and only label carries transposed variable part of the SRv6 SID.
+		// If Update carries Prefix SID attribute then there is no a label stack,
+		// but just 3 bytes which are used to carry the lower portion of Prefix SID.
+		// There is no bottom stack indication in this case. Once 3 bytes are stored
+		// breaking out of the loop.
 		bottomExpected = false
 	}
 	for len(data) >= 3 {
@@ -1668,6 +1650,13 @@ func (l *MPLSLabelStack) Serialize(options ...*MarshallingOption) ([]byte, error
 		buf[i*3+1] = byte((label >> 8) & 0xff)
 		buf[i*3+2] = byte(label & 0xff)
 	}
+	if IsAttributePresent(BGP_ATTR_TYPE_PREFIX_SID, options) {
+		// If Update carries Prefix SID attribute then there is no a label stack,
+		// but just 3 bytes which are used to carry the lower portion of Prefix SID.
+		// No need BoS bit set
+		return buf, nil
+	}
+
 	buf[len(buf)-1] |= 1
 	return buf, nil
 }
@@ -1771,10 +1760,6 @@ func (l *LabeledVPNIPAddrPrefix) DecodeFromBytes(data []byte, options ...*Marsha
 	}
 	data = data[l.Labels.Len():]
 	l.RD = GetRouteDistinguisher(data)
-	rdLen := l.RD.Len()
-	if len(data) < rdLen {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "bad labeled VPN-IPv4 NLRI length")
-	}
 	data = data[l.RD.Len():]
 	restbits := int(l.Length) - 8*(l.Labels.Len()+l.RD.Len())
 	return l.decodePrefix(data, uint8(restbits), l.addrlen)
@@ -2135,9 +2120,6 @@ type EthernetSegmentIdentifier struct {
 }
 
 func (esi *EthernetSegmentIdentifier) DecodeFromBytes(data []byte) error {
-	if len(data) < 10 {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, fmt.Sprintf("invalid %s length", esi.Type.String()))
-	}
 	esi.Type = ESIType(data[0])
 	esi.Value = data[1:10]
 	switch esi.Type {
@@ -2384,10 +2366,6 @@ func (er *EVPNEthernetAutoDiscoveryRoute) Len() int {
 
 func (er *EVPNEthernetAutoDiscoveryRoute) DecodeFromBytes(data []byte) error {
 	er.RD = GetRouteDistinguisher(data)
-	rdLen := er.RD.Len()
-	if len(data) < rdLen+14 { // 14 is 10 for
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "bad Ethernet Auto-discovery Route length")
-	}
 	data = data[er.RD.Len():]
 	err := er.ESI.DecodeFromBytes(data)
 	if err != nil {
@@ -2488,10 +2466,6 @@ func (er *EVPNMacIPAdvertisementRoute) Len() int {
 
 func (er *EVPNMacIPAdvertisementRoute) DecodeFromBytes(data []byte) error {
 	er.RD = GetRouteDistinguisher(data)
-	rdLen := er.RD.Len()
-	if len(data) < rdLen {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "bad length of MAC/IP Advertisement Route")
-	}
 	data = data[er.RD.Len():]
 	err := er.ESI.DecodeFromBytes(data)
 	if err != nil {
@@ -2644,10 +2618,6 @@ func (er *EVPNMulticastEthernetTagRoute) Len() int {
 
 func (er *EVPNMulticastEthernetTagRoute) DecodeFromBytes(data []byte) error {
 	er.RD = GetRouteDistinguisher(data)
-	rdLen := er.RD.Len()
-	if len(data) < rdLen+4 {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "invalid length of multicast ethernet tag route")
-	}
 	data = data[er.RD.Len():]
 	er.ETag = binary.BigEndian.Uint32(data[0:4])
 	er.IPAddressLength = data[4]
@@ -2742,10 +2712,6 @@ func (er *EVPNEthernetSegmentRoute) Len() int {
 
 func (er *EVPNEthernetSegmentRoute) DecodeFromBytes(data []byte) error {
 	er.RD = GetRouteDistinguisher(data)
-	rdLen := er.RD.Len()
-	if len(data) < rdLen {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "invalid Ethernet Segment Route length")
-	}
 	data = data[er.RD.Len():]
 	er.ESI.DecodeFromBytes(data)
 	data = data[10:]
@@ -4411,9 +4377,6 @@ func (n *FlowSpecNLRI) decodeFromBytes(rf RouteFamily, data []byte, options ...*
 	} else {
 		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "not all flowspec component bytes available")
 	}
-	if len(data) < length {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "not all flowspec component bytes available")
-	}
 
 	n.rf = rf
 
@@ -5047,34 +5010,19 @@ func (l *LsLinkDescriptor) ParseTLVs(tlvs []LsTLVInterface) {
 }
 
 func (l *LsLinkDescriptor) String() string {
-	switch {
-	case l.InterfaceAddrIPv4 != nil && l.NeighborAddrIPv4 != nil:
+	if l.InterfaceAddrIPv4 != nil && l.NeighborAddrIPv4 != nil {
 		return fmt.Sprintf("%v->%v", l.InterfaceAddrIPv4, l.NeighborAddrIPv4)
-
-	case l.InterfaceAddrIPv6 != nil && l.NeighborAddrIPv6 != nil:
-		return fmt.Sprintf("%v->%v", l.InterfaceAddrIPv6, l.NeighborAddrIPv6)
-
-	case l.LinkLocalID != nil && l.LinkRemoteID != nil:
-		return fmt.Sprintf("%v->%v", *l.LinkLocalID, *l.LinkRemoteID)
-
-	case l.InterfaceAddrIPv4 != nil:
-		return fmt.Sprintf("%v->UNKNOWN", l.InterfaceAddrIPv4)
-	case l.NeighborAddrIPv4 != nil:
-		return fmt.Sprintf("UNKNOWN->%v", l.NeighborAddrIPv4)
-
-	case l.InterfaceAddrIPv6 != nil:
-		return fmt.Sprintf("%v->UNKNOWN", l.InterfaceAddrIPv6)
-	case l.NeighborAddrIPv6 != nil:
-		return fmt.Sprintf("UNKNOWN->%v", l.NeighborAddrIPv6)
-
-	case l.LinkLocalID != nil:
-		return fmt.Sprintf("%v->UNKNOWN", *l.LinkLocalID)
-	case l.LinkRemoteID != nil:
-		return fmt.Sprintf("UNKNOWN->%v", *l.LinkRemoteID)
-
-	default:
-		return "UNKNOWN"
 	}
+
+	if l.InterfaceAddrIPv6 != nil && l.NeighborAddrIPv6 != nil {
+		return fmt.Sprintf("%v->%v", l.InterfaceAddrIPv6, l.NeighborAddrIPv6)
+	}
+
+	if l.LinkLocalID != nil && l.LinkRemoteID != nil {
+		return fmt.Sprintf("%v->%v", *l.LinkLocalID, *l.LinkRemoteID)
+	}
+
+	return "UNKNOWN"
 }
 
 type LsLinkNLRI struct {
@@ -6299,12 +6247,9 @@ func (l *LsTLVIgpRouterID) DecodeFromBytes(data []byte) error {
 	}
 
 	// https://tools.ietf.org/html/rfc7752#section-3.2.1.4
-	// 4, 6, 7, and 8 are the only valid values.
-	switch len(value) {
-	case 4, 6, 7, 8:
-		break
-	default:
-		return malformedAttrListErr(fmt.Sprintf("Incorrect IGP Router ID length: %d", len(value)))
+	// 6, 7, and 8 are the only valid values.
+	if len(value) < 6 || len(value) > 8 {
+		return malformedAttrListErr("Incorrect IGP Router ID length")
 	}
 
 	l.RouterID = value
@@ -8179,84 +8124,78 @@ func (f RouteFamily) String() string {
 }
 
 const (
-	RF_IPv4_UC        RouteFamily = AFI_IP<<16 | SAFI_UNICAST
-	RF_IPv6_UC        RouteFamily = AFI_IP6<<16 | SAFI_UNICAST
-	RF_IPv4_MC        RouteFamily = AFI_IP<<16 | SAFI_MULTICAST
-	RF_IPv6_MC        RouteFamily = AFI_IP6<<16 | SAFI_MULTICAST
-	RF_IPv4_VPN       RouteFamily = AFI_IP<<16 | SAFI_MPLS_VPN
-	RF_IPv6_VPN       RouteFamily = AFI_IP6<<16 | SAFI_MPLS_VPN
-	RF_IPv4_VPN_MC    RouteFamily = AFI_IP<<16 | SAFI_MPLS_VPN_MULTICAST
-	RF_IPv6_VPN_MC    RouteFamily = AFI_IP6<<16 | SAFI_MPLS_VPN_MULTICAST
-	RF_IPv4_MPLS      RouteFamily = AFI_IP<<16 | SAFI_MPLS_LABEL
-	RF_IPv6_MPLS      RouteFamily = AFI_IP6<<16 | SAFI_MPLS_LABEL
-	RF_VPLS           RouteFamily = AFI_L2VPN<<16 | SAFI_VPLS
-	RF_EVPN           RouteFamily = AFI_L2VPN<<16 | SAFI_EVPN
-	RF_RTC_UC         RouteFamily = AFI_IP<<16 | SAFI_ROUTE_TARGET_CONSTRAINTS
-	RF_IPv4_ENCAP     RouteFamily = AFI_IP<<16 | SAFI_ENCAPSULATION
-	RF_IPv6_ENCAP     RouteFamily = AFI_IP6<<16 | SAFI_ENCAPSULATION
-	RF_FS_IPv4_UC     RouteFamily = AFI_IP<<16 | SAFI_FLOW_SPEC_UNICAST
-	RF_FS_IPv4_VPN    RouteFamily = AFI_IP<<16 | SAFI_FLOW_SPEC_VPN
-	RF_FS_IPv6_UC     RouteFamily = AFI_IP6<<16 | SAFI_FLOW_SPEC_UNICAST
-	RF_FS_IPv6_VPN    RouteFamily = AFI_IP6<<16 | SAFI_FLOW_SPEC_VPN
-	RF_FS_L2_VPN      RouteFamily = AFI_L2VPN<<16 | SAFI_FLOW_SPEC_VPN
-	RF_OPAQUE         RouteFamily = AFI_OPAQUE<<16 | SAFI_KEY_VALUE
-	RF_LS             RouteFamily = AFI_LS<<16 | SAFI_LS
-	RF_SR_POLICY_IPv4 RouteFamily = AFI_IP<<16 | SAFI_SRPOLICY
-	RF_SR_POLICY_IPv6 RouteFamily = AFI_IP6<<16 | SAFI_SRPOLICY
+	RF_IPv4_UC     RouteFamily = AFI_IP<<16 | SAFI_UNICAST
+	RF_IPv6_UC     RouteFamily = AFI_IP6<<16 | SAFI_UNICAST
+	RF_IPv4_MC     RouteFamily = AFI_IP<<16 | SAFI_MULTICAST
+	RF_IPv6_MC     RouteFamily = AFI_IP6<<16 | SAFI_MULTICAST
+	RF_IPv4_VPN    RouteFamily = AFI_IP<<16 | SAFI_MPLS_VPN
+	RF_IPv6_VPN    RouteFamily = AFI_IP6<<16 | SAFI_MPLS_VPN
+	RF_IPv4_VPN_MC RouteFamily = AFI_IP<<16 | SAFI_MPLS_VPN_MULTICAST
+	RF_IPv6_VPN_MC RouteFamily = AFI_IP6<<16 | SAFI_MPLS_VPN_MULTICAST
+	RF_IPv4_MPLS   RouteFamily = AFI_IP<<16 | SAFI_MPLS_LABEL
+	RF_IPv6_MPLS   RouteFamily = AFI_IP6<<16 | SAFI_MPLS_LABEL
+	RF_VPLS        RouteFamily = AFI_L2VPN<<16 | SAFI_VPLS
+	RF_EVPN        RouteFamily = AFI_L2VPN<<16 | SAFI_EVPN
+	RF_RTC_UC      RouteFamily = AFI_IP<<16 | SAFI_ROUTE_TARGET_CONSTRAINTS
+	RF_IPv4_ENCAP  RouteFamily = AFI_IP<<16 | SAFI_ENCAPSULATION
+	RF_IPv6_ENCAP  RouteFamily = AFI_IP6<<16 | SAFI_ENCAPSULATION
+	RF_FS_IPv4_UC  RouteFamily = AFI_IP<<16 | SAFI_FLOW_SPEC_UNICAST
+	RF_FS_IPv4_VPN RouteFamily = AFI_IP<<16 | SAFI_FLOW_SPEC_VPN
+	RF_FS_IPv6_UC  RouteFamily = AFI_IP6<<16 | SAFI_FLOW_SPEC_UNICAST
+	RF_FS_IPv6_VPN RouteFamily = AFI_IP6<<16 | SAFI_FLOW_SPEC_VPN
+	RF_FS_L2_VPN   RouteFamily = AFI_L2VPN<<16 | SAFI_FLOW_SPEC_VPN
+	RF_OPAQUE      RouteFamily = AFI_OPAQUE<<16 | SAFI_KEY_VALUE
+	RF_LS          RouteFamily = AFI_LS<<16 | SAFI_LS
 )
 
 var AddressFamilyNameMap = map[RouteFamily]string{
-	RF_IPv4_UC:        "ipv4-unicast",
-	RF_IPv6_UC:        "ipv6-unicast",
-	RF_IPv4_MC:        "ipv4-multicast",
-	RF_IPv6_MC:        "ipv6-multicast",
-	RF_IPv4_MPLS:      "ipv4-labelled-unicast",
-	RF_IPv6_MPLS:      "ipv6-labelled-unicast",
-	RF_IPv4_VPN:       "l3vpn-ipv4-unicast",
-	RF_IPv6_VPN:       "l3vpn-ipv6-unicast",
-	RF_IPv4_VPN_MC:    "l3vpn-ipv4-multicast",
-	RF_IPv6_VPN_MC:    "l3vpn-ipv6-multicast",
-	RF_VPLS:           "l2vpn-vpls",
-	RF_EVPN:           "l2vpn-evpn",
-	RF_RTC_UC:         "rtc",
-	RF_IPv4_ENCAP:     "ipv4-encap",
-	RF_IPv6_ENCAP:     "ipv6-encap",
-	RF_FS_IPv4_UC:     "ipv4-flowspec",
-	RF_FS_IPv4_VPN:    "l3vpn-ipv4-flowspec",
-	RF_FS_IPv6_UC:     "ipv6-flowspec",
-	RF_FS_IPv6_VPN:    "l3vpn-ipv6-flowspec",
-	RF_FS_L2_VPN:      "l2vpn-flowspec",
-	RF_OPAQUE:         "opaque",
-	RF_LS:             "ls",
-	RF_SR_POLICY_IPv4: "ipv4-srpolicy",
-	RF_SR_POLICY_IPv6: "ipv6-srpolicy",
+	RF_IPv4_UC:     "ipv4-unicast",
+	RF_IPv6_UC:     "ipv6-unicast",
+	RF_IPv4_MC:     "ipv4-multicast",
+	RF_IPv6_MC:     "ipv6-multicast",
+	RF_IPv4_MPLS:   "ipv4-labelled-unicast",
+	RF_IPv6_MPLS:   "ipv6-labelled-unicast",
+	RF_IPv4_VPN:    "l3vpn-ipv4-unicast",
+	RF_IPv6_VPN:    "l3vpn-ipv6-unicast",
+	RF_IPv4_VPN_MC: "l3vpn-ipv4-multicast",
+	RF_IPv6_VPN_MC: "l3vpn-ipv6-multicast",
+	RF_VPLS:        "l2vpn-vpls",
+	RF_EVPN:        "l2vpn-evpn",
+	RF_RTC_UC:      "rtc",
+	RF_IPv4_ENCAP:  "ipv4-encap",
+	RF_IPv6_ENCAP:  "ipv6-encap",
+	RF_FS_IPv4_UC:  "ipv4-flowspec",
+	RF_FS_IPv4_VPN: "l3vpn-ipv4-flowspec",
+	RF_FS_IPv6_UC:  "ipv6-flowspec",
+	RF_FS_IPv6_VPN: "l3vpn-ipv6-flowspec",
+	RF_FS_L2_VPN:   "l2vpn-flowspec",
+	RF_OPAQUE:      "opaque",
+	RF_LS:          "ls",
 }
 
 var AddressFamilyValueMap = map[string]RouteFamily{
-	AddressFamilyNameMap[RF_IPv4_UC]:        RF_IPv4_UC,
-	AddressFamilyNameMap[RF_IPv6_UC]:        RF_IPv6_UC,
-	AddressFamilyNameMap[RF_IPv4_MC]:        RF_IPv4_MC,
-	AddressFamilyNameMap[RF_IPv6_MC]:        RF_IPv6_MC,
-	AddressFamilyNameMap[RF_IPv4_MPLS]:      RF_IPv4_MPLS,
-	AddressFamilyNameMap[RF_IPv6_MPLS]:      RF_IPv6_MPLS,
-	AddressFamilyNameMap[RF_IPv4_VPN]:       RF_IPv4_VPN,
-	AddressFamilyNameMap[RF_IPv6_VPN]:       RF_IPv6_VPN,
-	AddressFamilyNameMap[RF_IPv4_VPN_MC]:    RF_IPv4_VPN_MC,
-	AddressFamilyNameMap[RF_IPv6_VPN_MC]:    RF_IPv6_VPN_MC,
-	AddressFamilyNameMap[RF_VPLS]:           RF_VPLS,
-	AddressFamilyNameMap[RF_EVPN]:           RF_EVPN,
-	AddressFamilyNameMap[RF_RTC_UC]:         RF_RTC_UC,
-	AddressFamilyNameMap[RF_IPv4_ENCAP]:     RF_IPv4_ENCAP,
-	AddressFamilyNameMap[RF_IPv6_ENCAP]:     RF_IPv6_ENCAP,
-	AddressFamilyNameMap[RF_FS_IPv4_UC]:     RF_FS_IPv4_UC,
-	AddressFamilyNameMap[RF_FS_IPv4_VPN]:    RF_FS_IPv4_VPN,
-	AddressFamilyNameMap[RF_FS_IPv6_UC]:     RF_FS_IPv6_UC,
-	AddressFamilyNameMap[RF_FS_IPv6_VPN]:    RF_FS_IPv6_VPN,
-	AddressFamilyNameMap[RF_FS_L2_VPN]:      RF_FS_L2_VPN,
-	AddressFamilyNameMap[RF_OPAQUE]:         RF_OPAQUE,
-	AddressFamilyNameMap[RF_LS]:             RF_LS,
-	AddressFamilyNameMap[RF_SR_POLICY_IPv4]: RF_SR_POLICY_IPv4,
-	AddressFamilyNameMap[RF_SR_POLICY_IPv6]: RF_SR_POLICY_IPv6,
+	AddressFamilyNameMap[RF_IPv4_UC]:     RF_IPv4_UC,
+	AddressFamilyNameMap[RF_IPv6_UC]:     RF_IPv6_UC,
+	AddressFamilyNameMap[RF_IPv4_MC]:     RF_IPv4_MC,
+	AddressFamilyNameMap[RF_IPv6_MC]:     RF_IPv6_MC,
+	AddressFamilyNameMap[RF_IPv4_MPLS]:   RF_IPv4_MPLS,
+	AddressFamilyNameMap[RF_IPv6_MPLS]:   RF_IPv6_MPLS,
+	AddressFamilyNameMap[RF_IPv4_VPN]:    RF_IPv4_VPN,
+	AddressFamilyNameMap[RF_IPv6_VPN]:    RF_IPv6_VPN,
+	AddressFamilyNameMap[RF_IPv4_VPN_MC]: RF_IPv4_VPN_MC,
+	AddressFamilyNameMap[RF_IPv6_VPN_MC]: RF_IPv6_VPN_MC,
+	AddressFamilyNameMap[RF_VPLS]:        RF_VPLS,
+	AddressFamilyNameMap[RF_EVPN]:        RF_EVPN,
+	AddressFamilyNameMap[RF_RTC_UC]:      RF_RTC_UC,
+	AddressFamilyNameMap[RF_IPv4_ENCAP]:  RF_IPv4_ENCAP,
+	AddressFamilyNameMap[RF_IPv6_ENCAP]:  RF_IPv6_ENCAP,
+	AddressFamilyNameMap[RF_FS_IPv4_UC]:  RF_FS_IPv4_UC,
+	AddressFamilyNameMap[RF_FS_IPv4_VPN]: RF_FS_IPv4_VPN,
+	AddressFamilyNameMap[RF_FS_IPv6_UC]:  RF_FS_IPv6_UC,
+	AddressFamilyNameMap[RF_FS_IPv6_VPN]: RF_FS_IPv6_VPN,
+	AddressFamilyNameMap[RF_FS_L2_VPN]:   RF_FS_L2_VPN,
+	AddressFamilyNameMap[RF_OPAQUE]:      RF_OPAQUE,
+	AddressFamilyNameMap[RF_LS]:          RF_LS,
 }
 
 func GetRouteFamily(name string) (RouteFamily, error) {
@@ -8302,20 +8241,6 @@ func NewPrefixFromRouteFamily(afi uint16, safi uint8, prefixStr ...string) (pref
 		prefix = NewLabeledIPv6AddrPrefix(0, "", *NewMPLSLabelStack())
 	case RF_EVPN:
 		prefix = NewEVPNNLRI(0, nil)
-
-	// TODO (sbezverk) Add processing SR Policy NLRI
-	case RF_SR_POLICY_IPv4:
-		prefix = &SRPolicyIPv4{
-			SRPolicyNLRI: SRPolicyNLRI{
-				rf: RF_SR_POLICY_IPv4,
-			},
-		}
-	case RF_SR_POLICY_IPv6:
-		prefix = &SRPolicyIPv6{
-			SRPolicyNLRI: SRPolicyNLRI{
-				rf: RF_SR_POLICY_IPv6,
-			},
-		}
 	case RF_RTC_UC:
 		prefix = &RouteTargetMembershipNLRI{}
 	case RF_IPv4_ENCAP:
@@ -10367,8 +10292,6 @@ func (e *EncapExtended) String() string {
 		return "VXLAN GRE"
 	case TUNNEL_TYPE_MPLS_IN_UDP:
 		return "MPLS in UDP"
-	case TUNNEL_TYPE_SR_POLICY:
-		return "SR Policy"
 	default:
 		return fmt.Sprintf("tunnel: %d", e.TunnelType)
 	}
@@ -11439,7 +11362,7 @@ func (t *TunnelEncapSubTLV) DecodeFromBytes(data []byte) (value []byte, err erro
 	if len(data) < int(t.Length) {
 		return nil, NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "Not all TunnelEncapSubTLV bytes available")
 	}
-	return data[:t.Length], nil
+	return data, nil
 }
 
 func (t *TunnelEncapSubTLV) Serialize(value []byte) (buf []byte, err error) {
@@ -11642,156 +11565,6 @@ func NewTunnelEncapSubTLVColor(color uint32) *TunnelEncapSubTLVColor {
 	}
 }
 
-type TunnelEncapSubTLVEgressEndpoint struct {
-	TunnelEncapSubTLV
-	Address net.IP
-}
-
-// Tunnel Egress Endpoint Sub-TLV subfield positions
-const (
-	EGRESS_ENDPOINT_RESERVED_POS = 0
-	EGRESS_ENDPOINT_FAMILY_POS   = 4
-	EGRESS_ENDPOINT_ADDRESS_POS  = 6
-)
-
-func (t *TunnelEncapSubTLVEgressEndpoint) DecodeFromBytes(data []byte) error {
-	value, err := t.TunnelEncapSubTLV.DecodeFromBytes(data)
-	if err != nil {
-		return err
-	}
-	if t.Length < EGRESS_ENDPOINT_ADDRESS_POS {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "Not all TunnelEncapSubTLVEgressEndpoint bytes available")
-	}
-	addressFamily := binary.BigEndian.Uint16(value[EGRESS_ENDPOINT_FAMILY_POS : EGRESS_ENDPOINT_FAMILY_POS+2])
-
-	var addressLen uint16
-	switch addressFamily {
-	case 0:
-		addressLen = 0
-	case AFI_IP:
-		addressLen = net.IPv4len
-	case AFI_IP6:
-		addressLen = net.IPv6len
-	default:
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "Unsupported address family in TunnelEncapSubTLVEgressEndpoint")
-	}
-	if t.Length != EGRESS_ENDPOINT_ADDRESS_POS+addressLen {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "Not all TunnelEncapSubTLVEgressEndpoint address bytes available")
-	}
-	t.Address = nil
-	if addressFamily != 0 {
-		t.Address = net.IP(value[EGRESS_ENDPOINT_ADDRESS_POS : EGRESS_ENDPOINT_ADDRESS_POS+addressLen])
-	}
-
-	return nil
-}
-
-func (t *TunnelEncapSubTLVEgressEndpoint) Serialize() ([]byte, error) {
-	var length uint32 = EGRESS_ENDPOINT_ADDRESS_POS
-	var family uint16
-	var ip net.IP
-	if t.Address == nil {
-		family = 0
-	} else if t.Address.To4() != nil {
-		length += net.IPv4len
-		family = AFI_IP
-		ip = t.Address.To4()
-	} else {
-		length += net.IPv6len
-		family = AFI_IP6
-		ip = t.Address.To16()
-	}
-	buf := make([]byte, length)
-	binary.BigEndian.PutUint32(buf, 0)
-	binary.BigEndian.PutUint16(buf[EGRESS_ENDPOINT_FAMILY_POS:], family)
-	if family != 0 {
-		copy(buf[EGRESS_ENDPOINT_ADDRESS_POS:], ip)
-	}
-	return t.TunnelEncapSubTLV.Serialize(buf)
-}
-
-func (t *TunnelEncapSubTLVEgressEndpoint) String() string {
-	address := ""
-	if t.Address != nil {
-		address = t.Address.String()
-	}
-	return fmt.Sprintf("{EgressEndpoint: %s}", address)
-}
-
-func (t *TunnelEncapSubTLVEgressEndpoint) MarshalJSON() ([]byte, error) {
-	address := ""
-	if t.Address != nil {
-		address = t.Address.String()
-	}
-
-	return json.Marshal(struct {
-		Type    EncapSubTLVType `json:"type"`
-		Address string          `json:"address"`
-	}{
-		Type:    t.Type,
-		Address: address,
-	})
-}
-
-func NewTunnelEncapSubTLVEgressEndpoint(address string) *TunnelEncapSubTLVEgressEndpoint {
-	var ip net.IP = nil
-	if address != "" {
-		ip = net.ParseIP(address)
-	}
-	return &TunnelEncapSubTLVEgressEndpoint{
-		TunnelEncapSubTLV: TunnelEncapSubTLV{
-			Type: ENCAP_SUBTLV_TYPE_EGRESS_ENDPOINT,
-		},
-		Address: ip,
-	}
-}
-
-type TunnelEncapSubTLVUDPDestPort struct {
-	TunnelEncapSubTLV
-	UDPDestPort uint16
-}
-
-func (t *TunnelEncapSubTLVUDPDestPort) DecodeFromBytes(data []byte) error {
-	value, err := t.TunnelEncapSubTLV.DecodeFromBytes(data)
-	if err != nil {
-		return err
-	}
-	if t.Length < 2 {
-		return NewMessageError(BGP_ERROR_UPDATE_MESSAGE_ERROR, BGP_ERROR_SUB_MALFORMED_ATTRIBUTE_LIST, nil, "Not all TunnelEncapSubTLVUDPDestPort bytes available")
-	}
-	t.UDPDestPort = binary.BigEndian.Uint16(value[0:2])
-	return nil
-}
-
-func (t *TunnelEncapSubTLVUDPDestPort) Serialize() ([]byte, error) {
-	buf := make([]byte, 2)
-	binary.BigEndian.PutUint16(buf, t.UDPDestPort)
-	return t.TunnelEncapSubTLV.Serialize(buf)
-}
-
-func (t *TunnelEncapSubTLVUDPDestPort) String() string {
-	return fmt.Sprintf("{UDPDestPort: %d}", t.UDPDestPort)
-}
-
-func (t *TunnelEncapSubTLVUDPDestPort) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Type        EncapSubTLVType `json:"type"`
-		UDPDestPort uint16          `json:"port"`
-	}{
-		Type:        t.Type,
-		UDPDestPort: t.UDPDestPort,
-	})
-}
-
-func NewTunnelEncapSubTLVUDPDestPort(port uint16) *TunnelEncapSubTLVUDPDestPort {
-	return &TunnelEncapSubTLVUDPDestPort{
-		TunnelEncapSubTLV: TunnelEncapSubTLV{
-			Type: ENCAP_SUBTLV_TYPE_UDP_DEST_PORT,
-		},
-		UDPDestPort: port,
-	}
-}
-
 type TunnelEncapTLV struct {
 	Type   TunnelType
 	Length uint16
@@ -11824,22 +11597,6 @@ func (t *TunnelEncapTLV) DecodeFromBytes(data []byte) error {
 			subTlv = &TunnelEncapSubTLVProtocol{}
 		case ENCAP_SUBTLV_TYPE_COLOR:
 			subTlv = &TunnelEncapSubTLVColor{}
-		case ENCAP_SUBTLV_TYPE_UDP_DEST_PORT:
-			subTlv = &TunnelEncapSubTLVUDPDestPort{}
-		case ENCAP_SUBTLV_TYPE_EGRESS_ENDPOINT:
-			subTlv = &TunnelEncapSubTLVEgressEndpoint{}
-		case ENCAP_SUBTLV_TYPE_SRPREFERENCE:
-			subTlv = &TunnelEncapSubTLVSRPreference{}
-		case ENCAP_SUBTLV_TYPE_SRBINDING_SID:
-			subTlv = &TunnelEncapSubTLVSRBSID{}
-		case ENCAP_SUBTLV_TYPE_SRSEGMENT_LIST:
-			subTlv = &TunnelEncapSubTLVSRSegmentList{}
-		case ENCAP_SUBTLV_TYPE_SRENLP:
-			subTlv = &TunnelEncapSubTLVSRENLP{}
-		case ENCAP_SUBTLV_TYPE_SRPRIORITY:
-			subTlv = &TunnelEncapSubTLVSRPriority{}
-		case ENCAP_SUBTLV_TYPE_SRCANDIDATE_PATH_NAME:
-			subTlv = &TunnelEncapSubTLVSRCandidatePathName{}
 		default:
 			subTlv = &TunnelEncapSubTLVUnknown{
 				TunnelEncapSubTLV: TunnelEncapSubTLV{
@@ -12373,9 +12130,6 @@ func (p *PathAttributeAigp) DecodeFromBytes(data []byte, options ...*Marshalling
 	for len(value) > 3 {
 		typ := value[0]
 		length := binary.BigEndian.Uint16(value[1:3])
-		if length <= 3 {
-			return NewMessageError(BGP_ERROR_MESSAGE_HEADER_ERROR, BGP_ERROR_SUB_BAD_MESSAGE_LENGTH, nil, "Malformed BGP message")
-		}
 		if len(value) < int(length) {
 			break
 		}

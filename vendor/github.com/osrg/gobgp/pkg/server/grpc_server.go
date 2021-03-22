@@ -153,26 +153,11 @@ func toPathAPI(binNlri []byte, binPattrs [][]byte, anyNlri *any.Any, anyPattrs [
 	return p
 }
 
-func toPathApi(path *table.Path, v *table.Validation, nlri_binary, attribute_binary bool) *api.Path {
+func toPathApi(path *table.Path, v *table.Validation) *api.Path {
 	nlri := path.GetNlri()
 	anyNlri := apiutil.MarshalNLRI(nlri)
 	anyPattrs := apiutil.MarshalPathAttributes(path.GetPathAttrs())
-	var binNlri []byte
-	if nlri_binary {
-		binNlri, _ = nlri.Serialize()
-	}
-	var binPattrs [][]byte
-	if attribute_binary {
-		pa := path.GetPathAttrs()
-		binPattrs = make([][]byte, 0, len(pa))
-		for _, a := range pa {
-			b, e := a.Serialize()
-			if e == nil {
-				binPattrs = append(binPattrs, b)
-			}
-		}
-	}
-	return toPathAPI(binNlri, binPattrs, anyNlri, anyPattrs, path, v)
+	return toPathAPI(nil, nil, anyNlri, anyPattrs, path, v)
 }
 
 func getValidation(v map[*table.Path]*table.Validation, p *table.Path) *table.Validation {
@@ -296,11 +281,6 @@ func api2Path(resource api.TableType, path *api.Path, isWithdraw bool) (*table.P
 		return nil, err
 	}
 
-	// TODO (sbezverk) At this poinnt nlri and path attributes are converted to native mode
-	// need to check if update with SR Policy nlri comes with mandatory route distinguisher
-	// extended community or NO_ADVERTISE community, with Tunnel Encapsulation Attribute 23
-	// and tunnel type 15. If it is not the case ignore update and log an error.
-
 	pattrs := make([]bgp.PathAttributeInterface, 0)
 	seen := make(map[bgp.BGPAttrType]struct{})
 	for _, attr := range attrList {
@@ -315,9 +295,6 @@ func api2Path(resource api.TableType, path *api.Path, isWithdraw bool) (*table.P
 		case *bgp.PathAttributeNextHop:
 			nexthop = a.Value.String()
 		case *bgp.PathAttributeMpReachNLRI:
-			if len(a.Value) == 0 {
-				return nil, fmt.Errorf("invalid mp reach attribute")
-			}
 			nlri = a.Value[0]
 			nexthop = a.Nexthop.String()
 		default:
@@ -509,29 +486,20 @@ func readApplyPolicyFromAPIStruct(c *config.ApplyPolicy, a *api.ApplyPolicy) {
 	if c == nil || a == nil {
 		return
 	}
-	f := func(a api.RouteAction) config.DefaultPolicyType {
-		if a == api.RouteAction_ACCEPT {
-			return config.DEFAULT_POLICY_TYPE_ACCEPT_ROUTE
-		} else if a == api.RouteAction_REJECT {
-			return config.DEFAULT_POLICY_TYPE_REJECT_ROUTE
-		}
-		return ""
-	}
-
 	if a.ImportPolicy != nil {
-		c.Config.DefaultImportPolicy = f(a.ImportPolicy.DefaultAction)
+		c.Config.DefaultImportPolicy = config.IntToDefaultPolicyTypeMap[int(a.ImportPolicy.DefaultAction)]
 		for _, p := range a.ImportPolicy.Policies {
 			c.Config.ImportPolicyList = append(c.Config.ImportPolicyList, p.Name)
 		}
 	}
 	if a.ExportPolicy != nil {
-		c.Config.DefaultExportPolicy = f(a.ExportPolicy.DefaultAction)
+		c.Config.DefaultExportPolicy = config.IntToDefaultPolicyTypeMap[int(a.ExportPolicy.DefaultAction)]
 		for _, p := range a.ExportPolicy.Policies {
 			c.Config.ExportPolicyList = append(c.Config.ExportPolicyList, p.Name)
 		}
 	}
 	if a.InPolicy != nil {
-		c.Config.DefaultInPolicy = f(a.InPolicy.DefaultAction)
+		c.Config.DefaultInPolicy = config.IntToDefaultPolicyTypeMap[int(a.InPolicy.DefaultAction)]
 		for _, p := range a.InPolicy.Policies {
 			c.Config.InPolicyList = append(c.Config.InPolicyList, p.Name)
 		}
@@ -1167,11 +1135,6 @@ func toStatementApi(s *config.Statement) *api.Statement {
 					Self: true,
 				}
 			}
-			if string(s.Actions.BgpActions.SetNextHop) == "unchanged" {
-				return &api.NexthopAction{
-					Unchanged: true,
-				}
-			}
 			return &api.NexthopAction{
 				Address: string(s.Actions.BgpActions.SetNextHop),
 			}
@@ -1446,9 +1409,6 @@ func newNexthopActionFromApiStruct(a *api.NexthopAction) (*table.NexthopAction, 
 		func() string {
 			if a.Self {
 				return "self"
-			}
-			if a.Unchanged {
-				return "unchanged"
 			}
 			return a.Address
 		}(),
@@ -1796,8 +1756,4 @@ func (s *server) StopBgp(ctx context.Context, r *api.StopBgpRequest) (*empty.Emp
 
 func (s *server) GetTable(ctx context.Context, r *api.GetTableRequest) (*api.GetTableResponse, error) {
 	return s.bgpServer.GetTable(ctx, r)
-}
-
-func (s *server) SetLogLevel(ctx context.Context, r *api.SetLogLevelRequest) (*empty.Empty, error) {
-	return &empty.Empty{}, s.bgpServer.SetLogLevel(ctx, r)
 }
