@@ -299,9 +299,14 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 		return
 	}
 
-	svc, err := utils.ServiceForEndpoints(&nrc.svcLister, ep)
+	svc, exists, err := utils.ServiceForEndpoints(&nrc.svcLister, ep)
 	if err != nil {
 		glog.Errorf("failed to convert endpoints resource to service: %s", err)
+		return
+	}
+
+	// ignore updates to Endpoints object with no corresponding Service object
+	if !exists {
 		return
 	}
 

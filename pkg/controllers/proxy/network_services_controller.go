@@ -812,9 +812,13 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 	// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we don't
 	// need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now, it was a
 	// ClusterIP before.
-	svc, err := utils.ServiceForEndpoints(&nsc.svcLister, ep)
+	svc, exists, err := utils.ServiceForEndpoints(&nsc.svcLister, ep)
 	if err != nil {
 		glog.Errorf("failed to convert endpoints resource to service: %s", err)
+		return
+	}
+	// ignore updates to Endpoints object with no corresponding Service object
+	if !exists {
 		return
 	}
 	if utils.ServiceIsHeadless(svc) {
