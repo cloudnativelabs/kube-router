@@ -18,7 +18,7 @@ const (
 
 // GetPodCidrFromCniSpec gets pod CIDR allocated to the node from CNI spec file and returns it
 func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
-	var podCidr net.IPNet
+	var podCidr = net.IPNet{}
 	var err error
 	var ipamConfig *allocator.IPAMConfig
 
@@ -32,7 +32,9 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 			if conf.Network.IPAM.Type != "" {
 				ipamConfig, _, err = allocator.LoadIPAMConfig(conf.Bytes, "")
 				if err != nil {
-					return net.IPNet{}, fmt.Errorf("Failed to get IPAM details from the CNI conf file: %s", err.Error())
+					if err.Error() != "no IP ranges specified" {
+						return net.IPNet{}, fmt.Errorf("Failed to get IPAM details from the CNI conf file: %s", err.Error())
+					}
 				}
 				break
 			}
@@ -52,7 +54,7 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 		}
 	}
 	// TODO: Support multiple subnet definitions in CNI conf
-	if len(ipamConfig.Ranges) > 0 {
+	if ipamConfig != nil && len(ipamConfig.Ranges) > 0 {
 		for _, rangeset := range ipamConfig.Ranges {
 			for _, item := range rangeset {
 				if item.Subnet.IP != nil {
