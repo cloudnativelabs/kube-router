@@ -104,6 +104,12 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 
 		activePodFwChains[podFwChainName] = true
 
+		podFwInputChainName := podFirewallInputChainName(pod.namespace, pod.name, version)
+		if pod.ip == npc.nodeIP.String() {
+			npc.filterTableRules.WriteString(":" + podFwInputChainName + "\n")
+			activePodFwChains[podFwInputChainName] = true
+		}
+
 		// add entries in pod firewall to run through required network policies
 		for _, policy := range networkPoliciesInfo {
 			if _, ok := policy.targetPods[pod.ip]; ok {
@@ -111,17 +117,29 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
 				args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
 				npc.filterTableRules.WriteString(strings.Join(args, " "))
+				if pod.ip == npc.nodeIP.String() {
+					args = []string{"-I", podFwInputChainName, "1", "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
+					npc.filterTableRules.WriteString(strings.Join(args, " "))
+				}
 			}
 		}
 
 		comment := "\"rule to permit the traffic traffic to pods when source is the pod's local node\""
 		args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT", "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
+		if pod.ip == npc.nodeIP.String() {
+			args := []string{"-I", podFwInputChainName, "1", "-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT", "\n"}
+			npc.filterTableRules.WriteString(strings.Join(args, " "))
+		}
 
 		// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
 		comment = "\"rule for stateful firewall for pod\""
 		args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
+		if pod.ip == npc.nodeIP.String() {
+			args = []string{"-I", podFwInputChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
+			npc.filterTableRules.WriteString(strings.Join(args, " "))
+		}
 
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting routed (coming for other node pods)
@@ -129,6 +147,12 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			" to chain " + podFwChainName + "\""
 		args = []string{"-I", kubeForwardChainName, "1", "-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName + "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
+		if pod.ip == npc.nodeIP.String() {
+			comment = "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
+				" to chain " + podFwInputChainName + "\""
+			args = []string{"-I", kubeInputChainName, "1", "-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwInputChainName + "\n"}
+			npc.filterTableRules.WriteString(strings.Join(args, " "))
+		}
 
 		// ensure there is rule in filter table and OUTPUT chain to jump to pod specific firewall chain
 		// this rule applies to the traffic from a pod getting routed back to another pod on same node by service proxy
@@ -144,6 +168,15 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			"-d", pod.ip,
 			"-j", podFwChainName, "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
+		if pod.ip == npc.nodeIP.String() {
+			comment = "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
+				" to chain " + podFwInputChainName + "\""
+			args = []string{"-I", kubeInputChainName, "1", "-m", "physdev", "--physdev-is-bridged",
+				"-m", "comment", "--comment", comment,
+				"-d", pod.ip,
+				"-j", podFwInputChainName, "\n"}
+			npc.filterTableRules.WriteString(strings.Join(args, " "))
+		}
 
 		err = dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
 		if err != nil {
@@ -276,4 +309,10 @@ func podFirewallChainName(namespace, podName string, version string) string {
 	hash := sha256.Sum256([]byte(namespace + podName + version))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubePodFirewallChainPrefix + encoded[:16]
+}
+
+func podFirewallInputChainName(namespace, podName string, version string) string {
+	hash := sha256.Sum256([]byte(namespace + podName + version))
+	encoded := base32.StdEncoding.EncodeToString(hash[:])
+	return kubePodFirewallInputChainPrefix + encoded[:16]
 }

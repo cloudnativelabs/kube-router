@@ -26,13 +26,14 @@ import (
 )
 
 const (
-	kubePodFirewallChainPrefix   = "KUBE-POD-FW-"
-	kubeNetworkPolicyChainPrefix = "KUBE-NWPLCY-"
-	kubeSourceIPSetPrefix        = "KUBE-SRC-"
-	kubeDestinationIPSetPrefix   = "KUBE-DST-"
-	kubeInputChainName           = "KUBE-ROUTER-INPUT"
-	kubeForwardChainName         = "KUBE-ROUTER-FORWARD"
-	kubeOutputChainName          = "KUBE-ROUTER-OUTPUT"
+	kubePodFirewallChainPrefix      = "KUBE-POD-FW-"
+	kubePodFirewallInputChainPrefix = "KUBE-NODE-"
+	kubeNetworkPolicyChainPrefix    = "KUBE-NWPLCY-"
+	kubeSourceIPSetPrefix           = "KUBE-SRC-"
+	kubeDestinationIPSetPrefix      = "KUBE-DST-"
+	kubeInputChainName              = "KUBE-ROUTER-INPUT"
+	kubeForwardChainName            = "KUBE-ROUTER-FORWARD"
+	kubeOutputChainName             = "KUBE-ROUTER-OUTPUT"
 )
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
@@ -405,6 +406,11 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 				cleanupPodFwChains = append(cleanupPodFwChains, chain)
 			}
 		}
+		if strings.HasPrefix(chain, kubePodFirewallInputChainPrefix) {
+			if _, ok := activePodFwChains[chain]; !ok {
+				cleanupPodFwChains = append(cleanupPodFwChains, chain)
+			}
+		}
 	}
 
 	var newChains, newRules, desiredFilterTable bytes.Buffer
@@ -493,11 +499,30 @@ func (npc *NetworkPolicyController) Cleanup() {
 		return
 	}
 
+	// delete jump rules in INPUT chain to host-networked pod specific firewall chain
+	inputChainRules, err := iptablesCmdHandler.List("filter", kubeInputChainName)
+	if err != nil {
+		glog.Errorf("Failed to delete iptables rules as part of cleanup")
+		return
+	}
+
 	// TODO: need a better way to delte rule with out using number
 	var realRuleNo int
 	for i, rule := range forwardChainRules {
 		if strings.Contains(rule, kubePodFirewallChainPrefix) {
 			err = iptablesCmdHandler.Delete("filter", kubeForwardChainName, strconv.Itoa(i-realRuleNo))
+			if err != nil {
+				glog.Errorf("Failed to delete iptables rule as part of cleanup: %s", err)
+			}
+			realRuleNo++
+		}
+	}
+
+	// TODO: need a better way to delte rule with out using number
+	realRuleNo = 0
+	for i, rule := range inputChainRules {
+		if strings.Contains(rule, kubePodFirewallInputChainPrefix) {
+			err = iptablesCmdHandler.Delete("filter", kubeInputChainName, strconv.Itoa(i-realRuleNo))
 			if err != nil {
 				glog.Errorf("Failed to delete iptables rule as part of cleanup: %s", err)
 			}
@@ -531,7 +556,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 		return
 	}
 	for _, chain := range chains {
-		if strings.HasPrefix(chain, kubePodFirewallChainPrefix) {
+		if strings.HasPrefix(chain, kubePodFirewallChainPrefix) || strings.HasPrefix(chain, kubePodFirewallInputChainPrefix) {
 			err = iptablesCmdHandler.ClearChain("filter", chain)
 			if err != nil {
 				glog.Errorf("Failed to cleanup iptables rules: " + err.Error())
