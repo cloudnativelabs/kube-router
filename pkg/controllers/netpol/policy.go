@@ -11,7 +11,6 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
-	"github.com/golang/glog"
 	api "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 )
 
 func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.ResourceEventHandler {
@@ -40,7 +40,7 @@ func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.Resourc
 // OnNetworkPolicyUpdate handles updates to network policy from the kubernetes api server
 func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
 	netpol := obj.(*networking.NetworkPolicy)
-	glog.V(2).Infof("Received update for network policy: %s/%s", netpol.Namespace, netpol.Name)
+	klog.V(2).Infof("Received update for network policy: %s/%s", netpol.Namespace, netpol.Name)
 
 	npc.RequestFullSync()
 }
@@ -50,15 +50,15 @@ func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			glog.Errorf("unexpected object type: %v", obj)
+			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
 		if netpol, ok = tombstone.Obj.(*networking.NetworkPolicy); !ok {
-			glog.Errorf("unexpected object type: %v", obj)
+			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
 	}
-	glog.V(2).Infof("Received network policy: %s/%s delete event", netpol.Namespace, netpol.Name)
+	klog.V(2).Infof("Received network policy: %s/%s delete event", netpol.Namespace, netpol.Name)
 
 	npc.RequestFullSync()
 }
@@ -73,7 +73,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 	defer func() {
 		endTime := time.Since(start)
 		metrics.ControllerPolicyChainsSyncTime.Observe(endTime.Seconds())
-		glog.V(2).Infof("Syncing network policy chains took %v", endTime)
+		klog.V(2).Infof("Syncing network policy chains took %v", endTime)
 	}()
 
 	ipset, err := utils.NewIPSet(false)
@@ -138,7 +138,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 		return nil, nil, fmt.Errorf("failed to perform ipset restore: %s", err.Error())
 	}
 
-	glog.V(2).Infof("Iptables chains in the filter table are synchronized with the network policies.")
+	klog.V(2).Infof("Iptables chains in the filter table are synchronized with the network policies.")
 
 	return activePolicyChains, activePolicyIPSets, nil
 }

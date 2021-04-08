@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/golang/glog"
+	"k8s.io/klog/v2"
 
 	v1core "k8s.io/api/core/v1"
 )
@@ -30,7 +30,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		providerID := strings.Replace(node.Spec.ProviderID, "///", "//", 1)
 		URL, err := url.Parse(providerID)
 		if err != nil {
-			glog.Errorf("Failed to parse URL for providerID " + providerID + " : " + err.Error())
+			klog.Errorf("Failed to parse URL for providerID " + providerID + " : " + err.Error())
 			return
 		}
 		instanceID := URL.Path
@@ -40,7 +40,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		metadataClient := ec2metadata.New(sess)
 		region, err := metadataClient.Region()
 		if err != nil {
-			glog.Errorf("Failed to disable source destination check due to: " + err.Error())
+			klog.Errorf("Failed to disable source destination check due to: " + err.Error())
 			return
 		}
 		sess.Config.Region = aws.String(region)
@@ -57,12 +57,12 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 			awserr := err.(awserr.Error)
 			if awserr.Code() == "UnauthorizedOperation" {
 				nrc.ec2IamAuthorized = false
-				glog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
+				klog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
 				return
 			}
-			glog.Errorf("Failed to disable source destination check due to: %v", err.Error())
+			klog.Errorf("Failed to disable source destination check due to: %v", err.Error())
 		} else {
-			glog.Infof("Disabled source destination check for the instance: " + instanceID)
+			klog.Infof("Disabled source destination check for the instance: " + instanceID)
 		}
 
 		// to prevent EC2 rejecting API call due to API throttling give a delay between the calls

@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang/glog"
 	"github.com/moby/ipvs"
+	"k8s.io/klog/v2"
 )
 
 type gracefulQueue struct {
@@ -49,7 +49,7 @@ func (nsc *NetworkServicesController) ipvsDeleteDestination(svc *ipvs.Service, d
 	// flush conntrack when Destination for a UDP service changes
 	if svc.Protocol == syscall.IPPROTO_UDP {
 		if err := nsc.flushConntrackUDP(svc); err != nil {
-			glog.Errorf("Failed to flush conntrack: %s", err.Error())
+			klog.Errorf("Failed to flush conntrack: %s", err.Error())
 		}
 	}
 	return nil
@@ -62,7 +62,7 @@ func (nsc *NetworkServicesController) addToGracefulQueue(req *gracefulRequest) {
 	for _, jobQitem := range nsc.gracefulQueue.queue {
 		if jobQitem.ipvsSvc.Address.Equal(req.ipvsSvc.Address) && jobQitem.ipvsSvc.Port == req.ipvsSvc.Port && jobQitem.ipvsSvc.Protocol == req.ipvsSvc.Protocol {
 			if jobQitem.ipvsDst.Address.Equal(req.ipvsDst.Address) && jobQitem.ipvsDst.Port == req.ipvsDst.Port {
-				glog.V(2).Infof("Endpoint already scheduled for removal %+v %+v %s", *req.ipvsSvc, *req.ipvsDst, req.gracefulTerminationPeriod.String())
+				klog.V(2).Infof("Endpoint already scheduled for removal %+v %+v %s", *req.ipvsSvc, *req.ipvsDst, req.gracefulTerminationPeriod.String())
 				alreadyExists = true
 				break
 			}
@@ -72,10 +72,10 @@ func (nsc *NetworkServicesController) addToGracefulQueue(req *gracefulRequest) {
 		// try to get get Termination grace period from the pod, if unsuccesfull use the default timeout
 		podObj, err := nsc.getPodObjectForEndpoint(req.ipvsDst.Address.String())
 		if err != nil {
-			glog.V(1).Infof("Failed to find endpoint with ip: %s err: %s", req.ipvsDst.Address.String(), err.Error())
+			klog.V(1).Infof("Failed to find endpoint with ip: %s err: %s", req.ipvsDst.Address.String(), err.Error())
 			req.gracefulTerminationPeriod = nsc.gracefulPeriod
 		} else {
-			glog.V(1).Infof("Found pod termination grace period %d for pod %s", *podObj.Spec.TerminationGracePeriodSeconds, podObj.Name)
+			klog.V(1).Infof("Found pod termination grace period %d for pod %s", *podObj.Spec.TerminationGracePeriodSeconds, podObj.Name)
 			req.gracefulTerminationPeriod = time.Duration(float64(*podObj.Spec.TerminationGracePeriodSeconds) * float64(time.Second))
 		}
 		nsc.gracefulQueue.queue = append(nsc.gracefulQueue.queue, *req)
@@ -101,7 +101,7 @@ func (nsc *NetworkServicesController) gracefulDeleteIpvsDestination(req graceful
 	// Get active and inactive connections for the destination
 	aConn, iConn, err := nsc.getIpvsDestinationConnStats(req.ipvsSvc, req.ipvsDst)
 	if err != nil {
-		glog.V(1).Infof("Could not get connection stats for destination: %s", err.Error())
+		klog.V(1).Infof("Could not get connection stats for destination: %s", err.Error())
 	} else {
 		// Do we have active or inactive connections to this destination
 		// if we don't, proceed and delete the destination ahead of graceful period
@@ -117,9 +117,9 @@ func (nsc *NetworkServicesController) gracefulDeleteIpvsDestination(req graceful
 
 	//Destination has has one or more conditions for deletion
 	if deleteDestination {
-		glog.V(2).Infof("Deleting IPVS destination: %s", ipvsDestinationString(req.ipvsDst))
+		klog.V(2).Infof("Deleting IPVS destination: %s", ipvsDestinationString(req.ipvsDst))
 		if err := nsc.ln.ipvsDelDestination(req.ipvsSvc, req.ipvsDst); err != nil {
-			glog.Errorf("Failed to delete IPVS destination: %s, %s", ipvsDestinationString(req.ipvsDst), err.Error())
+			klog.Errorf("Failed to delete IPVS destination: %s, %s", ipvsDestinationString(req.ipvsDst), err.Error())
 		}
 	}
 	return deleteDestination
@@ -152,6 +152,6 @@ func (nsc *NetworkServicesController) flushConntrackUDP(svc *ipvs.Service) error
 			return fmt.Errorf("Failed to delete conntrack entry for endpoint: %s:%d due to %s", svc.Address.String(), svc.Port, err.Error())
 		}
 	}
-	glog.V(1).Infof("Deleted conntrack entry for endpoint: %s:%d", svc.Address.String(), svc.Port)
+	klog.V(1).Infof("Deleted conntrack entry for endpoint: %s:%d", svc.Address.String(), svc.Port)
 	return nil
 }

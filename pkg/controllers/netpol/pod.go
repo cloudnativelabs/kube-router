@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/golang/glog"
 	api "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 )
 
 func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHandler {
@@ -36,7 +36,7 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 // OnPodUpdate handles updates to pods from the Kubernetes api server
 func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 	pod := obj.(*api.Pod)
-	glog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
+	klog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
 
 	npc.RequestFullSync()
 }
@@ -46,15 +46,15 @@ func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			glog.Errorf("unexpected object type: %v", obj)
+			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
 		if pod, ok = tombstone.Obj.(*api.Pod); !ok {
-			glog.Errorf("unexpected object type: %v", obj)
+			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
 	}
-	glog.V(2).Infof("Received pod: %s/%s delete event", pod.Namespace, pod.Name)
+	klog.V(2).Infof("Received pod: %s/%s delete event", pod.Namespace, pod.Name)
 
 	npc.RequestFullSync()
 }
@@ -231,7 +231,7 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(networkPo
 			}
 			_, ok := policy.targetPods[pod.Status.PodIP]
 			if ok && (policy.policyType == "both" || policy.policyType == "ingress") {
-				glog.V(2).Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
+				klog.V(2).Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
 				nodePods[pod.Status.PodIP] = podInfo{ip: pod.Status.PodIP,
 					name:      pod.ObjectMeta.Name,
 					namespace: pod.ObjectMeta.Namespace,
@@ -260,7 +260,7 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(networkPol
 			}
 			_, ok := policy.targetPods[pod.Status.PodIP]
 			if ok && (policy.policyType == "both" || policy.policyType == "egress") {
-				glog.V(2).Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
+				klog.V(2).Infof("Found pod name: " + pod.ObjectMeta.Name + " namespace: " + pod.ObjectMeta.Namespace + " for which network policies need to be applied.")
 				nodePods[pod.Status.PodIP] = podInfo{ip: pod.Status.PodIP,
 					name:      pod.ObjectMeta.Name,
 					namespace: pod.ObjectMeta.Namespace,

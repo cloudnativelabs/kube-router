@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
 	"google.golang.org/grpc"
+	"k8s.io/klog/v2"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
 )
@@ -37,7 +37,7 @@ func NewRemoteRuntimeService(endpoint string, connectionTimeout time.Duration) (
 		return nil, err
 	}
 
-	glog.V(4).Infof("[RuntimeService] got endpoint %s (proto=%s, path=%s)", endpoint, proto, addr)
+	klog.V(4).Infof("[RuntimeService] got endpoint %s (proto=%s, path=%s)", endpoint, proto, addr)
 
 	if proto != "unix" {
 		return nil, errors.New("[RuntimeService] only unix socket is currently supported")
@@ -48,7 +48,7 @@ func NewRemoteRuntimeService(endpoint string, connectionTimeout time.Duration) (
 
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithContextDialer(dialer), grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
 	if err != nil {
-		glog.Errorf("Connect remote runtime %s failed: %v", addr, err)
+		klog.Errorf("Connect remote runtime %s failed: %v", addr, err)
 		return nil, err
 	}
 

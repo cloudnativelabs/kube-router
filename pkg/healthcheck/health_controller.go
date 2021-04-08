@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/options"
-	"github.com/golang/glog"
 	"golang.org/x/net/context"
+	"k8s.io/klog/v2"
 )
 
 //ControllerHeartbeat is the structure to hold the heartbeats sent by controllers
@@ -53,7 +53,7 @@ func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("OK\n"))
 		if err != nil {
-			glog.Errorf("Failed to write body: %s", err)
+			klog.Errorf("Failed to write body: %s", err)
 		}
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -70,14 +70,14 @@ func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
 		*/
 		_, err := w.Write([]byte("Unhealthy"))
 		if err != nil {
-			glog.Errorf("Failed to write body: %s", err)
+			klog.Errorf("Failed to write body: %s", err)
 		}
 	}
 }
 
 //HandleHeartbeat handles received heartbeats on the health channel
 func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
-	glog.V(3).Infof("Received heartbeat from %s", beat.Component)
+	klog.V(3).Infof("Received heartbeat from %s", beat.Component)
 
 	hc.Status.Lock()
 	defer hc.Status.Unlock()
@@ -114,28 +114,28 @@ func (hc *HealthController) CheckHealth() bool {
 
 	if hc.Config.RunFirewall {
 		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
-			glog.Error("Network Policy Controller heartbeat missed")
+			klog.Error("Network Policy Controller heartbeat missed")
 			health = false
 		}
 	}
 
 	if hc.Config.RunRouter {
 		if time.Since(hc.Status.NetworkRoutingControllerAlive) > hc.Config.RoutesSyncPeriod+hc.Status.NetworkRoutingControllerAliveTTL+graceTime {
-			glog.Error("Network Routing Controller heartbeat missed")
+			klog.Error("Network Routing Controller heartbeat missed")
 			health = false
 		}
 	}
 
 	if hc.Config.RunServiceProxy {
 		if time.Since(hc.Status.NetworkServicesControllerAlive) > hc.Config.IpvsSyncPeriod+hc.Status.NetworkServicesControllerAliveTTL+graceTime {
-			glog.Error("NetworkService Controller heartbeat missed")
+			klog.Error("NetworkService Controller heartbeat missed")
 			health = false
 		}
 	}
 
 	if hc.Config.MetricsEnabled {
 		if time.Since(hc.Status.MetricsControllerAlive) > 5*time.Second {
-			glog.Error("Metrics Controller heartbeat missed")
+			klog.Error("Metrics Controller heartbeat missed")
 			health = false
 		}
 	}
@@ -153,21 +153,21 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 		go func() {
 			if err := srv.ListenAndServe(); err != nil {
 				// cannot panic, because this probably is an intentional close
-				glog.Errorf("Health controller error: %s", err)
+				klog.Errorf("Health controller error: %s", err)
 			}
 		}()
 	} else if hc.Config.MetricsPort > 65535 {
-		glog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", hc.Config.MetricsPort)
+		klog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", hc.Config.MetricsPort)
 	} else {
 		hc.HTTPEnabled = false
 	}
 
 	// block until we receive a shut down signal
 	<-stopCh
-	glog.Infof("Shutting down health controller")
+	klog.Infof("Shutting down health controller")
 	if hc.HTTPEnabled {
 		if err := srv.Shutdown(context.Background()); err != nil {
-			glog.Errorf("could not shutdown: %v", err)
+			klog.Errorf("could not shutdown: %v", err)
 		}
 	}
 }
@@ -179,12 +179,12 @@ func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, sto
 	for {
 		select {
 		case <-stopCh:
-			glog.Infof("Shutting down HealthController RunCheck")
+			klog.Infof("Shutting down HealthController RunCheck")
 			return
 		case heartbeat := <-healthChan:
 			hc.HandleHeartbeat(heartbeat)
 		case <-t.C:
-			glog.V(4).Info("Health controller tick")
+			klog.V(4).Info("Health controller tick")
 		}
 		hc.Status.Healthy = hc.CheckHealth()
 	}
