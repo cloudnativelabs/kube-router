@@ -10,11 +10,11 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/version"
-	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/context"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -172,7 +172,7 @@ type Controller struct {
 func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(3 * time.Second)
 	defer wg.Done()
-	glog.Info("Starting metrics controller")
+	klog.Info("Starting metrics controller")
 
 	// register metrics for this controller
 	BuildInfo.WithLabelValues(runtime.Version(), version.Version).Set(1)
@@ -187,20 +187,20 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			// cannot panic, because this probably is an intentional close
-			glog.Errorf("Metrics controller error: %s", err)
+			klog.Errorf("Metrics controller error: %s", err)
 		}
 	}()
 	for {
 		healthcheck.SendHeartBeat(healthChan, "MC")
 		select {
 		case <-stopCh:
-			glog.Infof("Shutting down metrics controller")
+			klog.Infof("Shutting down metrics controller")
 			if err := srv.Shutdown(context.Background()); err != nil {
-				glog.Errorf("could not shutdown: %v", err)
+				klog.Errorf("could not shutdown: %v", err)
 			}
 			return
 		case <-t.C:
-			glog.V(4).Info("Metrics controller tick")
+			klog.V(4).Info("Metrics controller tick")
 		}
 	}
 }

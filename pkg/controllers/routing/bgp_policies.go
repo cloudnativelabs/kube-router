@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golang/glog"
 	gobgpapi "github.com/osrg/gobgp/api"
 	v1core "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 )
@@ -23,27 +23,27 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 
 	err := nrc.addPodCidrDefinedSet()
 	if err != nil {
-		glog.Errorf("Failed to add `podcidrdefinedset` defined set: %s", err)
+		klog.Errorf("Failed to add `podcidrdefinedset` defined set: %s", err)
 	}
 
 	err = nrc.addServiceVIPsDefinedSet()
 	if err != nil {
-		glog.Errorf("Failed to add `servicevipsdefinedset` defined set: %s", err)
+		klog.Errorf("Failed to add `servicevipsdefinedset` defined set: %s", err)
 	}
 
 	iBGPPeerCIDRs, err := nrc.addiBGPPeersDefinedSet()
 	if err != nil {
-		glog.Errorf("Failed to add `iBGPpeerset` defined set: %s", err)
+		klog.Errorf("Failed to add `iBGPpeerset` defined set: %s", err)
 	}
 
 	externalBGPPeerCIDRs, err := nrc.addExternalBGPPeersDefinedSet()
 	if err != nil {
-		glog.Errorf("Failed to add `externalpeerset` defined set: %s", err)
+		klog.Errorf("Failed to add `externalpeerset` defined set: %s", err)
 	}
 
 	err = nrc.addAllBGPPeersDefinedSet(iBGPPeerCIDRs, externalBGPPeerCIDRs)
 	if err != nil {
-		glog.Errorf("Failed to add `allpeerset` defined set: %s", err)
+		klog.Errorf("Failed to add `allpeerset` defined set: %s", err)
 	}
 
 	err = nrc.addExportPolicies()
@@ -174,7 +174,7 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 		nodeObj := node.(*v1core.Node)
 		nodeIP, err := utils.GetNodeIP(nodeObj)
 		if err != nil {
-			glog.Errorf("Failed to find a node IP and therefore cannot add internal BGP Peer: %v", err)
+			klog.Errorf("Failed to find a node IP and therefore cannot add internal BGP Peer: %v", err)
 			continue
 		}
 		iBGPPeerCIDRs = append(iBGPPeerCIDRs, nodeIP.String()+"/32")

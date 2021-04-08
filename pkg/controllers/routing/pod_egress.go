@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/golang/glog"
+	"k8s.io/klog/v2"
 )
 
 // set up MASQUERADE rule so that egress traffic from the pods gets masqueraded to node's IP
@@ -47,7 +47,7 @@ func (nrc *NetworkRoutingController) createPodEgressRule() error {
 
 	}
 
-	glog.V(1).Infof("Added iptables rule to masquerade outbound traffic from pods.")
+	klog.V(1).Infof("Added iptables rule to masquerade outbound traffic from pods.")
 	return nil
 }
 
@@ -76,7 +76,7 @@ func (nrc *NetworkRoutingController) deletePodEgressRule() error {
 			return errors.New("Failed to delete iptables rule to masquerade outbound traffic from pods: " +
 				err.Error() + ". Pod egress might still work...")
 		}
-		glog.Infof("Deleted iptables rule to masquerade outbound traffic from pods.")
+		klog.Infof("Deleted iptables rule to masquerade outbound traffic from pods.")
 	}
 
 	return nil
@@ -115,7 +115,7 @@ func (nrc *NetworkRoutingController) deleteBadPodEgressRules() error {
 					"Pod egress might still work, or bugs may persist after upgrade...",
 					err)
 			}
-			glog.Infof("Deleted old/bad iptables rule to masquerade outbound traffic from pods.")
+			klog.Infof("Deleted old/bad iptables rule to masquerade outbound traffic from pods.")
 		}
 	}
 

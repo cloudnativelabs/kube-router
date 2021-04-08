@@ -10,18 +10,18 @@ import (
 
 	"strings"
 
-	"github.com/golang/glog"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	gobgpapi "github.com/osrg/gobgp/api"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 )
 
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
 func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
-	glog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
+	klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
 	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 		Origin: 0,
@@ -47,7 +47,7 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
 // bgpWithdrawVIP  unadvertises the service vip
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
-	glog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
+	klog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
 
 	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 		Origin: 0,
@@ -77,7 +77,7 @@ func (nrc *NetworkRoutingController) advertiseVIPs(vips []string) {
 	for _, vip := range vips {
 		err := nrc.bgpAdvertiseVIP(vip)
 		if err != nil {
-			glog.Errorf("error advertising IP: %q, error: %v", vip, err)
+			klog.Errorf("error advertising IP: %q, error: %v", vip, err)
 		}
 	}
 }
@@ -86,7 +86,7 @@ func (nrc *NetworkRoutingController) withdrawVIPs(vips []string) {
 	for _, vip := range vips {
 		err := nrc.bgpWithdrawVIP(vip)
 		if err != nil {
-			glog.Errorf("error withdrawing IP: %q, error: %v", vip, err)
+			klog.Errorf("error withdrawing IP: %q, error: %v", vip, err)
 		}
 	}
 }
@@ -107,27 +107,27 @@ func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEven
 
 func getServiceObject(obj interface{}) (svc *v1core.Service) {
 	if svc, _ = obj.(*v1core.Service); svc == nil {
-		glog.Errorf("cache indexer returned obj that is not type *v1.Service")
+		klog.Errorf("cache indexer returned obj that is not type *v1.Service")
 	}
 	return
 }
 
 func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 	if !nrc.bgpServerStarted {
-		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
+		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
 		return
 	}
 
 	toAdvertise, toWithdraw, err := nrc.getActiveVIPs()
 	if err != nil {
-		glog.Errorf("error getting routes for services: %s", err)
+		klog.Errorf("error getting routes for services: %s", err)
 		return
 	}
 
 	// update export policies so that new VIP's gets added to clusteripprefixset and vip gets advertised to peers
 	err = nrc.AddPolicies()
 	if err != nil {
-		glog.Errorf("Error adding BGP policies: %s", err.Error())
+		klog.Errorf("Error adding BGP policies: %s", err.Error())
 	}
 
 	nrc.advertiseVIPs(toAdvertise)
@@ -137,18 +137,18 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 func (nrc *NetworkRoutingController) handleServiceDelete(svc *v1core.Service) {
 
 	if !nrc.bgpServerStarted {
-		glog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
+		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
 		return
 	}
 
 	err := nrc.AddPolicies()
 	if err != nil {
-		glog.Errorf("Error adding BGP policies: %s", err.Error())
+		klog.Errorf("Error adding BGP policies: %s", err.Error())
 	}
 
 	activeVIPs, _, err := nrc.getActiveVIPs()
 	if err != nil {
-		glog.Errorf("Failed to get active VIP's on service delete event due to: %s", err.Error())
+		klog.Errorf("Failed to get active VIP's on service delete event due to: %s", err.Error())
 		return
 	}
 	activeVIPsMap := make(map[string]bool)
@@ -169,14 +169,14 @@ func (nrc *NetworkRoutingController) handleServiceDelete(svc *v1core.Service) {
 
 func (nrc *NetworkRoutingController) tryHandleServiceUpdate(obj interface{}, logMsgFormat string) {
 	if svc := getServiceObject(obj); svc != nil {
-		glog.V(1).Infof(logMsgFormat, svc.Namespace, svc.Name)
+		klog.V(1).Infof(logMsgFormat, svc.Namespace, svc.Name)
 
 		// If the service is headless and the previous version of the service is either non-existent or also headless,
 		// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we don't
 		// need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now, it was a
 		// ClusterIP before.
 		if utils.ServiceIsHeadless(obj) {
-			glog.V(1).Infof("%s/%s is headless, skipping...", svc.Namespace, svc.Name)
+			klog.V(1).Infof("%s/%s is headless, skipping...", svc.Namespace, svc.Name)
 			return
 		}
 
@@ -189,19 +189,19 @@ func (nrc *NetworkRoutingController) tryHandleServiceDelete(obj interface{}, log
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			glog.Errorf("unexpected object type: %v", obj)
+			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
 		if svc, ok = tombstone.Obj.(*v1core.Service); !ok {
-			glog.Errorf("unexpected object type: %v", obj)
+			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
 	}
-	glog.V(1).Infof(logMsgFormat, svc.Namespace, svc.Name)
+	klog.V(1).Infof(logMsgFormat, svc.Namespace, svc.Name)
 
 	// If the service is headless skip processing as we only work with VIPs in the next section.
 	if utils.ServiceIsHeadless(obj) {
-		glog.V(1).Infof("%s/%s is headless, skipping...", svc.Namespace, svc.Name)
+		klog.V(1).Infof("%s/%s is headless, skipping...", svc.Namespace, svc.Name)
 		return
 	}
 
@@ -274,7 +274,7 @@ func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEv
 // Service was not created yet.
 func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
 	if !nrc.bgpServerStarted {
-		glog.V(3).Info("Skipping OnAdd event to endpoint, controller still performing bootup full-sync")
+		klog.V(3).Info("Skipping OnAdd event to endpoint, controller still performing bootup full-sync")
 		return
 	}
 
@@ -285,7 +285,7 @@ func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
 func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 	ep, ok := obj.(*v1core.Endpoints)
 	if !ok {
-		glog.Errorf("cache indexer returned obj that is not type *v1.Endpoints")
+		klog.Errorf("cache indexer returned obj that is not type *v1.Endpoints")
 		return
 	}
 
@@ -293,15 +293,15 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 		return
 	}
 
-	glog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
+	klog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
 	if !nrc.bgpServerStarted {
-		glog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
+		klog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
 		return
 	}
 
 	svc, exists, err := utils.ServiceForEndpoints(&nrc.svcLister, ep)
 	if err != nil {
-		glog.Errorf("failed to convert endpoints resource to service: %s", err)
+		klog.Errorf("failed to convert endpoints resource to service: %s", err)
 		return
 	}
 
