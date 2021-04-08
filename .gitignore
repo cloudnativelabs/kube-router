@@ -4,6 +4,7 @@
 /gobgp
 _output
 _cache
+vendor
 Dockerfile.amd64.run
 Dockerfile.arm64.run
 Dockerfile.s390x.run

@@ -1,1 +1,1 @@
-../../Documentation/bootkube.md
+../../docs/bootkube.md
