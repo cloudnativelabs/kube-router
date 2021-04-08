@@ -8,9 +8,9 @@ building your changes, detailed below.
 
 ## Building kube-router
 
-**Go version 1.7 or above is required to build kube-router**
+**Go version 1.13 or above is required to build kube-router**
 
-All the dependencies are vendored already, so just run `make` or `go build -o kube-router kube-router.go` to build.
+All the dependencies are specified as Go modules and will be fetched into your cache, so just run `make` or `go build -o kube-router kube-router.go` to build.
 
 ### Building A Docker Image
 
