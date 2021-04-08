@@ -183,7 +183,7 @@ func Test_GetPodCidrFromNodeSpec(t *testing.T) {
 				t.Fatalf("failed to create existing nodes for test: %v", err)
 			}
 
-			podCIDR, err := GetPodCidrFromNodeSpec(clientset, testcase.hostnameOverride)
+			podCIDR, err := GetPodCidrFromNodeSpec(clientset, testcase.hostnameOverride, "")
 			if !reflect.DeepEqual(err, testcase.err) {
 				t.Logf("actual error: %v", err)
 				t.Logf("expected error: %v", testcase.err)

@@ -1057,7 +1057,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	}
 
-	cidr, err := utils.GetPodCidrFromNodeSpec(clientset, nrc.hostnameOverride)
+	cidr, err := utils.GetPodCidrFromNodeSpec(clientset, nrc.hostnameOverride, kubeRouterConfig.PodCIDR)
 	if err != nil {
 		glog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to allocate pod CIDR for the node or an annotation `kube-router.io/pod-cidr`. Error: %v", err)
 		return nil, fmt.Errorf("Failed to get pod CIDR details from Node.spec: %s", err.Error())

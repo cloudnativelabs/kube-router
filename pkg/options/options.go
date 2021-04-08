@@ -69,6 +69,9 @@ type KubeRouterConfig struct {
 	Version                        bool
 	VLevel                         string
 	// FullMeshPassword    string
+
+	// Pelion additions
+	PodCIDR string
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
@@ -196,4 +199,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
 	fs.BoolVarP(&s.Version, "version", "V", false,
 		"Print version information.")
+
+	// Pelion addition
+	fs.StringVar(&s.PodCIDR, "pod-cidr", "",
+		"Specify the CIDR ranged used for pods, will override values fetched from kube-controller and Node annotation")
 }
