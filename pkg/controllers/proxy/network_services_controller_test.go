@@ -47,7 +47,7 @@ func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {
 	copy(svcsCopy, lnm.ipvsSvcs)
 	return svcsCopy, nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr string, addRouter bool) error {
+func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr string) error {
 	return nil
 }
 func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
