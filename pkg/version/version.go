@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/golang/glog"
+	"k8s.io/klog/v2"
 )
 
 // Version and BuildDate are injected at build time via ldflags
@@ -18,6 +18,6 @@ func PrintVersion(logOutput bool) {
 	if !logOutput {
 		fmt.Fprintf(os.Stderr, "%s", output)
 	} else {
-		glog.Info(output)
+		klog.Info(output)
 	}
 }

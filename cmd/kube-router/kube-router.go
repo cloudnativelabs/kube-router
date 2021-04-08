@@ -12,6 +12,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/version"
 	"github.com/spf13/pflag"
+	"k8s.io/klog/v2"
 )
 
 func main() {
@@ -23,6 +24,8 @@ func main() {
 }
 
 func Main() error {
+	klog.InitFlags(nil)
+
 	config := options.NewKubeRouterConfig()
 	config.AddFlags(pflag.CommandLine)
 	pflag.Parse()

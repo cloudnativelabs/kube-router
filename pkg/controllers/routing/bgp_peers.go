@@ -12,11 +12,11 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
-	"github.com/golang/glog"
 	gobgpapi "github.com/osrg/gobgp/api"
 	gobgp "github.com/osrg/gobgp/pkg/server"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 )
 
 // Refresh the peer relationship with rest of the nodes in the cluster (iBGP peers). Node add/remove
@@ -33,7 +33,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		if nrc.MetricsEnabled {
 			metrics.ControllerBGPInternalPeersSyncTime.Observe(endTime.Seconds())
 		}
-		glog.V(2).Infof("Syncing BGP peers for the node took %v", endTime)
+		klog.V(2).Infof("Syncing BGP peers for the node took %v", endTime)
 	}()
 
 	// get the current list of the nodes from API server
@@ -48,7 +48,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		node := obj.(*v1core.Node)
 		nodeIP, err := utils.GetNodeIP(node)
 		if err != nil {
-			glog.Errorf("Failed to find a node IP and therefore cannot sync internal BGP Peer: %v", err)
+			klog.Errorf("Failed to find a node IP and therefore cannot sync internal BGP Peer: %v", err)
 			continue
 		}
 
@@ -69,21 +69,21 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		if !nrc.bgpFullMeshMode {
 			nodeasn, ok := node.ObjectMeta.Annotations[nodeASNAnnotation]
 			if !ok {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is unknown.",
+				klog.Infof("Not peering with the Node %s as ASN number of the node is unknown.",
 					nodeIP.String())
 				continue
 			}
 
 			asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
 			if err != nil {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is invalid.",
+				klog.Infof("Not peering with the Node %s as ASN number of the node is invalid.",
 					nodeIP.String())
 				continue
 			}
 
 			// if the nodes ASN number is different from ASN number of current node skip peering
 			if nrc.nodeAsnNumber != uint32(asnNo) {
-				glog.Infof("Not peering with the Node %s as ASN number of the node is different.",
+				klog.Infof("Not peering with the Node %s as ASN number of the node is different.",
 					nodeIP.String())
 				continue
 			}
@@ -153,7 +153,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			Peer: n,
 		}); err != nil {
 			if !strings.Contains(err.Error(), "can't overwrite the existing peer") {
-				glog.Errorf("Failed to add node %s as peer due to %s", nodeIP.String(), err)
+				klog.Errorf("Failed to add node %s as peer due to %s", nodeIP.String(), err)
 			}
 		}
 	}
@@ -176,7 +176,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	// delete the neighbor for the nodes that are removed
 	for _, ip := range removedNodes {
 		if err := nrc.bgpServer.DeletePeer(context.Background(), &gobgpapi.DeletePeerRequest{Address: ip}); err != nil {
-			glog.Errorf("Failed to remove node %s as peer due to %s", ip, err)
+			klog.Errorf("Failed to remove node %s as peer due to %s", ip, err)
 		}
 		delete(nrc.activeNodes, ip)
 	}
@@ -231,7 +231,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpap
 			return fmt.Errorf("Error peering with peer router "+
 				"%q due to: %s", n.Conf.NeighborAddress, err)
 		}
-		glog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
+		klog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
 			n.Conf.NeighborAddress, n.Conf.PeerAs)
 	}
 	return nil
@@ -304,11 +304,11 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			node := obj.(*v1core.Node)
 			nodeIP, err := utils.GetNodeIP(node)
 			if err != nil {
-				glog.Errorf("New node received, but we were unable to add it as we were couldn't find it's node IP: %v", err)
+				klog.Errorf("New node received, but we were unable to add it as we were couldn't find it's node IP: %v", err)
 				return
 			}
 
-			glog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
+			klog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
 			nrc.OnNodeUpdate(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
@@ -319,11 +319,11 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			if !ok {
 				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 				if !ok {
-					glog.Errorf("unexpected object type: %v", obj)
+					klog.Errorf("unexpected object type: %v", obj)
 					return
 				}
 				if node, ok = tombstone.Obj.(*v1core.Node); !ok {
-					glog.Errorf("unexpected object type: %v", obj)
+					klog.Errorf("unexpected object type: %v", obj)
 					return
 				}
 			}
@@ -331,9 +331,9 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			// In this case even if we can't get the NodeIP that's alright as the node is being removed anyway and
 			// future node lister operations that happen in OnNodeUpdate won't be affected as the node won't be returned
 			if err == nil {
-				glog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
+				klog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
 			} else {
-				glog.Infof("Received node (IP unavailable) removed update from watch API, so remove node from peer")
+				klog.Infof("Received node (IP unavailable) removed update from watch API, so remove node from peer")
 			}
 
 			nrc.OnNodeUpdate(obj)
@@ -352,7 +352,7 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(obj interface{}) {
 	// update export policies so that NeighborSet gets updated with new set of nodes
 	err := nrc.AddPolicies()
 	if err != nil {
-		glog.Errorf("Error adding BGP policies: %s", err.Error())
+		klog.Errorf("Error adding BGP policies: %s", err.Error())
 	}
 
 	if nrc.bgpEnableInternal {
