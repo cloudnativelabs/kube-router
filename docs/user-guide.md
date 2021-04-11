@@ -216,7 +216,7 @@ To enable hairpin traffic for Service `my-service`:
 kubectl annotate service my-service "kube-router.io/service.hairpin="
 ```
 
-If you want hairpin also apply on externalIPs declared for Service `my-service`:
+If you want to also hairpin externalIPs declared for Service `my-service` (note, you must also either enable global hairpin or service hairpin (see above ^^^)  for this to have an effect):
 ```
 kubectl annotate service my-service "kube-router.io/service.hairpin.externalips="
 ```
