@@ -14,7 +14,10 @@ import (
 func NewCustomPodInformer(client kubernetes.Interface, h cache.ResourceEventHandler) (cache.Indexer, cache.Controller) {
 	clientState := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 	lw := cache.NewListWatchFromClient(client.CoreV1().RESTClient(), "pods", v1.NamespaceAll, fields.Everything())
-	fifo := cache.NewDeltaFIFO(cache.MetaNamespaceKeyFunc, clientState)
+	fifo := cache.NewDeltaFIFOWithOptions(cache.DeltaFIFOOptions{
+		KeyFunction:  cache.MetaNamespaceKeyFunc,
+		KnownObjects: clientState,
+	})
 	cfg := &cache.Config{
 		Queue:            fifo,
 		ListerWatcher:    lw,
