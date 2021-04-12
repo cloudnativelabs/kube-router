@@ -82,7 +82,7 @@ var _ LinuxNetworking = &LinuxNetworkingMock{}
 // 	}
 type LinuxNetworkingMock struct {
 	// cleanupMangleTableRuleFunc mocks the cleanupMangleTableRule method.
-	cleanupMangleTableRuleFunc func(ip string, protocol string, port string, fwmark string) error
+	cleanupMangleTableRuleFunc func(ip string, protocol string, port string, fwmark string, tcpMSS int) error
 
 	// getKubeDummyInterfaceFunc mocks the getKubeDummyInterface method.
 	getKubeDummyInterfaceFunc func() (netlink.Link, error)
@@ -293,7 +293,7 @@ type LinuxNetworkingMock struct {
 }
 
 // cleanupMangleTableRule calls cleanupMangleTableRuleFunc.
-func (mock *LinuxNetworkingMock) cleanupMangleTableRule(ip string, protocol string, port string, fwmark string) error {
+func (mock *LinuxNetworkingMock) cleanupMangleTableRule(ip string, protocol string, port string, fwmark string, tcpMSS int) error {
 	if mock.cleanupMangleTableRuleFunc == nil {
 		panic("LinuxNetworkingMock.cleanupMangleTableRuleFunc: method is nil but LinuxNetworking.cleanupMangleTableRule was just called")
 	}
@@ -311,7 +311,7 @@ func (mock *LinuxNetworkingMock) cleanupMangleTableRule(ip string, protocol stri
 	mock.lockcleanupMangleTableRule.Lock()
 	mock.calls.cleanupMangleTableRule = append(mock.calls.cleanupMangleTableRule, callInfo)
 	mock.lockcleanupMangleTableRule.Unlock()
-	return mock.cleanupMangleTableRuleFunc(ip, protocol, port, fwmark)
+	return mock.cleanupMangleTableRuleFunc(ip, protocol, port, fwmark, tcpMSS)
 }
 
 // cleanupMangleTableRuleCalls gets all the calls that were made to cleanupMangleTableRule.

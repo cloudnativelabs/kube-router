@@ -74,7 +74,7 @@ func (lnm *LinuxNetworkingMockImpl) ipvsDelService(ipvsSvc *ipvs.Service) error 
 func (lnm *LinuxNetworkingMockImpl) ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
 	return []*ipvs.Destination{}, nil
 }
-func (lnm *LinuxNetworkingMockImpl) cleanupMangleTableRule(ip string, protocol string, port string, fwmark string) error {
+func (lnm *LinuxNetworkingMockImpl) cleanupMangleTableRule(ip string, protocol string, port string, fwmark string, tcpMSS int) error {
 	return nil
 }
 

@@ -311,7 +311,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				externalIPServiceID = fmt.Sprint(fwMark)
 
 				// ensure there is iptables mangle table rule to FWMARK the packet
-				err = setupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), externalIPServiceID)
+				err = setupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), externalIPServiceID, nsc.dsrTCPMSS)
 				if err != nil {
 					klog.Errorf("Failed to setup mangle table rule to FMWARD the traffic to external IP")
 					continue
@@ -355,7 +355,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				fwMark := fmt.Sprint(fwmark)
 				for _, mangleTableRule := range mangleTableRules {
 					if strings.Contains(mangleTableRule, externalIP) && strings.Contains(mangleTableRule, fwMark) {
-						err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMark)
+						err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMark, nsc.dsrTCPMSS)
 						if err != nil {
 							klog.Errorf("Failed to verify and cleanup any mangle table rule to FMWARD the traffic to external IP due to " + err.Error())
 							continue
