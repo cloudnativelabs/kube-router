@@ -572,6 +572,24 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
 	}
 
+	comment = "allow icmp destination unreachable messages to service IPs"
+	args = []string{"-m", "comment", "--comment", comment,
+		"-p", "icmp", "--icmp-type", "destination-unreachable",
+		"-j", "ACCEPT"}
+	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
+	comment = "allow icmp ttl exceeded messages to service IPs"
+	args = []string{"-m", "comment", "--comment", comment,
+		"-p", "icmp", "--icmp-type", "time-exceeded",
+		"-j", "ACCEPT"}
+	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
+	if err != nil {
+		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+	}
+
 	// We exclude the local addresses here as that would otherwise block all
 	// traffic to local addresses if any NodePort service exists.
 	comment = "reject all unexpected traffic to service IPs"
