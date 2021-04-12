@@ -215,7 +215,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	if nrc.autoMTU {
-		mtu, err := getMTUFromNodeIP(nrc.nodeIP, nrc.enableOverlays)
+		mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP, nrc.enableOverlays)
 		if err != nil {
 			klog.Errorf("Failed to find MTU for node IP: %s for intelligently setting the kube-bridge MTU due to %s.", nrc.nodeIP, err.Error())
 		}
@@ -373,7 +373,7 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 }
 
 func (nrc *NetworkRoutingController) autoConfigureMTU() error {
-	mtu, err := getMTUFromNodeIP(nrc.nodeIP, nrc.enableOverlays)
+	mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP, nrc.enableOverlays)
 	if err != nil {
 		return fmt.Errorf("failed to generate MTU: %s", err.Error())
 	}

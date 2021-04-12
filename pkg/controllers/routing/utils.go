@@ -109,29 +109,6 @@ func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 	return net.IPNet{}, "", errors.New("failed to find interface with specified node ip")
 }
 
-func getMTUFromNodeIP(nodeIP net.IP, overlayEnabled bool) (int, error) {
-	links, err := netlink.LinkList()
-	if err != nil {
-		return 0, errors.New("failed to get list of links")
-	}
-	for _, link := range links {
-		addresses, err := netlink.AddrList(link, netlink.FAMILY_ALL)
-		if err != nil {
-			return 0, errors.New("failed to get list of addr")
-		}
-		for _, addr := range addresses {
-			if addr.IPNet.IP.Equal(nodeIP) {
-				linkMTU := link.Attrs().MTU
-				if overlayEnabled {
-					return linkMTU - 20, nil // -20 to accommodate IPIP header
-				}
-				return linkMTU, nil
-			}
-		}
-	}
-	return 0, errors.New("failed to find interface with specified node ip")
-}
-
 // generateTunnelName will generate a name for a tunnel interface given a node IP
 // for example, if the node IP is 10.0.0.1 the tunnel interface will be named tun-10001
 // Since linux restricts interface names to 15 characters, if length of a node IP
