@@ -919,6 +919,20 @@ func (nsc *NetworkServicesController) getPodObjectForEndpoint(endpointIP string)
 	return nil, errors.New("Failed to find pod with ip " + endpointIP)
 }
 
+func attemptNamespaceResetAfterError (hostNSHandle netns.NsHandle) {
+	err := netns.Set(hostNSHandle)
+	if err != nil {
+		klog.Errorf("failed to set hostNetworkNamespace while resetting namespace after a previous error due to " + err.Error())
+	}
+	activeNetworkNamespaceHandle, err := netns.Get()
+	if err != nil {
+		klog.Errorf("failed to confirm activeNetworkNamespace while resetting namespace after a previous error due to " + err.Error())
+		return
+	}
+	klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+	_ = activeNetworkNamespaceHandle.Close()
+}
+
 // This function does the following
 // - get the pod corresponding to the endpoint ip
 // - get the container id from pod spec
@@ -983,21 +997,12 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 	klog.V(2).Infof("Current network namespace after netns. Set to container network namespace: " + activeNetworkNamespaceHandle.String())
 	activeNetworkNamespaceHandle.Close()
 
-	// TODO: fix boilerplate `netns.Set(hostNetworkNamespaceHandle)` code. Need a robust
-	// way to switch back to old namespace, pretty much all things will go wrong if we dont switch back
-
 	// create a ipip tunnel interface inside the endpoint container
 	tunIf, err := netlink.LinkByName(KubeTunnelIf)
 	if err != nil {
 		if err.Error() != IfaceNotFound {
-			err = netns.Set(hostNetworkNamespaceHandle)
-			if err != nil {
-				return errors.New("Failed to get hostNetworkNamespace due to " + err.Error())
-			}
-			activeNetworkNamespaceHandle, err = netns.Get()
-			klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-			activeNetworkNamespaceHandle.Close()
-			return errors.New("Failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
+			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+			return errors.New("failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
 		}
 
 		klog.V(2).Infof("Could not find tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + " so creating one.")
@@ -1007,14 +1012,8 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 		}
 		err = netlink.LinkAdd(&ipTunLink)
 		if err != nil {
-			err = netns.Set(hostNetworkNamespaceHandle)
-			if err != nil {
-				return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-			}
-			activeNetworkNamespaceHandle, err = netns.Get()
-			klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-			activeNetworkNamespaceHandle.Close()
-			return errors.New("Failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
+			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+			return errors.New("failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
 		}
 
 		// TODO: this is ugly, but ran into issue multiple times where interface did not come up quickly.
@@ -1034,13 +1033,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 		}
 
 		if err != nil {
-			err = netns.Set(hostNetworkNamespaceHandle)
-			if err != nil {
-				return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-			}
-			activeNetworkNamespaceHandle, err = netns.Get()
-			klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-			activeNetworkNamespaceHandle.Close()
+			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 			return errors.New("Failed to get " + KubeTunnelIf + " tunnel interface handle due to " + err.Error())
 		}
 
@@ -1050,79 +1043,35 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 	// bring the tunnel interface up
 	err = netlink.LinkSetUp(tunIf)
 	if err != nil {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
 	}
 
 	// assign VIP to the KUBE_TUNNEL_IF interface
 	err = ln.ipAddrAdd(tunIf, vip, false)
 	if err != nil && err.Error() != IfaceHasAddr {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		if err != nil {
-			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-		}
-
-		klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to assign vip " + vip + " to kube-tunnel-if interface ")
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to assign vip " + vip + " to kube-tunnel-if interface ")
 	}
 	klog.Infof("Successfully assinged VIP: " + vip + " in endpoint " + endpointIP + ".")
 
 	// disable rp_filter on all interface
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		if err != nil {
-			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-		}
-
-		klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to disable rp_filter on kube-tunnel-if in the endpoint container")
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to disable rp_filter on kube-tunnel-if in the endpoint container")
 	}
 
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/eth0/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		if err != nil {
-			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-		}
-		klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to disable rp_filter on eth0 in the endpoint container")
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to disable rp_filter on eth0 in the endpoint container")
 	}
 
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		if err != nil {
-			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-		}
-		klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to disable rp_filter on `all` in the endpoint container")
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to disable rp_filter on `all` in the endpoint container")
 	}
 
 	klog.Infof("Successfully disabled rp_filter in endpoint " + endpointIP + ".")
@@ -1202,14 +1151,8 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 	tunIf, err := netlink.LinkByName(KubeTunnelIf)
 	if err != nil {
 		if err.Error() != IfaceNotFound {
-			err = netns.Set(hostNetworkNamespaceHandle)
-			if err != nil {
-				return errors.New("Failed to get hostNetworkNamespace due to " + err.Error())
-			}
-			activeNetworkNamespaceHandle, err = netns.Get()
-			klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-			activeNetworkNamespaceHandle.Close()
-			return errors.New("Failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
+			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+			return errors.New("failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
 		}
 
 		klog.V(2).Infof("Could not find tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + " so creating one.")
@@ -1219,14 +1162,8 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 		}
 		err = netlink.LinkAdd(&ipTunLink)
 		if err != nil {
-			err = netns.Set(hostNetworkNamespaceHandle)
-			if err != nil {
-				return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-			}
-			activeNetworkNamespaceHandle, err = netns.Get()
-			klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-			activeNetworkNamespaceHandle.Close()
-			return errors.New("Failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
+			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+			return errors.New("failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
 		}
 
 		// TODO: this is ugly, but ran into issue multiple times where interface did not come up quickly.
@@ -1246,14 +1183,8 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 		}
 
 		if err != nil {
-			err = netns.Set(hostNetworkNamespaceHandle)
-			if err != nil {
-				return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-			}
-			activeNetworkNamespaceHandle, err = netns.Get()
-			klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-			activeNetworkNamespaceHandle.Close()
-			return errors.New("Failed to get " + KubeTunnelIf + " tunnel interface handle due to " + err.Error())
+			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+			return errors.New("failed to get " + KubeTunnelIf + " tunnel interface handle due to " + err.Error())
 		}
 
 		klog.V(2).Infof("Successfully created tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + ".")
@@ -1262,79 +1193,35 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 	// bring the tunnel interface up
 	err = netlink.LinkSetUp(tunIf)
 	if err != nil {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
 	}
 
 	// assign VIP to the KUBE_TUNNEL_IF interface
 	err = ln.ipAddrAdd(tunIf, vip, false)
 	if err != nil && err.Error() != IfaceHasAddr {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		if err != nil {
-			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-		}
-
-		klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to assign vip " + vip + " to kube-tunnel-if interface ")
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to assign vip " + vip + " to kube-tunnel-if interface ")
 	}
 	klog.Infof("Successfully assinged VIP: " + vip + " in endpoint " + endpointIP + ".")
 
 	// disable rp_filter on all interface
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		if err != nil {
-			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-		}
-
-		klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to disable rp_filter on kube-tunnel-if in the endpoint container")
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to disable rp_filter on kube-tunnel-if in the endpoint container")
 	}
 
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/eth0/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		if err != nil {
-			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-		}
-		klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to disable rp_filter on eth0 in the endpoint container")
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to disable rp_filter on eth0 in the endpoint container")
 	}
 
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte(strconv.Itoa(0)), 0640)
 	if err != nil {
-		err = netns.Set(hostNetworkNamespaceHandle)
-		if err != nil {
-			return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-		}
-		activeNetworkNamespaceHandle, err = netns.Get()
-		if err != nil {
-			return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-		}
-		klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-		activeNetworkNamespaceHandle.Close()
-		return errors.New("Failed to disable rp_filter on `all` in the endpoint container")
+		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
+		return errors.New("failed to disable rp_filter on `all` in the endpoint container")
 	}
 
 	klog.Infof("Successfully disabled rp_filter in endpoint " + endpointIP + ".")
