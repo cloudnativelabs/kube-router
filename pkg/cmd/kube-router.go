@@ -107,7 +107,7 @@ func (kr *KubeRouter) Run() error {
 	wg.Add(1)
 	go hc.RunCheck(healthChan, stopCh, &wg)
 
-	if (kr.Config.MetricsPort > 0) && (kr.Config.MetricsPort <= 65535) {
+	if kr.Config.MetricsPort > 0 {
 		kr.Config.MetricsEnabled = true
 		mc, err := metrics.NewMetricsController(kr.Client, kr.Config)
 		if err != nil {
