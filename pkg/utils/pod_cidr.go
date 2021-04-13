@@ -67,7 +67,7 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 	return podCidr, nil
 }
 
-// InsertPodCidrInCniSpec inserts the pod CIDR allocated to the node by kubernetes controlller manager
+// InsertPodCidrInCniSpec inserts the pod CIDR allocated to the node by kubernetes controller manager
 // and stored it in the CNI specification
 func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 	file, err := ioutil.ReadFile(cniConfFilePath)

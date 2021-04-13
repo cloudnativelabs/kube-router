@@ -1485,7 +1485,7 @@ func (nsc *NetworkServicesController) buildEndpointsInfo() endpointsInfoMap {
 }
 
 // Add an iptables rule to masquerade outbound IPVS traffic. IPVS nat requires that reverse path traffic
-// to go through the director for its functioning. So the masquerade rule ensures source IP is modifed
+// to go through the director for its functioning. So the masquerade rule ensures source IP is modified
 // to node ip, so return traffic from real server (endpoint pods) hits the node/lvs director
 func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 	iptablesCmdHandler, err := iptables.New()
@@ -2146,7 +2146,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 
 // For DSR it is required that we dont assign the VIP to any interface to avoid martian packets
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
-// routeVIPTrafficToDirector: setups policy routing so that FWMARKed packets are deliverd locally
+// routeVIPTrafficToDirector: setups policy routing so that FWMARKed packets are delivered locally
 func routeVIPTrafficToDirector(fwmark string) error {
 	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
@@ -2164,7 +2164,7 @@ func routeVIPTrafficToDirector(fwmark string) error {
 
 // For DSR it is required that we dont assign the VIP to any interface to avoid martian packets
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
-// setupPolicyRoutingForDSR: setups policy routing so that FWMARKed packets are deliverd locally
+// setupPolicyRoutingForDSR: setups policy routing so that FWMARKed packets are delivered locally
 func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
 	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
 	if err != nil {
@@ -2191,9 +2191,9 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
 	return nil
 }
 
-// For DSR it is required that node needs to know how to route exteranl IP. Otherwise when endpoint
+// For DSR it is required that node needs to know how to route external IP. Otherwise when endpoint
 // directly responds back with source IP as external IP kernel will treat as martian packet.
-// To prevent martian packets add route to exteranl IP through the `kube-bridge` interface
+// To prevent martian packets add route to external IP through the `kube-bridge` interface
 // setupRoutesForExternalIPForDSR: setups routing so that kernel does not think return packets as martians
 
 func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap) error {

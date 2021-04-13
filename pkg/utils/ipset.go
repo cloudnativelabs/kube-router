@@ -86,7 +86,7 @@ type IPSet struct {
 	isIpv6    bool
 }
 
-// Set reprensent a ipset set entry.
+// Set represent a ipset set entry.
 type Set struct {
 	Parent  *IPSet
 	Name    string
@@ -201,7 +201,7 @@ func (ipset *IPSet) Create(setName string, createOptions ...string) (*Set, error
 	return ipset.Sets[setName], nil
 }
 
-// Adds a given Set to an IPSet
+// Add a given Set to an IPSet
 func (ipset *IPSet) Add(set *Set) error {
 	_, err := ipset.Create(set.Name, set.Options...)
 	if err != nil {
@@ -254,7 +254,7 @@ func (set *Set) Add(addOptions ...string) (*Entry, error) {
 	return entry, nil
 }
 
-// Adds given entries (with their options) to the set.
+// BatchAdd given entries (with their options) to the set.
 // For multiple items, this is much faster than Add().
 func (set *Set) BatchAdd(addOptions [][]string) error {
 	newEntries := make([]*Entry, len(addOptions))
@@ -297,7 +297,7 @@ func (entry *Entry) Del() error {
 	return nil
 }
 
-// Test wether an entry is in a set or not. Exit status number is zero if the
+// Test whether an entry is in a set or not. Exit status number is zero if the
 // tested entry is in the set and nonzero if it is missing from the set.
 func (set *Set) Test(testOptions ...string) (bool, error) {
 	_, err := set.Parent.run(append([]string{"test", set.name()}, testOptions...)...)
@@ -429,7 +429,7 @@ func (ipset *IPSet) Save() error {
 // stdin. Please note, existing sets and elements are not erased by restore
 // unless specified so in the restore file. All commands are allowed in restore
 // mode except list, help, version, interactive mode and restore itself.
-// Send formated ipset.sets into stdin of "ipset restore" command.
+// Send formatted ipset.sets into stdin of "ipset restore" command.
 func (ipset *IPSet) Restore() error {
 	stdin := bytes.NewBufferString(buildIPSetRestore(ipset))
 	_, err := ipset.runWithStdin(stdin, "restore", "-exist")
@@ -501,7 +501,7 @@ func (set *Set) Refresh(entries []string, extraOptions ...string) error {
 	return set.RefreshWithBuiltinOptions(entriesWithOptions)
 }
 
-// Refresh a Set with new entries with built-in options.
+// RefreshWithBuiltinOptions refresh a Set with new entries with built-in options.
 func (set *Set) RefreshWithBuiltinOptions(entries [][]string) error {
 	var err error
 
