@@ -148,7 +148,7 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 	defer wg.Done()
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(hc.HealthPort)), Handler: http.DefaultServeMux}
 	http.HandleFunc("/healthz", hc.Handler)
-	if (hc.Config.HealthPort > 0) && (hc.Config.HealthPort <= 65535) {
+	if hc.Config.HealthPort > 0 {
 		hc.HTTPEnabled = true
 		go func() {
 			if err := srv.ListenAndServe(); err != nil {
