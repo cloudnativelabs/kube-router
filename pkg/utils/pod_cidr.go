@@ -26,14 +26,14 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 		var confList *libcni.NetworkConfigList
 		confList, err = libcni.ConfListFromFile(cniConfFilePath)
 		if err != nil {
-			return net.IPNet{}, fmt.Errorf("Failed to load CNI config list file: %s", err.Error())
+			return net.IPNet{}, fmt.Errorf("failed to load CNI config list file: %s", err.Error())
 		}
 		for _, conf := range confList.Plugins {
 			if conf.Network.IPAM.Type != "" {
 				ipamConfig, _, err = allocator.LoadIPAMConfig(conf.Bytes, "")
 				if err != nil {
 					if err.Error() != "no IP ranges specified" {
-						return net.IPNet{}, fmt.Errorf("Failed to get IPAM details from the CNI conf file: %s", err.Error())
+						return net.IPNet{}, fmt.Errorf("failed to get IPAM details from the CNI conf file: %s", err.Error())
 					}
 				}
 				break
@@ -42,13 +42,13 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 	} else {
 		netconfig, err := libcni.ConfFromFile(cniConfFilePath)
 		if err != nil {
-			return net.IPNet{}, fmt.Errorf("Failed to load CNI conf file: %s", err.Error())
+			return net.IPNet{}, fmt.Errorf("failed to load CNI conf file: %s", err.Error())
 		}
 		ipamConfig, _, err = allocator.LoadIPAMConfig(netconfig.Bytes, "")
 		if err != nil {
 			// TODO: Handle this error properly in controllers, if no subnet is specified
 			if err.Error() != "no IP ranges specified" {
-				return net.IPNet{}, fmt.Errorf("Failed to get IPAM details from the CNI conf file: %s", err.Error())
+				return net.IPNet{}, fmt.Errorf("failed to get IPAM details from the CNI conf file: %s", err.Error())
 			}
 			return net.IPNet{}, nil
 		}
@@ -72,13 +72,13 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 	file, err := ioutil.ReadFile(cniConfFilePath)
 	if err != nil {
-		return fmt.Errorf("Failed to load CNI conf file: %s", err.Error())
+		return fmt.Errorf("failed to load CNI conf file: %s", err.Error())
 	}
 	var config interface{}
 	if strings.HasSuffix(cniConfFilePath, ".conflist") {
 		err = json.Unmarshal(file, &config)
 		if err != nil {
-			return fmt.Errorf("Failed to parse JSON from CNI conf file: %s", err.Error())
+			return fmt.Errorf("failed to parse JSON from CNI conf file: %s", err.Error())
 		}
 		updatedCidr := false
 		configMap := config.(map[string]interface{})
@@ -107,7 +107,7 @@ func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 	} else {
 		err = json.Unmarshal(file, &config)
 		if err != nil {
-			return fmt.Errorf("Failed to parse JSON from CNI conf file: %s", err.Error())
+			return fmt.Errorf("failed to parse JSON from CNI conf file: %s", err.Error())
 		}
 		pluginConfig := config.(map[string]interface{})
 		pluginConfig["ipam"].(map[string]interface{})["subnet"] = cidr
@@ -115,7 +115,7 @@ func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 	configJSON, _ := json.Marshal(config)
 	err = ioutil.WriteFile(cniConfFilePath, configJSON, 0644)
 	if err != nil {
-		return fmt.Errorf("Failed to insert subnet cidr into CNI conf file: %s", err.Error())
+		return fmt.Errorf("failed to insert subnet cidr into CNI conf file: %s", err.Error())
 	}
 	return nil
 }

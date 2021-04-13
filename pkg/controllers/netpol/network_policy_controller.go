@@ -386,13 +386,13 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 	// initialize tool sets for working with iptables and ipset
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		klog.Fatalf("failed to initialize iptables command executor due to %s", err.Error())
+		return fmt.Errorf("failed to initialize iptables command executor due to %s", err.Error())
 	}
 
 	// find iptables chains and ipsets that are no longer used by comparing current to the active maps we were passed
 	chains, err := iptablesCmdHandler.ListChains("filter")
 	if err != nil {
-		return fmt.Errorf("Unable to list chains: %s", err)
+		return fmt.Errorf("unable to list chains: %s", err)
 	}
 	for _, chain := range chains {
 		if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
@@ -452,7 +452,7 @@ func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[st
 	cleanupPolicyIPSets := make([]*utils.Set, 0)
 	ipsets, err := utils.NewIPSet(false)
 	if err != nil {
-		klog.Fatalf("failed to create ipsets command executor due to %s", err.Error())
+		return fmt.Errorf("failed to create ipsets command executor due to %s", err.Error())
 	}
 	err = ipsets.Save()
 	if err != nil {
@@ -470,7 +470,7 @@ func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[st
 	for _, set := range cleanupPolicyIPSets {
 		err = set.Destroy()
 		if err != nil {
-			return fmt.Errorf("Failed to delete ipset %s due to %s", set.Name, err)
+			return fmt.Errorf("failed to delete ipset %s due to %s", set.Name, err)
 		}
 	}
 	return nil

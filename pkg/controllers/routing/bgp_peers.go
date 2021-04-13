@@ -228,7 +228,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpap
 		}
 		err := server.AddPeer(context.Background(), &gobgpapi.AddPeerRequest{Peer: n})
 		if err != nil {
-			return fmt.Errorf("Error peering with peer router "+
+			return fmt.Errorf("error peering with peer router "+
 				"%q due to: %s", n.Conf.NeighborAddress, err)
 		}
 		klog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
@@ -244,8 +244,7 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 
 	// Validations
 	if len(ips) != len(asns) {
-		return nil, errors.New("Invalid peer router config. " +
-			"The number of IPs and ASN numbers must be equal.")
+		return nil, errors.New("invalid peer router config, the number of IPs and ASN numbers must be equal")
 	}
 
 	if len(ips) != len(passwords) && len(passwords) != 0 {
@@ -269,7 +268,7 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 			(asns[i] >= 64512 && asns[i] <= 65534) ||
 			(asns[i] >= 131072 && asns[i] <= 4199999999) ||
 			(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
-			return nil, fmt.Errorf("Reserved ASN number \"%d\" for global BGP peer",
+			return nil, fmt.Errorf("reserved ASN number \"%d\" for global BGP peer",
 				asns[i])
 		}
 

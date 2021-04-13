@@ -530,13 +530,13 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	// ipvs services only.
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		return errors.New("Failed to initialize iptables executor" + err.Error())
+		return errors.New("failed to initialize iptables executor" + err.Error())
 	}
 
 	// ClearChain either clears an existing chain or creates a new one.
 	err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 
 	// config.IpvsPermitAll: true then create INPUT/KUBE-ROUTER-SERVICE Chain creation else return
@@ -554,12 +554,12 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		"-j", "ACCEPT"}
 	exists, err = iptablesCmdHandler.Exists("filter", ipvsFirewallChainName, args...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
 		err := iptablesCmdHandler.Insert("filter", ipvsFirewallChainName, 1, args...)
 		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %s", err.Error())
 		}
 	}
 
@@ -569,7 +569,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		"-j", "ACCEPT"}
 	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 
 	comment = "allow icmp destination unreachable messages to service IPs"
@@ -578,7 +578,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		"-j", "ACCEPT"}
 	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 
 	comment = "allow icmp ttl exceeded messages to service IPs"
@@ -587,7 +587,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		"-j", "ACCEPT"}
 	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 
 	// We exclude the local addresses here as that would otherwise block all
@@ -598,19 +598,19 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		"-j", "REJECT", "--reject-with", "icmp-port-unreachable"}
 	err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 
-	// Pass incomming traffic into our custom chain.
+	// Pass incoming traffic into our custom chain.
 	ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
 	exists, err = iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
 		err = iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
 		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %s", err.Error())
 		}
 	}
 
@@ -1190,7 +1190,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 
 	activeNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
-		return errors.New("Failed to get activeNetworkNamespace due to " + err.Error())
+		return errors.New("failed to get activeNetworkNamespace due to " + err.Error())
 	}
 	klog.V(2).Infof("Current network namespace after netns. Set to container network namespace: " + activeNetworkNamespaceHandle.String())
 	activeNetworkNamespaceHandle.Close()
@@ -1557,7 +1557,7 @@ func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
 	for _, args := range argsBad {
 		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {
-			return fmt.Errorf("Failed to lookup iptables rule: %s", err.Error())
+			return fmt.Errorf("failed to lookup iptables rule: %s", err.Error())
 		}
 
 		if exists {
@@ -2076,14 +2076,14 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 	if strings.Contains(err.Error(), IpvsServerExists) {
 		err = ln.ipvsUpdateDestination(service, dest)
 		if err != nil {
-			return fmt.Errorf("Failed to update ipvs destination %s to the ipvs service %s due to : %s",
+			return fmt.Errorf("failed to update ipvs destination %s to the ipvs service %s due to : %s",
 				ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 		}
 		// TODO: Make this debug output when we get log levels
 		// klog.Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
 		// 	ipvsDestinationString(dest), ipvsServiceString(service))
 	} else {
-		return fmt.Errorf("Failed to add ipvs destination %s to the ipvs service %s due to : %s",
+		return fmt.Errorf("failed to add ipvs destination %s to the ipvs service %s due to : %s",
 			ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 	}
 	return nil
@@ -2546,7 +2546,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	if config.RunRouter {
 		cidr, err := utils.GetPodCidrFromNodeSpec(nsc.client, config.HostnameOverride)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get pod CIDR details from Node.spec: %s", err.Error())
+			return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %s", err.Error())
 		}
 		nsc.podCidr = cidr
 	}
@@ -2555,7 +2555,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	for i, excludedCidr := range config.ExcludedCidrs {
 		_, ipnet, err := net.ParseCIDR(excludedCidr)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get excluded CIDR details: %s", err.Error())
+			return nil, fmt.Errorf("failed to get excluded CIDR details: %s", err.Error())
 		}
 		nsc.excludedCidrs[i] = *ipnet
 	}

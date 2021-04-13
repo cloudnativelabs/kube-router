@@ -444,7 +444,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 		policy, ok := policyObj.(*networking.NetworkPolicy)
 		podSelector, _ := v1.LabelSelectorAsSelector(&policy.Spec.PodSelector)
 		if !ok {
-			return nil, fmt.Errorf("Failed to convert")
+			return nil, fmt.Errorf("failed to convert")
 		}
 		newPolicy := networkPolicyInfo{
 			name:        policy.Name,
