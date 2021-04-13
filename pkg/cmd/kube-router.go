@@ -208,7 +208,7 @@ func (kr *KubeRouter) Run() error {
 	return nil
 }
 
-// CacheSync performs cache synchronization under timeout limit
+// CacheSyncOrTimeout performs cache synchronization under timeout limit
 func (kr *KubeRouter) CacheSyncOrTimeout(informerFactory informers.SharedInformerFactory, stopCh <-chan struct{}) error {
 	syncOverCh := make(chan struct{})
 	go func() {
