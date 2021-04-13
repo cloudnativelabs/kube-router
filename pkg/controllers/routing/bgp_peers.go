@@ -343,7 +343,7 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 // OnNodeUpdate Handle updates from Node watcher. Node watcher calls this method whenever there is
 // new node is added or old node is deleted. So peer up with new node and drop peering
 // from old node
-func (nrc *NetworkRoutingController) OnNodeUpdate(obj interface{}) {
+func (nrc *NetworkRoutingController) OnNodeUpdate(_ interface{}) {
 	if !nrc.bgpServerStarted {
 		return
 	}

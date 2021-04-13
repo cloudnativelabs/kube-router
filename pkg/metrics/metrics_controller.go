@@ -13,7 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/net/context"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -206,7 +205,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 }
 
 // NewMetricsController returns new MetricController object
-func NewMetricsController(clientset kubernetes.Interface, config *options.KubeRouterConfig) (*Controller, error) {
+func NewMetricsController(config *options.KubeRouterConfig) (*Controller, error) {
 	mc := Controller{}
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort

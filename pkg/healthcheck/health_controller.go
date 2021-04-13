@@ -48,7 +48,7 @@ func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 }
 
 //Handler writes HTTP responses to the health path
-func (hc *HealthController) Handler(w http.ResponseWriter, req *http.Request) {
+func (hc *HealthController) Handler(w http.ResponseWriter, _ *http.Request) {
 	if hc.Status.Healthy {
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("OK\n"))

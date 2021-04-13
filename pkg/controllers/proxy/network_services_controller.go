@@ -900,7 +900,7 @@ type externalIPService struct {
 	externalIP string
 }
 
-func hasActiveEndpoints(svc *serviceInfo, endpoints []endpointsInfo) bool {
+func hasActiveEndpoints(endpoints []endpointsInfo) bool {
 	for _, endpoint := range endpoints {
 		if endpoint.isLocal {
 			return true
