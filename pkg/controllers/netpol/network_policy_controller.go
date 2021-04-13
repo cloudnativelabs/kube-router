@@ -484,6 +484,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		klog.Errorf("Failed to initialize iptables executor: %s", err.Error())
+		return
 	}
 
 	// delete jump rules in FORWARD chain to pod specific firewall chain
@@ -570,6 +571,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	ipset, err := utils.NewIPSet(false)
 	if err != nil {
 		klog.Errorf("Failed to clean up ipsets: " + err.Error())
+		return
 	}
 	err = ipset.Save()
 	if err != nil {

@@ -506,9 +506,6 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 	// cleanup stale ipvs service and servers
 	klog.V(1).Info("Cleaning up if any, old ipvs service and servers which are no longer needed")
 
-	if err != nil {
-		return errors.New("Failed to list IPVS services: " + err.Error())
-	}
 	var protocol string
 	for _, ipvsSvc := range ipvsSvcs {
 		if ipvsSvc.Protocol == syscall.IPPROTO_TCP {
