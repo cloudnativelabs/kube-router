@@ -133,7 +133,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 			// 2) Service is a local service, but has no active endpoints on this node
 			// 3) Service is a local service, has active endpoints on this node, and this endpoint is one of them
 			if svc.local {
-				if hasActiveEndpoints(svc, endpoints) && !endpoint.isLocal {
+				if hasActiveEndpoints(endpoints) && !endpoint.isLocal {
 					continue
 				}
 			}
@@ -171,7 +171,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 			continue
 		}
 		endpoints := endpointsInfoMap[k]
-		if svc.local && !hasActiveEndpoints(svc, endpoints) {
+		if svc.local && !hasActiveEndpoints(endpoints) {
 			klog.V(1).Infof("Skipping setting up NodePort service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
 			continue
 		}
@@ -283,7 +283,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 			continue
 		}
 
-		if svc.local && !hasActiveEndpoints(svc, endpoints) {
+		if svc.local && !hasActiveEndpoints(endpoints) {
 			klog.V(1).Infof("Skipping setting up IPVS service for external IP and LoadBalancer IP for the service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
 			continue
 		}

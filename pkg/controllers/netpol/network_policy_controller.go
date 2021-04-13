@@ -243,7 +243,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
-	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets)
+	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains)
 	if err != nil {
 		klog.Errorf("Aborting sync. Failed to cleanup stale iptables rules: %v", err.Error())
 		return
@@ -378,7 +378,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 
 }
 
-func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, activePodFwChains, activePolicyIPSets map[string]bool) error {
+func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool) error {
 
 	cleanupPodFwChains := make([]string, 0)
 	cleanupPolicyChains := make([]string, 0)
