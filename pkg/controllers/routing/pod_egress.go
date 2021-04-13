@@ -104,7 +104,7 @@ func (nrc *NetworkRoutingController) deleteBadPodEgressRules() error {
 	for _, args := range podEgressArgsBad {
 		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 		if err != nil {
-			return fmt.Errorf("Failed to lookup iptables rule: %s", err.Error())
+			return fmt.Errorf("failed to lookup iptables rule: %s", err.Error())
 		}
 
 		if exists {

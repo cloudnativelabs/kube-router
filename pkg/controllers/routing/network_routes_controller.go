@@ -527,11 +527,11 @@ out:
 	var prefix gobgpapi.IPAddressPrefix
 	err := ptypes.UnmarshalAny(nlri, &prefix)
 	if err != nil {
-		return fmt.Errorf("Invalid nlri in advertised path")
+		return fmt.Errorf("invalid nlri in advertised path")
 	}
 	dst, err := netlink.ParseIPNet(prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen))
 	if err != nil {
-		return fmt.Errorf("Invalid nlri in advertised path")
+		return fmt.Errorf("invalid nlri in advertised path")
 	}
 	var route *netlink.Route
 
@@ -573,14 +573,14 @@ out:
 			out, err := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
 				"remote", nextHop.String(), "dev", nrc.nodeInterface).CombinedOutput()
 			if err != nil {
-				return fmt.Errorf("Route not injected for the route advertised by the node %s "+
+				return fmt.Errorf("route not injected for the route advertised by the node %s "+
 					"Failed to create tunnel interface %s. error: %s, output: %s",
 					nextHop, tunnelName, err, string(out))
 			}
 
 			link, err = netlink.LinkByName(tunnelName)
 			if err != nil {
-				return fmt.Errorf("Route not injected for the route advertised by the node %s "+
+				return fmt.Errorf("route not injected for the route advertised by the node %s "+
 					"Failed to get tunnel interface by name error: %s", tunnelName, err)
 			}
 			if err := netlink.LinkSetUp(link); err != nil {
@@ -699,7 +699,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	}
 	err = psSet.Refresh(currentPodCidrs)
 	if err != nil {
-		return fmt.Errorf("Failed to sync Pod Subnets ipset: %s", err)
+		return fmt.Errorf("failed to sync Pod Subnets ipset: %s", err)
 	}
 
 	// Syncing Node Addresses ipset entries
@@ -714,7 +714,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	}
 	err = naSet.Refresh(currentNodeIPs)
 	if err != nil {
-		return fmt.Errorf("Failed to sync Node Addresses ipset: %s", err)
+		return fmt.Errorf("failed to sync Node Addresses ipset: %s", err)
 	}
 
 	return nil
@@ -738,12 +738,12 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 	args := []string{"-m", "comment", "--comment", comment, "-i", "kube-bridge", "-j", "ACCEPT"}
 	exists, err := iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
 		err := iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %s", err.Error())
 		}
 	}
 
@@ -751,12 +751,12 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 	args = []string{"-m", "comment", "--comment", comment, "-o", "kube-bridge", "-j", "ACCEPT"}
 	exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
 		err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %s", err.Error())
 		}
 	}
 
@@ -764,12 +764,12 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 	args = []string{"-m", "comment", "--comment", comment, "-o", nrc.nodeInterface, "-j", "ACCEPT"}
 	exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 	if err != nil {
-		return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+		return fmt.Errorf("failed to run iptables command: %s", err.Error())
 	}
 	if !exists {
 		err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 		if err != nil {
-			return fmt.Errorf("Failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %s", err.Error())
 		}
 	}
 
@@ -780,7 +780,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	var nodeAsnNumber uint32
 	node, err := utils.GetNodeObject(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
-		return errors.New("Failed to get node object from api server: " + err.Error())
+		return errors.New("failed to get node object from api server: " + err.Error())
 	}
 
 	if nrc.bgpFullMeshMode {
@@ -788,13 +788,13 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	} else {
 		nodeasn, ok := node.ObjectMeta.Annotations[nodeASNAnnotation]
 		if !ok {
-			return errors.New("Could not find ASN number for the node. " +
-				"Node needs to be annotated with ASN number details to start BGP server.")
+			return errors.New("could not find ASN number for the node. " +
+				"Node needs to be annotated with ASN number details to start BGP server")
 		}
 		klog.Infof("Found ASN for the node to be %s from the node annotations", nodeasn)
 		asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
 		if err != nil {
-			return errors.New("Failed to parse ASN number specified for the the node")
+			return errors.New("failed to parse ASN number specified for the the node")
 		}
 		nodeAsnNumber = uint32(asnNo)
 		nrc.nodeAsnNumber = nodeAsnNumber
@@ -805,7 +805,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		_, err := strconv.ParseUint(clusterid, 0, 32)
 		if err != nil {
 			if ip := net.ParseIP(clusterid).To4(); ip == nil {
-				return errors.New("Failed to parse rr.server clusterId specified for the node")
+				return errors.New("failed to parse rr.server clusterId specified for the node")
 			}
 		}
 		nrc.bgpClusterID = clusterid
@@ -815,7 +815,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		_, err := strconv.ParseUint(clusterid, 0, 32)
 		if err != nil {
 			if ip := net.ParseIP(clusterid).To4(); ip == nil {
-				return errors.New("Failed to parse rr.client clusterId specified for the node")
+				return errors.New("failed to parse rr.client clusterId specified for the node")
 			}
 		}
 		nrc.bgpClusterID = clusterid
@@ -826,17 +826,17 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		prependRepeatN, okRepeatN := node.ObjectMeta.Annotations[pathPrependRepeatNAnnotation]
 
 		if !okRepeatN {
-			return fmt.Errorf("Both %s and %s must be set", pathPrependASNAnnotation, pathPrependRepeatNAnnotation)
+			return fmt.Errorf("both %s and %s must be set", pathPrependASNAnnotation, pathPrependRepeatNAnnotation)
 		}
 
 		_, err := strconv.ParseUint(prependASN, 0, 32)
 		if err != nil {
-			return errors.New("Failed to parse ASN number specified to prepend")
+			return errors.New("failed to parse ASN number specified to prepend")
 		}
 
 		repeatN, err := strconv.ParseUint(prependRepeatN, 0, 8)
 		if err != nil {
-			return errors.New("Failed to parse number of times ASN should be repeated")
+			return errors.New("failed to parse number of times ASN should be repeated")
 		}
 
 		nrc.pathPrepend = true
@@ -869,7 +869,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	if err := nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global}); err != nil {
-		return errors.New("Failed to start BGP server due to : " + err.Error())
+		return errors.New("failed to start BGP server due to : " + err.Error())
 	}
 
 	go nrc.watchBgpUpdates()
@@ -891,7 +891,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 			if err2 != nil {
 				klog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
-			return fmt.Errorf("Failed to parse node's Peer ASN Numbers Annotation: %s", err)
+			return fmt.Errorf("failed to parse node's Peer ASN Numbers Annotation: %s", err)
 		}
 
 		// Get Global Peer Router IP Address configs
@@ -908,7 +908,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 				klog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
 
-			return fmt.Errorf("Failed to parse node's Peer Addresses Annotation: %s", err)
+			return fmt.Errorf("failed to parse node's Peer Addresses Annotation: %s", err)
 		}
 
 		// Get Global Peer Router ASN configs
@@ -923,7 +923,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 				if err2 != nil {
 					klog.Errorf("Failed to stop bgpServer: %s", err2)
 				}
-				return fmt.Errorf("Failed to parse node's Peer Port Numbers Annotation: %s", err)
+				return fmt.Errorf("failed to parse node's Peer Port Numbers Annotation: %s", err)
 			}
 		}
 
@@ -940,7 +940,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 				if err2 != nil {
 					klog.Errorf("Failed to stop bgpServer: %s", err2)
 				}
-				return fmt.Errorf("Failed to parse node's Peer Passwords Annotation: %s", err)
+				return fmt.Errorf("failed to parse node's Peer Passwords Annotation: %s", err)
 			}
 		}
 
@@ -952,7 +952,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 				klog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
 
-			return fmt.Errorf("Failed to process Global Peer Router configs: %s", err)
+			return fmt.Errorf("failed to process Global Peer Router configs: %s", err)
 		}
 
 		nrc.nodePeerRouters = ipStrings
@@ -967,7 +967,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 				klog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
 
-			return fmt.Errorf("Failed to peer with Global Peer Router(s): %s",
+			return fmt.Errorf("failed to peer with Global Peer Router(s): %s",
 				err)
 		}
 	} else {
@@ -1023,14 +1023,14 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
 	node, err := utils.GetNodeObject(clientset, nrc.hostnameOverride)
 	if err != nil {
-		return nil, errors.New("Failed getting node object from API server: " + err.Error())
+		return nil, errors.New("failed getting node object from API server: " + err.Error())
 	}
 
 	nrc.nodeName = node.Name
 
 	nodeIP, err := utils.GetNodeIP(node)
 	if err != nil {
-		return nil, errors.New("Failed getting IP address from node object: " + err.Error())
+		return nil, errors.New("failed getting IP address from node object: " + err.Error())
 	}
 	nrc.nodeIP = nodeIP
 	nrc.isIpv6 = nodeIP.To4() == nil
@@ -1039,7 +1039,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		nrc.routerID = kubeRouterConfig.RouterID
 	} else {
 		if nrc.isIpv6 {
-			return nil, errors.New("Router-id must be specified in ipv6 operation")
+			return nil, errors.New("router-id must be specified in ipv6 operation")
 		}
 		nrc.routerID = nrc.nodeIP.String()
 	}
@@ -1060,7 +1060,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	cidr, err := utils.GetPodCidrFromNodeSpec(clientset, nrc.hostnameOverride)
 	if err != nil {
 		klog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to allocate pod CIDR for the node or an annotation `kube-router.io/pod-cidr`. Error: %v", err)
-		return nil, fmt.Errorf("Failed to get pod CIDR details from Node.spec: %s", err.Error())
+		return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %s", err.Error())
 	}
 	nrc.podCidr = cidr
 
@@ -1086,7 +1086,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	if kubeRouterConfig.ClusterAsn != 0 {
 		if !((kubeRouterConfig.ClusterAsn >= 64512 && kubeRouterConfig.ClusterAsn <= 65535) ||
 			(kubeRouterConfig.ClusterAsn >= 4200000000 && kubeRouterConfig.ClusterAsn <= 4294967294)) {
-			return nil, errors.New("Invalid ASN number for cluster ASN")
+			return nil, errors.New("invalid ASN number for cluster ASN")
 		}
 		nrc.defaultNodeAsnNumber = uint32(kubeRouterConfig.ClusterAsn)
 	} else {
@@ -1121,29 +1121,29 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	if len(kubeRouterConfig.PeerPasswords) != 0 {
 		peerPasswords, err = stringSliceB64Decode(kubeRouterConfig.PeerPasswords)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to parse CLI Peer Passwords flag: %s", err)
+			return nil, fmt.Errorf("failed to parse CLI Peer Passwords flag: %s", err)
 		}
 	} else if len(kubeRouterConfig.PeerPasswordsFile) != 0 {
 		// Contents of the pw file should be in the same format as pw from CLI arg
 		pwFileBytes, err := ioutil.ReadFile(kubeRouterConfig.PeerPasswordsFile)
 		if err != nil {
-			return nil, fmt.Errorf("Error loading Peer Passwords File : %s", err)
+			return nil, fmt.Errorf("error loading Peer Passwords File : %s", err)
 		}
 		pws := strings.Split(string(pwFileBytes), ",")
 		peerPasswords, err = stringSliceB64Decode(pws)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to decode CLI Peer Passwords file: %s", err)
+			return nil, fmt.Errorf("failed to decode CLI Peer Passwords file: %s", err)
 		}
 	}
 
 	nrc.globalPeerRouters, err = newGlobalPeers(kubeRouterConfig.PeerRouters, peerPorts, peerASNs, peerPasswords, nrc.bgpHoldtime)
 	if err != nil {
-		return nil, fmt.Errorf("Error processing Global Peer Router configs: %s", err)
+		return nil, fmt.Errorf("error processing Global Peer Router configs: %s", err)
 	}
 
 	nrc.nodeSubnet, nrc.nodeInterface, err = getNodeSubnet(nodeIP)
 	if err != nil {
-		return nil, errors.New("Failed find the subnet of the node IP and interface on" +
+		return nil, errors.New("failed find the subnet of the node IP and interface on" +
 			"which its configured: " + err.Error())
 	}
 

@@ -149,7 +149,7 @@ func (nsc *NetworkServicesController) flushConntrackUDP(svc *ipvs.Service) error
 	out, err := exec.Command("conntrack", "-D", "--orig-dst", svc.Address.String(), "-p", "udp", "--dport", strconv.Itoa(int(svc.Port))).CombinedOutput()
 	if err != nil {
 		if matched := re.MatchString(string(out)); !matched {
-			return fmt.Errorf("Failed to delete conntrack entry for endpoint: %s:%d due to %s", svc.Address.String(), svc.Port, err.Error())
+			return fmt.Errorf("failed to delete conntrack entry for endpoint: %s:%d due to %s", svc.Address.String(), svc.Port, err.Error())
 		}
 	}
 	klog.V(1).Infof("Deleted conntrack entry for endpoint: %s:%d", svc.Address.String(), svc.Port)

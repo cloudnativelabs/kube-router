@@ -10,7 +10,7 @@ import (
 
 var (
 	// Error returned when ipset binary is not found.
-	errIpsetNotFound = errors.New("Ipset utility not found")
+	errIpsetNotFound = errors.New("ipset utility not found")
 )
 
 const (
@@ -176,7 +176,7 @@ func (ipset *IPSet) Create(setName string, createOptions ...string) (*Set, error
 	// Determine if set with the same name is already active on the system
 	setIsActive, err := ipset.Sets[setName].IsActive()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to determine if ipset set %s exists: %s",
+		return nil, fmt.Errorf("failed to determine if ipset set %s exists: %s",
 			setName, err)
 	}
 
@@ -188,13 +188,13 @@ func (ipset *IPSet) Create(setName string, createOptions ...string) (*Set, error
 			args = append(args, createOptions...)
 			args = append(args, "family", "inet6")
 			if _, err := ipset.run(args...); err != nil {
-				return nil, fmt.Errorf("Failed to create ipset set on system: %s", err)
+				return nil, fmt.Errorf("failed to create ipset set on system: %s", err)
 			}
 		} else {
 			_, err := ipset.run(append([]string{"create", "-exist", setName},
 				createOptions...)...)
 			if err != nil {
-				return nil, fmt.Errorf("Failed to create ipset set on system: %s", err)
+				return nil, fmt.Errorf("failed to create ipset set on system: %s", err)
 			}
 		}
 	}

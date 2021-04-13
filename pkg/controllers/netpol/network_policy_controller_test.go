@@ -407,7 +407,7 @@ func TestNetworkPolicyController(t *testing.T) {
 			"Missing nodename fails appropriately",
 			newMinimalKubeRouterConfig("", "", "", nil),
 			true,
-			"Failed to identify the node by NODE_NAME, hostname or --hostname-override",
+			"failed to identify the node by NODE_NAME, hostname or --hostname-override",
 		},
 		{
 			"Test bad cluster CIDR (not properly formatting ip address)",

@@ -500,7 +500,7 @@ func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap 
 func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpointMap map[string][]string) error {
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return errors.New("Failed get list of IPVS services due to: " + err.Error())
+		return errors.New("failed get list of IPVS services due to: " + err.Error())
 	}
 
 	// cleanup stale ipvs service and servers

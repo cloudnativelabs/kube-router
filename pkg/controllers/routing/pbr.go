@@ -13,18 +13,18 @@ import (
 func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 	err := rtTablesAdd(customRouteTableID, customRouteTableName)
 	if err != nil {
-		return fmt.Errorf("Failed to update rt_tables file: %s", err)
+		return fmt.Errorf("failed to update rt_tables file: %s", err)
 	}
 
 	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
-		return fmt.Errorf("Failed to verify if `ip rule` exists: %s", err.Error())
+		return fmt.Errorf("failed to verify if `ip rule` exists: %s", err.Error())
 	}
 
 	if !strings.Contains(string(out), nrc.podCidr) {
 		err = exec.Command("ip", "rule", "add", "from", nrc.podCidr, "lookup", customRouteTableID).Run()
 		if err != nil {
-			return fmt.Errorf("Failed to add ip rule due to: %s", err.Error())
+			return fmt.Errorf("failed to add ip rule due to: %s", err.Error())
 		}
 	}
 
@@ -34,19 +34,19 @@ func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
 	err := rtTablesAdd(customRouteTableID, customRouteTableName)
 	if err != nil {
-		return fmt.Errorf("Failed to update rt_tables file: %s", err)
+		return fmt.Errorf("failed to update rt_tables file: %s", err)
 	}
 
 	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
-		return fmt.Errorf("Failed to verify if `ip rule` exists: %s",
+		return fmt.Errorf("failed to verify if `ip rule` exists: %s",
 			err.Error())
 	}
 
 	if strings.Contains(string(out), nrc.podCidr) {
 		err = exec.Command("ip", "rule", "del", "from", nrc.podCidr, "table", customRouteTableID).Run()
 		if err != nil {
-			return fmt.Errorf("Failed to delete ip rule: %s", err.Error())
+			return fmt.Errorf("failed to delete ip rule: %s", err.Error())
 		}
 	}
 
@@ -56,17 +56,17 @@ func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
 func rtTablesAdd(tableNumber, tableName string) error {
 	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
 	if err != nil {
-		return fmt.Errorf("Failed to read: %s", err.Error())
+		return fmt.Errorf("failed to read: %s", err.Error())
 	}
 
 	if !strings.Contains(string(b), tableName) {
 		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
-			return fmt.Errorf("Failed to open: %s", err.Error())
+			return fmt.Errorf("failed to open: %s", err.Error())
 		}
 		defer f.Close()
 		if _, err = f.WriteString(tableNumber + " " + tableName + "\n"); err != nil {
-			return fmt.Errorf("Failed to write: %s", err.Error())
+			return fmt.Errorf("failed to write: %s", err.Error())
 		}
 	}
 

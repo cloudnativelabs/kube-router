@@ -68,7 +68,7 @@ func Test_GetNodeObject(t *testing.T) {
 					Name: "another-node",
 				},
 			},
-			errors.New("Failed to identify the node by NODE_NAME, hostname or --hostname-override"),
+			errors.New("failed to identify the node by NODE_NAME, hostname or --hostname-override"),
 		},
 	}
 
