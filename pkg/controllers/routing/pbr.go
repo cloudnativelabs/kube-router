@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 )
 
 // setup a custom routing table that will be used for policy based routing to ensure traffic originating
@@ -64,7 +66,7 @@ func rtTablesAdd(tableNumber, tableName string) error {
 		if err != nil {
 			return fmt.Errorf("failed to open: %s", err.Error())
 		}
-		defer f.Close()
+		defer utils.CloseCloserDisregardError(f)
 		if _, err = f.WriteString(tableNumber + " " + tableName + "\n"); err != nil {
 			return fmt.Errorf("failed to write: %s", err.Error())
 		}

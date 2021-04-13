@@ -958,20 +958,20 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 	if err != nil {
 		return errors.New("Failed to get namespace due to " + err.Error())
 	}
-	defer hostNetworkNamespaceHandle.Close()
+	defer utils.CloseCloserDisregardError(&hostNetworkNamespaceHandle)
 
 	activeNetworkNamespaceHandle, err = netns.Get()
 	if err != nil {
 		return errors.New("Failed to get namespace due to " + err.Error())
 	}
 	klog.V(1).Infof("Current network namespace before netns.Set: " + activeNetworkNamespaceHandle.String())
-	activeNetworkNamespaceHandle.Close()
+	defer utils.CloseCloserDisregardError(&activeNetworkNamespaceHandle)
 
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		return errors.New("Failed to get docker client due to " + err.Error())
 	}
-	defer dockerClient.Close()
+	defer utils.CloseCloserDisregardError(dockerClient)
 
 	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerID)
 	if err != nil {
@@ -983,7 +983,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 	if err != nil {
 		return errors.New("Failed to get endpoint namespace due to " + err.Error())
 	}
-	defer endpointNamespaceHandle.Close()
+	defer utils.CloseCloserDisregardError(&endpointNamespaceHandle)
 
 	err = netns.Set(endpointNamespaceHandle)
 	if err != nil {
@@ -995,7 +995,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 		return errors.New("Failed to get activeNetworkNamespace due to " + err.Error())
 	}
 	klog.V(2).Infof("Current network namespace after netns. Set to container network namespace: " + activeNetworkNamespaceHandle.String())
-	activeNetworkNamespaceHandle.Close()
+	_ = activeNetworkNamespaceHandle.Close()
 
 	// create a ipip tunnel interface inside the endpoint container
 	tunIf, err := netlink.LinkByName(KubeTunnelIf)
@@ -1085,7 +1085,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 		return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
 	}
 	klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-	activeNetworkNamespaceHandle.Close()
+	_ = activeNetworkNamespaceHandle.Close()
 	return nil
 }
 
@@ -1110,7 +1110,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 		return errors.New("failed to get host namespace due to " + err.Error())
 	}
 	klog.V(1).Infof("current network namespace before netns.Set: " + hostNetworkNamespaceHandle.String())
-	defer hostNetworkNamespaceHandle.Close()
+	defer utils.CloseCloserDisregardError(&hostNetworkNamespaceHandle)
 
 	rs, err := cri.NewRemoteRuntimeService(runtimeEndpoint, cri.DefaultConnectionTimeout)
 	if err != nil {
@@ -1130,7 +1130,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 	if err != nil {
 		return fmt.Errorf("failed to get endpoint namespace (containerID=%s, pid=%d, error=%s)", containerID, pid, err)
 	}
-	defer endpointNamespaceHandle.Close()
+	defer utils.CloseCloserDisregardError(&endpointNamespaceHandle)
 
 	err = netns.Set(endpointNamespaceHandle)
 	if err != nil {
@@ -1142,7 +1142,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 		return errors.New("failed to get activeNetworkNamespace due to " + err.Error())
 	}
 	klog.V(2).Infof("Current network namespace after netns. Set to container network namespace: " + activeNetworkNamespaceHandle.String())
-	activeNetworkNamespaceHandle.Close()
+	_ = activeNetworkNamespaceHandle.Close()
 
 	// TODO: fix boilerplate `netns.Set(hostNetworkNamespaceHandle)` code. Need a robust
 	// way to switch back to old namespace, pretty much all things will go wrong if we dont switch back
@@ -1235,7 +1235,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 		return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
 	}
 	klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-	activeNetworkNamespaceHandle.Close()
+	_ = activeNetworkNamespaceHandle.Close()
 	return nil
 }
 
@@ -2063,7 +2063,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
 		if err != nil {
 			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 		}
-		defer f.Close()
+		defer utils.CloseCloserDisregardError(f)
 		if _, err = f.WriteString(customDSRRouteTableID + " " + customDSRRouteTableName + "\n"); err != nil {
 			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 		}
@@ -2094,7 +2094,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		if err != nil {
 			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
 		}
-		defer f.Close()
+		defer utils.CloseCloserDisregardError(f)
 		if _, err = f.WriteString(externalIPRouteTableID + " " + externalIPRouteTableName + "\n"); err != nil {
 			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
 		}

@@ -65,7 +65,7 @@ func ipv4IsEnabled() bool {
 	if err != nil {
 		return false
 	}
-	l.Close()
+	_ = l.Close()
 
 	return true
 }
@@ -82,7 +82,7 @@ func ipv6IsEnabled() bool {
 	if err != nil {
 		return false
 	}
-	l.Close()
+	_ = l.Close()
 
 	return true
 }
