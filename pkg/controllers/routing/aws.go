@@ -54,8 +54,8 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 			},
 		)
 		if err != nil {
-			awserr := err.(awserr.Error)
-			if awserr.Code() == "UnauthorizedOperation" {
+			awsErr := err.(awserr.Error)
+			if awsErr.Code() == "UnauthorizedOperation" {
 				nrc.ec2IamAuthorized = false
 				klog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
 				return

@@ -130,13 +130,13 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 		}
 	}
 	for _, currentPrefix := range currentDefinedSet.Prefixes {
-		delete := true
+		shouldDelete := true
 		for _, prefix := range advIPPrefixList {
 			if currentPrefix.IpPrefix == prefix.IpPrefix {
-				delete = false
+				shouldDelete = false
 			}
 		}
-		if delete {
+		if shouldDelete {
 			toDelete = append(toDelete, currentPrefix)
 		}
 	}
@@ -216,13 +216,13 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 		}
 	}
 	for _, currentPrefix := range currentDefinedSet.List {
-		delete := true
+		shouldDelete := true
 		for _, prefix := range iBGPPeerCIDRs {
 			if currentPrefix == prefix {
-				delete = false
+				shouldDelete = false
 			}
 		}
-		if delete {
+		if shouldDelete {
 			toDelete = append(toDelete, currentPrefix)
 		}
 	}
@@ -322,13 +322,13 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, ext
 		}
 	}
 	for _, currentPeer := range currentDefinedSet.List {
-		delete := true
+		shouldDelete := true
 		for _, peer := range allBgpPeers {
 			if peer == currentPeer {
-				delete = false
+				shouldDelete = false
 			}
 		}
-		if delete {
+		if shouldDelete {
 			toDelete = append(toDelete, currentPeer)
 		}
 	}
