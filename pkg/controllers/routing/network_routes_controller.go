@@ -643,6 +643,7 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	ipset, err := utils.NewIPSet(nrc.isIpv6)
 	if err != nil {
 		klog.Errorf("Failed to clean up ipsets: " + err.Error())
+		return
 	}
 	err = ipset.Save()
 	if err != nil {
