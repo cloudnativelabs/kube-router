@@ -16,7 +16,7 @@ func PrintVersion(logOutput bool) {
 	output := fmt.Sprintf("Running %v version %s, built on %s, %s\n", os.Args[0], Version, BuildDate, runtime.Version())
 
 	if !logOutput {
-		fmt.Fprintf(os.Stderr, "%s", output)
+		_, _ = fmt.Fprintf(os.Stderr, "%s", output)
 	} else {
 		klog.Info(output)
 	}

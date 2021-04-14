@@ -9,7 +9,7 @@ import (
 )
 
 const DefaultBgpPort = 179
-const DefaultBgpHoldTime time.Duration = 90 * time.Second
+const DefaultBgpHoldTime = 90 * time.Second
 
 type KubeRouterConfig struct {
 	AdvertiseClusterIP             bool

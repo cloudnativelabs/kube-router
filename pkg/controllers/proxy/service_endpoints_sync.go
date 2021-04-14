@@ -288,7 +288,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 			continue
 		}
 		mangleTableRulesDump := bytes.Buffer{}
-		mangleTableRules := []string{}
+		var mangleTableRules []string
 		if err := utils.SaveInto("mangle", &mangleTableRulesDump); err != nil {
 			klog.Errorf("Failed to run iptables-save: %s" + err.Error())
 		} else {

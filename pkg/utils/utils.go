@@ -21,11 +21,6 @@ type Broadcaster struct {
 	listeners    []Listener
 }
 
-// NewBroadcaster returns an instance of Broadcaster object
-func NewBroadcaster() *Broadcaster {
-	return &Broadcaster{}
-}
-
 // Add lets to register a listener
 func (b *Broadcaster) Add(listener Listener) {
 	b.listenerLock.Lock()
