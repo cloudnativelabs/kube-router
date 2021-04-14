@@ -949,7 +949,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 				if err2 != nil {
 					klog.Errorf("Failed to stop bgpServer: %s", err2)
 				}
-				return fmt.Errorf("failed to parse node's Peer Passwords Annotation: %s", err)
+				return fmt.Errorf("failed to parse node's Peer Passwords Annotation")
 			}
 		}
 
