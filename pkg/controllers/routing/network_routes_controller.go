@@ -440,9 +440,12 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 
 	cidrStr := strings.Split(nrc.podCidr, "/")
 	subnet := cidrStr[0]
-	cidrLen, _ := strconv.Atoi(cidrStr[1])
+	cidrLen, err := strconv.Atoi(cidrStr[1])
+	if err != nil || cidrLen < 0 || cidrLen > 32 {
+		return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
+	}
 	if nrc.isIpv6 {
-		klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
+		klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers", subnet, cidrLen, nrc.nodeIP.String())
 
 		v6Family := &gobgpapi.Family{
 			Afi:  gobgpapi.Family_AFI_IP6,
@@ -472,7 +475,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 		}
 	} else {
 
-		klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", subnet, strconv.Itoa(cidrLen), nrc.nodeIP.String())
+		klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers", subnet, cidrLen, nrc.nodeIP.String())
 		nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
 			PrefixLen: uint32(cidrLen),
 			Prefix:    cidrStr[0],

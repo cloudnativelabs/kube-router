@@ -3,6 +3,7 @@ package routing
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -71,7 +72,10 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 		return err
 	}
 	if currentDefinedSet == nil {
-		cidrLen, _ := strconv.Atoi(strings.Split(nrc.podCidr, "/")[1])
+		cidrLen, err := strconv.Atoi(strings.Split(nrc.podCidr, "/")[1])
+		if err != nil || cidrLen < 0 || cidrLen > 32 {
+			return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
+		}
 		podCidrDefinedSet := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_PREFIX,
 			Name:        "podcidrdefinedset",
