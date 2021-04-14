@@ -697,6 +697,10 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 			return fmt.Errorf("ipset \"%s\" not found in controller instance",
 				podSubnetsIPSetName)
 		}
+		psSet = nrc.ipSetHandler.Get(podSubnetsIPSetName)
+		if nil == psSet {
+			return fmt.Errorf("failed to get ipsethandler for ipset \"%s\"", podSubnetsIPSetName)
+		}
 	}
 	err = psSet.Refresh(currentPodCidrs)
 	if err != nil {
@@ -711,6 +715,10 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		if err != nil {
 			return fmt.Errorf("ipset \"%s\" not found in controller instance",
 				nodeAddrsIPSetName)
+		}
+		naSet = nrc.ipSetHandler.Get(nodeAddrsIPSetName)
+		if nil == naSet {
+			return fmt.Errorf("failed to get ipsethandler for ipset \"%s\"", nodeAddrsIPSetName)
 		}
 	}
 	err = naSet.Refresh(currentNodeIPs)

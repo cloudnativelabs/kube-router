@@ -919,7 +919,7 @@ func (nsc *NetworkServicesController) getPodObjectForEndpoint(endpointIP string)
 	return nil, errors.New("Failed to find pod with ip " + endpointIP)
 }
 
-func attemptNamespaceResetAfterError (hostNSHandle netns.NsHandle) {
+func attemptNamespaceResetAfterError(hostNSHandle netns.NsHandle) {
 	err := netns.Set(hostNSHandle)
 	if err != nil {
 		klog.Errorf("failed to set hostNetworkNamespace while resetting namespace after a previous error due to " + err.Error())
@@ -1024,7 +1024,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 			if err == nil {
 				break
 			}
-			if err != nil && err.Error() == IfaceNotFound {
+			if err.Error() == IfaceNotFound {
 				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KubeTunnelIf)
 				continue
 			} else {
@@ -1053,7 +1053,7 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 		return errors.New("failed to assign vip " + vip + " to kube-tunnel-if interface ")
 	}
-	klog.Infof("Successfully assinged VIP: " + vip + " in endpoint " + endpointIP + ".")
+	klog.Infof("Successfully assigned VIP: " + vip + " in endpoint " + endpointIP + ".")
 
 	// disable rp_filter on all interface
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
@@ -1174,7 +1174,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 			if err == nil {
 				break
 			}
-			if err != nil && err.Error() == IfaceNotFound {
+			if err.Error() == IfaceNotFound {
 				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KubeTunnelIf)
 				continue
 			} else {
@@ -1203,7 +1203,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 		return errors.New("failed to assign vip " + vip + " to kube-tunnel-if interface ")
 	}
-	klog.Infof("Successfully assinged VIP: " + vip + " in endpoint " + endpointIP + ".")
+	klog.Infof("Successfully assigned VIP: " + vip + " in endpoint " + endpointIP + ".")
 
 	// disable rp_filter on all interface
 	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
@@ -1484,8 +1484,8 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 
 				// Handle ExternalIPs if requested
 				if svcInfo.hairpinExternalIPs {
-					for _, extip := range svcInfo.externalIPs {
-						rule, ruleArgs := hairpinRuleFrom(extip, ep.ip, svcInfo.port)
+					for _, extIP := range svcInfo.externalIPs {
+						rule, ruleArgs := hairpinRuleFrom(extIP, ep.ip, svcInfo.port)
 						rulesNeeded[rule] = ruleArgs
 					}
 				}

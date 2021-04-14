@@ -603,7 +603,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npc.serviceClusterIPRange = *ipnet
 
 	// Validate and parse NodePort range
-	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]{1}([0-9]+)$`)
+	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]([0-9]+)$`)
 	if matched := nodePortValidator.MatchString(config.NodePortRange); !matched {
 		return nil, fmt.Errorf("failed to parse node port range given: '%s' please see specification in help text", config.NodePortRange)
 	}
