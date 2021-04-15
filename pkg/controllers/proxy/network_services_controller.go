@@ -813,24 +813,26 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 	return nil
 }
 
-func endpointsListsEquivalent(a, b []endpointsInfo) bool {
+// TODO Move to utils
+func unsortedListsEquivalent(a, b []endpointsInfo) bool {
 	if len(a) != len(b) {
 		return false
 	}
 
-	for _, epA := range a {
-	        valid := false
-		for _, epB := range b {
-			if epA == epB {
-				valid = true
-				break
-			}
-		}
+	values := make(map[interface{}]int)
+	for _, val := range a {
+		values[val] = 1
+	}
+	for _, val := range b {
+		values[val] = values[val] + 1
+	}
 
-		if !valid {
-		    return false
+	for _, val := range values {
+		if val == 1 {
+			return false
 		}
 	}
+
 	return true
 }
 
@@ -839,15 +841,13 @@ func endpointsMapsEquivalent(a, b endpointsInfoMap) bool {
 		return false
 	}
 
-	// Endpoint maps are considered compatible if the lists of services includes same endpoints
-	// Order is not considered.
-	for k, valA := range a {
-		valB, ok := b[k]
+	for key, valA := range a {
+		valB, ok := b[key]
 		if !ok {
 			return false
 		}
 
-		if !endpointsListsEquivalent(valA, valB) {
+		if !unsortedListsEquivalent(valA, valB) {
 			return false
 		}
 	}
