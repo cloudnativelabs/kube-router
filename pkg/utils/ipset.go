@@ -80,6 +80,9 @@ const (
 	OptionNoMatch = "nomatch"
 	// OptionForceAdd All hash set types support the optional forceadd parameter when creating a set. When sets created with this option become full the next addition to the set may succeed and evict a random entry from the set.
 	OptionForceAdd = "forceadd"
+
+	// tmpIPSetPrefix Is the prefix added to temporary ipset names used in the atomic swap operations during ipset restore. You should never see these on your system because they only exist during the restore.
+	tmpIPSetPrefix = "TMP-"
 )
 
 // IPSet represent ipset sets managed by.
@@ -397,8 +400,6 @@ func parseIPSetSave(ipset *IPSet, result string) map[string]*Set {
 
 	return sets
 }
-
-const tmpIPSetPrefix = "TMP-"
 
 // Build ipset restore input
 // ex:
