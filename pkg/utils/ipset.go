@@ -2,9 +2,12 @@ package utils
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base32"
 	"errors"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -395,20 +398,45 @@ func parseIPSetSave(ipset *IPSet, result string) map[string]*Set {
 	return sets
 }
 
+const tmpIPSetPrefix = "TMP-"
+
 // Build ipset restore input
 // ex:
 // create KUBE-DST-3YNVZWWGX3UQQ4VQ hash:ip family inet hashsize 1024 maxelem 65536 timeout 0
 // add KUBE-DST-3YNVZWWGX3UQQ4VQ 100.96.1.6 timeout 0
 func buildIPSetRestore(ipset *IPSet) string {
-	ipSetRestore := ""
-	for _, set := range ipset.Sets {
-		ipSetRestore += fmt.Sprintf("create %s %s\n", set.Name, strings.Join(set.Options[:], " "))
-		ipSetRestore += fmt.Sprintf("flush %s\n", set.Name)
-		for _, entry := range set.Entries {
-			ipSetRestore += fmt.Sprintf("add %s %s\n", set.Name, strings.Join(entry.Options[:], " "))
-		}
+	ipSetRestore := &strings.Builder{}
+
+	keys := make([]string, 0, len(ipset.Sets))
+	for key := range ipset.Sets {
+		// we need keys in some consistent order so that we can unit-test this method has a predictable output:
+		keys = append(keys, key)
 	}
-	return ipSetRestore
+
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		set := ipset.Sets[key]
+		// we will create a temporary IPSet of the right type and then swap it in.
+		// it will be named based on the sha of the name of the set it will be swapped
+		// with, since IPSets have a 32-byte name size limit:
+		hash := sha256.Sum256([]byte("tmp:" + set.Name))
+		tmpSetName := tmpIPSetPrefix + (base32.StdEncoding.EncodeToString(hash[:]))[:16]
+
+		// first, create and populate the temporary ipset.
+		setOptions := strings.Join(set.Options[:], " ")
+		ipSetRestore.WriteString(fmt.Sprintf("create %s %s\n", tmpSetName, setOptions))
+		for _, entry := range set.Entries {
+			ipSetRestore.WriteString(fmt.Sprintf("add %s %s\n", tmpSetName, strings.Join(entry.Options[:], " ")))
+		}
+		// now create the actual IPSet (this is a noop if it already exists, because we run with -exists):
+		ipSetRestore.WriteString(fmt.Sprintf("create %s %s\n", set.Name, setOptions))
+		// now that both exist, we can swap them:
+		ipSetRestore.WriteString(fmt.Sprintf("swap %s %s\n", tmpSetName, set.Name))
+		// clean up the tmp- one which is actually the old one now:
+		ipSetRestore.WriteString(fmt.Sprintf("destroy %s\n", tmpSetName))
+	}
+	return ipSetRestore.String()
 }
 
 // Save the given set, or all sets if none is given to stdout in a format that
