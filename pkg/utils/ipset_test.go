@@ -43,11 +43,13 @@ func Test_buildIPSetRestore(t *testing.T) {
 				}},
 			},
 			want: "create TMP-7NOTZDOMLXBX6DAJ hash:ip yolo things 12345\n" +
+				"flush TMP-7NOTZDOMLXBX6DAJ\n" +
 				"add TMP-7NOTZDOMLXBX6DAJ 1.2.3.4\n" +
 				"create foo hash:ip yolo things 12345\n" +
 				"swap TMP-7NOTZDOMLXBX6DAJ foo\n" +
 				"flush TMP-7NOTZDOMLXBX6DAJ\n" +
 				"create TMP-XD7BSSQZELS7TP35 hash:ip lol\n" +
+				"flush TMP-XD7BSSQZELS7TP35\n" +
 				"add TMP-XD7BSSQZELS7TP35 4.4.4.4\n" +
 				"add TMP-XD7BSSQZELS7TP35 8.8.8.8\n" +
 				"create google-dns-servers hash:ip lol\n" +

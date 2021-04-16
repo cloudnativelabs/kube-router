@@ -426,6 +426,9 @@ func buildIPSetRestore(ipset *IPSet) string {
 			hash := sha1.Sum([]byte("tmp:" + setOptions))
 			tmpSetName = tmpIPSetPrefix + base32.StdEncoding.EncodeToString(hash[:10])
 			ipSetRestore.WriteString(fmt.Sprintf("create %s %s\n", tmpSetName, setOptions))
+			// just in case we are starting up after a crash, we should flush the TMP ipset to be safe if it
+			// already existed, so we do not pollute other ipsets:
+			ipSetRestore.WriteString(fmt.Sprintf("flush %s\n", tmpSetName))
 			tmpSets[setOptions] = tmpSetName
 		}
 
