@@ -5,8 +5,3 @@
 _output
 _cache
 vendor
-Dockerfile.amd64.run
-Dockerfile.arm64.run
-Dockerfile.s390x.run
-Dockerfile.arm.run
-Dockerfile.ppc64le.run

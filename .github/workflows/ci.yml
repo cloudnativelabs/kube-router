@@ -1,0 +1,65 @@
+name: continuous-integration
+
+on:
+  push:
+    branches:
+    - master
+    - v[1-9].*
+    tags:
+    - v[1-9].*
+  pull_request:
+    branches:
+    - master
+    - v[1-9].*
+
+jobs:
+  ci-go-lint:
+    name: ci-go-lint
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ~1.16.4
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Lint kube-router code
+      run: |
+        make lint
+
+  ci-unit-tests:
+    name: ci-unit-tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ~1.16.4
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Run unit tests for kube-router
+      run: |
+        make test
+
+  ci-build-kube-router:
+    name: ci-build-kube-router
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ~1.16.4
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Build kube-router
+      run: |
+        make kube-router

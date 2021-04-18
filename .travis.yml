@@ -19,8 +19,7 @@ env:
     - GIT_BRANCH=$TRAVIS_BRANCH
 
 script:
-  - build/travis-test.sh
-  # All successfully built commits get an image placed in the kube-router-git
+  # All built commits get an image placed in the kube-router-git
   # image repo and tagged with the commit hash.
   - wget https://github.com/estesp/manifest-tool/releases/download/v1.0.2/manifest-tool-linux-amd64 -O manifest-tool && chmod +x manifest-tool
   - build/travis-deploy.sh
