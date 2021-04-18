@@ -1,4 +1,5 @@
-FROM alpine:3.12
+ARG ARCH=
+FROM ${ARCH}alpine:3.12
 
 RUN apk add --no-cache \
       iptables \
