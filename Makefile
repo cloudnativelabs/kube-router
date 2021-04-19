@@ -20,6 +20,7 @@ UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
 DOCKER_BUILD_IMAGE?=golang:1.16.3-alpine3.12
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.27.0
+GOBGP_VERSION=v0.0.0-20210402043138-915bfc2d8189 # v2.26.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
@@ -216,11 +217,10 @@ gobgp:
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Building gobgp
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-    sh -c 'apk --no-cache add git && go get -u github.com/osrg/gobgp && GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o gobgp github.com/osrg/gobgp/cmd/gobgp'
+    sh -c 'apk --no-cache add git && GOARCH=$(GOARCH) CGO_ENABLED=0 GOBIN=/go/src/github.com/cloudnativelabs/kube-router go install github.com/osrg/gobgp/cmd/gobgp@$(GOBGP_VERSION)'
 	@echo Finished building gobgp.
 else
-	go get -u github.com/osrg/gobgp && \
-	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go build -o gobgp github.com/osrg/gobgp/cmd/gobgp
+	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux GOBIN=$(PWD) go install github.com/osrg/gobgp/cmd/gobgp@$(GOBGP_VERSION)
 endif
 
 multiarch-binverify:
