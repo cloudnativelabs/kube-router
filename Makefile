@@ -217,10 +217,10 @@ gobgp:
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	@echo Building gobgp
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-    sh -c 'apk --no-cache add git && GOARCH=$(GOARCH) CGO_ENABLED=0 GOBIN=/go/src/github.com/cloudnativelabs/kube-router go install github.com/osrg/gobgp/cmd/gobgp@$(GOBGP_VERSION)'
+    sh -c 'apk --no-cache add git && GOARCH=$(GOARCH) CGO_ENABLED=0 go install github.com/osrg/gobgp/cmd/gobgp@$(GOBGP_VERSION) && if [[ ${GOARCH} != $$(go env GOHOSTARCH) ]]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .'
 	@echo Finished building gobgp.
 else
-	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux GOBIN=$(PWD) go install github.com/osrg/gobgp/cmd/gobgp@$(GOBGP_VERSION)
+	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/cmd/gobgp@$(GOBGP_VERSION) && if [[ ${GOARCH} != $$(go env GOHOSTARCH) ]]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .
 endif
 
 multiarch-binverify:
