@@ -37,7 +37,7 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 	pod := obj.(*api.Pod)
 	if pod.Spec.HostNetwork {
-		klog.V(2).Info("Ignoring update to hostNetwork pod: %s/%s", pod.Namespace, pod.Name)
+		klog.V(2).Infof("Ignoring update to hostNetwork pod: %s/%s", pod.Namespace, pod.Name)
 		return
 	}
 	klog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
@@ -226,9 +226,11 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(networkPo
 	for _, obj := range npc.podLister.List() {
 		pod := obj.(*api.Pod)
 
-		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 {
+		// ignore the pods running on the different node or running in host network
+		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || pod.Spec.HostNetwork {
 			continue
 		}
+
 		for _, policy := range networkPoliciesInfo {
 			if policy.namespace != pod.ObjectMeta.Namespace {
 				continue
@@ -255,7 +257,8 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(networkPol
 	for _, obj := range npc.podLister.List() {
 		pod := obj.(*api.Pod)
 
-		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 {
+		// ignore the pods running on the different node or running in host network
+		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || pod.Spec.HostNetwork {
 			continue
 		}
 		for _, policy := range networkPoliciesInfo {
