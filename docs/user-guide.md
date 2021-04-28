@@ -13,6 +13,10 @@ Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/maste
 ### kubeadm
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/kubeadm.md) to deploy Kubernetes cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/)
 
+### k0sproject
+k0s by default uses kube-router as a CNI option.
+Please see the [steps](https://docs.k0sproject.io/latest/install/) to deploy Kubernetes cluster with Kube-router using [k0s](https://docs.k0sproject.io/)
+
 ### generic
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/generic.md) to deploy kube-router on manually installed clusters
 
