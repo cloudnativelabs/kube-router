@@ -111,8 +111,8 @@ kubectl annotate node <kube-node> "kube-router.io/path-prepend.repeat-n=5"
 
 The examples above have assumed there is no password authentication with BGP
 peer routers. If you need to use a password for peering, you can use the
-`--peer-router-passwords` CLI flag or the `kube-router.io/peer.passwords` node
-annotation.
+`--peer-router-passwords` command-line option, the `kube-router.io/peer.passwords` node
+annotation, or the `--peer-router-passwords-file` command-line option.
 
 #### Base64 Encoding Passwords
 
@@ -144,9 +144,24 @@ kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
 kubectl annotate node <kube-node> "kube-router.io/peer.passwords=U2VjdXJlUGFzc3dvcmQK,"
 ```
 
+Finally, to include peer passwords as a file you would run kube-router with the following option:
+```
+--peer-router-ips="192.168.1.99,192.168.1.100"
+--peer-router-asns="65000,65000"
+--peer-router-passwords-file='/etc/kube-router/bgp-passwords.conf'
+```
+
+The password file, closely follows the syntax of the command-line and node annotation options.
+Here, the first peer IP (192.168.1.99) would be configured with a password, while the second would not.
+```
+U2VjdXJlUGFzc3dvcmQK,
+```
+
+Note, complex parsing is not done on this file, please do not include any content other than the passwords on a single line in this file.
+
 ## BGP listen address list 
 
-By default GoBGP server binds on the node IP address. However in case of nodes with multiple IP address it is desirable to bind GoBGP to multiple local adresses. Local IP address on which GoGBP should listen on an node can be configured with annotation `kube-router.io/bgp-local-addresses`.
+By default, GoBGP server binds on the node IP address. However in case of nodes with multiple IP address it is desirable to bind GoBGP to multiple local adresses. Local IP address on which GoGBP should listen on an node can be configured with annotation `kube-router.io/bgp-local-addresses`.
 
 Here is sample example to make GoBGP server to listen on multiple IP address
 ```
