@@ -44,6 +44,7 @@ const (
 	nodeAddrsIPSetName   = "kube-router-node-ips"
 
 	nodeASNAnnotation                  = "kube-router.io/node.asn"
+	nodeCommunitiesAnnotation          = "kube-router.io/node.bgp.communities"
 	pathPrependASNAnnotation           = "kube-router.io/path-prepend.as"
 	pathPrependRepeatNAnnotation       = "kube-router.io/path-prepend.repeat-n"
 	peerASNAnnotation                  = "kube-router.io/peer.asns"
@@ -86,6 +87,7 @@ type NetworkRoutingController struct {
 	autoMTU                        bool
 	defaultNodeAsnNumber           uint32
 	nodeAsnNumber                  uint32
+	nodeCommunities                []string
 	globalPeerRouters              []*gobgpapi.Peer
 	nodePeerRouters                []string
 	enableCNI                      bool
@@ -854,6 +856,28 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		nrc.pathPrepend = true
 		nrc.pathPrependAS = prependASN
 		nrc.pathPrependCount = uint8(repeatN)
+	}
+
+	var nodeCommunities []string
+	nodeBGPCommunitiesAnnotation, ok := node.ObjectMeta.Annotations[nodeCommunitiesAnnotation]
+	if !ok {
+		klog.V(1).Info("Did not find any BGP communities on current node's annotations. " +
+			"Not exporting communities.")
+	} else {
+		nodeCommunities = stringToSlice(nodeBGPCommunitiesAnnotation, ",")
+		for _, nodeCommunity := range nodeCommunities {
+			if err = validateCommunity(nodeCommunity); err != nil {
+				klog.Warningf("cannot add BGP community '%s' from node annotation as it does not appear "+
+					"to be a valid community identifier", nodeCommunity)
+				continue
+			}
+			klog.V(1).Infof("Adding the node community found from node annotation: %s", nodeCommunity)
+			nrc.nodeCommunities = append(nrc.nodeCommunities, nodeCommunity)
+		}
+		if len(nrc.nodeCommunities) < 1 {
+			klog.Warningf("Found a community specified via annotation %s with value %s but none could be "+
+				"validated", nodeCommunitiesAnnotation, nodeBGPCommunitiesAnnotation)
+		}
 	}
 
 	if grpcServer {

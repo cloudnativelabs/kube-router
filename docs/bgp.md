@@ -159,6 +159,20 @@ U2VjdXJlUGFzc3dvcmQK,
 
 Note, complex parsing is not done on this file, please do not include any content other than the passwords on a single line in this file.
 
+### BGP Communities
+
+Global peers support the addition of BGP communities via node annotations. Node annotations can be formulated either as:
+* a single 32-bit integer
+* two 16-bit integers separated by a colon (`:`)
+* common BGP community names (e.g. `no-export`, `internet`, `no-peer`, etc.) (see: [WellKnownCommunityNameMap](https://github.com/osrg/gobgp/blob/cbdb752b10847163d9f942853b67cf173b6aa151/pkg/packet/bgp/bgp.go#L9444))
+
+In the following example we add the `NO_EXPORT` BGP community to two of our nodes via annotation using all three forms of the annotation:
+```
+kubectl annotate node <kube-node> "kube-router.io/node.bgp.communities=4294967041"
+kubectl annotate node <kube-node> "kube-router.io/node.bgp.communities=65535:65281"
+kubectl annotate node <kube-node> "kube-router.io/node.bgp.communities=no-export"
+```
+
 ## BGP listen address list 
 
 By default, GoBGP server binds on the node IP address. However in case of nodes with multiple IP address it is desirable to bind GoBGP to multiple local adresses. Local IP address on which GoGBP should listen on an node can be configured with annotation `kube-router.io/bgp-local-addresses`.

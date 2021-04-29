@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/osrg/gobgp/pkg/packet/bgp"
 
 	"github.com/vishvananda/netlink"
 )
@@ -142,4 +145,30 @@ func generateTunnelName(nodeIP string) string {
 	}
 
 	return "tun" + hash
+}
+
+// validateCommunity takes in a string and attempts to parse a BGP community out of it in a way that is similar to
+// gobgp (internal/pkg/table/policy.go:ParseCommunity()). If it is not able to parse the community information it
+// returns an error.
+func validateCommunity(arg string) error {
+	_, err := strconv.ParseUint(arg, 10, 32)
+	if err == nil {
+		return nil
+	}
+
+	_regexpCommunity := regexp.MustCompile(`(\d+):(\d+)`)
+	elems := _regexpCommunity.FindStringSubmatch(arg)
+	if len(elems) == 3 {
+		if _, err := strconv.ParseUint(elems[1], 10, 16); err == nil {
+			if _, err = strconv.ParseUint(elems[2], 10, 16); err == nil {
+				return nil
+			}
+		}
+	}
+	for _, v := range bgp.WellKnownCommunityNameMap {
+		if arg == v {
+			return nil
+		}
+	}
+	return fmt.Errorf("failed to parse %s as community", arg)
 }

@@ -419,6 +419,14 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			bgpActions.Nexthop = &gobgpapi.NexthopAction{Self: true}
 		}
 
+		// set BGP communities for the routes advertised to peers for VIPs
+		if len(nrc.nodeCommunities) > 0 {
+			bgpActions.Community = &gobgpapi.CommunityAction{
+				ActionType:  gobgpapi.CommunityActionType_COMMUNITY_ADD,
+				Communities: nrc.nodeCommunities,
+			}
+		}
+
 		// statement to represent the export policy to permit advertising cluster IP's
 		// only to the global BGP peer or node specific BGP peer
 		statements = append(statements, &gobgpapi.Statement{
@@ -438,6 +446,13 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		if nrc.advertisePodCidr {
 			actions := gobgpapi.Actions{
 				RouteAction: gobgpapi.RouteAction_ACCEPT,
+			}
+			// set BGP communities for the routes advertised to peers for the pod network
+			if len(nrc.nodeCommunities) > 0 {
+				actions.Community = &gobgpapi.CommunityAction{
+					ActionType:  gobgpapi.CommunityActionType_COMMUNITY_ADD,
+					Communities: nrc.nodeCommunities,
+				}
 			}
 			if nrc.overrideNextHop {
 				actions.Nexthop = &gobgpapi.NexthopAction{Self: true}
