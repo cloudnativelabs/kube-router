@@ -764,6 +764,170 @@ func Test_AddPolicies(t *testing.T) {
 			nil,
 			fmt.Errorf("both %s and %s must be set", pathPrependASNAnnotation, pathPrependRepeatNAnnotation),
 		},
+		{
+			"has nodes with communities defined",
+			&NetworkRoutingController{
+				clientset:         fake.NewSimpleClientset(),
+				hostnameOverride:  "node-1",
+				routerID:          "10.0.0.0",
+				bgpPort:           10000,
+				bgpFullMeshMode:   false,
+				bgpEnableInternal: false,
+				bgpServer:         gobgp.NewBgpServer(),
+				advertisePodCidr:  true,
+				activeNodes:       make(map[string]bool),
+				podCidr:           "172.20.0.0/24",
+				globalPeerRouters: []*gobgpapi.Peer{
+					{
+						Conf: &gobgpapi.PeerConf{
+							NeighborAddress: "10.10.0.1",
+						},
+					},
+					{
+						Conf: &gobgpapi.PeerConf{
+							NeighborAddress: "10.10.0.2",
+						},
+					},
+				},
+				nodeAsnNumber: 100,
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+						Annotations: map[string]string{
+							"kube-router.io/node.asn":             "100",
+							"kube-router.io/node.bgp.communities": "no-export",
+						},
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+					Spec: v1core.NodeSpec{
+						PodCIDR: "172.20.0.0/24",
+					},
+				},
+			},
+			[]*v1core.Service{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "svc-1",
+					},
+					Spec: v1core.ServiceSpec{
+						Type:        "ClusterIP",
+						ClusterIP:   "10.0.0.1",
+						ExternalIPs: []string{"1.1.1.1"},
+					},
+				},
+			},
+			&gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_PREFIX,
+				Name:        "podcidrdefinedset",
+				Prefixes: []*gobgpapi.Prefix{
+					{
+						IpPrefix:      "172.20.0.0/24",
+						MaskLengthMin: 24,
+						MaskLengthMax: 24,
+					},
+				},
+			},
+			&gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_PREFIX,
+				Name:        "servicevipsdefinedset",
+				Prefixes: []*gobgpapi.Prefix{
+					{
+						IpPrefix:      "1.1.1.1/32",
+						MaskLengthMin: 32,
+						MaskLengthMax: 32,
+					},
+					{
+						IpPrefix:      "10.0.0.1/32",
+						MaskLengthMin: 32,
+						MaskLengthMax: 32,
+					},
+				},
+			},
+			&gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				Name:        "externalpeerset",
+				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+			},
+			&gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				Name:        "allpeerset",
+				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+			},
+			[]*gobgpapi.Statement{
+				{
+					Name: "kube_router_export_stmt0",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							MatchType: gobgpapi.MatchType_ANY,
+							Name:      "servicevipsdefinedset",
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							MatchType: gobgpapi.MatchType_ANY,
+							Name:      "externalpeerset",
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						Community: &gobgpapi.CommunityAction{
+							ActionType:  gobgpapi.CommunityActionType_COMMUNITY_ADD,
+							Communities: []string{"65535:65281"}, // corresponds to no-export
+						},
+						RouteAction: gobgpapi.RouteAction_ACCEPT,
+					},
+				},
+				{
+					Name: "kube_router_export_stmt1",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							MatchType: gobgpapi.MatchType_ANY,
+							Name:      "podcidrdefinedset",
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							MatchType: gobgpapi.MatchType_ANY,
+							Name:      "externalpeerset",
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						Community: &gobgpapi.CommunityAction{
+							ActionType:  gobgpapi.CommunityActionType_COMMUNITY_ADD,
+							Communities: []string{"65535:65281"}, // corresponds to no-export
+						},
+						RouteAction: gobgpapi.RouteAction_ACCEPT,
+					},
+				},
+			},
+			[]*gobgpapi.Statement{
+				{
+					Name: "kube_router_import_stmt0",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							MatchType: gobgpapi.MatchType_ANY,
+							Name:      "servicevipsdefinedset",
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							MatchType: gobgpapi.MatchType_ANY,
+							Name:      "allpeerset",
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						RouteAction: gobgpapi.RouteAction_REJECT,
+					},
+				},
+			},
+			nil,
+			nil,
+		},
 	}
 
 	for _, testcase := range testcases {
