@@ -447,7 +447,13 @@ func buildIPSetRestore(ipset *IPSet) string {
 		ipSetRestore.WriteString(fmt.Sprintf("flush %s\n", tmpSetName))
 	}
 
+	setsToDestroy := make([]string, 0, len(tmpSets))
 	for _, tmpSetName := range tmpSets {
+		setsToDestroy = append(setsToDestroy, tmpSetName)
+	}
+	// need to destroy the sets in a predictable order for unit test!
+	sort.Strings(setsToDestroy)
+	for _, tmpSetName := range setsToDestroy {
 		// finally, destroy the tmp sets.
 		ipSetRestore.WriteString(fmt.Sprintf("destroy %s\n", tmpSetName))
 	}
