@@ -60,6 +60,8 @@ type KubeRouterConfig struct {
 	PeerPasswordsFile              string
 	PeerPorts                      []uint
 	PeerRouters                    []net.IP
+	PodFWRejectsLogBurst           int
+	PodFWRejectsLogLimit           string
 	RouterID                       string
 	RoutesSyncPeriod               time.Duration
 	RunFirewall                    bool
@@ -84,6 +86,8 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IpvsSyncPeriod:                 5 * time.Minute,
 		NodePortRange:                  "30000-32767",
 		OverlayType:                    "subnet",
+		PodFWRejectsLogBurst:           10,
+		PodFWRejectsLogLimit:           "10/minute",
 		RoutesSyncPeriod:               5 * time.Minute,
 	}
 }
@@ -176,6 +180,10 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Path to file containing password for authenticating against the BGP peer defined with \"--peer-router-ips\". --peer-router-passwords will be preferred if both are set.")
 	fs.UintSliceVar(&s.PeerPorts, "peer-router-ports", s.PeerPorts,
 		"The remote port of the external BGP to which all nodes will peer. If not set, default BGP port ("+strconv.Itoa(DefaultBgpPort)+") will be used.")
+	fs.IntVar(&s.PodFWRejectsLogBurst, "pod-fw-rejects-log-burst", s.PodFWRejectsLogBurst,
+		"The number of rejected packets logged from pod firewalls to nflog before the limit defined with \"--pod-fw-rejects-log-limit\" is used to ratelimit.")
+	fs.StringVar(&s.PodFWRejectsLogLimit, "pod-fw-rejects-log-limit", s.PodFWRejectsLogLimit,
+		"The maximum rate of rejected packets logged from pod firewalls to nflog.")
 	fs.StringVar(&s.RouterID, "router-id", "", "BGP router-id. Must be specified in a ipv6 only cluster.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")

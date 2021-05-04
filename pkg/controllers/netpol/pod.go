@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"reflect"
+	"strconv"
 	"strings"
 
 	api "k8s.io/api/core/v1"
@@ -70,7 +71,21 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 	dropUnmarkedTrafficRules := func(podName, podNamespace, podFwChainName string) error {
 		// add rule to log the packets that will be dropped due to network policy enforcement
 		comment := "\"rule to log dropped traffic POD name:" + podName + " namespace: " + podNamespace + "\""
-		args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment, "-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG", "--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10", "\n"}
+		args := []string{
+			"-A", podFwChainName,
+			"-m", "comment", "--comment", comment,
+			"-m", "mark", "!", "--mark", "0x10000/0x10000",
+			"-j", "NFLOG", "--nflog-group", "100",
+		}
+		if npc.nflogRejectsLimit != "" && npc.nflogRejectsBurst > 0 {
+			// you can tune the burst/limit parameters to increase or decrease logging rate, or you can set limit = ""
+			// or burst = 0 to disable limiting (but not logging) entirely (i.e. log everything) but be careful :)
+			args = append(args,
+				"-m", "limit", "--limit", npc.nflogRejectsLimit, "--limit-burst", strconv.Itoa(npc.nflogRejectsBurst),
+			)
+		}
+		args = append(args, "\n")
+
 		// This used to be AppendUnique when we were using iptables directly, this checks to make sure we didn't drop unmarked for this chain already
 		if strings.Contains(npc.filterTableRules.String(), strings.Join(args, " ")) {
 			return nil

@@ -70,6 +70,9 @@ type NetworkPolicyController struct {
 	NetworkPolicyEventHandler cache.ResourceEventHandler
 
 	filterTableRules bytes.Buffer
+
+	nflogRejectsBurst int
+	nflogRejectsLimit string
 }
 
 // internal structure to represent a network policy
@@ -588,7 +591,10 @@ func (npc *NetworkPolicyController) Cleanup() {
 func NewNetworkPolicyController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
 	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) (*NetworkPolicyController, error) {
-	npc := NetworkPolicyController{}
+	npc := NetworkPolicyController{
+		nflogRejectsLimit: config.PodFWRejectsLogLimit,
+		nflogRejectsBurst: config.PodFWRejectsLogBurst,
+	}
 
 	// Creating a single-item buffered channel to ensure that we only keep a single full sync request at a time,
 	// additional requests would be pointless to queue since after the first one was processed the system would already
