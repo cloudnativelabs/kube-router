@@ -867,14 +867,13 @@ func Test_AddPolicies(t *testing.T) {
 				t.Fatalf("error validating defined sets: %v", err)
 			}
 
-			checkPolicies(t, testcase, gobgpapi.PolicyDirection_EXPORT, gobgpapi.RouteAction_REJECT, testcase.exportPolicyStatements)
-			checkPolicies(t, testcase, gobgpapi.PolicyDirection_IMPORT, gobgpapi.RouteAction_ACCEPT, testcase.importPolicyStatements)
+			checkPolicies(t, testcase, gobgpapi.PolicyDirection_EXPORT, testcase.exportPolicyStatements)
+			checkPolicies(t, testcase, gobgpapi.PolicyDirection_IMPORT, testcase.importPolicyStatements)
 		})
 	}
 }
 
-func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpapi.PolicyDirection, defaultPolicy gobgpapi.RouteAction,
-	policyStatements []*gobgpapi.Statement) {
+func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpapi.PolicyDirection, policyStatements []*gobgpapi.Statement) {
 	policyExists := false
 
 	var direction string
@@ -911,15 +910,15 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 	}
 
 	if !policyAssignmentExists {
-		t.Errorf("export policy assignment 'kube_router_%v' was not added", direction)
+		t.Errorf("%s policy assignment 'kube_router_%s' was not added", direction, direction)
 	}
-	/*
-		statements := testcase.nrc.bgpServer.GetStatement()
+	err = testcase.nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{Name: fmt.Sprintf("kube_router_%s", direction)}, func(foundPolicy *gobgpapi.Policy) {
 		for _, expectedStatement := range policyStatements {
 			found := false
-			for _, statement := range statements {
+			for _, statement := range foundPolicy.Statements {
 				if reflect.DeepEqual(statement, expectedStatement) {
 					found = true
+					break
 				}
 			}
 
@@ -927,5 +926,8 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 				t.Errorf("statement %v not found", expectedStatement)
 			}
 		}
-	*/
+	})
+	if err != nil {
+		t.Fatalf("expected to find a policy, but none were returned")
+	}
 }
