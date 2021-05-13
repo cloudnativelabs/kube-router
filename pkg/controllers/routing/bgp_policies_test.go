@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -26,7 +27,8 @@ type PolicyTestCase struct {
 	allPeerDefinedSet      *gobgpapi.DefinedSet
 	exportPolicyStatements []*gobgpapi.Statement
 	importPolicyStatements []*gobgpapi.Statement
-	err                    error
+	addPolicyErr           error
+	startBGPServerErr      error
 }
 
 func Test_AddPolicies(t *testing.T) {
@@ -36,6 +38,8 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
+				routerID:          "10.0.0.0",
+				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: true,
 				bgpServer:         gobgp.NewBgpServer(),
@@ -121,6 +125,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "iBGPpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -139,6 +144,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "allpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_REJECT,
@@ -146,12 +152,15 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			nil,
+			nil,
 		},
 		{
 			"has nodes, services with external peers",
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
+				routerID:          "10.0.0.0",
+				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: true,
 				bgpServer:         gobgp.NewBgpServer(),
@@ -253,6 +262,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "iBGPpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -269,6 +279,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "externalpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -287,6 +298,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "allpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_REJECT,
@@ -294,12 +306,15 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			nil,
+			nil,
 		},
 		{
 			"has nodes, services with external peers and iBGP disabled",
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
+				routerID:          "10.0.0.0",
+				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: false,
 				bgpServer:         gobgp.NewBgpServer(),
@@ -401,6 +416,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "externalpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -419,12 +435,14 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "allpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_REJECT,
 					},
 				},
 			},
+			nil,
 			nil,
 		},
 		{
@@ -432,11 +450,10 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
+				routerID:          "10.0.0.0",
+				bgpPort:           10000,
 				bgpEnableInternal: true,
 				bgpFullMeshMode:   false,
-				pathPrepend:       true,
-				pathPrependCount:  5,
-				pathPrependAS:     "65100",
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.20.0.0/24",
@@ -459,7 +476,9 @@ func Test_AddPolicies(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
 						Annotations: map[string]string{
-							"kube-router.io/node.asn": "100",
+							"kube-router.io/node.asn":              "100",
+							"kube-router.io/path-prepend.as":       "65100",
+							"kube-router.io/path-prepend.repeat-n": "5",
 						},
 					},
 					Status: v1core.NodeStatus{
@@ -536,6 +555,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "iBGPpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -552,6 +572,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "externalpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -574,12 +595,14 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "allpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_REJECT,
 					},
 				},
 			},
+			nil,
 			nil,
 		},
 		{
@@ -587,10 +610,10 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
+				routerID:          "10.0.0.0",
+				bgpPort:           10000,
 				bgpEnableInternal: true,
 				bgpFullMeshMode:   false,
-				pathPrepend:       false,
-				pathPrependAS:     "65100",
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.20.0.0/24",
@@ -613,7 +636,8 @@ func Test_AddPolicies(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
 						Annotations: map[string]string{
-							"kube-router.io/node.asn": "100",
+							"kube-router.io/node.asn":        "100",
+							"kube-router.io/path-prepend.as": "65100",
 						},
 					},
 					Status: v1core.NodeStatus{
@@ -690,6 +714,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "iBGPpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -706,6 +731,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "externalpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -728,6 +754,7 @@ func Test_AddPolicies(t *testing.T) {
 							MatchType: gobgpapi.MatchType_ANY,
 							Name:      "allpeerset",
 						},
+						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						RouteAction: gobgpapi.RouteAction_REJECT,
@@ -735,36 +762,37 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			nil,
+			fmt.Errorf("both %s and %s must be set", pathPrependASNAnnotation, pathPrependRepeatNAnnotation),
 		},
 	}
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			go testcase.nrc.bgpServer.Serve()
-			global := &gobgpapi.Global{
-				As:         1,
-				RouterId:   "10.0.0.0",
-				ListenPort: 10000,
+			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
+
+			if err := createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
+				t.Errorf("failed to create existing nodes: %v", err)
 			}
-			err := testcase.nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global})
-			if err != nil {
-				t.Fatalf("failed to start BGP server: %v", err)
+
+			if err := createServices(testcase.nrc.clientset, testcase.existingServices); err != nil {
+				t.Errorf("failed to create existing nodes: %v", err)
+			}
+
+			err := testcase.nrc.startBgpServer(false)
+			if !reflect.DeepEqual(err, testcase.startBGPServerErr) {
+				t.Logf("expected err when invoking startBGPServer(): %v", testcase.startBGPServerErr)
+				t.Logf("actual err from startBGPServer() received: %v", err)
+				t.Error("unexpected error")
+			}
+			// If the server was not expected to start we should stop here as the rest of the tests are unimportant
+			if testcase.startBGPServerErr != nil {
+				return
 			}
 			defer func() {
 				if err := testcase.nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{}); err != nil {
 					t.Fatalf("failed to stop BGP server : %s", err)
 				}
 			}()
-
-			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
-
-			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
-				t.Errorf("failed to create existing nodes: %v", err)
-			}
-
-			if err = createServices(testcase.nrc.clientset, testcase.existingServices); err != nil {
-				t.Errorf("failed to create existing nodes: %v", err)
-			}
 
 			// ClusterIPs and ExternalIPs
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
@@ -777,21 +805,25 @@ func Test_AddPolicies(t *testing.T) {
 			nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 			testcase.nrc.nodeLister = nodeInformer.GetIndexer()
 			err = testcase.nrc.AddPolicies()
-			if !reflect.DeepEqual(err, testcase.err) {
-				t.Logf("expected err %v", testcase.err)
-				t.Logf("actual err %v", err)
+			if !reflect.DeepEqual(err, testcase.addPolicyErr) {
+				t.Logf("expected err when invoking AddPolicies(): %v", testcase.addPolicyErr)
+				t.Logf("actual err from AddPolicies() received: %v", err)
 				t.Error("unexpected error")
 			}
+			// If we expect AddPolicies() to fail we should stop here as there is no point in further evaluating policies
+			if testcase.addPolicyErr != nil {
+				return
+			}
 
-			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(), &gobgpapi.ListDefinedSetRequest{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "podcidrdefinedset"}, func(podDefinedSet *gobgpapi.DefinedSet) {
-				if !reflect.DeepEqual(podDefinedSet, testcase.podDefinedSet) {
-					t.Logf("expected pod defined set: %+v", testcase.podDefinedSet)
-					t.Logf("actual pod defined set: %+v", podDefinedSet)
-					t.Error("unexpected pod defined set")
-				}
-			})
+			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(),
+				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "podcidrdefinedset"},
+				func(podDefinedSet *gobgpapi.DefinedSet) {
+					if !reflect.DeepEqual(podDefinedSet, testcase.podDefinedSet) {
+						t.Logf("expected pod defined set: %+v", testcase.podDefinedSet)
+						t.Logf("actual pod defined set: %+v", podDefinedSet)
+						t.Error("unexpected pod defined set")
+					}
+				})
 			if err != nil {
 				t.Fatalf("error validating defined sets: %v", err)
 			}
