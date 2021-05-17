@@ -148,7 +148,7 @@ Finally, to include peer passwords as a file you would run kube-router with the 
 ```
 --peer-router-ips="192.168.1.99,192.168.1.100"
 --peer-router-asns="65000,65000"
---peer-router-passwords-file='/etc/kube-router/bgp-passwords.conf'
+--peer-router-passwords-file="/etc/kube-router/bgp-passwords.conf"
 ```
 
 The password file, closely follows the syntax of the command-line and node annotation options.
@@ -175,7 +175,7 @@ kubectl annotate node <kube-node> "kube-router.io/node.bgp.communities=no-export
 
 ## BGP listen address list 
 
-By default, GoBGP server binds on the node IP address. However in case of nodes with multiple IP address it is desirable to bind GoBGP to multiple local adresses. Local IP address on which GoGBP should listen on an node can be configured with annotation `kube-router.io/bgp-local-addresses`.
+By default, GoBGP server binds on the node IP address. However in case of nodes with multiple IP address it is desirable to bind GoBGP to multiple local adresses. Local IP address on which GoGBP should listen on a node can be configured with annotation `kube-router.io/bgp-local-addresses`.
 
 Here is sample example to make GoBGP server to listen on multiple IP address
 ```
