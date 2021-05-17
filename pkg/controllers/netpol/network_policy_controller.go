@@ -6,7 +6,6 @@ import (
 	"encoding/base32"
 	"fmt"
 	"net"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -601,26 +600,9 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npc.serviceClusterIPRange = *ipnet
 
 	// Validate and parse NodePort range
-	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]{1}([0-9]+)$`)
-	if matched := nodePortValidator.MatchString(config.NodePortRange); !matched {
-		return nil, fmt.Errorf("failed to parse node port range given: '%s' please see specification in help text", config.NodePortRange)
+	if npc.serviceNodePortRange, err = validateNodePortRange(config.NodePortRange); err != nil {
+		return nil, err
 	}
-	matches := nodePortValidator.FindStringSubmatch(config.NodePortRange)
-	if len(matches) != 3 {
-		return nil, fmt.Errorf("could not parse port number from range given: '%s'", config.NodePortRange)
-	}
-	port1, err := strconv.ParseInt(matches[1], 10, 16)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse first port number from range given: '%s'", config.NodePortRange)
-	}
-	port2, err := strconv.ParseInt(matches[2], 10, 16)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse second port number from range given: '%s'", config.NodePortRange)
-	}
-	if port1 >= port2 {
-		return nil, fmt.Errorf("port 1 is greater than or equal to port 2 in range given: '%s'", config.NodePortRange)
-	}
-	npc.serviceNodePortRange = fmt.Sprintf("%d:%d", port1, port2)
 
 	// Validate and parse ExternalIP service range
 	for _, externalIPRange := range config.ExternalIPCIDRs {
