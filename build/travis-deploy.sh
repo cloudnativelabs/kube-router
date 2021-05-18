@@ -4,6 +4,8 @@ set -o pipefail
 
 GOARCHES=(amd64 arm64 arm s390x ppc64le)
 
+make docker-login
+
 # Pull Request image tag format: PR00
 if [ "${TRAVIS_EVENT_TYPE}" = "pull_request" ]; then
     PR_USER=$(echo "${TRAVIS_PULL_REQUEST_SLUG}" | sed -e 's/\/.*//')
