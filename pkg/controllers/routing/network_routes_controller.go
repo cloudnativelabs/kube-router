@@ -118,6 +118,7 @@ type NetworkRoutingController struct {
 	overrideNextHop                bool
 	podCidr                        string
 	CNIFirewallSetup               *sync.Cond
+	ipsetMutex                     *sync.Mutex
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -645,6 +646,13 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	}
 
 	// delete all ipsets created by kube-router
+	klog.V(1).Infof("Attempting to attain ipset mutex lock")
+	nrc.ipsetMutex.Lock()
+	klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+	defer func() {
+		nrc.ipsetMutex.Unlock()
+		klog.V(1).Infof("Returned ipset mutex lock")
+	}()
 	ipset, err := utils.NewIPSet(nrc.isIpv6)
 	if err != nil {
 		klog.Errorf("Failed to clean up ipsets: " + err.Error())
@@ -667,6 +675,13 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		if nrc.MetricsEnabled {
 			metrics.ControllerRoutesSyncTime.Observe(time.Since(start).Seconds())
 		}
+	}()
+	klog.V(1).Infof("Attempting to attain ipset mutex lock")
+	nrc.ipsetMutex.Lock()
+	klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+	defer func() {
+		nrc.ipsetMutex.Unlock()
+		klog.V(1).Infof("Returned ipset mutex lock")
 	}()
 
 	nodes := nrc.nodeLister.List()
@@ -1019,11 +1034,11 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 func NewNetworkRoutingController(clientset kubernetes.Interface,
 	kubeRouterConfig *options.KubeRouterConfig,
 	nodeInformer cache.SharedIndexInformer, svcInformer cache.SharedIndexInformer,
-	epInformer cache.SharedIndexInformer) (*NetworkRoutingController, error) {
+	epInformer cache.SharedIndexInformer, ipsetMutex *sync.Mutex) (*NetworkRoutingController, error) {
 
 	var err error
 
-	nrc := NetworkRoutingController{}
+	nrc := NetworkRoutingController{ipsetMutex: ipsetMutex}
 	if kubeRouterConfig.MetricsEnabled {
 		//Register the metrics for this controller
 		prometheus.MustRegister(metrics.ControllerBGPadvertisementsReceived)

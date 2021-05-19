@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -522,7 +523,7 @@ func TestNetworkPolicyController(t *testing.T) {
 	_, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer)
+			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer, &sync.Mutex{})
 			if err == nil && test.expectError {
 				t.Error("This config should have failed, but it was successful instead")
 			} else if err != nil {
