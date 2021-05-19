@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/net/context"
+
 	"github.com/cloudnativelabs/kube-router/pkg/cri"
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
@@ -28,7 +30,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
-	"golang.org/x/net/context"
 	api "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -219,6 +220,7 @@ type NetworkServicesController struct {
 	ln                  LinuxNetworking
 	readyForUpdates     bool
 	ProxyFirewallSetup  *sync.Cond
+	ipsetMutex          *sync.Mutex
 
 	// Map of ipsets that we use.
 	ipsetMap map[string]*utils.Set
@@ -627,6 +629,13 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 	}
 
 	// Clear ipsets.
+	klog.V(1).Infof("Attempting to attain ipset mutex lock")
+	nsc.ipsetMutex.Lock()
+	klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+	defer func() {
+		nsc.ipsetMutex.Unlock()
+		klog.V(1).Infof("Returned ipset mutex lock")
+	}()
 	ipSetHandler, err := utils.NewIPSet(false)
 	if err != nil {
 		klog.Errorf("Failed to initialize ipset handler: %s", err.Error())
@@ -653,6 +662,13 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	   - update ipsets based on currently active IPVS services
 	*/
 	var err error
+	klog.V(1).Infof("Attempting to attain ipset mutex lock")
+	nsc.ipsetMutex.Lock()
+	klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+	defer func() {
+		nsc.ipsetMutex.Unlock()
+		klog.V(1).Infof("Returned ipset mutex lock")
+	}()
 
 	localIPsIPSet := nsc.ipsetMap[localIPsIPSetName]
 
@@ -2507,7 +2523,7 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 // NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
-	epInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer) (*NetworkServicesController, error) {
+	epInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer, ipsetMutex *sync.Mutex) (*NetworkServicesController, error) {
 
 	var err error
 	ln, err := newLinuxNetworking()
@@ -2515,7 +2531,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
-	nsc := NetworkServicesController{ln: ln}
+	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex}
 
 	if config.MetricsEnabled {
 		//Register the metrics for this controller

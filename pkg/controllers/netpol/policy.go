@@ -76,6 +76,14 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 		klog.V(2).Infof("Syncing network policy chains took %v", endTime)
 	}()
 
+	klog.V(1).Infof("Attempting to attain ipset mutex lock")
+	npc.ipsetMutex.Lock()
+	klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+	defer func() {
+		npc.ipsetMutex.Unlock()
+		klog.V(1).Infof("Returned ipset mutex lock")
+	}()
+
 	ipset, err := utils.NewIPSet(false)
 	if err != nil {
 		return nil, nil, err

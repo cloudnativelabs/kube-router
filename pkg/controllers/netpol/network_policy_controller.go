@@ -57,6 +57,7 @@ type NetworkPolicyController struct {
 	MetricsEnabled          bool
 	healthChan              chan<- *healthcheck.ControllerHeartbeat
 	fullSyncRequestChan     chan struct{}
+	ipsetMutex              *sync.Mutex
 
 	ipSetHandler *utils.IPSet
 
@@ -566,6 +567,13 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	// delete all ipsets
+	klog.V(1).Infof("Attempting to attain ipset mutex lock")
+	npc.ipsetMutex.Lock()
+	klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+	defer func() {
+		npc.ipsetMutex.Unlock()
+		klog.V(1).Infof("Returned ipset mutex lock")
+	}()
 	ipset, err := utils.NewIPSet(false)
 	if err != nil {
 		klog.Errorf("Failed to clean up ipsets: " + err.Error())
@@ -584,8 +592,8 @@ func (npc *NetworkPolicyController) Cleanup() {
 // NewNetworkPolicyController returns new NetworkPolicyController object
 func NewNetworkPolicyController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
-	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) (*NetworkPolicyController, error) {
-	npc := NetworkPolicyController{}
+	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer, ipsetMutex *sync.Mutex) (*NetworkPolicyController, error) {
+	npc := NetworkPolicyController{ipsetMutex: ipsetMutex}
 
 	// Creating a single-item buffered channel to ensure that we only keep a single full sync request at a time,
 	// additional requests would be pointless to queue since after the first one was processed the system would already
