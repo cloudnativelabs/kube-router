@@ -72,6 +72,7 @@ func CleanupConfigAndExit() {
 // Run starts the controllers and waits forever till we get SIGINT or SIGTERM
 func (kr *KubeRouter) Run() error {
 	var err error
+	var ipsetMutex sync.Mutex
 	var wg sync.WaitGroup
 	healthChan := make(chan *healthcheck.ControllerHeartbeat, 10)
 	defer close(healthChan)
@@ -140,7 +141,8 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if kr.Config.RunRouter {
-		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config, nodeInformer, svcInformer, epInformer)
+		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config,
+			nodeInformer, svcInformer, epInformer, &ipsetMutex)
 		if err != nil {
 			return errors.New("Failed to create network routing controller: " + err.Error())
 		}
@@ -162,7 +164,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunServiceProxy {
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
-			svcInformer, epInformer, podInformer)
+			svcInformer, epInformer, podInformer, &ipsetMutex)
 		if err != nil {
 			return errors.New("Failed to create network services controller: " + err.Error())
 		}
@@ -183,7 +185,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunFirewall {
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
-			kr.Config, podInformer, npInformer, nsInformer)
+			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex)
 		if err != nil {
 			return errors.New("Failed to create network policy controller: " + err.Error())
 		}
