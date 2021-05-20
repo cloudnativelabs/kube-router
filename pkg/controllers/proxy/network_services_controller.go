@@ -2462,7 +2462,7 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 // NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
-	epInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer) (*NetworkServicesController, error) {
+	epInformer cache.SharedIndexInformer, podInformer cache.Indexer) (*NetworkServicesController, error) {
 
 	var err error
 	ln, err := newLinuxNetworking()
@@ -2548,7 +2548,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	// remove 20 bytes
 	nsc.dsrTCPMSS = automtu - 20
 
-	nsc.podLister = podInformer.GetIndexer()
+	nsc.podLister = podInformer
 
 	nsc.svcLister = svcInformer.GetIndexer()
 	nsc.ServiceEventHandler = nsc.newSvcEventHandler()
