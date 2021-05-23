@@ -36,10 +36,6 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 // OnPodUpdate handles updates to pods from the Kubernetes api server
 func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
 	pod := obj.(*api.Pod)
-	if pod.Spec.HostNetwork {
-		klog.V(2).Infof("Ignoring update to hostNetwork pod: %s/%s", pod.Namespace, pod.Name)
-		return
-	}
 	klog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
 
 	npc.RequestFullSync()
