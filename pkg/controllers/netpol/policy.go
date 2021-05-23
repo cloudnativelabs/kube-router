@@ -483,7 +483,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 		namedPort2IngressEps := make(namedPort2eps)
 		if err == nil {
 			for _, matchingPod := range matchingPods {
-				if matchingPod.Status.PodIP == "" {
+				if !isNetPolActionable(matchingPod) {
 					continue
 				}
 				newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ip: matchingPod.Status.PodIP,
@@ -519,7 +519,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 				for _, peer := range specIngressRule.From {
 					if peerPods, err := npc.evalPodPeer(policy, peer); err == nil {
 						for _, peerPod := range peerPods {
-							if peerPod.Status.PodIP == "" {
+							if !isNetPolActionable(peerPod) {
 								continue
 							}
 							ingressRule.srcPods = append(ingressRule.srcPods,
@@ -560,7 +560,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 				if policyRulePortsHasNamedPort(specEgressRule.Ports) {
 					matchingPeerPods, _ := npc.ListPodsByNamespaceAndLabels(policy.Namespace, labels.Everything())
 					for _, peerPod := range matchingPeerPods {
-						if peerPod.Status.PodIP == "" {
+						if !isNetPolActionable(peerPod) {
 							continue
 						}
 						npc.grabNamedPortFromPod(peerPod, &namedPort2EgressEps)
@@ -571,7 +571,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 				for _, peer := range specEgressRule.To {
 					if peerPods, err := npc.evalPodPeer(policy, peer); err == nil {
 						for _, peerPod := range peerPods {
-							if peerPod.Status.PodIP == "" {
+							if !isNetPolActionable(peerPod) {
 								continue
 							}
 							egressRule.dstPods = append(egressRule.dstPods,

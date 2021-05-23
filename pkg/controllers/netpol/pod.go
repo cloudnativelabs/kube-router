@@ -226,8 +226,8 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(networkPo
 	for _, obj := range npc.podLister.List() {
 		pod := obj.(*api.Pod)
 
-		// ignore the pods running on the different node or running in host network
-		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || pod.Spec.HostNetwork {
+		// ignore the pods running on the different node and pods that are not actionable
+		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || !isNetPolActionable(pod) {
 			continue
 		}
 
@@ -246,8 +246,8 @@ func (npc *NetworkPolicyController) getIngressNetworkPolicyEnabledPods(networkPo
 			}
 		}
 	}
-	return &nodePods, nil
 
+	return &nodePods, nil
 }
 
 func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(networkPoliciesInfo []networkPolicyInfo, nodeIP string) (*map[string]podInfo, error) {
@@ -257,10 +257,11 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(networkPol
 	for _, obj := range npc.podLister.List() {
 		pod := obj.(*api.Pod)
 
-		// ignore the pods running on the different node or running in host network
-		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || pod.Spec.HostNetwork {
+		// ignore the pods running on the different node and pods that are not actionable
+		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || !isNetPolActionable(pod) {
 			continue
 		}
+
 		for _, policy := range networkPoliciesInfo {
 			if policy.namespace != pod.ObjectMeta.Namespace {
 				continue
@@ -276,6 +277,7 @@ func (npc *NetworkPolicyController) getEgressNetworkPolicyEnabledPods(networkPol
 			}
 		}
 	}
+
 	return &nodePods, nil
 }
 

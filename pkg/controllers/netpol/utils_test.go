@@ -4,7 +4,88 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	api "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+var (
+	fakePod = api.Pod{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Pod",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testpod",
+			Namespace: "testnamespace",
+			Labels:    map[string]string{"foo": "bar"}},
+		Spec: api.PodSpec{
+			Containers: []api.Container{
+				{
+					Image: "k8s.gcr.io/busybox",
+				},
+			},
+		},
+		Status: api.PodStatus{
+			PodIP: "172.16.0.1",
+			PodIPs: []api.PodIP{
+				{
+					IP: "172.16.0.1",
+				},
+			},
+			HostIP: "10.0.0.1",
+			Phase:  api.PodRunning,
+		},
+	}
+)
+
+func Test_isPodFinished(t *testing.T) {
+	t.Run("Failed pod should be detected as finished", func(t *testing.T) {
+		fakePod.Status.Phase = api.PodFailed
+		assert.True(t, isFinished(&fakePod))
+	})
+	t.Run("Succeeded pod should be detected as finished", func(t *testing.T) {
+		fakePod.Status.Phase = api.PodSucceeded
+		assert.True(t, isFinished(&fakePod))
+	})
+	t.Run("Completed pod should be detected as finished", func(t *testing.T) {
+		fakePod.Status.Phase = PodCompleted
+		assert.True(t, isFinished(&fakePod))
+	})
+	t.Run("Running pod should NOT be detected as finished", func(t *testing.T) {
+		fakePod.Status.Phase = api.PodRunning
+		assert.False(t, isFinished(&fakePod))
+	})
+	t.Run("Pending pod should NOT be detected as finished", func(t *testing.T) {
+		fakePod.Status.Phase = api.PodPending
+		assert.False(t, isFinished(&fakePod))
+	})
+	t.Run("Unknown pod should NOT be detected as finished", func(t *testing.T) {
+		fakePod.Status.Phase = api.PodUnknown
+		assert.False(t, isFinished(&fakePod))
+	})
+}
+
+func Test_isNetPolActionable(t *testing.T) {
+	t.Run("Normal pod should be actionable", func(t *testing.T) {
+		assert.True(t, isNetPolActionable(&fakePod))
+	})
+	t.Run("Pod without Pod IP should not be actionable", func(t *testing.T) {
+		fakePod.Status.PodIP = ""
+		assert.False(t, isNetPolActionable(&fakePod))
+	})
+	t.Run("Finished Pod should not be actionable", func(t *testing.T) {
+		fakePod.Status.Phase = api.PodFailed
+		assert.False(t, isNetPolActionable(&fakePod))
+		fakePod.Status.Phase = api.PodSucceeded
+		assert.False(t, isNetPolActionable(&fakePod))
+		fakePod.Status.Phase = PodCompleted
+		assert.False(t, isNetPolActionable(&fakePod))
+	})
+	t.Run("Host Networked Pod should not be actionable", func(t *testing.T) {
+		fakePod.Spec.HostNetwork = true
+		assert.False(t, isNetPolActionable(&fakePod))
+	})
+}
 
 func Test_NewNetworkPolicyController(t *testing.T) {
 	t.Run("Node Port range specified with a hyphen should pass validation", func(t *testing.T) {

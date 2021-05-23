@@ -4,7 +4,25 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+
+	api "k8s.io/api/core/v1"
 )
+
+const (
+	PodCompleted api.PodPhase = "Completed"
+)
+
+func isNetPolActionable(pod *api.Pod) bool {
+	return !isFinished(pod) && pod.Status.PodIP != "" && !pod.Spec.HostNetwork
+}
+
+func isFinished(pod *api.Pod) bool {
+	switch pod.Status.Phase {
+	case api.PodFailed, api.PodSucceeded, PodCompleted:
+		return true
+	}
+	return false
+}
 
 func validateNodePortRange(nodePortOption string) (string, error) {
 	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]([0-9]+)$`)
