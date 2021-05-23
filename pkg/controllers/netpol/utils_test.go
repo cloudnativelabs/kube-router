@@ -38,6 +38,44 @@ var (
 	}
 )
 
+func Test_isPodUpdateNetPolRelevant(t *testing.T) {
+	t.Run("Pod phase change should be detected as NetworkPolicy relevant", func(t *testing.T) {
+		newPod := fakePod.DeepCopy()
+		newPod.Status.Phase = api.PodFailed
+		assert.True(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
+	})
+	t.Run("Pod IP change should be detected as NetworkPolicy relevant", func(t *testing.T) {
+		newPod := fakePod.DeepCopy()
+		newPod.Status.PodIP = "172.16.0.2"
+		assert.True(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
+	})
+	t.Run("Pod IPs change should be detected as NetworkPolicy relevant", func(t *testing.T) {
+		newPod := fakePod.DeepCopy()
+		newPod.Status.PodIPs = []api.PodIP{{IP: "172.16.0.2"}}
+		assert.True(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
+	})
+	t.Run("Pod Label change should be detected as NetworkPolicy relevant", func(t *testing.T) {
+		newPod := fakePod.DeepCopy()
+		newPod.ObjectMeta.Labels = map[string]string{"bar": "foo"}
+		assert.True(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
+	})
+	t.Run("Pod Host IP change should be detected as NetworkPolicy relevant", func(t *testing.T) {
+		newPod := fakePod.DeepCopy()
+		newPod.Status.HostIP = "10.0.0.2"
+		assert.True(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
+	})
+	t.Run("Pod Image change should NOT be detected as NetworkPolicy relevant", func(t *testing.T) {
+		newPod := fakePod.DeepCopy()
+		newPod.Spec.Containers[0].Image = "k8s.gcr.io/otherimage"
+		assert.False(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
+	})
+	t.Run("Pod Name change should NOT be detected as NetworkPolicy relevant", func(t *testing.T) {
+		newPod := fakePod.DeepCopy()
+		newPod.ObjectMeta.Name = "otherpod"
+		assert.False(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
+	})
+}
+
 func Test_isPodFinished(t *testing.T) {
 	t.Run("Failed pod should be detected as finished", func(t *testing.T) {
 		fakePod.Status.Phase = api.PodFailed
