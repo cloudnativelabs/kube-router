@@ -3,7 +3,6 @@ package netpol
 import (
 	"crypto/sha256"
 	"encoding/base32"
-	"reflect"
 	"strings"
 
 	api "k8s.io/api/core/v1"
@@ -23,12 +22,21 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			newPodObj := newObj.(*api.Pod)
-			oldPodObj := oldObj.(*api.Pod)
-			if newPodObj.Status.Phase != oldPodObj.Status.Phase ||
-				newPodObj.Status.PodIP != oldPodObj.Status.PodIP ||
-				!reflect.DeepEqual(newPodObj.Labels, oldPodObj.Labels) {
-				// for the network policies, we are only interested in pod status phase change or IP change
+			var newPodObj, oldPodObj *api.Pod
+			var ok bool
+
+			// If either of these objects are not pods, quit now
+			if newPodObj, ok = newObj.(*api.Pod); !ok {
+				return
+			}
+			if oldPodObj, ok = oldObj.(*api.Pod); !ok {
+				return
+			}
+
+			// We don't check isNetPolActionable here, because if it is transitioning in or out of the actionable state
+			// we want to run the full sync so that it can be added or removed from the existing network policy of the host
+			// For the network policies, we are only interested in some changes, most pod changes aren't relevant to network policy
+			if isPodUpdateNetPolRelevant(oldPodObj, newPodObj) {
 				npc.OnPodUpdate(newObj)
 			}
 		},
