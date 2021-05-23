@@ -14,8 +14,13 @@ import (
 func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			npc.OnPodUpdate(obj)
-
+			if podObj, ok := obj.(*api.Pod); ok {
+				// If the pod isn't yet actionable there is no action to take here anyway, so skip it. When it becomes
+				// actionable, we'll get an update below.
+				if isNetPolActionable(podObj) {
+					npc.OnPodUpdate(obj)
+				}
+			}
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			newPodObj := newObj.(*api.Pod)
