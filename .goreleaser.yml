@@ -16,8 +16,8 @@ builds:
   env:
   - CGO_ENABLED=0
   ldflags:
-  - "-X github.com/cloudnativelabs/kube-router/pkg/cmd.version={{.Version}}"
-  - "-X github.com/cloudnativelabs/kube-router/pkg/cmd.buildDate={{.Date}}"
+  - "-X github.com/cloudnativelabs/kube-router/pkg/version.Version={{.Version}}"
+  - "-X github.com/cloudnativelabs/kube-router/pkg/version.BuildDate={{.Date}}"
 
 archives:
   -
