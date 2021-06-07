@@ -19,7 +19,7 @@ require (
 	github.com/moby/ipvs v1.0.1
 	github.com/moby/term v0.0.0-20201216013528-df9cb8a40635 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
-	github.com/onsi/ginkgo v1.16.1
+	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.11.0
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
