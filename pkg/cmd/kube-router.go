@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/controllers/netpol"
 	"github.com/cloudnativelabs/kube-router/pkg/controllers/proxy"
@@ -15,8 +16,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/version"
 	"k8s.io/klog/v2"
-
-	"time"
 
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -126,17 +125,17 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.BGPGracefulRestart {
 		if kr.Config.BGPGracefulRestartTime > time.Second*4095 {
-			return errors.New("BGPGracefuleRestartTime should be less than 4095 seconds")
+			return errors.New("BGPGracefulRestartTime should be less than 4095 seconds")
 		}
 		if kr.Config.BGPGracefulRestartTime <= 0 {
-			return errors.New("BGPGracefuleRestartTime must be positive")
+			return errors.New("BGPGracefulRestartTime must be positive")
 		}
 
 		if kr.Config.BGPGracefulRestartDeferralTime > time.Hour*18 {
-			return errors.New("BGPGracefuleRestartDeferralTime should be less than 18 hours")
+			return errors.New("BGPGracefulRestartDeferralTime should be less than 18 hours")
 		}
 		if kr.Config.BGPGracefulRestartDeferralTime <= 0 {
-			return errors.New("BGPGracefuleRestartDeferralTime must be positive")
+			return errors.New("BGPGracefulRestartDeferralTime must be positive")
 		}
 	}
 
