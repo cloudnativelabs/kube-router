@@ -122,6 +122,7 @@ type egressRule struct {
 type protocolAndPort struct {
 	protocol string
 	port     string
+	endport  string
 }
 
 type endPoints struct {

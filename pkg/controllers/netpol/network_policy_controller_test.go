@@ -1,7 +1,9 @@
 package netpol
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -10,6 +12,7 @@ import (
 
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/cache"
 
 	v1 "k8s.io/api/core/v1"
@@ -208,6 +211,7 @@ type tNetpolTestCase struct {
 	targetPods   tPodNamespaceMap
 	inSourcePods tPodNamespaceMap
 	outDestPods  tPodNamespaceMap
+	expectedRule string
 }
 
 // tGetNotTargetedPods finds set of pods that should not be targeted by netpol selectors
@@ -394,6 +398,182 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNetworkPolicyBuilder(t *testing.T) {
+	port, port1 := intstr.FromInt(30000), intstr.FromInt(34000)
+	ingressPort := intstr.FromInt(37000)
+	endPort, endPort1 := int32(31000), int32(35000)
+	testCases := []tNetpolTestCase{
+		{
+			name: "Simple Egress Destination Port",
+			netpol: tNetpol{name: "simple-egress", namespace: "nsA",
+				podSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "app",
+							Operator: "In",
+							Values:   []string{"a"},
+						},
+					},
+				},
+				egress: []netv1.NetworkPolicyEgressRule{
+					{
+						Ports: []netv1.NetworkPolicyPort{
+							{
+								Port: &port,
+							},
+						},
+					},
+				},
+			},
+			expectedRule: "-A KUBE-NWPLCY-QHFGOTFJZFXUJVTH -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-QHFGOTFJZFXUJVTH -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+		},
+		{
+			name: "Simple Ingress/Egress Destination Port",
+			netpol: tNetpol{name: "simple-ingress-egress", namespace: "nsA",
+				podSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "app",
+							Operator: "In",
+							Values:   []string{"a"},
+						},
+					},
+				},
+				egress: []netv1.NetworkPolicyEgressRule{
+					{
+						Ports: []netv1.NetworkPolicyPort{
+							{
+								Port: &port,
+							},
+						},
+					},
+				},
+				ingress: []netv1.NetworkPolicyIngressRule{
+					{
+						Ports: []netv1.NetworkPolicyPort{
+							{
+								Port: &ingressPort,
+							},
+						},
+					},
+				},
+			},
+			expectedRule: "-A KUBE-NWPLCY-KO52PWL34ABMMBI7 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-KO52PWL34ABMMBI7 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
+				"-A KUBE-NWPLCY-KO52PWL34ABMMBI7 -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\" --dport 37000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-KO52PWL34ABMMBI7 -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\" --dport 37000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+		},
+		{
+			name: "Simple Egress Destination Port Range",
+			netpol: tNetpol{name: "simple-egress-pr", namespace: "nsA",
+				podSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "app",
+							Operator: "In",
+							Values:   []string{"a"},
+						},
+					},
+				},
+				egress: []netv1.NetworkPolicyEgressRule{
+					{
+						Ports: []netv1.NetworkPolicyPort{
+							{
+								Port:    &port,
+								EndPort: &endPort,
+							},
+							{
+								Port:    &port1,
+								EndPort: &endPort1,
+							},
+						},
+					},
+				},
+			},
+			expectedRule: "-A KUBE-NWPLCY-SQYQ7PVNG6A6Q3DU -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-SQYQ7PVNG6A6Q3DU -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
+				"-A KUBE-NWPLCY-SQYQ7PVNG6A6Q3DU -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-SQYQ7PVNG6A6Q3DU -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+		},
+		{
+			name: "Port > EndPort (invalid condition, should drop endport)",
+			netpol: tNetpol{name: "invalid-endport", namespace: "nsA",
+				podSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "app",
+							Operator: "In",
+							Values:   []string{"a"},
+						},
+					},
+				},
+				egress: []netv1.NetworkPolicyEgressRule{
+					{
+						Ports: []netv1.NetworkPolicyPort{
+							{
+								Port:    &port1,
+								EndPort: &endPort,
+							},
+						},
+					},
+				},
+			},
+			expectedRule: "-A KUBE-NWPLCY-2A4DPWPR5REBS66I -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\" --dport 34000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-2A4DPWPR5REBS66I -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\" --dport 34000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+		},
+	}
+
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", "10.10.10.10")}})
+	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	informerFactory.Start(ctx.Done())
+	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
+	krNetPol, _ := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
+	tCreateFakePods(t, podInformer, nsInformer)
+	for _, test := range testCases {
+		test.netpol.createFakeNetpol(t, netpolInformer)
+		netpols, err := krNetPol.buildNetworkPoliciesInfo()
+		if err != nil {
+			t.Errorf("Problems building policies: %s", err)
+		}
+		for _, np := range netpols {
+			fmt.Printf(np.policyType)
+			if np.policyType == "egress" || np.policyType == "both" {
+				err = krNetPol.processEgressRules(np, "", nil, "1")
+				if err != nil {
+					t.Errorf("Error syncing the rules: %s", err)
+				}
+			}
+			if np.policyType == "ingress" || np.policyType == "both" {
+				err = krNetPol.processIngressRules(np, "", nil, "1")
+				if err != nil {
+					t.Errorf("Error syncing the rules: %s", err)
+				}
+			}
+		}
+
+		if !bytes.Equal([]byte(test.expectedRule), krNetPol.filterTableRules.Bytes()) {
+			t.Errorf("Invalid rule %s created:\nExpected:\n%s \nGot:\n%s", test.name, test.expectedRule, krNetPol.filterTableRules.String())
+		}
+		key := fmt.Sprintf("%s/%s", test.netpol.namespace, test.netpol.name)
+		obj, exists, err := krNetPol.npLister.GetByKey(key)
+		if err != nil {
+			t.Errorf("Failed to get Netpol from store: %s", err)
+		}
+		if exists {
+			err = krNetPol.npLister.Delete(obj)
+			if err != nil {
+				t.Errorf("Failed to remove Netpol from store: %s", err)
+			}
+		}
+		krNetPol.filterTableRules.Reset()
+
+	}
+
 }
 
 func TestNetworkPolicyController(t *testing.T) {
