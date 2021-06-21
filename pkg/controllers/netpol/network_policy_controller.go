@@ -32,6 +32,7 @@ const (
 	kubeInputChainName           = "KUBE-ROUTER-INPUT"
 	kubeForwardChainName         = "KUBE-ROUTER-FORWARD"
 	kubeOutputChainName          = "KUBE-ROUTER-OUTPUT"
+	kubeDefaultNetpolChain       = "KUBE-NWPLCY-DEFAULT"
 )
 
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
@@ -143,8 +144,11 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	klog.Info("Starting network policy controller")
 	npc.healthChan = healthChan
 
-	// setup kube-router specific top level custom chains
+	// setup kube-router specific top level custom chains (KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT)
 	npc.ensureTopLevelChains()
+
+	// setup default network policy chain that is applied to traffic from/to the pods that does not match any network policy
+	npc.ensureDefaultNetworkPolicyChain()
 
 	// Full syncs of the network policy controller take a lot of time and can only be processed one at a time,
 	// therefore, we start it in it's own goroutine and request a sync through a single item channel
@@ -377,6 +381,38 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, externalIPIndex+4)
 	}
 
+	// for the traffic to/from the local pod's let network policy controller be
+	// authoritative entity to ACCEPT the traffic if it complies to network policies
+	for _, chain := range chains {
+		comment := "rule to explictly ACCEPT traffic that comply to network policies"
+		args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT"}
+		err = iptablesCmdHandler.AppendUnique("filter", chain, args...)
+		if err != nil {
+			klog.Fatalf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+}
+
+// Creates custom chains KUBE-NWPLCY-DEFAULT
+func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
+
+	iptablesCmdHandler, err := iptables.New()
+	if err != nil {
+		klog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
+	}
+
+	markArgs := make([]string, 0)
+	markComment := "rule to mark traffic matching a network policy"
+	markArgs = append(markArgs, "-j", "MARK", "-m", "comment", "--comment", markComment, "--set-xmark", "0x10000/0x10000")
+
+	err = iptablesCmdHandler.NewChain("filter", kubeDefaultNetpolChain)
+	if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
+		klog.Fatalf("Failed to run iptables command to create %s chain due to %s", kubeDefaultNetpolChain, err.Error())
+	}
+	err = iptablesCmdHandler.AppendUnique("filter", kubeDefaultNetpolChain, markArgs...)
+	if err != nil {
+		klog.Fatalf("Failed to run iptables command: %s", err.Error())
+	}
 }
 
 func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool) error {
