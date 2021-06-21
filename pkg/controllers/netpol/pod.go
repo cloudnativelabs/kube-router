@@ -152,6 +152,12 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 
 // setup rules to jump to applicable network policy chaings for the pod inbound traffic
 func (npc *NetworkPolicyController) setupPodIngressRules(pod *podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, version string) error {
+
+	// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
+	comment := "\"rule for stateful firewall for pod\""
+	args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
+	npc.filterTableRules.WriteString(strings.Join(args, " "))
+
 	// add entries in pod firewall to run through required network policies
 	for _, policy := range networkPoliciesInfo {
 		if _, ok := policy.targetPods[pod.ip]; ok {
@@ -170,13 +176,8 @@ func (npc *NetworkPolicyController) setupPodIngressRules(pod *podInfo, podFwChai
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
-	comment := "\"rule to permit the traffic traffic to pods when source is the pod's local node\""
-	args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT", "\n"}
-	npc.filterTableRules.WriteString(strings.Join(args, " "))
-
-	// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
-	comment = "\"rule for stateful firewall for pod\""
-	args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
+	comment = "\"rule to permit the traffic traffic to pods when source is the pod's local node\""
+	args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT", "\n"}
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
 
 	return nil
@@ -209,6 +210,12 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, pod
 
 // setup rules to jump to applicable network policy chains for the pod outbound traffic
 func (npc *NetworkPolicyController) setupPodEgressRules(pod *podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, version string) error {
+
+	// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
+	comment := "\"rule for stateful firewall for pod\""
+	args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
+	npc.filterTableRules.WriteString(strings.Join(args, " "))
+
 	// add entries in pod firewall to run through required network policies
 	for _, policy := range networkPoliciesInfo {
 		if _, ok := policy.targetPods[pod.ip]; ok {
@@ -227,10 +234,6 @@ func (npc *NetworkPolicyController) setupPodEgressRules(pod *podInfo, podFwChain
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
-	// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
-	comment := "\"rule for stateful firewall for pod\""
-	args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
-	npc.filterTableRules.WriteString(strings.Join(args, " "))
 	return nil
 }
 
