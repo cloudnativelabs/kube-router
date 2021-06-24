@@ -142,8 +142,8 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 
 		// set mark to indicate traffic from/to the pod passed network policies.
 		// Mark will be checked to explictly ACCEPT the traffic
-		comment := "set mark to ACCEPT traffic that comply to network policies"
-		args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment, "-j", "MARK", "--set-mark", "0x20000/0x20000"}
+		comment := "\"set mark to ACCEPT traffic that comply to network policies\""
+		args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment, "-j", "MARK", "--set-mark", "0x20000/0x20000", "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
@@ -171,8 +171,8 @@ func (npc *NetworkPolicyController) setupPodIngressRules(pod *podInfo, podFwChai
 	// if pod does not have any network policy which applies rules for pod's ingress traffic
 	// then apply default network policy
 	if !npc.isIngressNetworkPolicyEnabledPod(networkPoliciesInfo, pod) {
-		comment := "run through default ingress policy  chain"
-		args := []string{"-I", podFwChainName, "1", "-d", pod.ip, "-m", "comment", "--comment", comment, "-j", kubeDefaultNetpolChain}
+		comment := "\"run through default ingress policy  chain\""
+		args := []string{"-I", podFwChainName, "1", "-d", pod.ip, "-m", "comment", "--comment", comment, "-j", kubeDefaultNetpolChain, "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
@@ -229,8 +229,8 @@ func (npc *NetworkPolicyController) setupPodEgressRules(pod *podInfo, podFwChain
 	// if pod does not have any network policy which applies rules for pod's egress traffic
 	// then apply default network policy
 	if !npc.isEgressNetworkPolicyEnabledPod(networkPoliciesInfo, pod) {
-		comment := "run through default network policy  chain"
-		args := []string{"-I", podFwChainName, "1", "-s", pod.ip, "-m", "comment", "--comment", comment, "-j", kubeDefaultNetpolChain}
+		comment := "\"run through default network policy  chain\""
+		args := []string{"-I", podFwChainName, "1", "-s", pod.ip, "-m", "comment", "--comment", comment, "-j", kubeDefaultNetpolChain, "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
