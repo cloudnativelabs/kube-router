@@ -255,7 +255,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	}
 
 	if err := utils.Restore("filter", npc.filterTableRules.Bytes()); err != nil {
-		klog.Errorf("Aborting sync. Failed to run iptables-restore: %v" + err.Error())
+		klog.Errorf("Aborting sync. Failed to run iptables-restore: %v\n%s", err.Error(), npc.filterTableRules.String())
 		return
 	}
 
@@ -433,6 +433,9 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 	}
 	for _, chain := range chains {
 		if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
+			if chain == kubeDefaultNetpolChain {
+				continue
+			}
 			if _, ok := activePolicyChains[chain]; !ok {
 				cleanupPolicyChains = append(cleanupPolicyChains, chain)
 			}
