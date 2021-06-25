@@ -111,29 +111,14 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 
 		activePodFwChains[podFwChainName] = true
 
-		// setup rules to run pod inbound traffic through applicable ingress network policies
-		err = npc.setupPodIngressRules(&pod, podFwChainName, networkPoliciesInfo, version)
-		if err != nil {
-			return nil, err
-		}
+		// setup rules to run through applicable ingress/egress network policies for the pod
+		npc.setupPodNetpolRules(&pod, podFwChainName, networkPoliciesInfo, version)
 
 		// setup rules to intercept inbound traffic to the pods
-		err = npc.interceptPodInboundTraffic(&pod, podFwChainName)
-		if err != nil {
-			return nil, err
-		}
-
-		// setup rules to run pod inbound traffic through applicable ingress network policies
-		err = npc.setupPodEgressRules(&pod, podFwChainName, networkPoliciesInfo, version)
-		if err != nil {
-			return nil, err
-		}
+		npc.interceptPodInboundTraffic(&pod, podFwChainName)
 
 		// setup rules to intercept inbound traffic to the pods
-		err = npc.interceptPodOutboundTraffic(&pod, podFwChainName)
-		if err != nil {
-			return nil, err
-		}
+		npc.interceptPodOutboundTraffic(&pod, podFwChainName)
 
 		err = dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
 		if err != nil {
@@ -150,40 +135,63 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 	return activePodFwChains, nil
 }
 
-// setup rules to jump to applicable network policy chaings for the pod inbound traffic
-func (npc *NetworkPolicyController) setupPodIngressRules(pod *podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, version string) error {
+// setup rules to jump to applicable network policy chains for the traffic from/to the pod
+func (npc *NetworkPolicyController) setupPodNetpolRules(pod *podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, version string) {
 
-	// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
-	comment := "\"rule for stateful firewall for pod\""
-	args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
-	npc.filterTableRules.WriteString(strings.Join(args, " "))
+	hasIngressPolicy := false
+	hasEgressPolicy := false
 
-	// add entries in pod firewall to run through required network policies
+	// add entries in pod firewall to run through applicable network policies
 	for _, policy := range networkPoliciesInfo {
-		if _, ok := policy.targetPods[pod.ip]; ok {
-			comment := "\"run through nw policy " + policy.name + "\""
-			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
-			args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
-			npc.filterTableRules.WriteString(strings.Join(args, " "))
+		if _, ok := policy.targetPods[pod.ip]; !ok {
+			continue
 		}
+		comment := "\"run through nw policy " + policy.name + "\""
+		policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
+		var args []string
+		switch policy.policyType {
+		case "both":
+			hasIngressPolicy = true
+			hasEgressPolicy = true
+			args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
+		case "ingress":
+			hasIngressPolicy = true
+			args = []string{"-I", podFwChainName, "1", "-d", pod.ip, "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
+		case "egress":
+			hasEgressPolicy = true
+			args = []string{"-I", podFwChainName, "1", "-s", pod.ip, "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
+		}
+		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
 	// if pod does not have any network policy which applies rules for pod's ingress traffic
 	// then apply default network policy
-	if !npc.isIngressNetworkPolicyEnabledPod(networkPoliciesInfo, pod) {
-		comment := "\"run through default ingress policy  chain\""
+	if !hasIngressPolicy {
+		comment := "\"run through default ingress network policy  chain\""
 		args := []string{"-I", podFwChainName, "1", "-d", pod.ip, "-m", "comment", "--comment", comment, "-j", kubeDefaultNetpolChain, "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
-	comment = "\"rule to permit the traffic traffic to pods when source is the pod's local node\""
-	args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT", "\n"}
+	// if pod does not have any network policy which applies rules for pod's egress traffic
+	// then apply default network policy
+	if !hasEgressPolicy {
+		comment := "\"run through default egress network policy  chain\""
+		args := []string{"-I", podFwChainName, "1", "-s", pod.ip, "-m", "comment", "--comment", comment, "-j", kubeDefaultNetpolChain, "\n"}
+		npc.filterTableRules.WriteString(strings.Join(args, " "))
+	}
+
+	comment := "\"rule to permit the traffic traffic to pods when source is the pod's local node\""
+	args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT", "\n"}
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
 
-	return nil
+	// ensure statefull firewall that permits RELATED,ESTABLISHED traffic from/to the pod
+	comment = "\"rule for stateful firewall for pod\""
+	args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
+	npc.filterTableRules.WriteString(strings.Join(args, " "))
+
 }
 
-func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, podFwChainName string) error {
+func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, podFwChainName string) {
 	// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 	// this rule applies to the traffic getting routed (coming for other node pods)
 	comment := "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
@@ -205,41 +213,11 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, pod
 		"-d", pod.ip,
 		"-j", podFwChainName, "\n"}
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
-	return nil
-}
-
-// setup rules to jump to applicable network policy chains for the pod outbound traffic
-func (npc *NetworkPolicyController) setupPodEgressRules(pod *podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, version string) error {
-
-	// ensure statefull firewall, that permits return traffic for the traffic originated by the pod
-	comment := "\"rule for stateful firewall for pod\""
-	args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT", "\n"}
-	npc.filterTableRules.WriteString(strings.Join(args, " "))
-
-	// add entries in pod firewall to run through required network policies
-	for _, policy := range networkPoliciesInfo {
-		if _, ok := policy.targetPods[pod.ip]; ok {
-			comment := "\"run through nw policy " + policy.name + "\""
-			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
-			args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
-			npc.filterTableRules.WriteString(strings.Join(args, " "))
-		}
-	}
-
-	// if pod does not have any network policy which applies rules for pod's egress traffic
-	// then apply default network policy
-	if !npc.isEgressNetworkPolicyEnabledPod(networkPoliciesInfo, pod) {
-		comment := "\"run through default network policy  chain\""
-		args := []string{"-I", podFwChainName, "1", "-s", pod.ip, "-m", "comment", "--comment", comment, "-j", kubeDefaultNetpolChain, "\n"}
-		npc.filterTableRules.WriteString(strings.Join(args, " "))
-	}
-
-	return nil
 }
 
 // setup iptable rules to intercept outbound traffic from pods and run it across the
 // firewall chain corresponding to the pod so that egress network policies are enforced
-func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, podFwChainName string) error {
+func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, podFwChainName string) {
 	egressFilterChains := []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName}
 	for _, chain := range egressFilterChains {
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
@@ -260,7 +238,6 @@ func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, po
 		"-s", pod.ip,
 		"-j", podFwChainName, "\n"}
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
-	return nil
 }
 
 func (npc *NetworkPolicyController) getLocalPods(nodeIP string) (*map[string]podInfo, error) {
@@ -277,32 +254,6 @@ func (npc *NetworkPolicyController) getLocalPods(nodeIP string) (*map[string]pod
 			labels:    pod.ObjectMeta.Labels}
 	}
 	return &localPods, nil
-}
-
-func (npc *NetworkPolicyController) isIngressNetworkPolicyEnabledPod(networkPoliciesInfo []networkPolicyInfo, pod *podInfo) bool {
-	for _, policy := range networkPoliciesInfo {
-		if policy.namespace != pod.namespace {
-			continue
-		}
-		_, ok := policy.targetPods[pod.ip]
-		if ok && (policy.policyType == "both" || policy.policyType == "ingress") {
-			return true
-		}
-	}
-	return false
-}
-
-func (npc *NetworkPolicyController) isEgressNetworkPolicyEnabledPod(networkPoliciesInfo []networkPolicyInfo, pod *podInfo) bool {
-	for _, policy := range networkPoliciesInfo {
-		if policy.namespace != pod.namespace {
-			continue
-		}
-		_, ok := policy.targetPods[pod.ip]
-		if ok && (policy.policyType == "both" || policy.policyType == "egress") {
-			return true
-		}
-	}
-	return false
 }
 
 func podFirewallChainName(namespace, podName string, version string) string {
