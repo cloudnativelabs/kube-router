@@ -224,6 +224,9 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	// ensure kube-router specific top level chains and corresponding rules exist
 	npc.ensureTopLevelChains()
 
+	// ensure default network policy chain that is applied to traffic from/to the pods that does not match any network policy
+	npc.ensureDefaultNetworkPolicyChain()
+
 	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 	if err != nil {
 		klog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())

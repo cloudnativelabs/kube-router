@@ -247,7 +247,7 @@ func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, po
 		// to pod on a different node)
 		comment := "\"rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
 			" to chain " + podFwChainName + "\""
-		args := []string{"-A", chain, "-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName, "\n"}
+		args := []string{"-I", chain, "1", "-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName, "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
