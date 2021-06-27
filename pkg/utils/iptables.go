@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strings"
 )
 
 // SaveInto calls `iptables-save` for given table and stores result in a given buffer.
@@ -32,15 +33,30 @@ func Restore(table string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	args := []string{"iptables-restore", "-T", table}
+	var args []string
+	args = []string{"iptables-restore", "--help"}
 	cmd := exec.Cmd{
+		Path: path,
+		Args: args,
+	}
+	cmdOutput, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%v (%s)", err, cmdOutput)
+	}
+	if strings.Contains(string(cmdOutput), "wait") {
+		args = []string{"iptables-restore", "--wait", "-T", table}
+	} else {
+		args = []string{"iptables-restore", "-T", table}
+	}
+
+	cmd = exec.Cmd{
 		Path:  path,
 		Args:  args,
 		Stdin: bytes.NewBuffer(data),
 	}
-	b, err := cmd.CombinedOutput()
+	cmdOutput, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%v (%s)", err, b)
+		return fmt.Errorf("%v (%s)", err, cmdOutput)
 	}
 
 	return nil
