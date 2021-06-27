@@ -126,7 +126,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		}
 
 		// set mark to indicate traffic from/to the pod passed network policies.
-		// Mark will be checked to explictly ACCEPT the traffic
+		// Mark will be checked to explicitly ACCEPT the traffic
 		comment := "\"set mark to ACCEPT traffic that comply to network policies\""
 		args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment, "-j", "MARK", "--set-mark", "0x20000/0x20000", "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
