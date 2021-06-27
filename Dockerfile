@@ -1,5 +1,5 @@
 ARG ARCH=
-FROM ${ARCH}alpine:3.12
+FROM ${ARCH}alpine:3.14
 
 RUN apk add --no-cache \
       iptables \
