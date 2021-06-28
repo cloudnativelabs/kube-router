@@ -8,7 +8,7 @@ GIT_COMMIT=$(shell git describe --tags --dirty)
 GIT_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
 IMG_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(if $(ARCH_TAG_PREFIX),$(ARCH_TAG_PREFIX)-)$(GIT_BRANCH)
 MANIFEST_TAG?=$(if $(IMG_TAG_PREFIX),$(IMG_TAG_PREFIX)-)$(GIT_BRANCH)
-RELEASE_TAG?=$(GOARCH)-$(shell build/get-git-tag.sh)
+RELEASE_TAG?=$(GOARCH)-$(shell git describe --exact-match || echo -n)
 REGISTRY?=$(if $(IMG_FQDN),$(IMG_FQDN)/$(IMG_NAMESPACE)/$(NAME),$(IMG_NAMESPACE)/$(NAME))
 REGISTRY_DEV?=$(REGISTRY)$(DEV_SUFFIX)
 IN_DOCKER_GROUP=$(filter docker,$(shell groups))
@@ -17,7 +17,7 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
-DOCKER_BUILD_IMAGE?=golang:1.16.4-alpine3.12
+DOCKER_BUILD_IMAGE?=golang:1.16.5-alpine3.14
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.27.0
 GOBGP_VERSION=v0.0.0-20210701110518-b284a8082ab4 # v2.29.0
 QEMU_IMAGE?=multiarch/qemu-user-static
@@ -180,42 +180,6 @@ else
 	go generate -v $(*).go
 endif
 
-gopath: ## Warns about issues building from a directory that does not match upstream.
-	@echo 'Checking project path for import issues...'
-	@echo '- Project dir: $(MAKEFILE_DIR)'
-	@echo '- Import dir:  $(UPSTREAM_IMPORT_PATH)'
-	@echo
-ifeq ($(MAKEFILE_DIR),$(UPSTREAM_IMPORT_PATH))
-	@echo 'Looks good!'
-else
-	@echo 'The project directory does not match $(UPSTREAM_IMPORT_PATH)'
-	@echo
-	@echo 'This could cause build issues. Consider moving this project'
-	@echo 'directory to $(UPSTREAM_IMPORT_PATH) and work from there.'
-	@echo 'This could be done for you by running: "make gopath-fix".'
-	@echo
-endif
-
-# This fixes GOPATH issues for contributers using their own Travis-CI account
-# with their forked kube-router repo. It's also useful for contributors testing
-# code and CI changes with their own Travis account.
-gopath-fix: ## Copies this project directory to the upstream import path.
-ifneq ($(wildcard $(UPSTREAM_IMPORT_PATH)/.*),)
-	@echo
-	@echo '$(UPSTREAM_IMPORT_PATH) already exists.'
-	@echo 'Aborting gopath-fix.'
-	@echo
-else
-	@echo
-	@echo 'Copying $(MAKEFILE_DIR) to $(UPSTREAM_IMPORT_PATH)'
-	@echo
-	mkdir -p "$(UPSTREAM_IMPORT_PATH)"
-	cp -ar $(MAKEFILE_DIR)/. "$(UPSTREAM_IMPORT_PATH)"
-	@echo
-	@echo 'Success! Please use $(UPSTREAM_IMPORT_PATH)'
-	@echo
-endif
-
 gobgp:
 	@echo Building gobgp
 ifeq "$(BUILD_IN_DOCKER)" "true"
@@ -238,6 +202,6 @@ help:
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs
 .PHONY: test lint docker-login push-manifest push-manifest-release
-.PHONY: push-release github-release help gopath gopath-fix multiarch-binverify
+.PHONY: push-release github-release help multiarch-binverify
 
 .DEFAULT: all
