@@ -7,6 +7,25 @@ import (
 	"strings"
 )
 
+var hasWait bool
+
+func init() {
+	path, err := exec.LookPath("iptables-restore")
+	if err != nil {
+		return
+	}
+	args := []string{"iptables-restore", "--help"}
+	cmd := exec.Cmd{
+		Path: path,
+		Args: args,
+	}
+	cmdOutput, err := cmd.CombinedOutput()
+	if err != nil {
+		return
+	}
+	hasWait = strings.Contains(string(cmdOutput), "wait")
+}
+
 // SaveInto calls `iptables-save` for given table and stores result in a given buffer.
 func SaveInto(table string, buffer *bytes.Buffer) error {
 	path, err := exec.LookPath("iptables-save")
@@ -34,29 +53,19 @@ func Restore(table string, data []byte) error {
 		return err
 	}
 	var args []string
-	args = []string{"iptables-restore", "--help"}
-	cmd := exec.Cmd{
-		Path: path,
-		Args: args,
-	}
-	cmdOutput, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%v (%s)", err, cmdOutput)
-	}
-	if strings.Contains(string(cmdOutput), "wait") {
+	if hasWait {
 		args = []string{"iptables-restore", "--wait", "-T", table}
 	} else {
 		args = []string{"iptables-restore", "-T", table}
 	}
-
-	cmd = exec.Cmd{
+	cmd := exec.Cmd{
 		Path:  path,
 		Args:  args,
 		Stdin: bytes.NewBuffer(data),
 	}
-	cmdOutput, err = cmd.CombinedOutput()
+	b, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%v (%s)", err, cmdOutput)
+		return fmt.Errorf("%v (%s)", err, b)
 	}
 
 	return nil
