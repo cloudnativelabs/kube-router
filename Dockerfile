@@ -1,3 +1,12 @@
+FROM golang:1.16.5-alpine3.14 as builder
+ENV BUILD_IN_DOCKER=false
+
+WORKDIR /build
+COPY . /build
+RUN apk add --no-cache make git \
+    && make kube-router \
+    && make gobgp
+
 ARG ARCH=
 FROM ${ARCH}alpine:3.14
 
@@ -19,7 +28,7 @@ COPY build/image-assets/bashrc /root/.bashrc
 COPY build/image-assets/profile /root/.profile
 COPY build/image-assets/vimrc /root/.vimrc
 COPY build/image-assets/motd-kube-router.sh /etc/motd-kube-router.sh
-COPY kube-router gobgp /usr/local/bin/
+COPY --from=builder /build/kube-router /build/gobgp /usr/local/bin/
 
 # Use iptables-wrappers so that correct version of iptables-legacy or iptables-nft gets used. Alpine contains both, but
 # which version is used should be based on the host system as well as where rules that may have been added before
