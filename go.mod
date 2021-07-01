@@ -13,6 +13,7 @@ require (
 	github.com/docker/go-connections v0.3.0 // indirect
 	github.com/docker/go-units v0.3.3 // indirect
 	github.com/golang/protobuf v1.4.3
+	github.com/gorilla/mux v1.7.3 // indirect
 	github.com/hashicorp/hcl v0.0.0-20180404174102-ef8a98b0bbce // indirect
 	github.com/k-sone/critbitgo v1.4.0 // indirect
 	github.com/magiconair/properties v1.7.6 // indirect
@@ -25,7 +26,7 @@ require (
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/osrg/gobgp v0.0.0-20210701110518-b284a8082ab4
 	github.com/pelletier/go-toml v1.1.0 // indirect
-	github.com/prometheus/client_golang v1.10.0
+	github.com/prometheus/client_golang v1.11.0
 	github.com/spf13/cast v1.2.0 // indirect
 	github.com/spf13/jwalterweatherman v0.0.0-20180109140146-7c0cea34c8ec // indirect
 	github.com/spf13/pflag v1.0.5
