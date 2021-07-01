@@ -23,7 +23,7 @@ require (
 	github.com/onsi/gomega v1.11.0
 	github.com/opencontainers/go-digest v1.0.0-rc1 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
-	github.com/osrg/gobgp v0.0.0-20210607002943-11eea493bebd
+	github.com/osrg/gobgp v0.0.0-20210701110518-b284a8082ab4
 	github.com/pelletier/go-toml v1.1.0 // indirect
 	github.com/prometheus/client_golang v1.10.0
 	github.com/spf13/cast v1.2.0 // indirect
