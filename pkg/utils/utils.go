@@ -2,6 +2,7 @@ package utils
 
 import (
 	"io"
+	"net"
 	"sync"
 )
 
@@ -42,4 +43,9 @@ func (b *Broadcaster) Notify(instance interface{}) {
 // statements, this allows an action like that to pass a linter as well as describe its intention well
 func CloseCloserDisregardError(handler io.Closer) {
 	_ = handler.Close()
+}
+
+// MatchAddressFamily compares 2 addresses families and returns true if they're the same, else false
+func MatchAddressFamily(x net.IP, y net.IP) bool {
+	return x.To4() != nil && y.To4() != nil || x.To16() != nil && x.To4() == nil && y.To16() != nil && y.To4() == nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
@@ -21,22 +22,24 @@ import (
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
 func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
-	klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
+	prefixLen, nh, afi := nrc.getVIPRoutingAttr(vip)
+
+	klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(prefixLen), nh)
 
 	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 		Origin: 0,
 	})
 	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.nodeIP.String(),
+		NextHop: nh,
 	})
 	attrs := []*any.Any{a1, a2}
 	nlri1, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
 		Prefix:    vip,
-		PrefixLen: 32,
+		PrefixLen: uint32(prefixLen),
 	})
 	_, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
 		Path: &gobgpapi.Path{
-			Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+			Family: &gobgpapi.Family{Afi: afi, Safi: gobgpapi.Family_SAFI_UNICAST},
 			Nlri:   nlri1,
 			Pattrs: attrs,
 		},
@@ -47,21 +50,22 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
 // bgpWithdrawVIP  unadvertises the service vip
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
-	klog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
+	prefixLen, nh, afi := nrc.getVIPRoutingAttr(vip)
+	klog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(prefixLen), nh)
 
 	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 		Origin: 0,
 	})
 	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.nodeIP.String(),
+		NextHop: nh,
 	})
 	attrs := []*any.Any{a1, a2}
 	nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
 		Prefix:    vip,
-		PrefixLen: 32,
+		PrefixLen: uint32(prefixLen),
 	})
 	path := gobgpapi.Path{
-		Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+		Family: &gobgpapi.Family{Afi: afi, Safi: gobgpapi.Family_SAFI_UNICAST},
 		Nlri:   nlri,
 		Pattrs: attrs,
 	}
@@ -71,6 +75,21 @@ func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 	})
 
 	return err
+}
+
+func (nrc *NetworkRoutingController) getVIPRoutingAttr(vip string) (int, string, gobgpapi.Family_Afi) {
+	prefixLen := 32
+	afi := gobgpapi.Family_AFI_IP
+	nh := nrc.nodeIP.String()
+	if nrc.isDualStack && utils.MatchAddressFamily(net.ParseIP(vip), nrc.dualStackNextNodeIP) {
+		nh = nrc.dualStackNextNodeIP.String()
+	}
+	if net.ParseIP(vip).To4() == nil && net.ParseIP(vip).To16() != nil {
+		prefixLen = 128
+		afi = gobgpapi.Family_AFI_IP6
+	}
+
+	return prefixLen, nh, afi
 }
 
 func (nrc *NetworkRoutingController) advertiseVIPs(vips []string) {

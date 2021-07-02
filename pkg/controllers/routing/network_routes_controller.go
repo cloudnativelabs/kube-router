@@ -72,6 +72,8 @@ type NetworkRoutingController struct {
 	nodeInterface                  string
 	routerID                       string
 	isIpv6                         bool
+	isDualStack                    bool
+	dualStackNextNodeIP            net.IP
 	activeNodes                    map[string]bool
 	mu                             sync.Mutex
 	clientset                      kubernetes.Interface
@@ -1085,7 +1087,16 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 	nrc.nodeIP = nodeIP
 	nrc.isIpv6 = nodeIP.To4() == nil
+	nrc.isDualStack = utils.IsNodeDualStack(node)
 
+	if nrc.isDualStack {
+		dualStackNextNodeIP, err := utils.GetNextFamilyNodeIP(node, nodeIP)
+		if err != nil {
+			return nil, errors.New("failed to get suitable node addresses for dual-stack: " + err.Error())
+		}
+		nrc.dualStackNextNodeIP = dualStackNextNodeIP
+
+	}
 	if kubeRouterConfig.RouterID != "" {
 		nrc.routerID = kubeRouterConfig.RouterID
 	} else {
