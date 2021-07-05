@@ -99,6 +99,12 @@ jobs:
       run: echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
       id: extract_branch
 
+   - name: Extract tag from github ref - New Release
+      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      shell: bash
+      run: echo "##[set-output name=tag;]$(echo ${GITHUB_REF#refs/tags/})"
+      id: extract_tag
+
     - name: Build and push - New Push
       uses: docker/build-push-action@v2
       if: ${{ startsWith(github.ref, 'refs/tags/v') != true && github.event_name != 'pull_request' }}
@@ -141,7 +147,7 @@ jobs:
           BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
           RUNTIME_BASE=${{ env.RUNTIME_BASE }}
         tags: |
-          cloudnativelabs/kube-router:${{ github.event.release.tag_name }}
+          cloudnativelabs/kube-router:${{ steps.extract_tag.outputs.tag }}
           cloudnativelabs/kube-router:latest
 
   # Runs Go Releaser on Tag Event
