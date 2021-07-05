@@ -12,6 +12,11 @@ on:
     - master
     - v[1-9].*
 
+env:
+  BUILDTIME_BASE: "golang:1.16.5-alpine3.14"
+  RUNTIME_BASE: "alpine:3.14"
+  GO_VERSION: "~1.16.5"
+
 jobs:
   # Runs Golangci-lint on the source code
   ci-go-lint:
@@ -21,7 +26,7 @@ jobs:
     - name: Set up Go 1.x
       uses: actions/setup-go@v2
       with:
-        go-version: ~1.16.4
+        go-version: ${{ env.GO_VERSION }}
       id: go
 
     - name: Check out code into the Go module directory
@@ -39,7 +44,7 @@ jobs:
     - name: Set up Go 1.x
       uses: actions/setup-go@v2
       with:
-        go-version: ~1.16.4
+        go-version: ${{ env.GO_VERSION }}
       id: go
 
     - name: Check out code into the Go module directory
@@ -48,6 +53,8 @@ jobs:
     - name: Run unit tests for kube-router
       run: |
         make test
+      env:
+        DOCKER_BUILD_IMAGE: ${{ env.BUILDTIME_BASE }}
 
   # Builds Kube-Router binary
   ci-build-kube-router:
@@ -57,7 +64,7 @@ jobs:
     - name: Set up Go 1.x
       uses: actions/setup-go@v2
       with:
-        go-version: ~1.16.4
+        go-version: ${{ env.GO_VERSION }}
       id: go
 
     - name: Check out code into the Go module directory
@@ -97,8 +104,14 @@ jobs:
       if: ${{ startsWith('refs/tags/v', github.ref) != true && github.event_name != 'pull_request'  }}
       with:
         context: .
-        platforms: linux/amd64,linux/arm64,linux/arm/v7
+        platforms: |
+          linux/amd64
+          linux/arm64
+          linux/arm/v7
         push: true
+        build-args: |
+          BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
+          RUNTIME_BASE=${{ env.RUNTIME_BASE }}
         tags: cloudnativelabs/kube-router-git:${ steps.extract_branch.outputs.branch}
 
     - name: Build and push - New PR
@@ -109,6 +122,9 @@ jobs:
         # Don't build multi arch images for PR as they take more than 30 min to build
         platforms: linux/amd64
         push: true
+        build-args: |
+          BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
+          RUNTIME_BASE=${{ env.RUNTIME_BASE }}
         tags: cloudnativelabs/kube-router-git:PR-${{ github.event.pull_request.number }}
 
     - name: Build and push - New Tag
@@ -116,9 +132,17 @@ jobs:
       if: ${{ startsWith('refs/tags/v', github.ref) }}
       with:
         context: .
-        platforms: linux/amd64,linux/arm64,linux/arm/v7
+        platforms: |
+          linux/amd64
+          linux/arm64
+          linux/arm/v7
         push: true
-        tags: cloudnativelabs/kube-router:${{ github.event.release.tag_name }},cloudnativelabs/kube-router:latest
+        build-args: |
+          BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
+          RUNTIME_BASE=${{ env.RUNTIME_BASE }}
+        tags: |
+          cloudnativelabs/kube-router:${{ github.event.release.tag_name }}
+          cloudnativelabs/kube-router:latest
 
   # Runs Go Releaser on Tag Event
   ci-goreleaser-tag:
@@ -128,7 +152,7 @@ jobs:
     - name: Set up Go 1.x
       uses: actions/setup-go@v2
       with:
-        go-version: ~1.16.4
+        go-version: ${{ env.GO_VERSION }}
       id: go
 
     - name: Check out code into the Go module directory

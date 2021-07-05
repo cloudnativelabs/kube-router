@@ -1,4 +1,6 @@
-FROM golang:1.16.5-alpine3.14 as builder
+ARG BUILDTIME_BASE=golang:1-alpine
+ARG RUNTIME_BASE=alpine:latest
+FROM ${BUILDTIME_BASE} as builder
 ENV BUILD_IN_DOCKER=false
 
 WORKDIR /build
@@ -7,8 +9,7 @@ RUN apk add --no-cache make git \
     && make kube-router \
     && make gobgp
 
-ARG ARCH=
-FROM ${ARCH}alpine:3.14
+FROM ${RUNTIME_BASE}
 
 RUN apk add --no-cache \
       iptables \
