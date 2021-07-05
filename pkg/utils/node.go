@@ -85,3 +85,49 @@ func GetMTUFromNodeIP(nodeIP net.IP, overlayEnabled bool) (int, error) {
 	}
 	return 0, errors.New("failed to find interface with specified node IP")
 }
+
+// GetNextFamilyNodeIP is used in the dual stack case and returns the Node IP from
+// the address family that is not the same as that returned from GetNodeIP
+func GetNextFamilyNodeIP(node *apiv1.Node, firstNodeIP net.IP) (net.IP, error) {
+	addresses := node.Status.Addresses
+	addressMap := make(map[apiv1.NodeAddressType][]apiv1.NodeAddress)
+	for i := range addresses {
+		addressMap[addresses[i].Type] = append(addressMap[addresses[i].Type], addresses[i])
+	}
+	for _, address := range addressMap[apiv1.NodeInternalIP] {
+		if !MatchAddressFamily(net.ParseIP(address.Address), firstNodeIP) {
+			return net.ParseIP(address.Address), nil
+		}
+	}
+
+	for _, address := range addressMap[apiv1.NodeExternalIP] {
+		if !MatchAddressFamily(net.ParseIP(address.Address), firstNodeIP) {
+			return net.ParseIP(address.Address), nil
+		}
+	}
+
+	return nil, errors.New("Unable to find suitable next IP for dual-stack")
+}
+
+// IsNodeDualStack returns true after finding both an IPv4 and IPv6 address in either
+// NodeInternalIP or NodeExternalIP, else returns false.  Consider changing to look at
+// IPv6DualStack feature gate when promoted to core
+func IsNodeDualStack(node *apiv1.Node) bool {
+	hasv4 := false
+	hasv6 := false
+
+	addresses := node.Status.Addresses
+	for i := range addresses {
+		if addresses[i].Type == apiv1.NodeInternalIP || addresses[i].Type == apiv1.NodeExternalIP {
+			if net.ParseIP(addresses[i].Address).To4() != nil {
+				hasv4 = true
+			} else if net.ParseIP(addresses[i].Address).To16() != nil {
+				hasv6 = true
+			}
+			if hasv4 && hasv6 {
+				return true
+			}
+		}
+	}
+	return false
+}
