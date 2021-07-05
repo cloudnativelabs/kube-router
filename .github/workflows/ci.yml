@@ -112,7 +112,7 @@ jobs:
         build-args: |
           BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
           RUNTIME_BASE=${{ env.RUNTIME_BASE }}
-        tags: cloudnativelabs/kube-router-git:${ steps.extract_branch.outputs.branch}
+        tags: cloudnativelabs/kube-router-git:${{ steps.extract_branch.outputs.branch }}
 
     - name: Build and push - New PR
       uses: docker/build-push-action@v2
