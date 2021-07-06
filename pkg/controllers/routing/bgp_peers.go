@@ -91,13 +91,18 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		currentNodes = append(currentNodes, nodeIP.String())
 		nrc.activeNodes[nodeIP.String()] = true
+		// explicitly set neighbors.transport.config.local-address with nodeIP which is configured
+		// as their neighbor address at the remote peers.
+		// this prevents the controller from initiating connection to its peers with a different IP address
+		// when multiple L3 interfaces are active.
 		n := &gobgpapi.Peer{
 			Conf: &gobgpapi.PeerConf{
 				NeighborAddress: nodeIP.String(),
 				PeerAs:          nrc.nodeAsnNumber,
 			},
 			Transport: &gobgpapi.Transport{
-				RemotePort: nrc.bgpPort,
+				LocalAddress: nrc.nodeIP.String(),
+				RemotePort:   nrc.bgpPort,
 			},
 		}
 
@@ -182,7 +187,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	}
 }
 
-// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
+// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
 func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer, bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration,
 	bgpGracefulRestartTime time.Duration, peerMultihopTTL uint8) error {
 	for _, n := range peerNeighbors {
@@ -238,7 +243,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpap
 }
 
 // Does validation and returns neighbor configs
-func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []string, holdtime float64) (
+func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []string, holdtime float64, localAddress string) (
 	[]*gobgpapi.Peer, error) {
 	peers := make([]*gobgpapi.Peer, 0)
 
@@ -272,6 +277,10 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 				asns[i])
 		}
 
+		// explicitly set neighbors.transport.config.local-address with nodeIP which is configured
+		// as their neighbor address at the remote peers.
+		// this prevents the controller from initiating connection to its peers with a different IP address
+		// when multiple L3 interfaces are active.
 		peer := &gobgpapi.Peer{
 			Conf: &gobgpapi.PeerConf{
 				NeighborAddress: ips[i].String(),
@@ -279,7 +288,8 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 			},
 			Timers: &gobgpapi.Timers{Config: &gobgpapi.TimersConfig{HoldTime: uint64(holdtime)}},
 			Transport: &gobgpapi.Transport{
-				RemotePort: options.DefaultBgpPort,
+				LocalAddress: localAddress,
+				RemotePort:   options.DefaultBgpPort,
 			},
 		}
 
