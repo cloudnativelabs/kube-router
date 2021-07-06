@@ -216,7 +216,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	if nrc.autoMTU {
-		mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP, nrc.enableOverlays)
+		mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP)
 		if err != nil {
 			klog.Errorf("Failed to find MTU for node IP: %s for intelligently setting the kube-bridge MTU due to %s.", nrc.nodeIP, err.Error())
 		}
@@ -374,7 +374,7 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 }
 
 func (nrc *NetworkRoutingController) autoConfigureMTU() error {
-	mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP, nrc.enableOverlays)
+	mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP)
 	if err != nil {
 		return fmt.Errorf("failed to generate MTU: %s", err.Error())
 	}
@@ -591,10 +591,6 @@ out:
 			}
 			if err := netlink.LinkSetUp(link); err != nil {
 				return errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
-			}
-			// reduce the MTU by 20 bytes to accommodate ipip tunnel overhead
-			if err := netlink.LinkSetMTU(link, link.Attrs().MTU-20); err != nil {
-				return errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
 			}
 		} else {
 			klog.Infof("Tunnel interface: " + tunnelName + " for the node " + nextHop.String() + " already exists.")
