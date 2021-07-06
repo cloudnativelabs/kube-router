@@ -576,8 +576,13 @@ out:
 		var err error
 		link, err = netlink.LinkByName(tunnelName)
 		if err != nil {
-			out, err := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
-				"remote", nextHop.String(), "dev", nrc.nodeInterface).CombinedOutput()
+			cmdArgs := []string{"tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(), "remote", nextHop.String()}
+			// need to skip binding device if nrc.nodeInterface is loopback, otherwise packets never leave
+			// from egress interface to the tunnel peer.
+			if nrc.nodeInterface != "lo" {
+				cmdArgs = append(cmdArgs, []string{"dev", nrc.nodeInterface}...)
+			}
+			out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("route not injected for the route advertised by the node %s "+
 					"Failed to create tunnel interface %s. error: %s, output: %s",
