@@ -105,8 +105,12 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 	}
 	advIPPrefixList := make([]*gobgpapi.Prefix, 0)
 	advIps, _, _ := nrc.getAllVIPs()
-	for _, ip := range advIps {
-		advIPPrefixList = append(advIPPrefixList, &gobgpapi.Prefix{IpPrefix: ip + "/32", MaskLengthMin: 32, MaskLengthMax: 32})
+	if len(nrc.advertiseServiceClusterIPRange) != 0 {
+		advIPPrefixList = append(advIPPrefixList, &gobgpapi.Prefix{IpPrefix: nrc.advertiseServiceClusterIPRange, MaskLengthMin: 6, MaskLengthMax: 32})
+	} else {
+		for _, ip := range advIps {
+			advIPPrefixList = append(advIPPrefixList, &gobgpapi.Prefix{IpPrefix: ip + "/32", MaskLengthMin: 32, MaskLengthMax: 32})
+		}
 	}
 	if currentDefinedSet == nil {
 		clusterIPPrefixSet := &gobgpapi.DefinedSet{
