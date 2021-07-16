@@ -116,6 +116,7 @@ type NetworkRoutingController struct {
 	pathPrepend                    bool
 	localAddressList               []string
 	overrideNextHop                bool
+	advertiseNodeIP                net.IP // A specific IP to advertise as the next hop
 	podCidr                        string
 	CNIFirewallSetup               *sync.Cond
 	ipsetMutex                     *sync.Mutex
@@ -463,7 +464,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 		})
 		v6Attrs, _ := ptypes.MarshalAny(&gobgpapi.MpReachNLRIAttribute{
 			Family:   v6Family,
-			NextHops: []string{nrc.nodeIP.String()},
+			NextHops: []string{nrc.advertiseNodeIP.String()},
 			Nlris:    []*any.Any{nlri},
 		})
 		_, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
@@ -488,7 +489,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 			Origin: 0,
 		})
 		a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
-			NextHop: nrc.nodeIP.String(),
+			NextHop: nrc.advertiseNodeIP.String(),
 		})
 		attrs := []*any.Any{a1, a2}
 
@@ -1085,6 +1086,19 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 	nrc.nodeIP = nodeIP
 	nrc.isIpv6 = nodeIP.To4() == nil
+	nrc.advertiseNodeIP = nodeIP
+
+	// TODO: Pull this further up or into a config or something
+	const ADVERTISE_INTERFACE_HACK = true
+	if ADVERTISE_INTERFACE_HACK {
+		const iface = "ens11"
+		ip, err := getIPForInterface(iface)
+		if err != nil {
+			return nil, err
+		}
+
+		nrc.advertiseNodeIP = ip
+	}
 
 	if kubeRouterConfig.RouterID != "" {
 		nrc.routerID = kubeRouterConfig.RouterID
