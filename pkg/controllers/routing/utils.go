@@ -90,6 +90,24 @@ func ipv6IsEnabled() bool {
 	return true
 }
 
+func getIPForInterface(iface string) (net.IP, error) {
+	l, err := netlink.LinkByName(iface)
+	if err != nil {
+		return nil, err
+	}
+
+	addrs, err := netlink.AddrList(l, netlink.FAMILY_V4)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(addrs) == 0 {
+		return nil, fmt.Errorf("couldnt find ip for %s", iface)
+	}
+
+	return addrs[0].IP, nil
+}
+
 func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 	links, err := netlink.LinkList()
 	if err != nil {

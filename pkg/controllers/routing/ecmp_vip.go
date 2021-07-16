@@ -27,7 +27,7 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 		Origin: 0,
 	})
 	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.nodeIP.String(),
+		NextHop: nrc.advertiseNodeIP.String(),
 	})
 	attrs := []*any.Any{a1, a2}
 	nlri1, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
@@ -53,7 +53,7 @@ func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 		Origin: 0,
 	})
 	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.nodeIP.String(),
+		NextHop: nrc.advertiseNodeIP.String(),
 	})
 	attrs := []*any.Any{a1, a2}
 	nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
