@@ -650,13 +650,18 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 	}
 
 	// Clear ipsets.
-	klog.V(1).Infof("Attempting to attain ipset mutex lock")
-	nsc.ipsetMutex.Lock()
-	klog.V(1).Infof("Attained ipset mutex lock, continuing...")
-	defer func() {
-		nsc.ipsetMutex.Unlock()
-		klog.V(1).Infof("Returned ipset mutex lock")
-	}()
+	// There are certain actions like Cleanup() actions that aren't working with full instantiations of the controller
+	// and in these instances the mutex may not be present and may not need to be present as they are operating out of a
+	// single goroutine where there is no need for locking
+	if nil != nsc.ipsetMutex {
+		klog.V(1).Infof("Attempting to attain ipset mutex lock")
+		nsc.ipsetMutex.Lock()
+		klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+		defer func() {
+			nsc.ipsetMutex.Unlock()
+			klog.V(1).Infof("Returned ipset mutex lock")
+		}()
+	}
 	ipSetHandler, err := utils.NewIPSet(false)
 	if err != nil {
 		klog.Errorf("Failed to initialize ipset handler: %s", err.Error())
