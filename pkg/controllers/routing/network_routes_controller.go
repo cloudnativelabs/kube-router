@@ -508,38 +508,12 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 
 func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	klog.V(2).Infof("injectRoute Path Looks Like: %s", path.String())
-	var nextHop net.IP
-out:
-	for _, pAttr := range path.GetPattrs() {
-		var value ptypes.DynamicAny
-		if err := ptypes.UnmarshalAny(pAttr, &value); err != nil {
-			return fmt.Errorf("failed to unmarshal path attribute: %s", err)
-		}
-		switch a := value.Message.(type) {
-		case *gobgpapi.NextHopAttribute:
-			nextHop = net.ParseIP(a.NextHop).To4()
-			if nextHop == nil {
-				if nextHop = net.ParseIP(a.NextHop).To16(); nextHop == nil {
-					return fmt.Errorf("invalid nextHop address: %s", a.NextHop)
-				}
-			}
-			break out
-		}
-	}
-	if nextHop == nil {
-		return fmt.Errorf("could not parse next hop received from GoBGP for path: %s", path)
-	}
-	nlri := path.GetNlri()
-	var prefix gobgpapi.IPAddressPrefix
-	err := ptypes.UnmarshalAny(nlri, &prefix)
-	if err != nil {
-		return fmt.Errorf("invalid nlri in advertised path")
-	}
-	dst, err := netlink.ParseIPNet(prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen))
-	if err != nil {
-		return fmt.Errorf("invalid nlri in advertised path")
-	}
 	var route *netlink.Route
+
+	dst, nextHop, err := parseBGPPath(path)
+	if err != nil {
+		return err
+	}
 
 	tunnelName := generateTunnelName(nextHop.String())
 	sameSubnet := nrc.nodeSubnet.Contains(nextHop)
