@@ -541,6 +541,8 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 			return err
 		}
 	} else {
+		// knowing that a tunnel shouldn't exist for this route, check to see if there are any lingering tunnels /
+		// routes that need to be cleaned up.
 		nrc.cleanupTunnel(dst, tunnelName)
 	}
 
@@ -565,10 +567,15 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 		return nil
 	}
 
+	// If we've made it this far, then it is likely that the node is holding a destination route for this path already.
+	// If the path we've received from GoBGP is a withdrawl, we should clean up any lingering routes that may exist
+	// on the host (rather than creating a new one or updating an existing one), and then return.
 	if path.IsWithdraw {
 		klog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nextHop)
 		return netlink.RouteDel(route)
 	}
+
+	// Alright, everything is in place, and we have our route configured, let's add it to the host's routing table
 	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nextHop)
 	return netlink.RouteReplace(route)
 }
