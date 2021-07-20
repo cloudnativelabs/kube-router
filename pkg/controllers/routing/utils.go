@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/golang/protobuf/ptypes"
+	gobgpapi "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/pkg/packet/bgp"
 
 	"github.com/vishvananda/netlink"
@@ -148,4 +150,48 @@ func validateCommunity(arg string) error {
 		}
 	}
 	return fmt.Errorf("failed to parse %s as community", arg)
+}
+
+// parseBGPNextHop takes in a GoBGP Path and parses out the destination's next hop from its attributes. If it
+// can't parse a next hop IP from the GoBGP Path, it returns an error.
+func parseBGPNextHop(path *gobgpapi.Path) (net.IP, error) {
+	for _, pAttr := range path.GetPattrs() {
+		var value ptypes.DynamicAny
+		if err := ptypes.UnmarshalAny(pAttr, &value); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal path attribute: %s", err)
+		}
+		switch a := value.Message.(type) {
+		case *gobgpapi.NextHopAttribute:
+			nextHop := net.ParseIP(a.NextHop).To4()
+			if nextHop == nil {
+				if nextHop = net.ParseIP(a.NextHop).To16(); nextHop == nil {
+					return nil, fmt.Errorf("invalid nextHop address: %s", a.NextHop)
+				}
+			}
+			return nextHop, nil
+		}
+	}
+	return nil, fmt.Errorf("could not parse next hop received from GoBGP for path: %s", path)
+}
+
+// parseBGPPath takes in a GoBGP Path and parses out the destination subnet and the next hop from its attributes.
+// If successful, it will return the destination of the BGP path as a subnet form and the next hop. If it
+// can't parse the destination or the next hop IP, it returns an error.
+func parseBGPPath(path *gobgpapi.Path) (*net.IPNet, net.IP, error) {
+	nextHop, err := parseBGPNextHop(path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	nlri := path.GetNlri()
+	var prefix gobgpapi.IPAddressPrefix
+	err = ptypes.UnmarshalAny(nlri, &prefix)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid nlri in advertised path")
+	}
+	dstSubnet, err := netlink.ParseIPNet(prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen))
+	if err != nil {
+		return nil, nil, fmt.Errorf("couldn't parse IP subnet from nlri advertised path")
+	}
+	return dstSubnet, nextHop, nil
 }
