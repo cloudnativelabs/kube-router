@@ -576,7 +576,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 // cleanupTunnels removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer
 // needed. All errors are logged only, as we want to attempt to perform all cleanup actions regardless of their success
 func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
-	klog.Infof("Cleaning up old routes if there are any")
+	klog.V(1).Infof("Cleaning up old routes for %s if there are any", destinationSubnet.String())
 	routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
 		Dst: destinationSubnet, Protocol: 0x11,
 	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
@@ -590,7 +590,7 @@ func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet,
 		}
 	}
 
-	klog.Infof("Cleaning up if there is any existing tunnel interface for the node")
+	klog.V(1).Infof("Cleaning up any lingering tunnel interfaces named: %s", tunnelName)
 	if link, err := netlink.LinkByName(tunnelName); err == nil {
 		if err = netlink.LinkDel(link); err != nil {
 			klog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
@@ -628,7 +628,8 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 			return nil, errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
 		}
 	} else {
-		klog.Infof("Tunnel interface: " + tunnelName + " for the node " + nextHop.String() + " already exists.")
+		klog.V(1).Infof(
+			"Tunnel interface: " + tunnelName + " for the node " + nextHop.String() + " already exists.")
 	}
 
 	// Now that the tunnel link exists, we need to add a route to it, so the node knows where to send traffic bound for
