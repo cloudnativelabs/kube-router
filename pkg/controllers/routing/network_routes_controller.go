@@ -509,6 +509,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	klog.V(2).Infof("injectRoute Path Looks Like: %s", path.String())
 	var route *netlink.Route
+	var link netlink.Link
 
 	dst, nextHop, err := parseBGPPath(path)
 	if err != nil {
@@ -518,70 +519,33 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	tunnelName := generateTunnelName(nextHop.String())
 	sameSubnet := nrc.nodeSubnet.Contains(nextHop)
 
-	// cleanup route and tunnel if overlay is disabled or node is in same subnet and overlay-type is set to 'subnet'
-	if !nrc.enableOverlays || (sameSubnet && nrc.overlayType == "subnet") {
-		klog.Infof("Cleaning up old routes if there are any")
-		routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
-			Dst: dst, Protocol: 0x11,
-		}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
-		if err != nil {
-			klog.Errorf("Failed to get routes from netlink")
+	shouldCreateTunnel := func() bool {
+		if !nrc.enableOverlays {
+			return false
 		}
-		for i, r := range routes {
-			klog.V(2).Infof("Found route to remove: %s", r.String())
-			if err := netlink.RouteDel(&routes[i]); err != nil {
-				klog.Errorf("Failed to remove route due to " + err.Error())
-			}
+		if nrc.overlayType == "full" {
+			return true
 		}
-
-		klog.Infof("Cleaning up if there is any existing tunnel interface for the node")
-		if link, err := netlink.LinkByName(tunnelName); err == nil {
-			if err = netlink.LinkDel(link); err != nil {
-				klog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
-			}
+		if nrc.overlayType == "subnet" && !sameSubnet {
+			return true
 		}
+		return false
 	}
 
 	// create IPIP tunnels only when node is not in same subnet or overlay-type is set to 'full'
-	// if the user has disabled overlays, don't create tunnels
-	if (!sameSubnet || nrc.overlayType == "full") && nrc.enableOverlays {
-		// create ip-in-ip tunnel and inject route as overlay is enabled
-		var link netlink.Link
-		var err error
-		link, err = netlink.LinkByName(tunnelName)
+	// if the user has disabled overlays, don't create tunnels. If we're not creating a tunnel, check to see if there is
+	// any cleanup that needs to happen.
+	if shouldCreateTunnel() {
+		link, err = nrc.setupOverlayTunnel(tunnelName, nextHop)
 		if err != nil {
-			out, err := exec.Command("ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(),
-				"remote", nextHop.String(), "dev", nrc.nodeInterface).CombinedOutput()
-			if err != nil {
-				return fmt.Errorf("route not injected for the route advertised by the node %s "+
-					"Failed to create tunnel interface %s. error: %s, output: %s",
-					nextHop, tunnelName, err, string(out))
-			}
-
-			link, err = netlink.LinkByName(tunnelName)
-			if err != nil {
-				return fmt.Errorf("route not injected for the route advertised by the node %s "+
-					"Failed to get tunnel interface by name error: %s", tunnelName, err)
-			}
-			if err := netlink.LinkSetUp(link); err != nil {
-				return errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
-			}
-			// reduce the MTU by 20 bytes to accommodate ipip tunnel overhead
-			if err := netlink.LinkSetMTU(link, link.Attrs().MTU-20); err != nil {
-				return errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
-			}
-		} else {
-			klog.Infof("Tunnel interface: " + tunnelName + " for the node " + nextHop.String() + " already exists.")
+			return err
 		}
+	} else {
+		nrc.cleanupTunnel(dst, tunnelName)
+	}
 
-		out, err := exec.Command("ip", "route", "list", "table", customRouteTableID).CombinedOutput()
-		if err != nil || !strings.Contains(string(out), "dev "+tunnelName+" scope") {
-			if out, err = exec.Command("ip", "route", "add", nextHop.String(), "dev", tunnelName, "table",
-				customRouteTableID).CombinedOutput(); err != nil {
-				return fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
-			}
-		}
-
+	if link != nil {
+		// if we setup an overlay tunnel link, then use it for destination routing
 		route = &netlink.Route{
 			LinkIndex: link.Attrs().Index,
 			Src:       nrc.nodeIP,
@@ -589,12 +553,15 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 			Protocol:  0x11,
 		}
 	} else if sameSubnet {
+		// if the nextHop is within the same subnet, add a route for the destination so that traffic can bet routed
+		// at layer 2 and minimize the need to traverse a router
 		route = &netlink.Route{
 			Dst:      dst,
 			Gw:       nextHop,
 			Protocol: 0x11,
 		}
 	} else {
+		// otherwise, let BGP do its thing, nothing to do here
 		return nil
 	}
 
@@ -604,6 +571,77 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	}
 	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nextHop)
 	return netlink.RouteReplace(route)
+}
+
+// cleanupTunnels removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer
+// needed. All errors are logged only, as we want to attempt to perform all cleanup actions regardless of their success
+func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
+	klog.Infof("Cleaning up old routes if there are any")
+	routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
+		Dst: destinationSubnet, Protocol: 0x11,
+	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
+	if err != nil {
+		klog.Errorf("Failed to get routes from netlink")
+	}
+	for i, r := range routes {
+		klog.V(2).Infof("Found route to remove: %s", r.String())
+		if err := netlink.RouteDel(&routes[i]); err != nil {
+			klog.Errorf("Failed to remove route due to " + err.Error())
+		}
+	}
+
+	klog.Infof("Cleaning up if there is any existing tunnel interface for the node")
+	if link, err := netlink.LinkByName(tunnelName); err == nil {
+		if err = netlink.LinkDel(link); err != nil {
+			klog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
+		}
+	}
+}
+
+// setupOverlayTunnel attempts to create an tunnel link and corresponding routes for IPIP based overlay networks
+func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextHop net.IP) (netlink.Link, error) {
+	var out []byte
+	link, err := netlink.LinkByName(tunnelName)
+
+	// an error here indicates that the the tunnel didn't exist, so we need to create it, if it already exists there's
+	// nothing to do here
+	if err != nil {
+		out, err = exec.Command(
+			"ip", "tunnel", "add", tunnelName, "mode", "ipip", "local", nrc.nodeIP.String(), "remote",
+			nextHop.String(), "dev", nrc.nodeInterface).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
+				"Failed to create tunnel interface %s. error: %s, output: %s",
+				nextHop, tunnelName, err, string(out))
+		}
+
+		link, err = netlink.LinkByName(tunnelName)
+		if err != nil {
+			return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
+				"Failed to get tunnel interface by name error: %s", tunnelName, err)
+		}
+		if err = netlink.LinkSetUp(link); err != nil {
+			return nil, errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
+		}
+		// reduce the MTU by 20 bytes to accommodate ipip tunnel overhead
+		if err = netlink.LinkSetMTU(link, link.Attrs().MTU-20); err != nil {
+			return nil, errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
+		}
+	} else {
+		klog.Infof("Tunnel interface: " + tunnelName + " for the node " + nextHop.String() + " already exists.")
+	}
+
+	// Now that the tunnel link exists, we need to add a route to it, so the node knows where to send traffic bound for
+	// this interface
+	out, err = exec.Command("ip", "route", "list", "table", customRouteTableID).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "dev "+tunnelName+" scope") {
+		if out, err = exec.Command("ip", "route", "add", nextHop.String(), "dev", tunnelName, "table",
+			customRouteTableID).CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
+		}
+	}
+
+	return link, nil
 }
 
 // Cleanup performs the cleanup of configurations done
