@@ -572,12 +572,45 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	// on the host (rather than creating a new one or updating an existing one), and then return.
 	if path.IsWithdraw {
 		klog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nextHop)
-		return netlink.RouteDel(route)
+
+		// The path might be withdrawn because the peer became unestablished or it may be withdrawn because just the
+		// path was withdrawn. Check to see if the peer is still established before deciding whether to clean the
+		// tunnel and tunnel routes or whether to just delete the destination route.
+		peerEstablished, err := nrc.isPeerEstablished(nextHop.String())
+		if err != nil {
+			klog.Errorf("encountered error while checking peer status: %v", err)
+		}
+		if err == nil && !peerEstablished {
+			klog.V(1).Infof("Peer '%s' was not found any longer, removing tunnel and routes", nextHop.String())
+			nrc.cleanupTunnel(dst, tunnelName)
+			return nil
+		} else {
+			return netlink.RouteDel(route)
+		}
 	}
 
 	// Alright, everything is in place, and we have our route configured, let's add it to the host's routing table
 	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nextHop)
 	return netlink.RouteReplace(route)
+}
+
+func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, error) {
+	var peerDisconnected bool
+	peerFunc := func(peer *gobgpapi.Peer) {
+		if peer.Conf.NeighborAddress == peerIP {
+			if peer.State.SessionState != gobgpapi.PeerState_ESTABLISHED {
+				peerDisconnected = true
+			}
+		}
+	}
+	err := nrc.bgpServer.ListPeer(context.Background(), &gobgpapi.ListPeerRequest{
+		Address: peerIP,
+	}, peerFunc)
+	if err != nil {
+		return false, fmt.Errorf("unable to list peers to see if tunnel & routes need to be removed: %v", err)
+	}
+
+	return peerDisconnected, nil
 }
 
 // cleanupTunnels removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer
