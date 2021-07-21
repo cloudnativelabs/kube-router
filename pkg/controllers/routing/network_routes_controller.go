@@ -517,6 +517,28 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	tunnelName := generateTunnelName(nextHop.String())
 	sameSubnet := nrc.nodeSubnet.Contains(nextHop)
 
+	// If we've made it this far, then it is likely that the node is holding a destination route for this path already.
+	// If the path we've received from GoBGP is a withdrawal, we should clean up any lingering routes that may exist
+	// on the host (rather than creating a new one or updating an existing one), and then return.
+	if path.IsWithdraw {
+		klog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nextHop)
+
+		// The path might be withdrawn because the peer became unestablished or it may be withdrawn because just the
+		// path was withdrawn. Check to see if the peer is still established before deciding whether to clean the
+		// tunnel and tunnel routes or whether to just delete the destination route.
+		peerEstablished, err := nrc.isPeerEstablished(nextHop.String())
+		if err != nil {
+			klog.Errorf("encountered error while checking peer status: %v", err)
+		}
+		if err == nil && !peerEstablished {
+			klog.V(1).Infof("Peer '%s' was not found any longer, removing tunnel and routes", nextHop.String())
+			nrc.cleanupTunnel(dst, tunnelName)
+			return nil
+		}
+
+		return deleteRoutesByDestination(dst)
+	}
+
 	shouldCreateTunnel := func() bool {
 		if !nrc.enableOverlays {
 			return false
@@ -563,28 +585,6 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	} else {
 		// otherwise, let BGP do its thing, nothing to do here
 		return nil
-	}
-
-	// If we've made it this far, then it is likely that the node is holding a destination route for this path already.
-	// If the path we've received from GoBGP is a withdrawl, we should clean up any lingering routes that may exist
-	// on the host (rather than creating a new one or updating an existing one), and then return.
-	if path.IsWithdraw {
-		klog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nextHop)
-
-		// The path might be withdrawn because the peer became unestablished or it may be withdrawn because just the
-		// path was withdrawn. Check to see if the peer is still established before deciding whether to clean the
-		// tunnel and tunnel routes or whether to just delete the destination route.
-		peerEstablished, err := nrc.isPeerEstablished(nextHop.String())
-		if err != nil {
-			klog.Errorf("encountered error while checking peer status: %v", err)
-		}
-		if err == nil && !peerEstablished {
-			klog.V(1).Infof("Peer '%s' was not found any longer, removing tunnel and routes", nextHop.String())
-			nrc.cleanupTunnel(dst, tunnelName)
-			return nil
-		} else {
-			return deleteRoutesByDestination(dst)
-		}
 	}
 
 	// Alright, everything is in place, and we have our route configured, let's add it to the host's routing table
