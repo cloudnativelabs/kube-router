@@ -28,8 +28,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
-	"github.com/vishvananda/netlink/nl"
-
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -585,7 +583,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 			nrc.cleanupTunnel(dst, tunnelName)
 			return nil
 		} else {
-			return netlink.RouteDel(route)
+			return deleteRoutesByDestination(dst)
 		}
 	}
 
@@ -617,17 +615,8 @@ func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, err
 // needed. All errors are logged only, as we want to attempt to perform all cleanup actions regardless of their success
 func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
 	klog.V(1).Infof("Cleaning up old routes for %s if there are any", destinationSubnet.String())
-	routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
-		Dst: destinationSubnet, Protocol: 0x11,
-	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
-	if err != nil {
-		klog.Errorf("Failed to get routes from netlink")
-	}
-	for i, r := range routes {
-		klog.V(2).Infof("Found route to remove: %s", r.String())
-		if err := netlink.RouteDel(&routes[i]); err != nil {
-			klog.Errorf("Failed to remove route due to " + err.Error())
-		}
+	if err := deleteRoutesByDestination(destinationSubnet); err != nil {
+		klog.Errorf("Failed to cleanup routes: %v", err)
 	}
 
 	klog.V(1).Infof("Cleaning up any lingering tunnel interfaces named: %s", tunnelName)

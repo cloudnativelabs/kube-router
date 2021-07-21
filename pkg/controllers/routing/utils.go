@@ -12,6 +12,8 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	gobgpapi "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/pkg/packet/bgp"
+	"github.com/vishvananda/netlink/nl"
+	"k8s.io/klog/v2"
 
 	"github.com/vishvananda/netlink"
 )
@@ -194,4 +196,21 @@ func parseBGPPath(path *gobgpapi.Path) (*net.IPNet, net.IP, error) {
 		return nil, nil, fmt.Errorf("couldn't parse IP subnet from nlri advertised path")
 	}
 	return dstSubnet, nextHop, nil
+}
+
+// deleteRoutesByDestination attempts to safely find all routes based upon its destination subnet and delete them
+func deleteRoutesByDestination(destinationSubnet *net.IPNet) error {
+	routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
+		Dst: destinationSubnet, Protocol: 0x11,
+	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
+	if err != nil {
+		return fmt.Errorf("failed to get routes from netlink: %v", err)
+	}
+	for i, r := range routes {
+		klog.V(2).Infof("Found route to remove: %s", r.String())
+		if err = netlink.RouteDel(&routes[i]); err != nil {
+			return fmt.Errorf("failed to remove route due to %v", err)
+		}
+	}
+	return nil
 }
