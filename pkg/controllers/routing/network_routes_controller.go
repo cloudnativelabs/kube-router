@@ -611,7 +611,7 @@ func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, err
 	return peerDisconnected, nil
 }
 
-// cleanupTunnels removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer
+// cleanupTunnel removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer
 // needed. All errors are logged only, as we want to attempt to perform all cleanup actions regardless of their success
 func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
 	klog.V(1).Infof("Cleaning up old routes for %s if there are any", destinationSubnet.String())
