@@ -622,35 +622,40 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 }
 
 func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
-	/*
-		- delete firewall rules
-		- delete ipsets
-	*/
-	var err error
-
-	// Clear iptables rules.
+	// Clear iptables rules
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
-		klog.Errorf("Failed to initialize iptables executor: %s", err.Error())
+		klog.Errorf("failed to initialize iptables executor: %v", err)
 	} else {
 		ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
-		err = iptablesCmdHandler.Delete("filter", "INPUT", ipvsFirewallInputChainRule...)
+		exists, err := iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
 		if err != nil {
-			klog.Errorf("Failed to run iptables command: %s", err.Error())
+			// Changing to level 1 logging as errors occur when ipsets have already been cleaned and needlessly worries users
+			klog.V(1).Infof("failed to check if iptables rules exists: %v", err)
+		} else if exists {
+			err = iptablesCmdHandler.Delete("filter", "INPUT", ipvsFirewallInputChainRule...)
+			if err != nil {
+				klog.Errorf("failed to run iptables command: %v", err)
+			}
 		}
 
-		err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
+		exists, err = iptablesCmdHandler.ChainExists("filter", ipvsFirewallChainName)
 		if err != nil {
-			klog.Errorf("Failed to run iptables command: %s", err.Error())
-		}
+			klog.Errorf("failed to check if chain exists for deletion: %v", err)
+		} else if exists {
+			err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
+			if err != nil {
+				klog.Errorf("Failed to run iptables command: %s", err.Error())
+			}
 
-		err = iptablesCmdHandler.DeleteChain("filter", ipvsFirewallChainName)
-		if err != nil {
-			klog.Errorf("Failed to run iptables command: %s", err.Error())
+			err = iptablesCmdHandler.DeleteChain("filter", ipvsFirewallChainName)
+			if err != nil {
+				klog.Errorf("Failed to run iptables command: %s", err.Error())
+			}
 		}
 	}
 
-	// Clear ipsets.
+	// Clear ipsets
 	// There are certain actions like Cleanup() actions that aren't working with full instantiations of the controller
 	// and in these instances the mutex may not be present and may not need to be present as they are operating out of a
 	// single goroutine where there is no need for locking
@@ -666,17 +671,29 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 	ipSetHandler, err := utils.NewIPSet(false)
 	if err != nil {
 		klog.Errorf("Failed to initialize ipset handler: %s", err.Error())
-	} else {
+		return
+	}
+	err = ipSetHandler.Save()
+	if err != nil {
+		klog.Fatalf("failed to initialize ipsets command executor due to %v", err)
+		return
+	}
+
+	if _, ok := ipSetHandler.Sets[localIPsIPSetName]; ok {
 		err = ipSetHandler.Destroy(localIPsIPSetName)
 		if err != nil {
 			klog.Errorf("failed to destroy ipset: %s", err.Error())
 		}
+	}
 
+	if _, ok := ipSetHandler.Sets[serviceIPsIPSetName]; ok {
 		err = ipSetHandler.Destroy(serviceIPsIPSetName)
 		if err != nil {
 			klog.Errorf("failed to destroy ipset: %s", err.Error())
 		}
+	}
 
+	if _, ok := ipSetHandler.Sets[ipvsServicesIPSetName]; ok {
 		err = ipSetHandler.Destroy(ipvsServicesIPSetName)
 		if err != nil {
 			klog.Errorf("failed to destroy ipset: %s", err.Error())
