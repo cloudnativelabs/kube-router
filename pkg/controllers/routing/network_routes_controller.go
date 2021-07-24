@@ -649,6 +649,10 @@ func (nrc *NetworkRoutingController) Cleanup() {
 		klog.V(1).Infof("Error deleting Pod egress iptables rule: %s", err.Error())
 	}
 
+	// For some reason, if we go too fast into the ipset logic below it causes the system to think that the above
+	// iptables rules are still referencing the ipsets below, and we get errors
+	time.Sleep(1 * time.Second)
+
 	// delete all ipsets created by kube-router
 	// There are certain actions like Cleanup() actions that aren't working with full instantiations of the controller
 	// and in these instances the mutex may not be present and may not need to be present as they are operating out of a
