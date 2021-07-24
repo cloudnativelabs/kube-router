@@ -495,6 +495,20 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 
 func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[string]bool) error {
 	cleanupPolicyIPSets := make([]*utils.Set, 0)
+
+	// There are certain actions like Cleanup() actions that aren't working with full instantiations of the controller
+	// and in these instances the mutex may not be present and may not need to be present as they are operating out of a
+	// single goroutine where there is no need for locking
+	if nil != npc.ipsetMutex {
+		klog.V(1).Infof("Attempting to attain ipset mutex lock")
+		npc.ipsetMutex.Lock()
+		klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+		defer func() {
+			npc.ipsetMutex.Unlock()
+			klog.V(1).Infof("Returned ipset mutex lock")
+		}()
+	}
+
 	ipsets, err := utils.NewIPSet(false)
 	if err != nil {
 		return fmt.Errorf("failed to create ipsets command executor due to %s", err.Error())
