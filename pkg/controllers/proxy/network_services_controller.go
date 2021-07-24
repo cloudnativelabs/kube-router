@@ -2361,16 +2361,21 @@ func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 
 // Cleanup cleans all the configurations (IPVS, iptables, links) done
 func (nsc *NetworkServicesController) Cleanup() {
-	// cleanup ipvs rules by flush
-	klog.Infof("Cleaning up IPVS configuration permanently")
+	klog.Infof("Cleaning up NetworkServiceController configurations...")
 
+	// cleanup ipvs rules by flush
 	handle, err := ipvs.New("")
 	if err != nil {
-		klog.Errorf("Failed to cleanup ipvs rules: %s", err.Error())
-		return
+		klog.Errorf("failed to get ipvs handle for cleaning ipvs definitions: %v", err)
+	} else {
+		klog.Infof("ipvs definitions don't have names associated with them for checking, during cleanup " +
+			"we assume that we own all of them and delete all ipvs definitions")
+		err = handle.Flush()
+		if err != nil {
+			klog.Errorf("unable to flush ipvs tables: %v", err)
+		}
+		handle.Close()
 	}
-
-	handle.Close()
 
 	// cleanup iptables masquerade rule
 	err = deleteMasqueradeIptablesRule()
@@ -2401,7 +2406,8 @@ func (nsc *NetworkServicesController) Cleanup() {
 			return
 		}
 	}
-	klog.Infof("Successfully cleaned the ipvs configuration done by kube-router")
+
+	klog.Infof("Successfully cleaned the NetworkServiceController configuration done by kube-router")
 }
 
 func (nsc *NetworkServicesController) newEndpointsEventHandler() cache.ResourceEventHandler {
