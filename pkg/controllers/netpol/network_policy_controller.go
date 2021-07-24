@@ -441,11 +441,13 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 			}
 			if _, ok := activePolicyChains[chain]; !ok {
 				cleanupPolicyChains = append(cleanupPolicyChains, chain)
+				continue
 			}
 		}
 		if strings.HasPrefix(chain, kubePodFirewallChainPrefix) {
 			if _, ok := activePodFwChains[chain]; !ok {
 				cleanupPodFwChains = append(cleanupPodFwChains, chain)
+				continue
 			}
 		}
 	}
