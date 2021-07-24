@@ -251,7 +251,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
-	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains)
+	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains, false)
 	if err != nil {
 		klog.Errorf("Aborting sync. Failed to cleanup stale iptables rules: %v", err.Error())
 		return
@@ -418,7 +418,7 @@ func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
 	}
 }
 
-func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool) error {
+func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool, deleteDefaultChains bool) error {
 
 	cleanupPodFwChains := make([]string, 0)
 	cleanupPolicyChains := make([]string, 0)
@@ -469,6 +469,14 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 			if strings.Contains(rule, policyChainName) {
 				skipRule = true
 				break
+			}
+		}
+		if deleteDefaultChains {
+			for _, chain := range []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName, kubeDefaultNetpolChain} {
+				if strings.Contains(rule, chain) {
+					skipRule = true
+					break
+				}
 			}
 		}
 		if strings.Contains(rule, "COMMIT") || strings.HasPrefix(rule, "# ") {
@@ -537,122 +545,36 @@ func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[st
 
 // Cleanup cleanup configurations done
 func (npc *NetworkPolicyController) Cleanup() {
+	klog.Info("Cleaning up NetworkPolicyController configurations...")
 
-	klog.Info("Cleaning up iptables configuration permanently done by kube-router")
-
-	iptablesCmdHandler, err := iptables.New()
+	var emptySet map[string]bool
+	// Take a dump (iptables-save) of the current filter table for cleanupStaleRules() to work on
+	if err := utils.SaveInto("filter", &npc.filterTableRules); err != nil {
+		klog.Errorf("error encountered attempting to list iptables rules for cleanup: %v", err)
+		return
+	}
+	// Run cleanupStaleRules() to get rid of most of the kube-router rules (this is the same logic that runs as
+	// part NPC's runtime loop). Setting the last parameter to true causes even the default chains are removed.
+	err := npc.cleanupStaleRules(emptySet, emptySet, true)
 	if err != nil {
-		klog.Errorf("Failed to initialize iptables executor: %s", err.Error())
+		klog.Errorf("error encountered attempting to cleanup iptables rules: %v", err)
+		return
+	}
+	//klog.Infof("Final rules to save: %s", npc.filterTableRules)
+	// Restore (iptables-restore) npc's cleaned up version of the iptables filter chain
+	if err = utils.Restore("filter", npc.filterTableRules.Bytes()); err != nil {
+		klog.Errorf(
+			"error encountered while loading running iptables-restore: %v\n%s", err, npc.filterTableRules.String())
+	}
+
+	// Cleanup ipsets
+	err = npc.cleanupStaleIPSets(emptySet)
+	if err != nil {
+		klog.Errorf("error encountered while cleaning ipsets: %v", err)
 		return
 	}
 
-	// delete jump rules in FORWARD chain to pod specific firewall chain
-	forwardChainRules, err := iptablesCmdHandler.List("filter", kubeForwardChainName)
-	if err != nil {
-		klog.Errorf("Failed to delete iptables rules as part of cleanup")
-		return
-	}
-
-	// TODO: need a better way to delete rule with out using number
-	var realRuleNo int
-	for i, rule := range forwardChainRules {
-		if strings.Contains(rule, kubePodFirewallChainPrefix) {
-			err = iptablesCmdHandler.Delete("filter", kubeForwardChainName, strconv.Itoa(i-realRuleNo))
-			if err != nil {
-				klog.Errorf("Failed to delete iptables rule as part of cleanup: %s", err)
-			}
-			realRuleNo++
-		}
-	}
-
-	// delete jump rules in OUTPUT chain to pod specific firewall chain
-	forwardChainRules, err = iptablesCmdHandler.List("filter", kubeOutputChainName)
-	if err != nil {
-		klog.Errorf("Failed to delete iptables rules as part of cleanup")
-		return
-	}
-
-	// TODO: need a better way to delete rule with out using number
-	realRuleNo = 0
-	for i, rule := range forwardChainRules {
-		if strings.Contains(rule, kubePodFirewallChainPrefix) {
-			err = iptablesCmdHandler.Delete("filter", kubeOutputChainName, strconv.Itoa(i-realRuleNo))
-			if err != nil {
-				klog.Errorf("Failed to delete iptables rule as part of cleanup: %s", err)
-			}
-			realRuleNo++
-		}
-	}
-
-	// flush and delete pod specific firewall chain
-	chains, err := iptablesCmdHandler.ListChains("filter")
-	if err != nil {
-		klog.Errorf("Unable to list chains: %s", err)
-		return
-	}
-	for _, chain := range chains {
-		if strings.HasPrefix(chain, kubePodFirewallChainPrefix) {
-			err = iptablesCmdHandler.ClearChain("filter", chain)
-			if err != nil {
-				klog.Errorf("Failed to cleanup iptables rules: " + err.Error())
-				return
-			}
-			err = iptablesCmdHandler.DeleteChain("filter", chain)
-			if err != nil {
-				klog.Errorf("Failed to cleanup iptables rules: " + err.Error())
-				return
-			}
-		}
-	}
-
-	// flush and delete per network policy specific chain
-	chains, err = iptablesCmdHandler.ListChains("filter")
-	if err != nil {
-		klog.Errorf("Unable to list chains: %s", err)
-		return
-	}
-	for _, chain := range chains {
-		if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
-			err = iptablesCmdHandler.ClearChain("filter", chain)
-			if err != nil {
-				klog.Errorf("Failed to cleanup iptables rules: " + err.Error())
-				return
-			}
-			err = iptablesCmdHandler.DeleteChain("filter", chain)
-			if err != nil {
-				klog.Errorf("Failed to cleanup iptables rules: " + err.Error())
-				return
-			}
-		}
-	}
-
-	// delete all ipsets
-	// There are certain actions like Cleanup() actions that aren't working with full instantiations of the controller
-	// and in these instances the mutex may not be present and may not need to be present as they are operating out of a
-	// single goroutine where there is no need for locking
-	if nil != npc.ipsetMutex {
-		klog.V(1).Infof("Attempting to attain ipset mutex lock")
-		npc.ipsetMutex.Lock()
-		klog.V(1).Infof("Attained ipset mutex lock, continuing...")
-		defer func() {
-			npc.ipsetMutex.Unlock()
-			klog.V(1).Infof("Returned ipset mutex lock")
-		}()
-	}
-	ipset, err := utils.NewIPSet(false)
-	if err != nil {
-		klog.Errorf("Failed to clean up ipsets: " + err.Error())
-		return
-	}
-	err = ipset.Save()
-	if err != nil {
-		klog.Errorf("Failed to clean up ipsets: " + err.Error())
-	}
-	err = ipset.DestroyAllWithin()
-	if err != nil {
-		klog.Errorf("Failed to clean up ipsets: " + err.Error())
-	}
-	klog.Infof("Successfully cleaned the iptables configuration done by kube-router")
+	klog.Infof("Successfully cleaned the NetworkPolicyController configurations done by kube-router")
 }
 
 // NewNetworkPolicyController returns new NetworkPolicyController object
