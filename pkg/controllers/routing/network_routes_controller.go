@@ -634,15 +634,19 @@ out:
 
 // Cleanup performs the cleanup of configurations done
 func (nrc *NetworkRoutingController) Cleanup() {
+	klog.Infof("Cleaning up NetworkRoutesController configurations")
+
 	// Pod egress cleanup
 	err := nrc.deletePodEgressRule()
 	if err != nil {
-		klog.Warningf("Error deleting Pod egress iptables rule: %s", err.Error())
+		// Changing to level 1 logging as errors occur when ipsets have already been cleaned and needlessly worries users
+		klog.V(1).Infof("Error deleting Pod egress iptables rule: %v", err)
 	}
 
 	err = nrc.deleteBadPodEgressRules()
 	if err != nil {
-		klog.Warningf("Error deleting Pod egress iptables rule: %s", err.Error())
+		// Changing to level 1 logging as errors occur when ipsets have already been cleaned and needlessly worries users
+		klog.V(1).Infof("Error deleting Pod egress iptables rule: %s", err.Error())
 	}
 
 	// delete all ipsets created by kube-router
@@ -671,6 +675,8 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	if err != nil {
 		klog.Warningf("Error deleting ipset: %s", err.Error())
 	}
+
+	klog.Infof("Successfully cleaned the NetworkRoutesController configuration done by kube-router")
 }
 
 func (nrc *NetworkRoutingController) syncNodeIPSets() error {
