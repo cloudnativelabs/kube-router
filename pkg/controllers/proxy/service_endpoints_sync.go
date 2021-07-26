@@ -565,6 +565,7 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 			metrics.ServicePpsOut.DeleteLabelValues(labelValues...)
 			metrics.ServiceTotalConn.DeleteLabelValues(labelValues...)
 			metrics.ControllerIpvsServices.Dec()
+			delete(nsc.metricsMap, key)
 		} else {
 			dsts, err := nsc.ln.ipvsGetDestinations(ipvsSvc)
 			if err != nil {

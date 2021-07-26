@@ -2508,7 +2508,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex, metricsMap: make(map[string][]string)}
 
 	if config.MetricsEnabled {
-		// Register the metrics for this controller.
+		// Register the metrics for this controller
 		prometheus.MustRegister(metrics.ControllerIpvsServices)
 		prometheus.MustRegister(metrics.ControllerIpvsServicesSyncTime)
 		prometheus.MustRegister(metrics.ServiceBpsIn)
