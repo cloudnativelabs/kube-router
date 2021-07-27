@@ -63,6 +63,11 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		syncErrors = true
 		klog.Errorf("Error cleaning up stale IPVS services and servers: %s", err.Error())
 	}
+	err = nsc.cleanupStaleMetrics(activeServiceEndpointMap)
+	if err != nil {
+		syncErrors = true
+		klog.Errorf("Error cleaning up stale metrics: %s", err.Error())
+	}
 	err = nsc.syncIpvsFirewall()
 	if err != nil {
 		syncErrors = true
@@ -548,24 +553,6 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 					ipvsServiceString(ipvsSvc), err.Error())
 				continue
 			}
-
-			labelValues, ok := nsc.metricsMap[key]
-			if !ok {
-				continue
-			}
-
-			metrics.ServiceBpsIn.DeleteLabelValues(labelValues...)
-			metrics.ServiceBpsOut.DeleteLabelValues(labelValues...)
-			metrics.ServiceBytesIn.DeleteLabelValues(labelValues...)
-			metrics.ServiceBytesOut.DeleteLabelValues(labelValues...)
-			metrics.ServiceCPS.DeleteLabelValues(labelValues...)
-			metrics.ServicePacketsIn.DeleteLabelValues(labelValues...)
-			metrics.ServicePacketsOut.DeleteLabelValues(labelValues...)
-			metrics.ServicePpsIn.DeleteLabelValues(labelValues...)
-			metrics.ServicePpsOut.DeleteLabelValues(labelValues...)
-			metrics.ServiceTotalConn.DeleteLabelValues(labelValues...)
-			metrics.ControllerIpvsServices.Dec()
-			delete(nsc.metricsMap, key)
 		} else {
 			dsts, err := nsc.ln.ipvsGetDestinations(ipvsSvc)
 			if err != nil {
@@ -590,6 +577,28 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 				}
 			}
 		}
+	}
+	return nil
+}
+
+func (nsc *NetworkServicesController) cleanupStaleMetrics(activeServiceEndpointMap map[string][]string) error {
+	for k, v := range nsc.metricsMap {
+		if _, ok := activeServiceEndpointMap[k]; ok {
+			continue
+		}
+
+		metrics.ServiceBpsIn.DeleteLabelValues(v...)
+		metrics.ServiceBpsOut.DeleteLabelValues(v...)
+		metrics.ServiceBytesIn.DeleteLabelValues(v...)
+		metrics.ServiceBytesOut.DeleteLabelValues(v...)
+		metrics.ServiceCPS.DeleteLabelValues(v...)
+		metrics.ServicePacketsIn.DeleteLabelValues(v...)
+		metrics.ServicePacketsOut.DeleteLabelValues(v...)
+		metrics.ServicePpsIn.DeleteLabelValues(v...)
+		metrics.ServicePpsOut.DeleteLabelValues(v...)
+		metrics.ServiceTotalConn.DeleteLabelValues(v...)
+		metrics.ControllerIpvsServices.Dec()
+		delete(nsc.metricsMap, k)
 	}
 	return nil
 }
