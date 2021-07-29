@@ -63,11 +63,9 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		syncErrors = true
 		klog.Errorf("Error cleaning up stale IPVS services and servers: %s", err.Error())
 	}
-	err = nsc.cleanupStaleMetrics(activeServiceEndpointMap)
-	if err != nil {
-		syncErrors = true
-		klog.Errorf("Error cleaning up stale metrics: %s", err.Error())
-	}
+
+	nsc.cleanupStaleMetrics(activeServiceEndpointMap)
+
 	err = nsc.syncIpvsFirewall()
 	if err != nil {
 		syncErrors = true
@@ -581,7 +579,7 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 	return nil
 }
 
-func (nsc *NetworkServicesController) cleanupStaleMetrics(activeServiceEndpointMap map[string][]string) error {
+func (nsc *NetworkServicesController) cleanupStaleMetrics(activeServiceEndpointMap map[string][]string) {
 	for k, v := range nsc.metricsMap {
 		if _, ok := activeServiceEndpointMap[k]; ok {
 			continue
@@ -600,5 +598,4 @@ func (nsc *NetworkServicesController) cleanupStaleMetrics(activeServiceEndpointM
 		metrics.ControllerIpvsServices.Dec()
 		delete(nsc.metricsMap, k)
 	}
-	return nil
 }
