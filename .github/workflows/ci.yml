@@ -74,10 +74,10 @@ jobs:
       run: |
         make kube-router
 
-  # Builds Container on Push Event, not run if there's a Tag Event
+  # Builds Container only if a new push to main branch, a tag or a pull request from a source branch within the repository
   ci-build-container:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     steps:
     - name: Checkout
       uses: actions/checkout@v2
