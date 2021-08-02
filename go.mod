@@ -33,4 +33,4 @@ require (
 
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.4 // CVE-2021-32760
 
-go 1.13
+go 1.16
