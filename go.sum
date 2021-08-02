@@ -535,8 +535,8 @@ github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d/go.m
 github.com/opencontainers/runtime-tools v0.0.0-20181011054405-1d69bd0f9c39/go.mod h1:r3f7wjNzSs2extwzU3Y+6pKfobzPh+kKFJ3ofN+3nfs=
 github.com/opencontainers/selinux v1.6.0/go.mod h1:VVGKuOLlE7v4PJyT6h7mNWvq1rzqiriPsEqVhc+svHE=
 github.com/opencontainers/selinux v1.8.0/go.mod h1:RScLhm78qiWa2gbVCcGkC7tCGdgk3ogry1nUQF8Evvo=
-github.com/osrg/gobgp v0.0.0-20210701110518-b284a8082ab4 h1:NVrx71w60uKmhfF0LTvdjY54th4E1OPCb5uaelGnE9s=
-github.com/osrg/gobgp v0.0.0-20210701110518-b284a8082ab4/go.mod h1:aNi0T2X6FSkl1evOifmJUsdxiQ1AQkiV7fIEtLIVv/U=
+github.com/osrg/gobgp v0.0.0-20210801043420-9e48a36ed97c h1:xjEw4wejCHaHMNXXOx9apMOo8Su3fRsH8LMQv3iUuQM=
+github.com/osrg/gobgp v0.0.0-20210801043420-9e48a36ed97c/go.mod h1:aNi0T2X6FSkl1evOifmJUsdxiQ1AQkiV7fIEtLIVv/U=
 github.com/pelletier/go-buffruneio v0.2.0/go.mod h1:JkE26KsDizTr40EUHkXVtNPvgGtbSNq5BcowyYOWdKo=
 github.com/pelletier/go-toml v1.0.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
