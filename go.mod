@@ -2,10 +2,11 @@ module github.com/cloudnativelabs/kube-router
 
 require (
 	github.com/aws/aws-sdk-go v1.38.70
-	github.com/containerd/containerd v1.5.2 // indirect
+	github.com/containerd/containerd v1.5.4 // indirect
 	github.com/containernetworking/cni v0.8.1
 	github.com/containernetworking/plugins v0.9.1
 	github.com/coreos/go-iptables v0.6.0
+	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v20.10.7+incompatible
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/golang/protobuf v1.4.3
@@ -29,5 +30,7 @@ require (
 	k8s.io/cri-api v0.21.2
 	k8s.io/klog/v2 v2.9.0
 )
+
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.4 // CVE-2021-32760
 
 go 1.13
