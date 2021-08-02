@@ -196,19 +196,19 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, pod
 	// this rule applies to the traffic getting routed (coming for other node pods)
 	comment := "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
 		" to chain " + podFwChainName + "\""
-	args := []string{"-I", kubeForwardChainName, "1", "-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName + "\n"}
+	args := []string{"-A", kubeForwardChainName, "-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName + "\n"}
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
 
 	// ensure there is rule in filter table and OUTPUT chain to jump to pod specific firewall chain
 	// this rule applies to the traffic from a pod getting routed back to another pod on same node by service proxy
-	args = []string{"-I", kubeOutputChainName, "1", "-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName + "\n"}
+	args = []string{"-A", kubeOutputChainName, "-m", "comment", "--comment", comment, "-d", pod.ip, "-j", podFwChainName + "\n"}
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
 
 	// ensure there is rule in filter table and forward chain to jump to pod specific firewall chain
 	// this rule applies to the traffic getting switched (coming for same node pods)
 	comment = "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
 		" to chain " + podFwChainName + "\""
-	args = []string{"-I", kubeForwardChainName, "1", "-m", "physdev", "--physdev-is-bridged",
+	args = []string{"-A", kubeForwardChainName, "-m", "physdev", "--physdev-is-bridged",
 		"-m", "comment", "--comment", comment,
 		"-d", pod.ip,
 		"-j", podFwChainName, "\n"}
@@ -218,14 +218,13 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, pod
 // setup iptable rules to intercept outbound traffic from pods and run it across the
 // firewall chain corresponding to the pod so that egress network policies are enforced
 func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, podFwChainName string) {
-	egressFilterChains := []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName}
-	for _, chain := range egressFilterChains {
+	for _, chain := range defaultChains {
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
-		// this rule applies to the traffic getting forwarded/routed (traffic from the pod destinted
+		// this rule applies to the traffic getting forwarded/routed (traffic from the pod destined
 		// to pod on a different node)
 		comment := "\"rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
 			" to chain " + podFwChainName + "\""
-		args := []string{"-I", chain, "1", "-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName, "\n"}
+		args := []string{"-A", chain, "-m", "comment", "--comment", comment, "-s", pod.ip, "-j", podFwChainName, "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
@@ -233,7 +232,7 @@ func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, po
 	// this rule applies to the traffic getting switched (coming for same node pods)
 	comment := "\"rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
 		" to chain " + podFwChainName + "\""
-	args := []string{"-I", kubeForwardChainName, "1", "-m", "physdev", "--physdev-is-bridged",
+	args := []string{"-A", kubeForwardChainName, "-m", "physdev", "--physdev-is-bridged",
 		"-m", "comment", "--comment", comment,
 		"-s", pod.ip,
 		"-j", podFwChainName, "\n"}
