@@ -35,6 +35,10 @@ const (
 	kubeDefaultNetpolChain       = "KUBE-NWPLCY-DEFAULT"
 )
 
+var (
+	defaultChains = map[string]string{"INPUT": kubeInputChainName, "FORWARD": kubeForwardChainName, "OUTPUT": kubeOutputChainName}
+)
+
 // Network policy controller provides both ingress and egress filtering for the pods as per the defined network
 // policies. Two different types of iptables chains are used. Each pod running on the node which either
 // requires ingress or egress filtering gets a pod specific chains. Each network policy has a iptables chain, which
@@ -251,6 +255,10 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
+	// Makes sure that the ACCEPT rules for packets marked with "0x20000" are added to the end of each of kube-router's
+	// top level chains
+	npc.ensureExplicitAccept()
+
 	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains, false)
 	if err != nil {
 		klog.Errorf("Aborting sync. Failed to cleanup stale iptables rules: %v", err.Error())
@@ -337,9 +345,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		}
 	}
 
-	chains := map[string]string{"INPUT": kubeInputChainName, "FORWARD": kubeForwardChainName, "OUTPUT": kubeOutputChainName}
-
-	for builtinChain, customChain := range chains {
+	for builtinChain, customChain := range defaultChains {
 		err = iptablesCmdHandler.NewChain("filter", customChain)
 		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
 			klog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
@@ -383,16 +389,15 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		}
 		ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, externalIPIndex+4)
 	}
+}
 
+func (npc *NetworkPolicyController) ensureExplicitAccept() {
 	// for the traffic to/from the local pod's let network policy controller be
 	// authoritative entity to ACCEPT the traffic if it complies to network policies
-	for _, chain := range chains {
-		comment := "rule to explicitly ACCEPT traffic that comply to network policies"
+	for _, chain := range defaultChains {
+		comment := "\"rule to explicitly ACCEPT traffic that comply to network policies\""
 		args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT"}
-		err = iptablesCmdHandler.AppendUnique("filter", chain, args...)
-		if err != nil {
-			klog.Fatalf("Failed to run iptables command: %s", err.Error())
-		}
+		npc.filterTableRules = utils.AppendUnique(npc.filterTableRules, chain, args)
 	}
 }
 
