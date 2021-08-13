@@ -42,6 +42,7 @@ type KubeRouterConfig struct {
 	HealthPort                     uint16
 	HelpRequested                  bool
 	HostnameOverride               string
+	InjectedRoutesSyncPeriod       time.Duration
 	IPTablesSyncPeriod             time.Duration
 	IpvsGracefulPeriod             time.Duration
 	IpvsGracefulTermination        bool
@@ -89,6 +90,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		NodePortRange:                  "30000-32767",
 		OverlayType:                    "subnet",
 		RoutesSyncPeriod:               5 * time.Minute,
+		InjectedRoutesSyncPeriod:       15 * time.Second,
 	}
 }
 
@@ -149,6 +151,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.HostnameOverride, "hostname-override", s.HostnameOverride,
 		"Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName "+
 			"automatically.")
+	fs.DurationVar(&s.InjectedRoutesSyncPeriod, "injected-routes-sync-period", s.InjectedRoutesSyncPeriod,
+		"The delay between route table synchronizations  (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.DurationVar(&s.IPTablesSyncPeriod, "iptables-sync-period", s.IPTablesSyncPeriod,
 		"The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.DurationVar(&s.IpvsGracefulPeriod, "ipvs-graceful-period", s.IpvsGracefulPeriod,

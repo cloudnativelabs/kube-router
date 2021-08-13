@@ -36,16 +36,17 @@ func Test_AddPolicies(t *testing.T) {
 		{
 			"has nodes and services",
 			&NetworkRoutingController{
-				clientset:         fake.NewSimpleClientset(),
-				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.0",
-				bgpPort:           10000,
-				bgpFullMeshMode:   false,
-				bgpEnableInternal: true,
-				bgpServer:         gobgp.NewBgpServer(),
-				activeNodes:       make(map[string]bool),
-				nodeAsnNumber:     100,
-				podCidr:           "172.20.0.0/24",
+				clientset:                fake.NewSimpleClientset(),
+				hostnameOverride:         "node-1",
+				routerID:                 "10.0.0.0",
+				bgpPort:                  10000,
+				bgpFullMeshMode:          false,
+				bgpEnableInternal:        true,
+				bgpServer:                gobgp.NewBgpServer(),
+				activeNodes:              make(map[string]bool),
+				nodeAsnNumber:            100,
+				podCidr:                  "172.20.0.0/24",
+				injectedRoutesSyncPeriod: 15,
 			},
 			[]*v1core.Node{
 				{
@@ -195,7 +196,8 @@ func Test_AddPolicies(t *testing.T) {
 						},
 					},
 				},
-				nodeAsnNumber: 100,
+				nodeAsnNumber:            100,
+				injectedRoutesSyncPeriod: 15,
 			},
 			[]*v1core.Node{
 				{
@@ -366,7 +368,8 @@ func Test_AddPolicies(t *testing.T) {
 						},
 					},
 				},
-				nodeAsnNumber: 100,
+				nodeAsnNumber:            100,
+				injectedRoutesSyncPeriod: 15,
 			},
 			[]*v1core.Node{
 				{
@@ -520,7 +523,8 @@ func Test_AddPolicies(t *testing.T) {
 						},
 					},
 				},
-				nodeAsnNumber: 100,
+				nodeAsnNumber:            100,
+				injectedRoutesSyncPeriod: 15,
 			},
 			[]*v1core.Node{
 				{
@@ -697,7 +701,8 @@ func Test_AddPolicies(t *testing.T) {
 						},
 					},
 				},
-				nodeAsnNumber: 100,
+				nodeAsnNumber:            100,
+				injectedRoutesSyncPeriod: 15,
 			},
 			[]*v1core.Node{
 				{
@@ -874,7 +879,8 @@ func Test_AddPolicies(t *testing.T) {
 						},
 					},
 				},
-				nodeAsnNumber: 100,
+				nodeAsnNumber:            100,
+				injectedRoutesSyncPeriod: 15,
 			},
 			[]*v1core.Node{
 				{
