@@ -38,6 +38,11 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 		klog.Errorf("Failed to add `defaultroutedefinedset` defined set: %s", err)
 	}
 
+	err = nrc.addCustomImportRejectDefinedSet()
+	if err != nil {
+		klog.Errorf("Failed to add `customimportrejectdefinedset` defined set: %s", err)
+	}
+
 	iBGPPeerCIDRs, err := nrc.addiBGPPeersDefinedSet()
 	if err != nil {
 		klog.Errorf("Failed to add `iBGPpeerset` defined set: %s", err)
@@ -210,6 +215,38 @@ func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
 		}
 		return nrc.bgpServer.AddDefinedSet(context.Background(),
 			&gobgpapi.AddDefinedSetRequest{DefinedSet: defaultRouteDefinedSet})
+	}
+	return nil
+}
+
+// create a defined set to represent custom annotated routes to be rejected on import
+func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
+	var currentDefinedSet *gobgpapi.DefinedSet
+	err := nrc.bgpServer.ListDefinedSet(context.Background(),
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "customimportrejectdefinedset"},
+		func(ds *gobgpapi.DefinedSet) {
+			currentDefinedSet = ds
+		})
+	if err != nil {
+		return err
+	}
+	if currentDefinedSet == nil {
+		prefixes := make([]*gobgpapi.Prefix, 0)
+		for _, ipNet := range nrc.nodeCustomImportRejectIPNets {
+			prefix := new(gobgpapi.Prefix)
+			prefix.IpPrefix = ipNet.String()
+			mask, _ := ipNet.Mask.Size()
+			prefix.MaskLengthMin = uint32(mask)
+			prefix.MaskLengthMax = uint32(mask)
+			prefixes = append(prefixes, prefix)
+		}
+		customImportRejectDefinedSet := &gobgpapi.DefinedSet{
+			DefinedType: gobgpapi.DefinedType_PREFIX,
+			Name:        "customimportrejectdefinedset",
+			Prefixes:    prefixes,
+		}
+		return nrc.bgpServer.AddDefinedSet(context.Background(),
+			&gobgpapi.AddDefinedSetRequest{DefinedSet: customImportRejectDefinedSet})
 	}
 	return nil
 }
@@ -620,6 +657,22 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 		},
 		Actions: &actions,
 	})
+
+	if len(nrc.nodeCustomImportRejectIPNets) > 0 {
+		statements = append(statements, &gobgpapi.Statement{
+			Conditions: &gobgpapi.Conditions{
+				PrefixSet: &gobgpapi.MatchSet{
+					MatchType: gobgpapi.MatchType_ANY,
+					Name:      "customimportrejectdefinedset",
+				},
+				NeighborSet: &gobgpapi.MatchSet{
+					MatchType: gobgpapi.MatchType_ANY,
+					Name:      "allpeerset",
+				},
+			},
+			Actions: &actions,
+		})
+	}
 
 	definition := gobgpapi.Policy{
 		Name:       "kube_router_import",
