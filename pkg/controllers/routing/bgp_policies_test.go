@@ -1107,6 +1107,9 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 				t.Errorf("statement %v not found", expectedStatement)
 			}
 		}
+		if len(policyStatements) != len(foundPolicy.Statements) {
+			t.Errorf("unexpected statement found: %v", foundPolicy.Statements)
+		}
 	})
 	if err != nil {
 		t.Fatalf("expected to find a policy, but none were returned")
