@@ -1521,15 +1521,16 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR server with int cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				nodeIP:           net.ParseIP("10.0.0.0"),
-				routerID:         "10.0.0.0",
-				bgpServer:        gobgp.NewBgpServer(),
-				activeNodes:      make(map[string]bool),
-				nodeAsnNumber:    100,
-				hostnameOverride: "node-1",
+				bgpFullMeshMode:          false,
+				bgpPort:                  10000,
+				clientset:                fake.NewSimpleClientset(),
+				nodeIP:                   net.ParseIP("10.0.0.0"),
+				routerID:                 "10.0.0.0",
+				bgpServer:                gobgp.NewBgpServer(),
+				activeNodes:              make(map[string]bool),
+				nodeAsnNumber:            100,
+				hostnameOverride:         "node-1",
+				injectedRoutesSyncPeriod: 15,
 			},
 			&v1core.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1548,15 +1549,16 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR server with IPv4 cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				nodeIP:           net.ParseIP("10.0.0.0"),
-				routerID:         "10.0.0.0",
-				bgpServer:        gobgp.NewBgpServer(),
-				activeNodes:      make(map[string]bool),
-				nodeAsnNumber:    100,
-				hostnameOverride: "node-1",
+				bgpFullMeshMode:          false,
+				bgpPort:                  10000,
+				clientset:                fake.NewSimpleClientset(),
+				nodeIP:                   net.ParseIP("10.0.0.0"),
+				routerID:                 "10.0.0.0",
+				bgpServer:                gobgp.NewBgpServer(),
+				activeNodes:              make(map[string]bool),
+				nodeAsnNumber:            100,
+				hostnameOverride:         "node-1",
+				injectedRoutesSyncPeriod: 15,
 			},
 			&v1core.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1575,15 +1577,16 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR client with int cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				nodeIP:           net.ParseIP("10.0.0.0"),
-				routerID:         "10.0.0.0",
-				bgpServer:        gobgp.NewBgpServer(),
-				activeNodes:      make(map[string]bool),
-				nodeAsnNumber:    100,
-				hostnameOverride: "node-1",
+				bgpFullMeshMode:          false,
+				bgpPort:                  10000,
+				clientset:                fake.NewSimpleClientset(),
+				nodeIP:                   net.ParseIP("10.0.0.0"),
+				routerID:                 "10.0.0.0",
+				bgpServer:                gobgp.NewBgpServer(),
+				activeNodes:              make(map[string]bool),
+				nodeAsnNumber:            100,
+				hostnameOverride:         "node-1",
+				injectedRoutesSyncPeriod: 15,
 			},
 			&v1core.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1602,15 +1605,16 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR client with IPv4 cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				nodeIP:           net.ParseIP("10.0.0.0"),
-				routerID:         "10.0.0.0",
-				bgpServer:        gobgp.NewBgpServer(),
-				activeNodes:      make(map[string]bool),
-				nodeAsnNumber:    100,
-				hostnameOverride: "node-1",
+				bgpFullMeshMode:          false,
+				bgpPort:                  10000,
+				clientset:                fake.NewSimpleClientset(),
+				nodeIP:                   net.ParseIP("10.0.0.0"),
+				routerID:                 "10.0.0.0",
+				bgpServer:                gobgp.NewBgpServer(),
+				activeNodes:              make(map[string]bool),
+				nodeAsnNumber:            100,
+				hostnameOverride:         "node-1",
+				injectedRoutesSyncPeriod: 15,
 			},
 			&v1core.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1629,14 +1633,15 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR server with unparseable cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				nodeIP:           net.ParseIP("10.0.0.0"),
-				bgpServer:        gobgp.NewBgpServer(),
-				activeNodes:      make(map[string]bool),
-				nodeAsnNumber:    100,
-				hostnameOverride: "node-1",
+				bgpFullMeshMode:          false,
+				bgpPort:                  10000,
+				clientset:                fake.NewSimpleClientset(),
+				nodeIP:                   net.ParseIP("10.0.0.0"),
+				bgpServer:                gobgp.NewBgpServer(),
+				activeNodes:              make(map[string]bool),
+				nodeAsnNumber:            100,
+				hostnameOverride:         "node-1",
+				injectedRoutesSyncPeriod: 15,
 			},
 			&v1core.Node{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1656,14 +1661,15 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR client with unparseable cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				nodeIP:           net.ParseIP("10.0.0.0"),
-				bgpServer:        gobgp.NewBgpServer(),
-				activeNodes:      make(map[string]bool),
-				nodeAsnNumber:    100,
-				hostnameOverride: "node-1",
+				bgpFullMeshMode:          false,
+				bgpPort:                  10000,
+				clientset:                fake.NewSimpleClientset(),
+				nodeIP:                   net.ParseIP("10.0.0.0"),
+				bgpServer:                gobgp.NewBgpServer(),
+				activeNodes:              make(map[string]bool),
+				nodeAsnNumber:            100,
+				hostnameOverride:         "node-1",
+				injectedRoutesSyncPeriod: 15,
 			},
 			&v1core.Node{
 				ObjectMeta: metav1.ObjectMeta{

@@ -117,6 +117,8 @@ type NetworkRoutingController struct {
 	podCidr                        string
 	CNIFirewallSetup               *sync.Cond
 	ipsetMutex                     *sync.Mutex
+	injectedRoutesSyncPeriod       time.Duration
+	routeTableStateMap             map[string]*netlink.Route
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -125,6 +127,10 @@ type NetworkRoutingController struct {
 	NodeEventHandler      cache.ResourceEventHandler
 	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
+}
+
+func (nrc *NetworkRoutingController) addInjectedRoute(route *netlink.Route, dst *net.IPNet) {
+	nrc.routeTableStateMap[dst.String()] = route
 }
 
 // Run runs forever until we are notified on stop channel
@@ -409,7 +415,26 @@ func (nrc *NetworkRoutingController) autoConfigureMTU() error {
 	return nil
 }
 
+func (nrc *NetworkRoutingController) watchRouteTable() {
+	go func() {
+		t := time.NewTicker(nrc.injectedRoutesSyncPeriod)
+		defer t.Stop()
+		for {
+			for _, route := range nrc.routeTableStateMap {
+				err := netlink.RouteReplace(route)
+				if err != nil {
+					klog.Errorf("Route could not be replaced due to : " + err.Error())
+				}
+			}
+			// Wait until the next iteration
+			<-t.C
+		}
+	}()
+}
+
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
+	// Start the route table watcher prior to adding anything
+	nrc.watchRouteTable()
 	pathWatch := func(path *gobgpapi.Path) {
 		if nrc.MetricsEnabled {
 			metrics.ControllerBGPadvertisementsReceived.Inc()
@@ -589,7 +614,8 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 
 	// Alright, everything is in place, and we have our route configured, let's add it to the host's routing table
 	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nextHop)
-	return netlink.RouteReplace(route)
+	nrc.addInjectedRoute(route, dst)
+	return nil
 }
 
 func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, error) {
@@ -1114,6 +1140,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.peerMultihopTTL = kubeRouterConfig.PeerMultihopTTL
 	nrc.enablePodEgress = kubeRouterConfig.EnablePodEgress
 	nrc.syncPeriod = kubeRouterConfig.RoutesSyncPeriod
+	nrc.injectedRoutesSyncPeriod = kubeRouterConfig.InjectedRoutesSyncPeriod
 	nrc.overrideNextHop = kubeRouterConfig.OverrideNextHop
 	nrc.clientset = clientset
 	nrc.activeNodes = make(map[string]bool)
@@ -1122,6 +1149,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
+	nrc.routeTableStateMap = make(map[string]*netlink.Route)
 
 	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldTime.Seconds()
 	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {
