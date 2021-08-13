@@ -43,12 +43,13 @@ const (
 	podSubnetsIPSetName  = "kube-router-pod-subnets"
 	nodeAddrsIPSetName   = "kube-router-node-ips"
 
-	nodeASNAnnotation            = "kube-router.io/node.asn"
-	nodeCommunitiesAnnotation    = "kube-router.io/node.bgp.communities"
-	pathPrependASNAnnotation     = "kube-router.io/path-prepend.as"
-	pathPrependRepeatNAnnotation = "kube-router.io/path-prepend.repeat-n"
-	peerASNAnnotation            = "kube-router.io/peer.asns"
-	peerIPAnnotation             = "kube-router.io/peer.ips"
+	nodeASNAnnotation                = "kube-router.io/node.asn"
+	nodeCommunitiesAnnotation        = "kube-router.io/node.bgp.communities"
+	nodeCustomImportRejectAnnotation = "kube-router.io/node.bgp.customimportreject"
+	pathPrependASNAnnotation         = "kube-router.io/path-prepend.as"
+	pathPrependRepeatNAnnotation     = "kube-router.io/path-prepend.repeat-n"
+	peerASNAnnotation                = "kube-router.io/peer.asns"
+	peerIPAnnotation                 = "kube-router.io/peer.ips"
 	// nolint:gosec // this is not a hardcoded password
 	peerPasswordAnnotation             = "kube-router.io/peer.passwords"
 	peerPortAnnotation                 = "kube-router.io/peer.ports"
@@ -100,6 +101,7 @@ type NetworkRoutingController struct {
 	autoMTU                        bool
 	defaultNodeAsnNumber           uint32
 	nodeAsnNumber                  uint32
+	nodeCustomImportRejectIPNets   []net.IPNet
 	nodeCommunities                []string
 	globalPeerRouters              []*gobgpapi.Peer
 	nodePeerRouters                []string
@@ -997,6 +999,21 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		if len(nrc.nodeCommunities) < 1 {
 			klog.Warningf("Found a community specified via annotation %s with value %s but none could be "+
 				"validated", nodeCommunitiesAnnotation, nodeBGPCommunitiesAnnotation)
+		}
+	}
+
+	// Get Custom Import Reject CIDRs from annotations
+	nodeBGPCustomImportRejectAnnotation, ok := node.ObjectMeta.Annotations[nodeCustomImportRejectAnnotation]
+	if !ok {
+		klog.V(1).Info("Did not find any node.bgp.customimportreject on current node's annotations. " +
+			"Skip configuring it.")
+	} else {
+		ipNetStrings := stringToSlice(nodeBGPCustomImportRejectAnnotation, ",")
+		ipNets, err := stringSliceToIPNets(ipNetStrings)
+		if err != nil {
+			klog.Warningf("Failed to parse node.bgp.customimportreject specified for the node, skip configuring it")
+		} else {
+			nrc.nodeCustomImportRejectIPNets = ipNets
 		}
 	}
 

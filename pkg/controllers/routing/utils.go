@@ -44,6 +44,21 @@ func stringSliceToIPs(s []string) ([]net.IP, error) {
 	return ips, nil
 }
 
+func stringSliceToIPNets(s []string) ([]net.IPNet, error) {
+	ipNets := make([]net.IPNet, 0)
+	for _, ipNetString := range s {
+		ip, ipNet, err := net.ParseCIDR(strings.TrimSpace(ipNetString))
+		if err != nil {
+			return nil, fmt.Errorf("could not parse \"%s\" as an CIDR", ipNetString)
+		}
+		if ip == nil {
+			return nil, fmt.Errorf("could not parse \"%s\" as an IP", ipNetString)
+		}
+		ipNets = append(ipNets, *ipNet)
+	}
+	return ipNets, nil
+}
+
 func stringSliceToUInt32(s []string) ([]uint32, error) {
 	ints := make([]uint32, 0)
 	for _, intString := range s {

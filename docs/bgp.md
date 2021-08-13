@@ -173,6 +173,19 @@ kubectl annotate node <kube-node> "kube-router.io/node.bgp.communities=65535:652
 kubectl annotate node <kube-node> "kube-router.io/node.bgp.communities=no-export"
 ```
 
+### Custom BGP Import Policy Reject
+
+Kube-router accepts by default all routes advertised by it's neighbors.
+
+If the bgp session with one neighbor dies, gobgp deletes all routes received by it.
+
+If one of the received routes is needed for this node to function properly (eg: custom static route), it could stop working.
+
+In the following example we add custom prefixes that'll be set on a custom import policy reject rule via annotation, protecting the node from losing required routes:
+```
+kubectl annotate node <kube-node> "kube-router.io/node.bgp.customimportreject=10.0.0.0/16, 192.168.1.0/24"
+```
+
 ## BGP listen address list 
 
 By default, GoBGP server binds on the node IP address. However in case of nodes with multiple IP address it is desirable to bind GoBGP to multiple local adresses. Local IP address on which GoGBP should listen on a node can be configured with annotation `kube-router.io/bgp-local-addresses`.
