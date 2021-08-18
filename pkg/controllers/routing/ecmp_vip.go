@@ -227,31 +227,29 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(objNew interface{}, objOld 
 	//
 	// As such, it needs to be handled differently as nrc.handleServiceUpdate only withdraws VIPs if the service
 	// endpoint is no longer scheduled on this node and its a local type service.
-	withdrawnServiceVips := nrc.getExternalIPsToWithdraw(getServiceObject(objOld), getServiceObject(objNew))
+	nrc.withdrawVIPs(nrc.getExternalIPsToWithdraw(getServiceObject(objOld), getServiceObject(objNew)))
+}
 
+func (nrc *NetworkRoutingController) getExternalIPsToWithdraw(svcOld, svcNew *v1core.Service) (out []string) {
+	withdrawnServiceVips := make([]string, 0)
+	if svcOld != nil && svcNew != nil {
+		withdrawnServiceVips = getMissingPrevGen(nrc.getExternalIPs(svcOld), nrc.getExternalIPs(svcNew))
+	}
 	// ensure external IP to be withdrawn is not used by any other service
 	allActiveVIPs, _, err := nrc.getActiveVIPs()
 	if err != nil {
-		klog.Errorf("Failed to get all active VIP's due to: %s", err.Error())
+		klog.Errorf("failed to get all active VIP's due to: %s", err.Error())
 		return
 	}
 	activeVIPsMap := make(map[string]bool)
 	for _, activeVIP := range allActiveVIPs {
 		activeVIPsMap[activeVIP] = true
 	}
-	withdrawVIPs := make([]string, 0)
 	for _, serviceVIP := range withdrawnServiceVips {
 		// withdraw VIP only if updated service is the last service using the VIP
 		if !activeVIPsMap[serviceVIP] {
-			withdrawVIPs = append(withdrawVIPs, serviceVIP)
+			out = append(out, serviceVIP)
 		}
-	}
-	nrc.withdrawVIPs(withdrawVIPs)
-}
-
-func (nrc *NetworkRoutingController) getExternalIPsToWithdraw(svcOld, svcNew *v1core.Service) (out []string) {
-	if svcOld != nil && svcNew != nil {
-		out = getMissingPrevGen(nrc.getExternalIPs(svcOld), nrc.getExternalIPs(svcNew))
 	}
 	return
 }
