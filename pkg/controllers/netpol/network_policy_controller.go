@@ -346,9 +346,15 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	}
 
 	for builtinChain, customChain := range defaultChains {
-		err = iptablesCmdHandler.NewChain("filter", customChain)
-		if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-			klog.Fatalf("Failed to run iptables command to create %s chain due to %s", customChain, err.Error())
+		exists, err := iptablesCmdHandler.ChainExists("filter", customChain)
+		if err != nil {
+			klog.Fatalf("failed to check for the existence of chain %s, error: %v", customChain, err)
+		}
+		if !exists {
+			err = iptablesCmdHandler.NewChain("filter", customChain)
+			if err != nil {
+				klog.Fatalf("failed to run iptables command to create %s chain due to %s", customChain, err.Error())
+			}
 		}
 		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
 		uuid, err := addUUIDForRuleSpec(builtinChain, &args)
@@ -413,9 +419,15 @@ func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
 	markComment := "rule to mark traffic matching a network policy"
 	markArgs = append(markArgs, "-j", "MARK", "-m", "comment", "--comment", markComment, "--set-xmark", "0x10000/0x10000")
 
-	err = iptablesCmdHandler.NewChain("filter", kubeDefaultNetpolChain)
-	if err != nil && err.(*iptables.Error).ExitStatus() != 1 {
-		klog.Fatalf("Failed to run iptables command to create %s chain due to %s", kubeDefaultNetpolChain, err.Error())
+	exists, err := iptablesCmdHandler.ChainExists("filter", kubeDefaultNetpolChain)
+	if err != nil {
+		klog.Fatalf("failed to check for the existence of chain %s, error: %v", kubeDefaultNetpolChain, err)
+	}
+	if !exists {
+		err = iptablesCmdHandler.NewChain("filter", kubeDefaultNetpolChain)
+		if err != nil {
+			klog.Fatalf("failed to run iptables command to create %s chain due to %s", kubeDefaultNetpolChain, err.Error())
+		}
 	}
 	err = iptablesCmdHandler.AppendUnique("filter", kubeDefaultNetpolChain, markArgs...)
 	if err != nil {
