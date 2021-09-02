@@ -1,22 +1,15 @@
 run:
   timeout: 5m
 linters:
-  disable-all: true
   enable:
-    - deadcode
+    - bodyclose
+    - depguard
+    - dogsled
     - errcheck
+    - exportloopref
     - gofmt
     - goimports
-    - golint
-    - gosimple
-    - govet
-    - ineffassign
     - misspell
-    - staticcheck
-    - structcheck
-    - typecheck
-    - unused
-    - varcheck
 output:
   format: tab
   print-issued-lines: true
