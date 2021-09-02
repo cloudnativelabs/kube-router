@@ -9,7 +9,7 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v20.10.8+incompatible
 	github.com/docker/go-connections v0.4.0 // indirect
-	github.com/golang/protobuf v1.4.3
+	github.com/golang/protobuf v1.5.2
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/moby/ipvs v1.0.1
 	github.com/morikuni/aec v1.0.0 // indirect
@@ -23,9 +23,8 @@ require (
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
 	golang.org/x/net v0.0.0-20210813160813-60bc85c4be6d
 	google.golang.org/grpc v1.40.0
-	gopkg.in/yaml.v3 v3.0.0-20200601152816-913338de1bd2 // indirect
 	k8s.io/api v0.21.3
-	k8s.io/apimachinery v0.21.3
+	k8s.io/apimachinery v0.22.1
 	k8s.io/client-go v0.21.3
 	k8s.io/cri-api v0.21.3
 	k8s.io/klog/v2 v2.10.0
