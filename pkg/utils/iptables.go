@@ -9,6 +9,7 @@ import (
 
 var hasWait bool
 
+//nolint:gochecknoinits // This is actually a good usage of the init() function
 func init() {
 	path, err := exec.LookPath("iptables-restore")
 	if err != nil {
