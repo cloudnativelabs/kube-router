@@ -6,6 +6,7 @@ package proxy
 import (
 	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"net"
 	"sync"
 )
@@ -20,8 +21,11 @@ var _ LinuxNetworking = &LinuxNetworkingMock{}
 //
 // 		// make and configure a mocked LinuxNetworking
 // 		mockedLinuxNetworking := &LinuxNetworkingMock{
-// 			cleanupMangleTableRuleFunc: func(ip string, protocol string, port string, fwmark string) error {
+// 			cleanupMangleTableRuleFunc: func(ip string, protocol string, port string, fwmark string, tcpMSS int) error {
 // 				panic("mock out the cleanupMangleTableRule method")
+// 			},
+// 			configureContainerForDSRFunc: func(vip string, endpointIP string, containerID string, pid int, hostNetworkNamespaceHandle netns.NsHandle) error {
+// 				panic("mock out the configureContainerForDSR method")
 // 			},
 // 			getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
 // 				panic("mock out the getKubeDummyInterface method")
@@ -65,8 +69,11 @@ var _ LinuxNetworking = &LinuxNetworkingMock{}
 // 			ipvsUpdateServiceFunc: func(ipvsSvc *ipvs.Service) error {
 // 				panic("mock out the ipvsUpdateService method")
 // 			},
-// 			prepareEndpointForDsrFunc: func(containerID string, endpointIP string, vip string) error {
-// 				panic("mock out the prepareEndpointForDsr method")
+// 			prepareEndpointForDsrWithCRIFunc: func(runtimeEndpoint string, containerID string, endpointIP string, vip string) error {
+// 				panic("mock out the prepareEndpointForDsrWithCRI method")
+// 			},
+// 			prepareEndpointForDsrWithDockerFunc: func(containerID string, endpointIP string, vip string) error {
+// 				panic("mock out the prepareEndpointForDsrWithDocker method")
 // 			},
 // 			setupPolicyRoutingForDSRFunc: func() error {
 // 				panic("mock out the setupPolicyRoutingForDSR method")
@@ -83,6 +90,9 @@ var _ LinuxNetworking = &LinuxNetworkingMock{}
 type LinuxNetworkingMock struct {
 	// cleanupMangleTableRuleFunc mocks the cleanupMangleTableRule method.
 	cleanupMangleTableRuleFunc func(ip string, protocol string, port string, fwmark string, tcpMSS int) error
+
+	// configureContainerForDSRFunc mocks the configureContainerForDSR method.
+	configureContainerForDSRFunc func(vip string, endpointIP string, containerID string, pid int, hostNetworkNamespaceHandle netns.NsHandle) error
 
 	// getKubeDummyInterfaceFunc mocks the getKubeDummyInterface method.
 	getKubeDummyInterfaceFunc func() (netlink.Link, error)
@@ -126,8 +136,11 @@ type LinuxNetworkingMock struct {
 	// ipvsUpdateServiceFunc mocks the ipvsUpdateService method.
 	ipvsUpdateServiceFunc func(ipvsSvc *ipvs.Service) error
 
-	// prepareEndpointForDsrFunc mocks the prepareEndpointForDsr method.
-	prepareEndpointForDsrFunc func(containerID string, endpointIP string, vip string) error
+	// prepareEndpointForDsrWithCRIFunc mocks the prepareEndpointForDsrWithCRI method.
+	prepareEndpointForDsrWithCRIFunc func(runtimeEndpoint string, containerID string, endpointIP string, vip string) error
+
+	// prepareEndpointForDsrWithDockerFunc mocks the prepareEndpointForDsrWithDocker method.
+	prepareEndpointForDsrWithDockerFunc func(containerID string, endpointIP string, vip string) error
 
 	// setupPolicyRoutingForDSRFunc mocks the setupPolicyRoutingForDSR method.
 	setupPolicyRoutingForDSRFunc func() error
@@ -147,6 +160,21 @@ type LinuxNetworkingMock struct {
 			Port string
 			// Fwmark is the fwmark argument value.
 			Fwmark string
+			// TcpMSS is the tcpMSS argument value.
+			TcpMSS int
+		}
+		// configureContainerForDSR holds details about calls to the configureContainerForDSR method.
+		configureContainerForDSR []struct {
+			// Vip is the vip argument value.
+			Vip string
+			// EndpointIP is the endpointIP argument value.
+			EndpointIP string
+			// ContainerID is the containerID argument value.
+			ContainerID string
+			// Pid is the pid argument value.
+			Pid int
+			// HostNetworkNamespaceHandle is the hostNetworkNamespaceHandle argument value.
+			HostNetworkNamespaceHandle netns.NsHandle
 		}
 		// getKubeDummyInterface holds details about calls to the getKubeDummyInterface method.
 		getKubeDummyInterface []struct {
@@ -254,8 +282,19 @@ type LinuxNetworkingMock struct {
 			// IpvsSvc is the ipvsSvc argument value.
 			IpvsSvc *ipvs.Service
 		}
-		// prepareEndpointForDsr holds details about calls to the prepareEndpointForDsr method.
-		prepareEndpointForDsr []struct {
+		// prepareEndpointForDsrWithCRI holds details about calls to the prepareEndpointForDsrWithCRI method.
+		prepareEndpointForDsrWithCRI []struct {
+			// RuntimeEndpoint is the runtimeEndpoint argument value.
+			RuntimeEndpoint string
+			// ContainerID is the containerID argument value.
+			ContainerID string
+			// EndpointIP is the endpointIP argument value.
+			EndpointIP string
+			// Vip is the vip argument value.
+			Vip string
+		}
+		// prepareEndpointForDsrWithDocker holds details about calls to the prepareEndpointForDsrWithDocker method.
+		prepareEndpointForDsrWithDocker []struct {
 			// ContainerID is the containerID argument value.
 			ContainerID string
 			// EndpointIP is the endpointIP argument value.
@@ -272,24 +311,26 @@ type LinuxNetworkingMock struct {
 			ServiceInfoMapMoqParam serviceInfoMap
 		}
 	}
-	lockcleanupMangleTableRule         sync.RWMutex
-	lockgetKubeDummyInterface          sync.RWMutex
-	lockipAddrAdd                      sync.RWMutex
-	lockipAddrDel                      sync.RWMutex
-	lockipvsAddFWMarkService           sync.RWMutex
-	lockipvsAddServer                  sync.RWMutex
-	lockipvsAddService                 sync.RWMutex
-	lockipvsDelDestination             sync.RWMutex
-	lockipvsDelService                 sync.RWMutex
-	lockipvsGetDestinations            sync.RWMutex
-	lockipvsGetServices                sync.RWMutex
-	lockipvsNewDestination             sync.RWMutex
-	lockipvsNewService                 sync.RWMutex
-	lockipvsUpdateDestination          sync.RWMutex
-	lockipvsUpdateService              sync.RWMutex
-	lockprepareEndpointForDsr          sync.RWMutex
-	locksetupPolicyRoutingForDSR       sync.RWMutex
-	locksetupRoutesForExternalIPForDSR sync.RWMutex
+	lockcleanupMangleTableRule          sync.RWMutex
+	lockconfigureContainerForDSR        sync.RWMutex
+	lockgetKubeDummyInterface           sync.RWMutex
+	lockipAddrAdd                       sync.RWMutex
+	lockipAddrDel                       sync.RWMutex
+	lockipvsAddFWMarkService            sync.RWMutex
+	lockipvsAddServer                   sync.RWMutex
+	lockipvsAddService                  sync.RWMutex
+	lockipvsDelDestination              sync.RWMutex
+	lockipvsDelService                  sync.RWMutex
+	lockipvsGetDestinations             sync.RWMutex
+	lockipvsGetServices                 sync.RWMutex
+	lockipvsNewDestination              sync.RWMutex
+	lockipvsNewService                  sync.RWMutex
+	lockipvsUpdateDestination           sync.RWMutex
+	lockipvsUpdateService               sync.RWMutex
+	lockprepareEndpointForDsrWithCRI    sync.RWMutex
+	lockprepareEndpointForDsrWithDocker sync.RWMutex
+	locksetupPolicyRoutingForDSR        sync.RWMutex
+	locksetupRoutesForExternalIPForDSR  sync.RWMutex
 }
 
 // cleanupMangleTableRule calls cleanupMangleTableRuleFunc.
@@ -302,11 +343,13 @@ func (mock *LinuxNetworkingMock) cleanupMangleTableRule(ip string, protocol stri
 		Protocol string
 		Port     string
 		Fwmark   string
+		TcpMSS   int
 	}{
 		IP:       ip,
 		Protocol: protocol,
 		Port:     port,
 		Fwmark:   fwmark,
+		TcpMSS:   tcpMSS,
 	}
 	mock.lockcleanupMangleTableRule.Lock()
 	mock.calls.cleanupMangleTableRule = append(mock.calls.cleanupMangleTableRule, callInfo)
@@ -322,16 +365,65 @@ func (mock *LinuxNetworkingMock) cleanupMangleTableRuleCalls() []struct {
 	Protocol string
 	Port     string
 	Fwmark   string
+	TcpMSS   int
 } {
 	var calls []struct {
 		IP       string
 		Protocol string
 		Port     string
 		Fwmark   string
+		TcpMSS   int
 	}
 	mock.lockcleanupMangleTableRule.RLock()
 	calls = mock.calls.cleanupMangleTableRule
 	mock.lockcleanupMangleTableRule.RUnlock()
+	return calls
+}
+
+// configureContainerForDSR calls configureContainerForDSRFunc.
+func (mock *LinuxNetworkingMock) configureContainerForDSR(vip string, endpointIP string, containerID string, pid int, hostNetworkNamespaceHandle netns.NsHandle) error {
+	if mock.configureContainerForDSRFunc == nil {
+		panic("LinuxNetworkingMock.configureContainerForDSRFunc: method is nil but LinuxNetworking.configureContainerForDSR was just called")
+	}
+	callInfo := struct {
+		Vip                        string
+		EndpointIP                 string
+		ContainerID                string
+		Pid                        int
+		HostNetworkNamespaceHandle netns.NsHandle
+	}{
+		Vip:                        vip,
+		EndpointIP:                 endpointIP,
+		ContainerID:                containerID,
+		Pid:                        pid,
+		HostNetworkNamespaceHandle: hostNetworkNamespaceHandle,
+	}
+	mock.lockconfigureContainerForDSR.Lock()
+	mock.calls.configureContainerForDSR = append(mock.calls.configureContainerForDSR, callInfo)
+	mock.lockconfigureContainerForDSR.Unlock()
+	return mock.configureContainerForDSRFunc(vip, endpointIP, containerID, pid, hostNetworkNamespaceHandle)
+}
+
+// configureContainerForDSRCalls gets all the calls that were made to configureContainerForDSR.
+// Check the length with:
+//     len(mockedLinuxNetworking.configureContainerForDSRCalls())
+func (mock *LinuxNetworkingMock) configureContainerForDSRCalls() []struct {
+	Vip                        string
+	EndpointIP                 string
+	ContainerID                string
+	Pid                        int
+	HostNetworkNamespaceHandle netns.NsHandle
+} {
+	var calls []struct {
+		Vip                        string
+		EndpointIP                 string
+		ContainerID                string
+		Pid                        int
+		HostNetworkNamespaceHandle netns.NsHandle
+	}
+	mock.lockconfigureContainerForDSR.RLock()
+	calls = mock.calls.configureContainerForDSR
+	mock.lockconfigureContainerForDSR.RUnlock()
 	return calls
 }
 
@@ -839,10 +931,53 @@ func (mock *LinuxNetworkingMock) ipvsUpdateServiceCalls() []struct {
 	return calls
 }
 
-// prepareEndpointForDsr calls prepareEndpointForDsrFunc.
-func (mock *LinuxNetworkingMock) prepareEndpointForDsr(containerID string, endpointIP string, vip string) error {
-	if mock.prepareEndpointForDsrFunc == nil {
-		panic("LinuxNetworkingMock.prepareEndpointForDsrFunc: method is nil but LinuxNetworking.prepareEndpointForDsr was just called")
+// prepareEndpointForDsrWithCRI calls prepareEndpointForDsrWithCRIFunc.
+func (mock *LinuxNetworkingMock) prepareEndpointForDsrWithCRI(runtimeEndpoint string, containerID string, endpointIP string, vip string) error {
+	if mock.prepareEndpointForDsrWithCRIFunc == nil {
+		panic("LinuxNetworkingMock.prepareEndpointForDsrWithCRIFunc: method is nil but LinuxNetworking.prepareEndpointForDsrWithCRI was just called")
+	}
+	callInfo := struct {
+		RuntimeEndpoint string
+		ContainerID     string
+		EndpointIP      string
+		Vip             string
+	}{
+		RuntimeEndpoint: runtimeEndpoint,
+		ContainerID:     containerID,
+		EndpointIP:      endpointIP,
+		Vip:             vip,
+	}
+	mock.lockprepareEndpointForDsrWithCRI.Lock()
+	mock.calls.prepareEndpointForDsrWithCRI = append(mock.calls.prepareEndpointForDsrWithCRI, callInfo)
+	mock.lockprepareEndpointForDsrWithCRI.Unlock()
+	return mock.prepareEndpointForDsrWithCRIFunc(runtimeEndpoint, containerID, endpointIP, vip)
+}
+
+// prepareEndpointForDsrWithCRICalls gets all the calls that were made to prepareEndpointForDsrWithCRI.
+// Check the length with:
+//     len(mockedLinuxNetworking.prepareEndpointForDsrWithCRICalls())
+func (mock *LinuxNetworkingMock) prepareEndpointForDsrWithCRICalls() []struct {
+	RuntimeEndpoint string
+	ContainerID     string
+	EndpointIP      string
+	Vip             string
+} {
+	var calls []struct {
+		RuntimeEndpoint string
+		ContainerID     string
+		EndpointIP      string
+		Vip             string
+	}
+	mock.lockprepareEndpointForDsrWithCRI.RLock()
+	calls = mock.calls.prepareEndpointForDsrWithCRI
+	mock.lockprepareEndpointForDsrWithCRI.RUnlock()
+	return calls
+}
+
+// prepareEndpointForDsrWithDocker calls prepareEndpointForDsrWithDockerFunc.
+func (mock *LinuxNetworkingMock) prepareEndpointForDsrWithDocker(containerID string, endpointIP string, vip string) error {
+	if mock.prepareEndpointForDsrWithDockerFunc == nil {
+		panic("LinuxNetworkingMock.prepareEndpointForDsrWithDockerFunc: method is nil but LinuxNetworking.prepareEndpointForDsrWithDocker was just called")
 	}
 	callInfo := struct {
 		ContainerID string
@@ -853,16 +988,16 @@ func (mock *LinuxNetworkingMock) prepareEndpointForDsr(containerID string, endpo
 		EndpointIP:  endpointIP,
 		Vip:         vip,
 	}
-	mock.lockprepareEndpointForDsr.Lock()
-	mock.calls.prepareEndpointForDsr = append(mock.calls.prepareEndpointForDsr, callInfo)
-	mock.lockprepareEndpointForDsr.Unlock()
-	return mock.prepareEndpointForDsrFunc(containerID, endpointIP, vip)
+	mock.lockprepareEndpointForDsrWithDocker.Lock()
+	mock.calls.prepareEndpointForDsrWithDocker = append(mock.calls.prepareEndpointForDsrWithDocker, callInfo)
+	mock.lockprepareEndpointForDsrWithDocker.Unlock()
+	return mock.prepareEndpointForDsrWithDockerFunc(containerID, endpointIP, vip)
 }
 
-// prepareEndpointForDsrCalls gets all the calls that were made to prepareEndpointForDsr.
+// prepareEndpointForDsrWithDockerCalls gets all the calls that were made to prepareEndpointForDsrWithDocker.
 // Check the length with:
-//     len(mockedLinuxNetworking.prepareEndpointForDsrCalls())
-func (mock *LinuxNetworkingMock) prepareEndpointForDsrCalls() []struct {
+//     len(mockedLinuxNetworking.prepareEndpointForDsrWithDockerCalls())
+func (mock *LinuxNetworkingMock) prepareEndpointForDsrWithDockerCalls() []struct {
 	ContainerID string
 	EndpointIP  string
 	Vip         string
@@ -872,9 +1007,9 @@ func (mock *LinuxNetworkingMock) prepareEndpointForDsrCalls() []struct {
 		EndpointIP  string
 		Vip         string
 	}
-	mock.lockprepareEndpointForDsr.RLock()
-	calls = mock.calls.prepareEndpointForDsr
-	mock.lockprepareEndpointForDsr.RUnlock()
+	mock.lockprepareEndpointForDsrWithDocker.RLock()
+	calls = mock.calls.prepareEndpointForDsrWithDocker
+	mock.lockprepareEndpointForDsrWithDocker.RUnlock()
 	return calls
 }
 

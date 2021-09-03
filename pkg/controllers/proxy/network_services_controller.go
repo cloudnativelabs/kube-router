@@ -86,9 +86,11 @@ type ipvsCalls interface {
 type netlinkCalls interface {
 	ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error
 	ipAddrDel(iface netlink.Link, ip string) error
-	prepareEndpointForDsr(containerID string, endpointIP string, vip string) error
+	prepareEndpointForDsrWithDocker(containerID string, endpointIP string, vip string) error
 	getKubeDummyInterface() (netlink.Link, error)
 	setupRoutesForExternalIPForDSR(serviceInfoMap) error
+	prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) error
+	configureContainerForDSR(vip, endpointIP, containerID string, pid int, hostNetworkNamespaceHandle netns.NsHandle) error
 	setupPolicyRoutingForDSR() error
 	cleanupMangleTableRule(ip string, protocol string, port string, fwmark string, tcpMSS int) error
 }
@@ -1018,20 +1020,6 @@ func (nsc *NetworkServicesController) getPodObjectForEndpoint(endpointIP string)
 	return nil, errors.New("Failed to find pod with ip " + endpointIP)
 }
 
-func attemptNamespaceResetAfterError(hostNSHandle netns.NsHandle) {
-	err := netns.Set(hostNSHandle)
-	if err != nil {
-		klog.Errorf("failed to set hostNetworkNamespace while resetting namespace after a previous error due to " + err.Error())
-	}
-	activeNetworkNamespaceHandle, err := netns.Get()
-	if err != nil {
-		klog.Errorf("failed to confirm activeNetworkNamespace while resetting namespace after a previous error due to " + err.Error())
-		return
-	}
-	klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-	_ = activeNetworkNamespaceHandle.Close()
-}
-
 // This function does the following
 // - get the pod corresponding to the endpoint ip
 // - get the container id from pod spec
@@ -1040,9 +1028,9 @@ func attemptNamespaceResetAfterError(hostNSHandle netns.NsHandle) {
 // - add VIP to the tunnel interface
 // - disable rp_filter
 // WARN: This method is deprecated and will be removed once docker-shim is removed from kubelet.
-func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP string, vip string) error {
+func (ln *linuxNetworking) prepareEndpointForDsrWithDocker(containerID string, endpointIP string, vip string) error {
 
-	// FIXME: its possible switch namespaces may never work safely in GO without hacks.
+	// Its possible switch namespaces may never work safely in GO without hacks.
 	//	 https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion
 	//	 https://www.weave.works/blog/linux-namespaces-and-go-don-t-mix
 	// Dont know if same issue, but seen namespace issue, so adding
@@ -1055,150 +1043,43 @@ func (ln *linuxNetworking) prepareEndpointForDsr(containerID string, endpointIP 
 
 	hostNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
-		return errors.New("Failed to get namespace due to " + err.Error())
+		return fmt.Errorf("failed to get namespace due to %v", err)
 	}
 	defer utils.CloseCloserDisregardError(&hostNetworkNamespaceHandle)
 
 	activeNetworkNamespaceHandle, err = netns.Get()
 	if err != nil {
-		return errors.New("Failed to get namespace due to " + err.Error())
+		return fmt.Errorf("failed to get namespace due to %v", err)
 	}
-	klog.V(1).Infof("Current network namespace before netns.Set: " + activeNetworkNamespaceHandle.String())
+	klog.V(1).Infof("Current network namespace before netns.Set: %s", activeNetworkNamespaceHandle.String())
 	defer utils.CloseCloserDisregardError(&activeNetworkNamespaceHandle)
 
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		return errors.New("Failed to get docker client due to " + err.Error())
+		return fmt.Errorf("failed to get docker client due to %v", err)
 	}
 	defer utils.CloseCloserDisregardError(dockerClient)
 
 	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerID)
 	if err != nil {
-		return errors.New("Failed to get docker container spec due to " + err.Error())
+		return fmt.Errorf("failed to get docker container spec due to %v", err)
 	}
 
 	pid := containerSpec.State.Pid
-	endpointNamespaceHandle, err := netns.GetFromPid(pid)
-	if err != nil {
-		return errors.New("Failed to get endpoint namespace due to " + err.Error())
-	}
-	defer utils.CloseCloserDisregardError(&endpointNamespaceHandle)
-
-	err = netns.Set(endpointNamespaceHandle)
-	if err != nil {
-		return errors.New("Failed to enter to endpoint namespace due to " + err.Error())
-	}
-
-	activeNetworkNamespaceHandle, err = netns.Get()
-	if err != nil {
-		return errors.New("Failed to get activeNetworkNamespace due to " + err.Error())
-	}
-	klog.V(2).Infof("Current network namespace after netns. Set to container network namespace: " + activeNetworkNamespaceHandle.String())
-	_ = activeNetworkNamespaceHandle.Close()
-
-	// create a ipip tunnel interface inside the endpoint container
-	tunIf, err := netlink.LinkByName(KubeTunnelIf)
-	if err != nil {
-		if err.Error() != IfaceNotFound {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return errors.New("failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
-		}
-
-		klog.V(2).Infof("Could not find tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + " so creating one.")
-		ipTunLink := netlink.Iptun{
-			LinkAttrs: netlink.LinkAttrs{Name: KubeTunnelIf},
-			Local:     net.ParseIP(endpointIP),
-		}
-		err = netlink.LinkAdd(&ipTunLink)
-		if err != nil {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return errors.New("failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
-		}
-
-		// TODO: this is ugly, but ran into issue multiple times where interface did not come up quickly.
-		// need to find the root cause
-		for retry := 0; retry < 60; retry++ {
-			time.Sleep(100 * time.Millisecond)
-			tunIf, err = netlink.LinkByName(KubeTunnelIf)
-			if err == nil {
-				break
-			}
-			if err.Error() == IfaceNotFound {
-				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KubeTunnelIf)
-				continue
-			} else {
-				break
-			}
-		}
-
-		if err != nil {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return errors.New("Failed to get " + KubeTunnelIf + " tunnel interface handle due to " + err.Error())
-		}
-
-		klog.V(2).Infof("Successfully created tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + ".")
-	}
-
-	// bring the tunnel interface up
-	err = netlink.LinkSetUp(tunIf)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
-	}
-
-	// assign VIP to the KUBE_TUNNEL_IF interface
-	err = ln.ipAddrAdd(tunIf, vip, false)
-	if err != nil && err.Error() != IfaceHasAddr {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to assign vip " + vip + " to kube-tunnel-if interface ")
-	}
-	klog.Infof("Successfully assigned VIP: " + vip + " in endpoint " + endpointIP + ".")
-
-	// disable rp_filter on all interface
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to disable rp_filter on kube-tunnel-if in the endpoint container")
-	}
-
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/eth0/rp_filter", []byte(strconv.Itoa(0)), 0640)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to disable rp_filter on eth0 in the endpoint container")
-	}
-
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte(strconv.Itoa(0)), 0640)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to disable rp_filter on `all` in the endpoint container")
-	}
-
-	klog.Infof("Successfully disabled rp_filter in endpoint " + endpointIP + ".")
-
-	err = netns.Set(hostNetworkNamespaceHandle)
-	if err != nil {
-		return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-	}
-	activeNetworkNamespaceHandle, err = netns.Get()
-	if err != nil {
-		return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-	}
-	klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-	_ = activeNetworkNamespaceHandle.Close()
-	return nil
+	return ln.configureContainerForDSR(vip, endpointIP, containerID, pid, hostNetworkNamespaceHandle)
 }
 
 // The same as prepareEndpointForDsr but using CRI instead of docker.
-func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) (err error) {
+func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) error {
 
-	// FIXME: its possible switch namespaces may never work safely in GO without hacks.
+	// Its possible switch namespaces may never work safely in GO without hacks.
 	//	 https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion
 	//	 https://www.weave.works/blog/linux-namespaces-and-go-don-t-mix
 	// Dont know if same issue, but seen namespace issue, so adding
 	// logs and boilerplate code and verbose logs for diagnosis
 
 	if runtimeEndpoint == "" {
-		return errors.New("runtimeEndpoint is not specified")
+		return fmt.Errorf("runtimeEndpoint is not specified")
 	}
 
 	runtime.LockOSThread()
@@ -1206,18 +1087,16 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 
 	hostNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
-		return errors.New("failed to get host namespace due to " + err.Error())
+		return fmt.Errorf("failed to get host namespace due to %v", err)
 	}
-	klog.V(1).Infof("current network namespace before netns.Set: " + hostNetworkNamespaceHandle.String())
+	klog.V(1).Infof("current network namespace before netns.Set: %s", hostNetworkNamespaceHandle.String())
 	defer utils.CloseCloserDisregardError(&hostNetworkNamespaceHandle)
 
 	rs, err := cri.NewRemoteRuntimeService(runtimeEndpoint, cri.DefaultConnectionTimeout)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		err = rs.Close()
-	}()
+	defer utils.CloseCloserDisregardError(rs)
 
 	info, err := rs.ContainerInfo(containerID)
 	if err != nil {
@@ -1225,117 +1104,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 	}
 
 	pid := info.Pid
-	endpointNamespaceHandle, err := netns.GetFromPid(pid)
-	if err != nil {
-		return fmt.Errorf("failed to get endpoint namespace (containerID=%s, pid=%d, error=%s)", containerID, pid, err)
-	}
-	defer utils.CloseCloserDisregardError(&endpointNamespaceHandle)
-
-	err = netns.Set(endpointNamespaceHandle)
-	if err != nil {
-		return fmt.Errorf("failed to enter endpoint namespace (containerID=%s, pid=%d, error=%s)", containerID, pid, err)
-	}
-
-	activeNetworkNamespaceHandle, err := netns.Get()
-	if err != nil {
-		return errors.New("failed to get activeNetworkNamespace due to " + err.Error())
-	}
-	klog.V(2).Infof("Current network namespace after netns. Set to container network namespace: " + activeNetworkNamespaceHandle.String())
-	_ = activeNetworkNamespaceHandle.Close()
-
-	// TODO: fix boilerplate `netns.Set(hostNetworkNamespaceHandle)` code. Need a robust
-	// way to switch back to old namespace, pretty much all things will go wrong if we dont switch back
-
-	// create a ipip tunnel interface inside the endpoint container
-	tunIf, err := netlink.LinkByName(KubeTunnelIf)
-	if err != nil {
-		if err.Error() != IfaceNotFound {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return errors.New("failed to verify if ipip tunnel interface exists in endpoint " + endpointIP + " namespace due to " + err.Error())
-		}
-
-		klog.V(2).Infof("Could not find tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + " so creating one.")
-		ipTunLink := netlink.Iptun{
-			LinkAttrs: netlink.LinkAttrs{Name: KubeTunnelIf},
-			Local:     net.ParseIP(endpointIP),
-		}
-		err = netlink.LinkAdd(&ipTunLink)
-		if err != nil {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return errors.New("failed to add ipip tunnel interface in endpoint namespace due to " + err.Error())
-		}
-
-		// TODO: this is ugly, but ran into issue multiple times where interface did not come up quickly.
-		// need to find the root cause
-		for retry := 0; retry < 60; retry++ {
-			time.Sleep(100 * time.Millisecond)
-			tunIf, err = netlink.LinkByName(KubeTunnelIf)
-			if err == nil {
-				break
-			}
-			if err.Error() == IfaceNotFound {
-				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KubeTunnelIf)
-				continue
-			} else {
-				break
-			}
-		}
-
-		if err != nil {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return errors.New("failed to get " + KubeTunnelIf + " tunnel interface handle due to " + err.Error())
-		}
-
-		klog.V(2).Infof("Successfully created tunnel interface " + KubeTunnelIf + " in endpoint " + endpointIP + ".")
-	}
-
-	// bring the tunnel interface up
-	err = netlink.LinkSetUp(tunIf)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to bring up ipip tunnel interface in endpoint namespace due to " + err.Error())
-	}
-
-	// assign VIP to the KUBE_TUNNEL_IF interface
-	err = ln.ipAddrAdd(tunIf, vip, false)
-	if err != nil && err.Error() != IfaceHasAddr {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to assign vip " + vip + " to kube-tunnel-if interface ")
-	}
-	klog.Infof("Successfully assigned VIP: " + vip + " in endpoint " + endpointIP + ".")
-
-	// disable rp_filter on all interface
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to disable rp_filter on kube-tunnel-if in the endpoint container")
-	}
-
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/eth0/rp_filter", []byte(strconv.Itoa(0)), 0640)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to disable rp_filter on eth0 in the endpoint container")
-	}
-
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte(strconv.Itoa(0)), 0640)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return errors.New("failed to disable rp_filter on `all` in the endpoint container")
-	}
-
-	klog.Infof("Successfully disabled rp_filter in endpoint " + endpointIP + ".")
-
-	err = netns.Set(hostNetworkNamespaceHandle)
-	if err != nil {
-		return errors.New("Failed to set hostNetworkNamespace handle due to " + err.Error())
-	}
-	activeNetworkNamespaceHandle, err = netns.Get()
-	if err != nil {
-		return errors.New("Failed to get activeNetworkNamespace handle due to " + err.Error())
-	}
-	klog.Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
-	_ = activeNetworkNamespaceHandle.Close()
-	return nil
+	return ln.configureContainerForDSR(vip, endpointIP, containerID, pid, hostNetworkNamespaceHandle)
 }
 
 func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
