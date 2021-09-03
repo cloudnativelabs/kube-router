@@ -515,6 +515,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		},
 	}
 
+	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -704,6 +705,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 		},
 	}
 
+	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -926,6 +928,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 		},
 	}
 
+	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()

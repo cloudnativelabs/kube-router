@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	api "k8s.io/api/core/v1"
 )
 
@@ -60,4 +61,42 @@ func validateNodePortRange(nodePortOption string) (string, error) {
 		return "", fmt.Errorf("port 1 is greater than or equal to port 2 in range given: '%s'", nodePortOption)
 	}
 	return fmt.Sprintf("%d:%d", port1, port2), nil
+}
+
+func getIPsFromPods(pods []podInfo) []string {
+	ips := make([]string, len(pods))
+	for idx, pod := range pods {
+		ips[idx] = pod.ip
+	}
+	return ips
+}
+
+func (npc *NetworkPolicyController) createGenericHashIPSet(ipsetName, hashType string, ips []string) {
+	setEntries := make([][]string, 0)
+	for _, ip := range ips {
+		setEntries = append(setEntries, []string{ip, utils.OptionTimeout, "0"})
+	}
+	npc.ipSetHandler.RefreshSet(ipsetName, setEntries, hashType)
+}
+
+// createPolicyIndexedIPSet creates a policy based ipset and indexes it as an active ipset
+func (npc *NetworkPolicyController) createPolicyIndexedIPSet(
+	activePolicyIPSets map[string]bool, ipsetName, hashType string, ips []string) {
+	activePolicyIPSets[ipsetName] = true
+	npc.createGenericHashIPSet(ipsetName, hashType, ips)
+}
+
+// createPodWithPortPolicyRule handles the case where port details are provided by the ingress/egress rule and creates
+// an iptables rule that matches on both the source/dest IPs and the port
+func (npc *NetworkPolicyController) createPodWithPortPolicyRule(
+	ports []protocolAndPort, policy networkPolicyInfo, policyName string, srcSetName string, dstSetName string) error {
+	for _, portProtocol := range ports {
+		comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
+			policy.name + " namespace " + policy.namespace
+		if err := npc.appendRuleToPolicyChain(policyName, comment, srcSetName, dstSetName, portProtocol.protocol,
+			portProtocol.port, portProtocol.endport); err != nil {
+			return err
+		}
+	}
+	return nil
 }

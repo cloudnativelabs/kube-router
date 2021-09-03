@@ -5,6 +5,7 @@ linters:
     - bodyclose
     - depguard
     - dogsled
+    - dupl
     - errcheck
     - exportloopref
     - gofmt
