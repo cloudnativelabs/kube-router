@@ -73,14 +73,15 @@ func (kr *KubeRouter) Run() error {
 	var err error
 	var ipsetMutex sync.Mutex
 	var wg sync.WaitGroup
-	healthChan := make(chan *healthcheck.ControllerHeartbeat, 10)
-	defer close(healthChan)
-	stopCh := make(chan struct{})
 
 	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
 		klog.Info("Router, Firewall or Service proxy functionality must be specified. Exiting!")
 		os.Exit(0)
 	}
+
+	healthChan := make(chan *healthcheck.ControllerHeartbeat, 10)
+	defer close(healthChan)
+	stopCh := make(chan struct{})
 
 	hc, err := healthcheck.NewHealthController(kr.Config)
 	if err != nil {
@@ -107,7 +108,7 @@ func (kr *KubeRouter) Run() error {
 	wg.Add(1)
 	go hc.RunCheck(healthChan, stopCh, &wg)
 
-	if kr.Config.MetricsPort > 0 {
+	if kr.Config.MetricsPort > 0 && kr.Config.MetricsPort < 65535 {
 		kr.Config.MetricsEnabled = true
 		mc, err := metrics.NewMetricsController(kr.Config)
 		if err != nil {
@@ -116,10 +117,8 @@ func (kr *KubeRouter) Run() error {
 		wg.Add(1)
 		go mc.Run(healthChan, stopCh, &wg)
 
-	} else if kr.Config.MetricsPort > 65535 {
-		klog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", kr.Config.MetricsPort)
-		kr.Config.MetricsEnabled = false
 	} else {
+		klog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", kr.Config.MetricsPort)
 		kr.Config.MetricsEnabled = false
 	}
 

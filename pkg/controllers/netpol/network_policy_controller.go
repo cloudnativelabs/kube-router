@@ -324,7 +324,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 
 		var ruleNo, ruleIndexOffset int
 		for i, rule := range rules {
-			rule = strings.Replace(rule, "\"", "", 2) //removes quote from comment string
+			rule = strings.Replace(rule, "\"", "", 2) // removes quote from comment string
 			if strings.HasPrefix(rule, "-P") || strings.HasPrefix(rule, "-N") {
 				// if this chain has a default policy, then it will show as rule #1 from iptablesCmdHandler.List so we
 				// need to account for this offset
@@ -581,7 +581,6 @@ func (npc *NetworkPolicyController) Cleanup() {
 		klog.Errorf("error encountered attempting to cleanup iptables rules: %v", err)
 		return
 	}
-	//klog.Infof("Final rules to save: %s", npc.filterTableRules)
 	// Restore (iptables-restore) npc's cleaned up version of the iptables filter chain
 	if err = utils.Restore("filter", npc.filterTableRules.Bytes()); err != nil {
 		klog.Errorf(
@@ -631,7 +630,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 
 	if config.MetricsEnabled {
-		//Register the metrics for this controller
+		// Register the metrics for this controller
 		prometheus.MustRegister(metrics.ControllerIptablesSyncTime)
 		prometheus.MustRegister(metrics.ControllerPolicyChainsSyncTime)
 		prometheus.MustRegister(metrics.ControllerIptablesSyncTotalTime)

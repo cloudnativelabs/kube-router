@@ -477,14 +477,14 @@ func (nsc *NetworkServicesController) doSync() error {
 }
 
 // Lookup service ip, protocol, port by given fwmark value (reverse of generateFwmark)
-func (nsc *NetworkServicesController) lookupServiceByFWMark(FWMark uint32) (string, string, int, error) {
+func (nsc *NetworkServicesController) lookupServiceByFwMark(fwMark uint32) (string, string, int, error) {
 	for _, svc := range nsc.serviceMap {
 		for _, externalIP := range svc.externalIPs {
 			gfwmark, err := generateFwmark(externalIP, svc.protocol, fmt.Sprint(svc.port))
 			if err != nil {
 				return "", "", 0, err
 			}
-			if FWMark == gfwmark {
+			if fwMark == gfwmark {
 				return externalIP, svc.protocol, svc.port, nil
 			}
 		}
@@ -762,7 +762,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 			}
 			port = int(ipvsService.Port)
 		} else if ipvsService.FWMark != 0 {
-			address, protocol, port, err = nsc.lookupServiceByFWMark(ipvsService.FWMark)
+			address, protocol, port, err = nsc.lookupServiceByFwMark(ipvsService.FWMark)
 			if err != nil {
 				klog.Errorf("failed to lookup %d by FWMark: %s", ipvsService.FWMark, err)
 			}
@@ -888,7 +888,7 @@ func unsortedListsEquivalent(a, b []endpointsInfo) bool {
 		values[val] = 1
 	}
 	for _, val := range b {
-		values[val] = values[val] + 1
+		values[val]++
 	}
 
 	for _, val := range values {
@@ -1147,15 +1147,16 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			svcInfo.scheduler = ipvs.RoundRobin
 			schedulingMethod, ok := svc.ObjectMeta.Annotations[svcSchedulerAnnotation]
 			if ok {
-				if schedulingMethod == ipvs.RoundRobin {
+				switch {
+				case schedulingMethod == ipvs.RoundRobin:
 					svcInfo.scheduler = ipvs.RoundRobin
-				} else if schedulingMethod == ipvs.LeastConnection {
+				case schedulingMethod == ipvs.LeastConnection:
 					svcInfo.scheduler = ipvs.LeastConnection
-				} else if schedulingMethod == ipvs.DestinationHashing {
+				case schedulingMethod == ipvs.DestinationHashing:
 					svcInfo.scheduler = ipvs.DestinationHashing
-				} else if schedulingMethod == ipvs.SourceHashing {
+				case schedulingMethod == ipvs.SourceHashing:
 					svcInfo.scheduler = ipvs.SourceHashing
-				} else if schedulingMethod == IpvsMaglevHashing {
+				case schedulingMethod == IpvsMaglevHashing:
 					svcInfo.scheduler = IpvsMaglevHashing
 				}
 			}
@@ -1276,7 +1277,7 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 		}
 	}
 	if len(nsc.podCidr) > 0 {
-		//TODO: ipset should be used for destination podCidr(s) match after multiple podCidr(s) per node get supported
+		// TODO: ipset should be used for destination podCidr(s) match after multiple podCidr(s) per node get supported
 		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
 			"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
 		if iptablesCmdHandler.HasRandomFully() {
@@ -1340,8 +1341,8 @@ func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
 // enabled globally via CLI argument or a service has an annotation requesting
 // it.
 func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
-	//TODO: Use ipset?
-	//TODO: Log a warning that this will not work without hairpin sysctl set on veth
+	// TODO: Use ipset?
+	// TODO: Log a warning that this will not work without hairpin sysctl set on veth
 
 	// Key is a string that will match iptables.List() rules
 	// Value is a string[] with arguments that iptables transaction functions expect
@@ -1579,27 +1580,27 @@ func ipvsServiceString(s *ipvs.Service) string {
 	}
 
 	if s.Flags&0x0001 != 0 {
-		flags = flags + "[persistent port]"
+		flags += "[persistent port]"
 	}
 
 	if s.Flags&0x0002 != 0 {
-		flags = flags + "[hashed entry]"
+		flags += "[hashed entry]"
 	}
 
 	if s.Flags&0x0004 != 0 {
-		flags = flags + "[one-packet scheduling]"
+		flags += "[one-packet scheduling]"
 	}
 
 	if s.Flags&0x0008 != 0 {
-		flags = flags + "[flag-1(fallback)]"
+		flags += "[flag-1(fallback)]"
 	}
 
 	if s.Flags&0x0010 != 0 {
-		flags = flags + "[flag-2(port)]"
+		flags += "[flag-2(port)]"
 	}
 
 	if s.Flags&0x0020 != 0 {
-		flags = flags + "[flag-3]"
+		flags += "[flag-3]"
 	}
 
 	return fmt.Sprintf("%s:%s:%v (Flags: %s)", protocol, s.Address, s.Port, flags)
@@ -1743,11 +1744,12 @@ func generateFwmark(ip, protocol, port string) (uint32, error) {
 func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 
 	var protocolStr string
-	if protocol == syscall.IPPROTO_TCP {
+	switch {
+	case protocol == syscall.IPPROTO_TCP:
 		protocolStr = tcpProtocol
-	} else if protocol == syscall.IPPROTO_UDP {
+	case protocol == syscall.IPPROTO_UDP:
 		protocolStr = udpProtocol
-	} else {
+	default:
 		protocolStr = "unknown"
 	}
 
