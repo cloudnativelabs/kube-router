@@ -140,7 +140,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		// we are rr-server peer with other rr-client with reflection enabled
 		if nrc.bgpRRServer {
 			if _, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
-				//add rr options with clusterId
+				// add rr options with clusterId
 				n.RouteReflector = &gobgpapi.RouteReflector{
 					RouteReflectorClient:    true,
 					RouteReflectorClusterId: fmt.Sprint(nrc.bgpClusterID),

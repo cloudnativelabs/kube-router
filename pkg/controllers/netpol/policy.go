@@ -415,11 +415,12 @@ func (npc *NetworkPolicyController) appendRuleToPolicyChain(policyChainName, com
 		}
 	}
 
+	// nolint:gocritic // we want to append to a separate array here so that we can re-use args below
 	markArgs := append(args, "-j", "MARK", "--set-xmark", "0x10000/0x10000", "\n")
 	npc.filterTableRules.WriteString(strings.Join(markArgs, " "))
 
-	returnArgs := append(args, "-m", "mark", "--mark", "0x10000/0x10000", "-j", "RETURN", "\n")
-	npc.filterTableRules.WriteString(strings.Join(returnArgs, " "))
+	args = append(args, "-m", "mark", "--mark", "0x10000/0x10000", "-j", "RETURN", "\n")
+	npc.filterTableRules.WriteString(strings.Join(args, " "))
 
 	return nil
 }
@@ -451,11 +452,12 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 				egressType = true
 			}
 		}
-		if ingressType && egressType {
+		switch {
+		case ingressType && egressType:
 			newPolicy.policyType = kubeBothPolicyType
-		} else if egressType {
+		case egressType:
 			newPolicy.policyType = kubeEgressPolicyType
-		} else if ingressType {
+		case ingressType:
 			newPolicy.policyType = kubeIngressPolicyType
 		}
 
@@ -628,20 +630,18 @@ func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networki
 		if npPort.Port == nil {
 			numericPorts = append(numericPorts, protocolAndPort{port: "", protocol: protocol})
 		} else if npPort.Port.Type == intstr.Int {
-			var portproto protocolAndPort
+			var portProto protocolAndPort
 			if npPort.EndPort != nil {
 				if *npPort.EndPort >= npPort.Port.IntVal {
-					portproto.endport = strconv.Itoa(int(*npPort.EndPort))
+					portProto.endport = strconv.Itoa(int(*npPort.EndPort))
 				}
 			}
-			portproto.protocol, portproto.port = protocol, npPort.Port.String()
-			numericPorts = append(numericPorts, portproto)
-		} else {
-			if protocol2eps, ok := namedPort2eps[npPort.Port.String()]; ok {
-				if numericPort2eps, ok := protocol2eps[protocol]; ok {
-					for _, eps := range numericPort2eps {
-						namedPorts = append(namedPorts, *eps)
-					}
+			portProto.protocol, portProto.port = protocol, npPort.Port.String()
+			numericPorts = append(numericPorts, portProto)
+		} else if protocol2eps, ok := namedPort2eps[npPort.Port.String()]; ok {
+			if numericPort2eps, ok := protocol2eps[protocol]; ok {
+				for _, eps := range numericPort2eps {
+					namedPorts = append(namedPorts, *eps)
 				}
 			}
 		}

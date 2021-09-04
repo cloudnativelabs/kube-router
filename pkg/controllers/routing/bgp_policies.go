@@ -336,6 +336,7 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, ext
 	if err != nil {
 		return err
 	}
+	// nolint:gocritic // We intentionally append to a different array here so as to not change the passed in externalBGPPeerCIDRs
 	allBgpPeers := append(externalBGPPeerCIDRs, iBGPPeerCIDRs...)
 	if currentDefinedSet == nil {
 		allPeerNS := &gobgpapi.DefinedSet{

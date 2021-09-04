@@ -11,13 +11,13 @@ import (
 	"k8s.io/klog/v2"
 )
 
-//ControllerHeartbeat is the structure to hold the heartbeats sent by controllers
+// ControllerHeartbeat is the structure to hold the heartbeats sent by controllers
 type ControllerHeartbeat struct {
 	Component     string
 	LastHeartBeat time.Time
 }
 
-//HealthController reports the health of the controller loops as a http endpoint
+// HealthController reports the health of the controller loops as a http endpoint
 type HealthController struct {
 	HealthPort  uint16
 	HTTPEnabled bool
@@ -25,7 +25,7 @@ type HealthController struct {
 	Config      *options.KubeRouterConfig
 }
 
-//HealthStats is holds the latest heartbeats
+// HealthStats is holds the latest heartbeats
 type HealthStats struct {
 	sync.Mutex
 	Healthy                           bool
@@ -38,7 +38,7 @@ type HealthStats struct {
 	NetworkServicesControllerAliveTTL time.Duration
 }
 
-//SendHeartBeat sends a heartbeat on the passed channel
+// SendHeartBeat sends a heartbeat on the passed channel
 func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 	heartbeat := ControllerHeartbeat{
 		Component:     controller,
@@ -47,7 +47,7 @@ func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
 	channel <- &heartbeat
 }
 
-//Handler writes HTTP responses to the health path
+// Handler writes HTTP responses to the health path
 func (hc *HealthController) Handler(w http.ResponseWriter, _ *http.Request) {
 	if hc.Status.Healthy {
 		w.WriteHeader(http.StatusOK)
@@ -75,7 +75,7 @@ func (hc *HealthController) Handler(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-//HandleHeartbeat handles received heartbeats on the health channel
+// HandleHeartbeat handles received heartbeats on the health channel
 func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 	klog.V(3).Infof("Received heartbeat from %s", beat.Component)
 
@@ -143,7 +143,7 @@ func (hc *HealthController) CheckHealth() bool {
 	return health
 }
 
-//RunServer starts the HealthController's server
+// RunServer starts the HealthController's server
 func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 	srv := &http.Server{Addr: ":" + strconv.Itoa(int(hc.HealthPort)), Handler: http.DefaultServeMux}
@@ -156,8 +156,6 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 				klog.Errorf("Health controller error: %s", err)
 			}
 		}()
-	} else if hc.Config.MetricsPort > 65535 {
-		klog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", hc.Config.MetricsPort)
 	} else {
 		hc.HTTPEnabled = false
 	}
@@ -172,7 +170,7 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 	}
 }
 
-//RunCheck starts the HealthController's check
+// RunCheck starts the HealthController's check
 func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(5000 * time.Millisecond)
 	defer wg.Done()
@@ -200,7 +198,7 @@ func (hc *HealthController) SetAlive() {
 	hc.Status.NetworkServicesControllerAlive = now
 }
 
-//NewHealthController creates a new health controller and returns a reference to it
+// NewHealthController creates a new health controller and returns a reference to it
 func NewHealthController(config *options.KubeRouterConfig) (*HealthController, error) {
 	hc := HealthController{
 		Config:     config,

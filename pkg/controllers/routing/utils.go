@@ -119,7 +119,7 @@ func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 // is greater than 12 (after removing "."), then the interface name is tunXYZ
 // as opposed to tun-XYZ
 func generateTunnelName(nodeIP string) string {
-	hash := strings.Replace(nodeIP, ".", "", -1)
+	hash := strings.ReplaceAll(nodeIP, ".", "")
 
 	if len(hash) < 12 {
 		return "tun-" + hash
@@ -162,6 +162,7 @@ func parseBGPNextHop(path *gobgpapi.Path) (net.IP, error) {
 		if err := ptypes.UnmarshalAny(pAttr, &value); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal path attribute: %s", err)
 		}
+		// nolint:gocritic // We can't change this to an if condition because it is a .(type) expression
 		switch a := value.Message.(type) {
 		case *gobgpapi.NextHopAttribute:
 			nextHop := net.ParseIP(a.NextHop).To4()

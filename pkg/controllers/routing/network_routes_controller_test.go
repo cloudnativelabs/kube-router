@@ -515,7 +515,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		},
 	}
 
-	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
+	// nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -705,7 +705,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 		},
 	}
 
-	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
+	// nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -928,7 +928,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 		},
 	}
 
-	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
+	// nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -1646,8 +1646,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 					Name: "node-1",
 					Annotations: map[string]string{
 						"kube-router.io/node.asn": "100",
-						//rrServerAnnotation:        "10_0_0_1",
-						rrServerAnnotation: "hello world",
+						rrServerAnnotation:        "hello world",
 					},
 				},
 			},
@@ -1712,10 +1711,8 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				if testcase.expectedClusterID != testcase.nrc.bgpClusterID {
 					t.Errorf("Node suppose to have cluster id '%s' but got %s", testcase.expectedClusterID, testcase.nrc.bgpClusterID)
 				}
-			} else {
-				if err == nil {
-					t.Fatal("misconfigured BGP server not suppose to start")
-				}
+			} else if err == nil {
+				t.Fatal("misconfigured BGP server not suppose to start")
 			}
 		})
 	}

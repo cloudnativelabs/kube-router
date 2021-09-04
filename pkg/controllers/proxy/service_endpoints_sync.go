@@ -517,11 +517,12 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 			protocol = udpProtocol
 		}
 		var key string
-		if ipvsSvc.Address != nil {
+		switch {
+		case ipvsSvc.Address != nil:
 			key = generateIPPortID(ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
-		} else if ipvsSvc.FWMark != 0 {
+		case ipvsSvc.FWMark != 0:
 			key = fmt.Sprint(ipvsSvc.FWMark)
-		} else {
+		default:
 			continue
 		}
 

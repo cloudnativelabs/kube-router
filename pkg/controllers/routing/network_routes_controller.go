@@ -570,7 +570,8 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 		nrc.cleanupTunnel(dst, tunnelName)
 	}
 
-	if link != nil {
+	switch {
+	case link != nil:
 		// if we setup an overlay tunnel link, then use it for destination routing
 		route = &netlink.Route{
 			LinkIndex: link.Attrs().Index,
@@ -578,7 +579,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 			Dst:       dst,
 			Protocol:  0x11,
 		}
-	} else if sameSubnet {
+	case sameSubnet:
 		// if the nextHop is within the same subnet, add a route for the destination so that traffic can bet routed
 		// at layer 2 and minimize the need to traverse a router
 		route = &netlink.Route{
@@ -586,7 +587,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 			Gw:       nextHop,
 			Protocol: 0x11,
 		}
-	} else {
+	default:
 		// otherwise, let BGP do its thing, nothing to do here
 		return nil
 	}
@@ -1101,7 +1102,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 
 	nrc := NetworkRoutingController{ipsetMutex: ipsetMutex}
 	if kubeRouterConfig.MetricsEnabled {
-		//Register the metrics for this controller
+		// Register the metrics for this controller
 		prometheus.MustRegister(metrics.ControllerBGPadvertisementsReceived)
 		prometheus.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
 		prometheus.MustRegister(metrics.ControllerBPGpeers)

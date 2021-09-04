@@ -102,12 +102,10 @@ func (nsc *NetworkServicesController) gracefulDeleteIpvsDestination(req graceful
 	aConn, iConn, err := nsc.getIpvsDestinationConnStats(req.ipvsSvc, req.ipvsDst)
 	if err != nil {
 		klog.V(1).Infof("Could not get connection stats for destination: %s", err.Error())
-	} else {
+	} else if aConn == 0 && iConn == 0 {
 		// Do we have active or inactive connections to this destination
 		// if we don't, proceed and delete the destination ahead of graceful period
-		if aConn == 0 && iConn == 0 {
-			deleteDestination = true
-		}
+		deleteDestination = true
 	}
 
 	// Check if our destinations graceful termination period has passed
@@ -115,7 +113,7 @@ func (nsc *NetworkServicesController) gracefulDeleteIpvsDestination(req graceful
 		deleteDestination = true
 	}
 
-	//Destination has has one or more conditions for deletion
+	// Destination has has one or more conditions for deletion
 	if deleteDestination {
 		klog.V(2).Infof("Deleting IPVS destination: %s", ipvsDestinationString(req.ipvsDst))
 		if err := nsc.ln.ipvsDelDestination(req.ipvsSvc, req.ipvsDst); err != nil {
