@@ -61,8 +61,13 @@ const (
 	ipvsServicesIPSetName             = "kube-router-ipvs-services"
 	serviceIPsIPSetName               = "kube-router-service-ips"
 	ipvsFirewallChainName             = "KUBE-ROUTER-SERVICES"
+	ipvsHairpinChainName              = "KUBE-ROUTER-HAIRPIN"
 	synctypeAll                       = iota
 	synctypeIpvs
+
+	tcpProtocol         = "tcp"
+	udpProtocol         = "udp"
+	tunnelInterfaceType = "tunnel"
 )
 
 var (
@@ -751,9 +756,9 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 		if ipvsService.Address != nil {
 			address = ipvsService.Address.String()
 			if ipvsService.Protocol == syscall.IPPROTO_TCP {
-				protocol = "tcp"
+				protocol = tcpProtocol
 			} else {
-				protocol = "udp"
+				protocol = udpProtocol
 			}
 			port = int(ipvsService.Port)
 		} else if ipvsService.FWMark != 0 {
@@ -811,9 +816,9 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		var svcVip string
 
 		switch aProtocol := svc.protocol; aProtocol {
-		case "tcp":
+		case tcpProtocol:
 			protocol = syscall.IPPROTO_TCP
-		case "udp":
+		case udpProtocol:
 			protocol = syscall.IPPROTO_UDP
 		default:
 			protocol = syscall.IPPROTO_NONE
@@ -1383,7 +1388,6 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	}
 
 	// TODO: Factor these variables out
-	hairpinChain := "KUBE-ROUTER-HAIRPIN"
 	hasHairpinChain := false
 
 	// TODO: Factor out this code
@@ -1394,32 +1398,30 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 
 	// TODO: Factor out this code
 	for _, chain := range chains {
-		if chain == hairpinChain {
+		if chain == ipvsHairpinChainName {
 			hasHairpinChain = true
 		}
 	}
 
 	// Create a chain for hairpin rules, if needed
 	if !hasHairpinChain {
-		err = iptablesCmdHandler.NewChain("nat", hairpinChain)
+		err = iptablesCmdHandler.NewChain("nat", ipvsHairpinChainName)
 		if err != nil {
-			return errors.New("Failed to create iptables chain \"" + hairpinChain +
-				"\": " + err.Error())
+			return fmt.Errorf("failed to create iptables chain \"%s\": %v", ipvsHairpinChainName, err)
 		}
 	}
 
 	// Create a rule that targets our hairpin chain, if needed
 	// TODO: Factor this static rule out
-	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", hairpinChain}
+	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", ipvsHairpinChainName}
 	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", jumpArgs...)
 	if err != nil {
-		return errors.New("Failed to add hairpin iptables jump rule: %s" + err.Error())
+		return fmt.Errorf("failed to add hairpin iptables jump rule: %v", err)
 	}
 
-	rulesFromNode, err := iptablesCmdHandler.List("nat", hairpinChain)
+	rulesFromNode, err := iptablesCmdHandler.List("nat", ipvsHairpinChainName)
 	if err != nil {
-		return errors.New("Failed to get rules from iptables chain \"" +
-			hairpinChain + "\": " + err.Error())
+		return fmt.Errorf("failed to get rules from iptables chain \"%s\": %v", ipvsHairpinChainName, err)
 	}
 
 	// Apply the rules we need
@@ -1432,9 +1434,9 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 			}
 		}
 		if !ruleExists {
-			err = iptablesCmdHandler.AppendUnique("nat", hairpinChain, ruleArgs...)
+			err = iptablesCmdHandler.AppendUnique("nat", ipvsHairpinChainName, ruleArgs...)
 			if err != nil {
-				return errors.New("Failed to apply hairpin iptables rule: " + err.Error())
+				return fmt.Errorf("failed to apply hairpin iptables rule: %v", err)
 			}
 		}
 	}
@@ -1447,18 +1449,21 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 			if len(args) > 2 {
 				args = args[2:] // Strip "-A CHAIN_NAME"
 
-				err = iptablesCmdHandler.Delete("nat", hairpinChain, args...)
+				err = iptablesCmdHandler.Delete("nat", ipvsHairpinChainName, args...)
 				if err != nil {
-					klog.Errorf("Unable to delete hairpin rule \"%s\" from chain %s: %e", ruleFromNode, hairpinChain, err)
+					klog.Errorf("Unable to delete hairpin rule \"%s\" from chain %s: %e", ruleFromNode,
+						ipvsHairpinChainName, err)
 				} else {
-					klog.V(1).Infof("Deleted invalid/outdated hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
+					klog.V(1).Infof("Deleted invalid/outdated hairpin rule \"%s\" from chain %s",
+						ruleFromNode, ipvsHairpinChainName)
 				}
 			} else {
 				// Ignore the chain creation rule
-				if ruleFromNode == "-N "+hairpinChain {
+				if ruleFromNode == "-N "+ipvsHairpinChainName {
 					continue
 				}
-				klog.V(1).Infof("Not removing invalid hairpin rule \"%s\" from chain %s", ruleFromNode, hairpinChain)
+				klog.V(1).Infof("Not removing invalid hairpin rule \"%s\" from chain %s", ruleFromNode,
+					ipvsHairpinChainName)
 			}
 		}
 	}
@@ -1495,12 +1500,11 @@ func deleteHairpinIptablesRules() error {
 	}
 
 	// TODO: Factor these variables out
-	hairpinChain := "KUBE-ROUTER-HAIRPIN"
 	hasHairpinChain := false
 
 	// TODO: Factor out this code
 	for _, chain := range chains {
-		if chain == hairpinChain {
+		if chain == ipvsHairpinChainName {
 			hasHairpinChain = true
 			break
 		}
@@ -1512,32 +1516,30 @@ func deleteHairpinIptablesRules() error {
 	}
 
 	// TODO: Factor this static jump rule out
-	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", hairpinChain}
+	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", ipvsHairpinChainName}
 	hasHairpinJumpRule, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", jumpArgs...)
 	if err != nil {
-		return errors.New("Failed to search POSTROUTING iptables rules: " + err.Error())
+		return fmt.Errorf("failed to search POSTROUTING iptables rules: %v", err)
 	}
 
 	// Delete the jump rule to the hairpin chain
 	if hasHairpinJumpRule {
 		err = iptablesCmdHandler.Delete("nat", "POSTROUTING", jumpArgs...)
 		if err != nil {
-			klog.Errorf("Unable to delete hairpin jump rule from chain \"POSTROUTING\": %e", err)
+			klog.Errorf("unable to delete hairpin jump rule from chain \"POSTROUTING\": %v", err)
 		} else {
 			klog.V(1).Info("Deleted hairpin jump rule from chain \"POSTROUTING\"")
 		}
 	}
 
 	// Flush and delete the chain for hairpin rules
-	err = iptablesCmdHandler.ClearChain("nat", hairpinChain)
+	err = iptablesCmdHandler.ClearChain("nat", ipvsHairpinChainName)
 	if err != nil {
-		return errors.New("Failed to flush iptables chain \"" + hairpinChain +
-			"\": " + err.Error())
+		return fmt.Errorf("failed to flush iptables chain \"%s\": %v", ipvsHairpinChainName, err)
 	}
-	err = iptablesCmdHandler.DeleteChain("nat", hairpinChain)
+	err = iptablesCmdHandler.DeleteChain("nat", ipvsHairpinChainName)
 	if err != nil {
-		return errors.New("Failed to delete iptables chain \"" + hairpinChain +
-			"\": " + err.Error())
+		return fmt.Errorf("failed to delete iptables chain \"%s\": %v", ipvsHairpinChainName, err)
 	}
 	return nil
 }
@@ -1742,9 +1744,9 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 
 	var protocolStr string
 	if protocol == syscall.IPPROTO_TCP {
-		protocolStr = "tcp"
+		protocolStr = tcpProtocol
 	} else if protocol == syscall.IPPROTO_UDP {
-		protocolStr = "udp"
+		protocolStr = udpProtocol
 	} else {
 		protocolStr = "unknown"
 	}
@@ -1868,7 +1870,7 @@ func setupMangleTableRule(ip string, protocol string, port string, fwmark string
 	}
 
 	// setup iptables rule TCPMSS for DSR mode to fix mtu problem
-	mtuArgs := []string{"-d", ip, "-m", "tcp", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS",
+	mtuArgs := []string{"-d", ip, "-m", tcpProtocol, "-p", tcpProtocol, "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS",
 		"--set-mss", strconv.Itoa(tcpMSS)}
 	err = iptablesCmdHandler.AppendUnique("mangle", "PREROUTING", mtuArgs...)
 	if err != nil {
@@ -1910,7 +1912,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 	}
 
 	// cleanup iptables rule TCPMSS
-	mtuArgs := []string{"-d", ip, "-m", "tcp", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS",
+	mtuArgs := []string{"-d", ip, "-m", tcpProtocol, "-p", tcpProtocol, "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS",
 		"--set-mss", strconv.Itoa(tcpMSS)}
 	exists, err = iptablesCmdHandler.Exists("mangle", "PREROUTING", mtuArgs...)
 	if err != nil {

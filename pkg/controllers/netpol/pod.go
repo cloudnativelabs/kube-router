@@ -150,14 +150,14 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod *podInfo, podFwChain
 		policyChainName := networkPolicyChainName(policy.namespace, policy.name, version)
 		var args []string
 		switch policy.policyType {
-		case "both":
+		case kubeBothPolicyType:
 			hasIngressPolicy = true
 			hasEgressPolicy = true
 			args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
-		case "ingress":
+		case kubeIngressPolicyType:
 			hasIngressPolicy = true
 			args = []string{"-I", podFwChainName, "1", "-d", pod.ip, "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
-		case "egress":
+		case kubeEgressPolicyType:
 			hasEgressPolicy = true
 			args = []string{"-I", podFwChainName, "1", "-s", pod.ip, "-m", "comment", "--comment", comment, "-j", policyChainName, "\n"}
 		}

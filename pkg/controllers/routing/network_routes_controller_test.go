@@ -42,7 +42,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "ClusterIP",
+						Type:      ClusterIPST,
 						ClusterIP: "10.0.0.1",
 					},
 				},
@@ -63,7 +63,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "ClusterIP",
+						Type:      ClusterIPST,
 						ClusterIP: "10.0.0.1",
 					},
 				},
@@ -72,7 +72,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
+						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.2",
 					},
 				},
@@ -81,7 +81,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "NodePort",
+						Type:      NodePortST,
 						ClusterIP: "10.0.0.3",
 					},
 				},
@@ -104,7 +104,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "ClusterIP",
+						Type:      ClusterIPST,
 						ClusterIP: "10.0.0.1",
 					},
 				},
@@ -134,7 +134,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "ClusterIP",
+						Type:      ClusterIPST,
 						ClusterIP: "10.0.0.1",
 					},
 				},
@@ -143,7 +143,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "ClusterIP",
+						Type:      ClusterIPST,
 						ClusterIP: "None",
 					},
 				},
@@ -152,7 +152,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "ClusterIP",
+						Type:      ClusterIPST,
 						ClusterIP: "",
 					},
 				},
@@ -263,7 +263,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
 					},
@@ -286,7 +286,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -296,7 +296,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "LoadBalancer",
+						Type:        LoadBalancerST,
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2"},
 					},
@@ -306,7 +306,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "NodePort",
+						Type:        NodePortST,
 						ClusterIP:   "10.0.0.3",
 						ExternalIPs: []string{"3.3.3.3", "4.4.4.4"},
 					},
@@ -331,7 +331,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -363,7 +363,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -373,7 +373,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "None",
 						ExternalIPs: []string{"2.2.2.2"},
 					},
@@ -383,7 +383,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "",
 						ExternalIPs: []string{"3.3.3.3"},
 					},
@@ -405,7 +405,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
+						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.1",
 					},
 					Status: v1core.ServiceStatus{
@@ -433,7 +433,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
+						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.1",
 					},
 					Status: v1core.ServiceStatus{
@@ -467,7 +467,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
+						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.1",
 					},
 					Status: v1core.ServiceStatus{
@@ -494,7 +494,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
+						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.1",
 					},
 					Status: v1core.ServiceStatus{
@@ -616,7 +616,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -626,7 +626,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 						Name: "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "NodePort",
+						Type:        NodePortST,
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
 					},
@@ -636,7 +636,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 						Name: "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "LoadBalancer",
+						Type:        LoadBalancerST,
 						ClusterIP:   "10.0.0.3",
 						ExternalIPs: []string{"4.4.4.4"},
 					},
@@ -683,7 +683,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "LoadBalancer",
+						Type:        LoadBalancerST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
 					},
@@ -807,7 +807,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -817,7 +817,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						Name: "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "NodePort",
+						Type:        NodePortST,
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
 					},
@@ -827,7 +827,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						Name: "svc-3",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "LoadBalancer",
+						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.3",
 						// ignored since LoadBalancer services don't
 						// advertise external IPs.
@@ -866,7 +866,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
+						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -881,7 +881,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "NodePort",
+						Type:        NodePortST,
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
 					},
@@ -896,7 +896,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "LoadBalancer",
+						Type:        LoadBalancerST,
 						ClusterIP:   "10.0.0.3",
 						ExternalIPs: []string{"4.4.4.4"},
 					},
@@ -1031,7 +1031,7 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1core.ServiceSpec{
-					Type:        "ClusterIP",
+					Type:        ClusterIPST,
 					ClusterIP:   "10.0.0.1",
 					ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
 				},
@@ -1070,7 +1070,7 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1core.ServiceSpec{
-					Type:        "ClusterIP",
+					Type:        ClusterIPST,
 					ClusterIP:   "10.0.0.1",
 					ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
 				},

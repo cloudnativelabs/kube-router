@@ -33,6 +33,10 @@ const (
 	kubeForwardChainName         = "KUBE-ROUTER-FORWARD"
 	kubeOutputChainName          = "KUBE-ROUTER-OUTPUT"
 	kubeDefaultNetpolChain       = "KUBE-NWPLCY-DEFAULT"
+
+	kubeIngressPolicyType = "ingress"
+	kubeEgressPolicyType  = "egress"
+	kubeBothPolicyType    = "both"
 )
 
 var (

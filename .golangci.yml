@@ -9,6 +9,7 @@ linters:
     - errcheck
     - exportloopref
     - gochecknoinits
+    - goconst
     - gofmt
     - goimports
     - misspell

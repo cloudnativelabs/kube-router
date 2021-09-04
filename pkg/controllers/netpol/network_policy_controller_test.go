@@ -542,13 +542,13 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 		}
 		for _, np := range netpols {
 			fmt.Printf(np.policyType)
-			if np.policyType == "egress" || np.policyType == "both" {
+			if np.policyType == kubeEgressPolicyType || np.policyType == kubeBothPolicyType {
 				err = krNetPol.processEgressRules(np, "", nil, "1")
 				if err != nil {
 					t.Errorf("Error syncing the rules: %s", err)
 				}
 			}
-			if np.policyType == "ingress" || np.policyType == "both" {
+			if np.policyType == kubeIngressPolicyType || np.policyType == kubeBothPolicyType {
 				err = krNetPol.processIngressRules(np, "", nil, "1")
 				if err != nil {
 					t.Errorf("Error syncing the rules: %s", err)

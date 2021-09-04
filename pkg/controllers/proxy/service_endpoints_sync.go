@@ -95,9 +95,9 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		var protocol uint16
 
 		switch svc.protocol {
-		case "tcp":
+		case tcpProtocol:
 			protocol = syscall.IPPROTO_TCP
-		case "udp":
+		case udpProtocol:
 			protocol = syscall.IPPROTO_UDP
 		default:
 			protocol = syscall.IPPROTO_NONE
@@ -161,9 +161,9 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 		var protocol uint16
 
 		switch svc.protocol {
-		case "tcp":
+		case tcpProtocol:
 			protocol = syscall.IPPROTO_TCP
-		case "udp":
+		case udpProtocol:
 			protocol = syscall.IPPROTO_UDP
 		default:
 			protocol = syscall.IPPROTO_NONE
@@ -255,9 +255,9 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 		var protocol uint16
 
 		switch svc.protocol {
-		case "tcp":
+		case tcpProtocol:
 			protocol = syscall.IPPROTO_TCP
-		case "udp":
+		case udpProtocol:
 			protocol = syscall.IPPROTO_UDP
 		default:
 			protocol = syscall.IPPROTO_NONE
@@ -299,7 +299,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 		}
 		for _, externalIP := range extIPSet.List() {
 			var externalIPServiceID string
-			if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
+			if svc.directServerReturn && svc.directServerReturnMethod == tunnelInterfaceType {
 				ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(net.ParseIP(externalIP), protocol, uint16(svc.port), svc.sessionAffinity, svc.sessionAffinityTimeoutSeconds, svc.scheduler, svc.flags)
 				if err != nil {
 					klog.Errorf("Failed to create ipvs service for External IP: %s due to: %s", externalIP, err.Error())
@@ -389,7 +389,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 					continue
 				}
 
-				if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
+				if svc.directServerReturn && svc.directServerReturnMethod == tunnelInterfaceType {
 					dst.ConnectionFlags = ipvs.ConnectionFlagTunnel
 				}
 
@@ -400,7 +400,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				}
 
 				// For now just support IPVS tunnel mode, we can add other ways of DSR in future
-				if svc.directServerReturn && svc.directServerReturnMethod == "tunnel" {
+				if svc.directServerReturn && svc.directServerReturnMethod == tunnelInterfaceType {
 
 					podObj, err := nsc.getPodObjectForEndpoint(endpoint.ip)
 					if err != nil {
@@ -512,9 +512,9 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 	var protocol string
 	for _, ipvsSvc := range ipvsSvcs {
 		if ipvsSvc.Protocol == syscall.IPPROTO_TCP {
-			protocol = "tcp"
+			protocol = tcpProtocol
 		} else {
-			protocol = "udp"
+			protocol = udpProtocol
 		}
 		var key string
 		if ipvsSvc.Address != nil {
