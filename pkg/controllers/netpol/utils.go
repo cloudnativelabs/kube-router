@@ -33,6 +33,7 @@ func isNetPolActionable(pod *api.Pod) bool {
 }
 
 func isFinished(pod *api.Pod) bool {
+	// nolint:exhaustive // We don't care about PodPending, PodRunning, PodUnknown here as we want those to fall into the false case
 	switch pod.Status.Phase {
 	case api.PodFailed, api.PodSucceeded, PodCompleted:
 		return true
