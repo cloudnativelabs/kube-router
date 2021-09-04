@@ -111,7 +111,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			currentPodIPs = append(currentPodIPs, ip)
 		}
 
-		if policy.policyType == "both" || policy.policyType == "ingress" {
+		if policy.policyType == kubeBothPolicyType || policy.policyType == kubeIngressPolicyType {
 			// create a ipset for all destination pod ip's matched by the policy spec PodSelector
 			targetDestPodIPSetName := policyDestinationPodIPSetName(policy.namespace, policy.name)
 			npc.createGenericHashIPSet(targetDestPodIPSetName, utils.TypeHashIP, currentPodIPs)
@@ -121,7 +121,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			}
 			activePolicyIPSets[targetDestPodIPSetName] = true
 		}
-		if policy.policyType == "both" || policy.policyType == "egress" {
+		if policy.policyType == kubeBothPolicyType || policy.policyType == kubeEgressPolicyType {
 			// create a ipset for all source pod ip's matched by the policy spec PodSelector
 			targetSourcePodIPSetName := policySourcePodIPSetName(policy.namespace, policy.name)
 			npc.createGenericHashIPSet(targetSourcePodIPSetName, utils.TypeHashIP, currentPodIPs)
@@ -439,7 +439,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 			name:        policy.Name,
 			namespace:   policy.Namespace,
 			podSelector: podSelector,
-			policyType:  "ingress",
+			policyType:  kubeIngressPolicyType,
 		}
 
 		ingressType, egressType := false, false
@@ -452,11 +452,11 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 			}
 		}
 		if ingressType && egressType {
-			newPolicy.policyType = "both"
+			newPolicy.policyType = kubeBothPolicyType
 		} else if egressType {
-			newPolicy.policyType = "egress"
+			newPolicy.policyType = kubeEgressPolicyType
 		} else if ingressType {
-			newPolicy.policyType = "ingress"
+			newPolicy.policyType = kubeIngressPolicyType
 		}
 
 		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)

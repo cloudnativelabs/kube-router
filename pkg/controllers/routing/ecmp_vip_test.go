@@ -36,7 +36,7 @@ func Test_getVIPsForService(t *testing.T) {
 				Name: "svc-cluster",
 			},
 			Spec: v1core.ServiceSpec{
-				Type:      "ClusterIP",
+				Type:      ClusterIPST,
 				ClusterIP: "10.0.0.1",
 			},
 		},
@@ -45,7 +45,7 @@ func Test_getVIPsForService(t *testing.T) {
 				Name: "svc-external",
 			},
 			Spec: v1core.ServiceSpec{
-				Type:        "ClusterIP",
+				Type:        ClusterIPST,
 				ClusterIP:   "10.0.0.1",
 				ExternalIPs: []string{"1.1.1.1"},
 			},
@@ -55,7 +55,7 @@ func Test_getVIPsForService(t *testing.T) {
 				Name: "svc-nodeport",
 			},
 			Spec: v1core.ServiceSpec{
-				Type:        "NodePort",
+				Type:        NodePortST,
 				ClusterIP:   "10.0.0.1",
 				ExternalIPs: []string{"1.1.1.1"},
 			},
@@ -65,7 +65,7 @@ func Test_getVIPsForService(t *testing.T) {
 				Name: "svc-loadbalancer",
 			},
 			Spec: v1core.ServiceSpec{
-				Type:        "LoadBalancer",
+				Type:        LoadBalancerST,
 				ClusterIP:   "10.0.0.1",
 				ExternalIPs: []string{"1.1.1.1"},
 			},

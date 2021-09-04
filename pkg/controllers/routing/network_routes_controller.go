@@ -60,6 +60,10 @@ const (
 
 	// Deprecated: use kube-router.io/service.advertise.loadbalancer instead
 	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
+
+	LoadBalancerST = "LoadBalancer"
+	ClusterIPST    = "ClusterIP"
+	NodePortST     = "NodePort"
 )
 
 // NetworkRoutingController is struct to hold necessary information required by controller
