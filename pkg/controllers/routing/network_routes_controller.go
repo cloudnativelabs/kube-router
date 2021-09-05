@@ -232,11 +232,11 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	if _, err := exec.Command("modprobe", "br_netfilter").CombinedOutput(); err != nil {
 		klog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may not work: %s", err.Error())
 	}
-	if err = ioutil.WriteFile("/proc/sys/net/bridge/bridge-nf-call-iptables", []byte(strconv.Itoa(1)), 0640); err != nil {
+	if err = ioutil.WriteFile("/sys/class/net/kube-bridge/bridge/nf_call_iptables", []byte(strconv.Itoa(1)), 0644); err != nil {
 		klog.Errorf("Failed to enable iptables for bridge. Network policies and service proxy may not work: %s", err.Error())
 	}
 	if nrc.isIpv6 {
-		if err = ioutil.WriteFile("/proc/sys/net/bridge/bridge-nf-call-ip6tables", []byte(strconv.Itoa(1)), 0640); err != nil {
+		if err = ioutil.WriteFile("/sys/class/net/kube-bridge/bridge/nf_call_ip6tables", []byte(strconv.Itoa(1)), 0644); err != nil {
 			klog.Errorf("Failed to enable ip6tables for bridge. Network policies and service proxy may not work: %s", err.Error())
 		}
 
