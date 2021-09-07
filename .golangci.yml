@@ -6,6 +6,7 @@ linters:
     - depguard
     - dogsled
     - dupl
+    - durationcheck
     - exportloopref
     - exhaustive
     - gochecknoinits
