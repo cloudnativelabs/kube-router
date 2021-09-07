@@ -77,7 +77,7 @@ func GetMTUFromNodeIP(nodeIP net.IP, overlayEnabled bool) (int, error) {
 			if addr.IPNet.IP.Equal(nodeIP) {
 				linkMTU := link.Attrs().MTU
 				if overlayEnabled {
-					return linkMTU - 20, nil // -20 to accommodate IPIP header
+					return linkMTU - IPInIPHeaderLength, nil // -20 to accommodate IPIP header
 				}
 				return linkMTU, nil
 			}

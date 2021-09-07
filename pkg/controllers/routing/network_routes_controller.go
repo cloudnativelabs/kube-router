@@ -64,6 +64,14 @@ const (
 	LoadBalancerST = "LoadBalancer"
 	ClusterIPST    = "ClusterIP"
 	NodePortST     = "NodePort"
+
+	prependPathMaxBits      = 8
+	asnMaxBitSize           = 32
+	bgpCommunityMaxSize     = 32
+	bgpCommunityMaxPartSize = 16
+	routeReflectorMaxId     = 32
+	// Taken from: https://github.com/torvalds/linux/blob/master/include/uapi/linux/rtnetlink.h#L284
+	zebraRouteOriginator = 0x11
 )
 
 // NetworkRoutingController is struct to hold necessary information required by controller
@@ -577,7 +585,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 			LinkIndex: link.Attrs().Index,
 			Src:       nrc.nodeIP,
 			Dst:       dst,
-			Protocol:  0x11,
+			Protocol:  zebraRouteOriginator,
 		}
 	case sameSubnet:
 		// if the nextHop is within the same subnet, add a route for the destination so that traffic can bet routed
@@ -585,7 +593,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 		route = &netlink.Route{
 			Dst:      dst,
 			Gw:       nextHop,
-			Protocol: 0x11,
+			Protocol: zebraRouteOriginator,
 		}
 	default:
 		// otherwise, let BGP do its thing, nothing to do here
@@ -658,7 +666,7 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 			return nil, errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
 		}
 		// reduce the MTU by 20 bytes to accommodate ipip tunnel overhead
-		if err = netlink.LinkSetMTU(link, link.Attrs().MTU-20); err != nil {
+		if err = netlink.LinkSetMTU(link, link.Attrs().MTU-utils.IPInIPHeaderLength); err != nil {
 			return nil, errors.New("Failed to set MTU of tunnel interface " + tunnelName + " up due to: " + err.Error())
 		}
 	} else {
@@ -883,7 +891,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 				"Node needs to be annotated with ASN number details to start BGP server")
 		}
 		klog.Infof("Found ASN for the node to be %s from the node annotations", nodeasn)
-		asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
+		asnNo, err := strconv.ParseUint(nodeasn, 0, asnMaxBitSize)
 		if err != nil {
 			return errors.New("failed to parse ASN number specified for the the node")
 		}
@@ -893,7 +901,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 	if clusterid, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; ok {
 		klog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
-		_, err := strconv.ParseUint(clusterid, 0, 32)
+		_, err := strconv.ParseUint(clusterid, 0, routeReflectorMaxId)
 		if err != nil {
 			if ip := net.ParseIP(clusterid).To4(); ip == nil {
 				return errors.New("failed to parse rr.server clusterId specified for the node")
@@ -903,7 +911,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		nrc.bgpRRServer = true
 	} else if clusterid, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
 		klog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
-		_, err := strconv.ParseUint(clusterid, 0, 32)
+		_, err := strconv.ParseUint(clusterid, 0, routeReflectorMaxId)
 		if err != nil {
 			if ip := net.ParseIP(clusterid).To4(); ip == nil {
 				return errors.New("failed to parse rr.client clusterId specified for the node")
@@ -920,12 +928,12 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 			return fmt.Errorf("both %s and %s must be set", pathPrependASNAnnotation, pathPrependRepeatNAnnotation)
 		}
 
-		_, err := strconv.ParseUint(prependASN, 0, 32)
+		_, err := strconv.ParseUint(prependASN, 0, asnMaxBitSize)
 		if err != nil {
 			return errors.New("failed to parse ASN number specified to prepend")
 		}
 
-		repeatN, err := strconv.ParseUint(prependRepeatN, 0, 8)
+		repeatN, err := strconv.ParseUint(prependRepeatN, 0, prependPathMaxBits)
 		if err != nil {
 			return errors.New("failed to parse number of times ASN should be repeated")
 		}

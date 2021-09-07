@@ -15,6 +15,11 @@ import (
 	v1core "k8s.io/api/core/v1"
 )
 
+const (
+	awsThrottlingRequestDelay = 1000 * time.Millisecond
+	awsMaxRetries             = 5
+)
+
 // disableSourceDestinationCheck disables src-dst check of all the VM's when cluster
 // is provisioned on AWS. EC2 by default drops any packets originating or destination
 // to a VM with IP other than that of VM's ip. This check needs to be disabled so that
@@ -36,7 +41,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		instanceID := URL.Path
 		instanceID = strings.Trim(instanceID, "/")
 
-		sess, _ := session.NewSession(aws.NewConfig().WithMaxRetries(5))
+		sess, _ := session.NewSession(aws.NewConfig().WithMaxRetries(awsMaxRetries))
 		metadataClient := ec2metadata.New(sess)
 		region, err := metadataClient.Region()
 		if err != nil {
@@ -66,6 +71,6 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		}
 
 		// to prevent EC2 rejecting API call due to API throttling give a delay between the calls
-		time.Sleep(1000 * time.Millisecond)
+		time.Sleep(awsThrottlingRequestDelay)
 	}
 }

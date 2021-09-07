@@ -121,6 +121,7 @@ func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 func generateTunnelName(nodeIP string) string {
 	hash := strings.ReplaceAll(nodeIP, ".", "")
 
+	// nolint:gomnd // this number becomes less obvious when made a constant
 	if len(hash) < 12 {
 		return "tun-" + hash
 	}
@@ -132,7 +133,7 @@ func generateTunnelName(nodeIP string) string {
 // gobgp (internal/pkg/table/policy.go:ParseCommunity()). If it is not able to parse the community information it
 // returns an error.
 func validateCommunity(arg string) error {
-	_, err := strconv.ParseUint(arg, 10, 32)
+	_, err := strconv.ParseUint(arg, 10, bgpCommunityMaxSize)
 	if err == nil {
 		return nil
 	}
@@ -140,8 +141,8 @@ func validateCommunity(arg string) error {
 	_regexpCommunity := regexp.MustCompile(`(\d+):(\d+)`)
 	elems := _regexpCommunity.FindStringSubmatch(arg)
 	if len(elems) == 3 {
-		if _, err := strconv.ParseUint(elems[1], 10, 16); err == nil {
-			if _, err = strconv.ParseUint(elems[2], 10, 16); err == nil {
+		if _, err := strconv.ParseUint(elems[1], 10, bgpCommunityMaxPartSize); err == nil {
+			if _, err = strconv.ParseUint(elems[2], 10, bgpCommunityMaxPartSize); err == nil {
 				return nil
 			}
 		}
@@ -202,7 +203,7 @@ func parseBGPPath(path *gobgpapi.Path) (*net.IPNet, net.IP, error) {
 // deleteRoutesByDestination attempts to safely find all routes based upon its destination subnet and delete them
 func deleteRoutesByDestination(destinationSubnet *net.IPNet) error {
 	routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
-		Dst: destinationSubnet, Protocol: 0x11,
+		Dst: destinationSubnet, Protocol: zebraRouteOriginator,
 	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
 	if err != nil {
 		return fmt.Errorf("failed to get routes from netlink: %v", err)

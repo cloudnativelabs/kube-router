@@ -74,7 +74,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				continue
 			}
 
-			asnNo, err := strconv.ParseUint(nodeasn, 0, 32)
+			asnNo, err := strconv.ParseUint(nodeasn, 0, asnMaxBitSize)
 			if err != nil {
 				klog.Infof("Not peering with the Node %s as ASN number of the node is invalid.",
 					nodeIP.String())

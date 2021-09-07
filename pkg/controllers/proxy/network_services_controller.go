@@ -48,6 +48,24 @@ const (
 	IpvsSvcFSched2    = "flag-2"
 	IpvsSvcFSched3    = "flag-3"
 
+	// Taken from https://github.com/torvalds/linux/blob/master/include/uapi/linux/ip_vs.h#L21
+	ipvsPersistentFlagHex = 0x0001
+	ipvsHashedFlagHex     = 0x0002
+	ipvsOnePacketFlagHex  = 0x0004
+	ipvsSched1FlagHex     = 0x0008
+	ipvsSched2FlagHex     = 0x0010
+	ipvsSched3FlagHex     = 0x0020
+
+	// Taken from https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
+	ipvsConnReuseModeDisableSpecialHandling = 0
+	ipvsExpireQuiescentTemplateEnable       = 1
+	ipvsExpireNodestConnEnable              = 1
+	ipvsConntrackEnable                     = 1
+
+	// Taken from https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt
+	arpAnnounceUseBestLocalAddress      = 2
+	arpIgnoreReplyOnlyIfTargetIPIsLocal = 1
+
 	svcDSRAnnotation                = "kube-router.io/service.dsr"
 	svcSchedulerAnnotation          = "kube-router.io/service.scheduler"
 	svcHairpinAnnotation            = "kube-router.io/service.hairpin"
@@ -68,6 +86,8 @@ const (
 	tcpProtocol         = "tcp"
 	udpProtocol         = "udp"
 	tunnelInterfaceType = "tunnel"
+
+	gracefulTermServiceTickTime = 5 * time.Second
 )
 
 var (
@@ -319,25 +339,25 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
-	sysctlErr := utils.SetSysctl("net/ipv4/vs/conntrack", 1)
+	sysctlErr := utils.SetSysctl("net/ipv4/vs/conntrack", ipvsConntrackEnable)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", 1)
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", ipvsExpireNodestConnEnable)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", 1)
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", ipvsExpireQuiescentTemplateEnable)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/71114
-	sysctlErr = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", 0)
+	sysctlErr = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", ipvsConnReuseModeDisableSpecialHandling)
 	if sysctlErr != nil {
 		// Check if the error is fatal, on older kernels this option does not exist and the same behaviour is default
 		// if option is not found just log it
@@ -349,13 +369,13 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", 1)
+	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", arpIgnoreReplyOnlyIfTargetIPIsLocal)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_announce", 2)
+	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_announce", arpAnnounceUseBestLocalAddress)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
@@ -367,7 +387,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 	nsc.ProxyFirewallSetup.Broadcast()
 
-	gracefulTicker := time.NewTicker(5 * time.Second)
+	gracefulTicker := time.NewTicker(gracefulTermServiceTickTime)
 	defer gracefulTicker.Stop()
 
 	select {
@@ -1579,27 +1599,27 @@ func ipvsServiceString(s *ipvs.Service) string {
 		protocol = "UNKNOWN"
 	}
 
-	if s.Flags&0x0001 != 0 {
+	if s.Flags&ipvsPersistentFlagHex != 0 {
 		flags += "[persistent port]"
 	}
 
-	if s.Flags&0x0002 != 0 {
+	if s.Flags&ipvsHashedFlagHex != 0 {
 		flags += "[hashed entry]"
 	}
 
-	if s.Flags&0x0004 != 0 {
+	if s.Flags&ipvsOnePacketFlagHex != 0 {
 		flags += "[one-packet scheduling]"
 	}
 
-	if s.Flags&0x0008 != 0 {
+	if s.Flags&ipvsSched1FlagHex != 0 {
 		flags += "[flag-1(fallback)]"
 	}
 
-	if s.Flags&0x0010 != 0 {
+	if s.Flags&ipvsSched2FlagHex != 0 {
 		flags += "[flag-2(port)]"
 	}
 
-	if s.Flags&0x0020 != 0 {
+	if s.Flags&ipvsSched3FlagHex != 0 {
 		flags += "[flag-3]"
 	}
 
@@ -1612,11 +1632,11 @@ func ipvsDestinationString(d *ipvs.Destination) string {
 
 func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) {
 	if p {
-		svc.Flags |= 0x0001
+		svc.Flags |= ipvsPersistentFlagHex
 		svc.Netmask |= 0xFFFFFFFF
 		svc.Timeout = uint32(timeout)
 	} else {
-		svc.Flags &^= 0x0001
+		svc.Flags &^= ipvsPersistentFlagHex
 		svc.Netmask &^= 0xFFFFFFFF
 		svc.Timeout = 0
 	}
@@ -1624,21 +1644,21 @@ func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) {
 
 func ipvsSetSchedFlags(svc *ipvs.Service, s schedFlags) {
 	if s.flag1 {
-		svc.Flags |= 0x0008
+		svc.Flags |= ipvsSched1FlagHex
 	} else {
-		svc.Flags &^= 0x0008
+		svc.Flags &^= ipvsSched1FlagHex
 	}
 
 	if s.flag2 {
-		svc.Flags |= 0x0010
+		svc.Flags |= ipvsSched2FlagHex
 	} else {
-		svc.Flags &^= 0x0010
+		svc.Flags &^= ipvsSched2FlagHex
 	}
 
 	if s.flag3 {
-		svc.Flags |= 0x0020
+		svc.Flags |= ipvsSched3FlagHex
 	} else {
-		svc.Flags &^= 0x0020
+		svc.Flags &^= ipvsSched3FlagHex
 	}
 
 	/* Keep netmask which is set by ipvsSetPersistence() before */
@@ -1651,15 +1671,15 @@ func ipvsSetSchedFlags(svc *ipvs.Service, s schedFlags) {
 
 /* Compare service scheduler flags with ipvs service */
 func changedIpvsSchedFlags(svc *ipvs.Service, s schedFlags) bool {
-	if (s.flag1 && (svc.Flags&0x0008) == 0) || (!s.flag1 && (svc.Flags&0x0008) != 0) {
+	if (s.flag1 && (svc.Flags&ipvsSched1FlagHex) == 0) || (!s.flag1 && (svc.Flags&ipvsSched1FlagHex) != 0) {
 		return true
 	}
 
-	if (s.flag2 && (svc.Flags&0x0010) == 0) || (!s.flag2 && (svc.Flags&0x0010) != 0) {
+	if (s.flag2 && (svc.Flags&ipvsSched2FlagHex) == 0) || (!s.flag2 && (svc.Flags&ipvsSched2FlagHex) != 0) {
 		return true
 	}
 
-	if (s.flag3 && (svc.Flags&0x0020) == 0) || (!s.flag3 && (svc.Flags&0x0020) != 0) {
+	if (s.flag3 && (svc.Flags&ipvsSched3FlagHex) == 0) || (!s.flag3 && (svc.Flags&ipvsSched3FlagHex) != 0) {
 		return true
 	}
 
@@ -1671,7 +1691,8 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 	var err error
 	for _, svc := range svcs {
 		if vip.Equal(svc.Address) && protocol == svc.Protocol && port == svc.Port {
-			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) ||
+			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
+				(!persistent && (svc.Flags&ipvsPersistentFlagHex) != 0) ||
 				svc.Timeout != uint32(persistentTimeout) {
 				ipvsSetPersistence(svc, persistent, persistentTimeout)
 
@@ -1732,12 +1753,13 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 // TODO: I ran into issues with FWMARK for any value above 2^15. Either policy
 // routing and IPVS FWMARK service was not functioning with value above 2^15
 func generateFwmark(ip, protocol, port string) (uint32, error) {
+	const maxFwMarkBitSize = 0x3FFF
 	h := fnv.New32a()
 	_, err := h.Write([]byte(ip + "-" + protocol + "-" + port))
 	if err != nil {
 		return 0, err
 	}
-	return h.Sum32() & 0x3FFF, err
+	return h.Sum32() & maxFwMarkBitSize, err
 }
 
 // ipvsAddFWMarkService: creates a IPVS service using FWMARK
@@ -1765,7 +1787,8 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 
 	for _, svc := range svcs {
 		if fwmark == svc.FWMark {
-			if (persistent && (svc.Flags&0x0001) == 0) || (!persistent && (svc.Flags&0x0001) != 0) {
+			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
+				(!persistent && (svc.Flags&ipvsPersistentFlagHex) != 0) {
 				ipvsSetPersistence(svc, persistent, persistentTimeout)
 
 				if changedIpvsSchedFlags(svc, flags) {
@@ -2381,7 +2404,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	// Sets it to 20 bytes less than the auto-detected MTU to account for additional ip-ip headers needed for DSR, above
 	// method GetMTUFromNodeIP() already accounts for the overhead of ip-ip overlay networking, so we only need to
 	// remove 20 bytes
-	nsc.dsrTCPMSS = automtu - 20
+	nsc.dsrTCPMSS = automtu - utils.IPInIPHeaderLength
 
 	nsc.podLister = podInformer.GetIndexer()
 

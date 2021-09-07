@@ -14,7 +14,31 @@ linters:
     - gocritic
     - gofmt
     - goimports
+    - gomnd
     - misspell
+issues:
+  exclude-rules:
+    # Excluding single digits from magic number detector because it produces too many obvious results (like klog)
+    - text: "Magic number: [0-9]{1},"
+      linters:
+        - gomnd
+    # Exclude file masks from magic number detector because these numbers are obvious
+    - text: "Magic number: 0[0-7]{3},"
+      linters:
+        - gomnd
+    # Exlude IP masks netmasks as substituting them for constants only makes these less obvious
+    - text: "Magic number: 255,"
+      linters:
+        - gomnd
+      path: pkg/controllers/proxy/network_services_controller.go
+    # Exclude IP netmasks from magic number detector because these numbers are obvious
+    - text: "Magic number: 32,"
+      linters:
+        - gomnd
+    # Exclude decimal bases from magic number detector because these numbers are obvious
+    - text: "Magic number: 10,"
+      linters:
+        - gomnd
 output:
   format: tab
   print-issued-lines: true

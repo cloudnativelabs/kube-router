@@ -13,6 +13,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const (
+	interfaceWaitSleepTime = 100 * time.Millisecond
+)
+
 func attemptNamespaceResetAfterError(hostNSHandle netns.NsHandle) {
 	err := netns.Set(hostNSHandle)
 	if err != nil {
@@ -76,7 +80,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 
 		// this is ugly, but ran into issue multiple times where interface did not come up quickly.
 		for retry := 0; retry < 60; retry++ {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(interfaceWaitSleepTime)
 			tunIf, err = netlink.LinkByName(KubeTunnelIf)
 			if err == nil {
 				break
