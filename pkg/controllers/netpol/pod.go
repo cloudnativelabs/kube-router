@@ -112,13 +112,13 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		activePodFwChains[podFwChainName] = true
 
 		// setup rules to run through applicable ingress/egress network policies for the pod
-		npc.setupPodNetpolRules(&pod, podFwChainName, networkPoliciesInfo, version)
+		npc.setupPodNetpolRules(pod, podFwChainName, networkPoliciesInfo, version)
 
 		// setup rules to intercept inbound traffic to the pods
-		npc.interceptPodInboundTraffic(&pod, podFwChainName)
+		npc.interceptPodInboundTraffic(pod, podFwChainName)
 
 		// setup rules to intercept inbound traffic to the pods
-		npc.interceptPodOutboundTraffic(&pod, podFwChainName)
+		npc.interceptPodOutboundTraffic(pod, podFwChainName)
 
 		err = dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
 		if err != nil {
@@ -136,7 +136,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 }
 
 // setup rules to jump to applicable network policy chains for the traffic from/to the pod
-func (npc *NetworkPolicyController) setupPodNetpolRules(pod *podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, version string) {
+func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainName string, networkPoliciesInfo []networkPolicyInfo, version string) {
 
 	hasIngressPolicy := false
 	hasEgressPolicy := false
@@ -191,7 +191,7 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod *podInfo, podFwChain
 
 }
 
-func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, podFwChainName string) {
+func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod podInfo, podFwChainName string) {
 	// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 	// this rule applies to the traffic getting routed (coming for other node pods)
 	comment := "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
@@ -217,7 +217,7 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod *podInfo, pod
 
 // setup iptable rules to intercept outbound traffic from pods and run it across the
 // firewall chain corresponding to the pod so that egress network policies are enforced
-func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod *podInfo, podFwChainName string) {
+func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod podInfo, podFwChainName string) {
 	for _, chain := range defaultChains {
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting forwarded/routed (traffic from the pod destined
