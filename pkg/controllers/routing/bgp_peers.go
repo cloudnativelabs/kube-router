@@ -248,18 +248,15 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 	}
 
 	if len(ips) != len(passwords) && len(passwords) != 0 {
-		return nil, errors.New("Invalid peer router config. " +
-			"The number of passwords should either be zero, or one per peer router." +
-			" Use blank items if a router doesn't expect a password.\n" +
-			"Example: \"pass,,pass\" OR [\"pass\",\"\",\"pass\"].")
+		return nil, errors.New("invalid peer router config. The number of passwords should either be zero, or " +
+			"one per peer router. Use blank items if a router doesn't expect a password. Example: \"pass,,pass\" " +
+			"OR [\"pass\",\"\",\"pass\"]")
 	}
 
 	if len(ips) != len(ports) && len(ports) != 0 {
-		return nil, errors.New("Invalid peer router config. " +
-			"The number of ports should either be zero, or one per peer router." +
-			" If blank items are used, it will default to standard BGP port, " +
-			strconv.Itoa(options.DefaultBgpPort) + "\n" +
-			"Example: \"port,,port\" OR [\"port\",\"\",\"port\"].")
+		return nil, fmt.Errorf("invalid peer router config. The number of ports should either be zero, or "+
+			"one per peer router. If blank items are used, it will default to standard BGP port, %s. "+
+			"Example: \"port,,port\" OR [\"port\",\"\",\"port\"]", strconv.Itoa(options.DefaultBgpPort))
 	}
 
 	for i := 0; i < len(ips); i++ {

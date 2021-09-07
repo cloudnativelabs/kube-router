@@ -21,6 +21,7 @@ linters:
     - nakedret
     - noctx
     - nolintlint
+    - stylecheck
 issues:
   exclude-rules:
     # Excluding single digits from magic number detector because it produces too many obvious results (like klog)

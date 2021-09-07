@@ -70,7 +70,7 @@ const (
 	asnMaxBitSize           = 32
 	bgpCommunityMaxSize     = 32
 	bgpCommunityMaxPartSize = 16
-	routeReflectorMaxId     = 32
+	routeReflectorMaxID     = 32
 	// Taken from: https://github.com/torvalds/linux/blob/master/include/uapi/linux/rtnetlink.h#L284
 	zebraRouteOriginator = 0x11
 )
@@ -916,7 +916,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 	if clusterid, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; ok {
 		klog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
-		_, err := strconv.ParseUint(clusterid, 0, routeReflectorMaxId)
+		_, err := strconv.ParseUint(clusterid, 0, routeReflectorMaxID)
 		if err != nil {
 			if ip := net.ParseIP(clusterid).To4(); ip == nil {
 				return errors.New("failed to parse rr.server clusterId specified for the node")
@@ -926,7 +926,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		nrc.bgpRRServer = true
 	} else if clusterid, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
 		klog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
-		_, err := strconv.ParseUint(clusterid, 0, routeReflectorMaxId)
+		_, err := strconv.ParseUint(clusterid, 0, routeReflectorMaxID)
 		if err != nil {
 			if ip := net.ParseIP(clusterid).To4(); ip == nil {
 				return errors.New("failed to parse rr.client clusterId specified for the node")

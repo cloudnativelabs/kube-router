@@ -1374,9 +1374,8 @@ func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
 		if exists {
 			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
 			if err != nil {
-				return fmt.Errorf("Failed to delete old/bad iptables rule to "+
-					"masquerade outbound IVPS traffic: %s.\n"+
-					"Masquerade all might still work, or bugs may persist after upgrade...",
+				return fmt.Errorf("failed to delete old/bad iptables rule to masquerade outbound IVPS "+
+					"traffic: %s. Masquerade all might still work, or bugs may persist after upgrade",
 					err)
 			}
 			klog.Infof("Deleted old/bad iptables rule to masquerade outbound traffic.")
