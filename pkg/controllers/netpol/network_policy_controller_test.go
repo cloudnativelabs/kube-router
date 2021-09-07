@@ -178,8 +178,8 @@ func newFakeNode(name string, addr string) *v1.Node {
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Status: v1.NodeStatus{
 			Capacity: v1.ResourceList{
-				v1.ResourceName(v1.ResourceCPU):    resource.MustParse("1"),
-				v1.ResourceName(v1.ResourceMemory): resource.MustParse("1G"),
+				v1.ResourceCPU:    resource.MustParse("1"),
+				v1.ResourceMemory: resource.MustParse("1G"),
 			},
 			Addresses: []v1.NodeAddress{{Type: v1.NodeExternalIP, Address: addr}},
 		},
