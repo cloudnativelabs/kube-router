@@ -199,7 +199,7 @@ func (ipset *IPSet) run(args ...string) (string, error) {
 }
 
 // Used to run ipset binary with arg and inject stdin buffer and return stdout.
-func (ipset *IPSet) runWithStdin(stdin *bytes.Buffer, args ...string) (string, error) {
+func (ipset *IPSet) runWithStdin(stdin *bytes.Buffer, args ...string) error {
 	var stderr bytes.Buffer
 	var stdout bytes.Buffer
 	cmd := exec.Cmd{
@@ -211,10 +211,10 @@ func (ipset *IPSet) runWithStdin(stdin *bytes.Buffer, args ...string) (string, e
 	}
 
 	if err := cmd.Run(); err != nil {
-		return "", errors.New(stderr.String())
+		return errors.New(stderr.String())
 	}
 
-	return stdout.String(), nil
+	return nil
 }
 
 // NewIPSet create a new IPSet with ipSetPath initialized.
@@ -347,7 +347,7 @@ func (set *Set) BatchAdd(addOptions [][]string) error {
 	restoreContents := builder.String()
 
 	// Invoke the command
-	_, err := set.Parent.runWithStdin(bytes.NewBufferString(restoreContents), "restore")
+	err := set.Parent.runWithStdin(bytes.NewBufferString(restoreContents), "restore")
 	if err != nil {
 		return err
 	}
@@ -548,7 +548,7 @@ func (ipset *IPSet) Save() error {
 // Send formatted ipset.sets into stdin of "ipset restore" command.
 func (ipset *IPSet) Restore() error {
 	stdin := bytes.NewBufferString(buildIPSetRestore(ipset))
-	_, err := ipset.runWithStdin(stdin, "restore", "-exist")
+	err := ipset.runWithStdin(stdin, "restore", "-exist")
 	if err != nil {
 		return err
 	}

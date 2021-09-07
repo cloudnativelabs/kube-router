@@ -1954,6 +1954,7 @@ func startInformersForRoutes(nrc *NetworkRoutingController, clientset kubernetes
 	nrc.nodeLister = nodeInformer.GetIndexer()
 }
 
+// nolint:unparam // it doesn't hurt anything to leave timeout here, and increases future flexibility for testing
 func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *testing.T) {
 	tick := time.Tick(100 * time.Millisecond)
 	timeoutCh := time.After(timeout)

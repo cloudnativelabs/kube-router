@@ -20,6 +20,7 @@ import (
 
 // Used for processing Annotations that may contain multiple items
 // Pass this the string and the delimiter
+// nolint:unparam // while delimiter is always "," for now it provides flexibility to leave the function this way
 func stringToSlice(s, d string) []string {
 	ss := make([]string, 0)
 	if strings.Contains(s, d) {

@@ -262,11 +262,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
-	activePodFwChains, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
-	if err != nil {
-		klog.Errorf("Aborting sync. Failed to sync pod firewalls: %v", err.Error())
-		return
-	}
+	activePodFwChains := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
 
 	// Makes sure that the ACCEPT rules for packets marked with "0x20000" are added to the end of each of kube-router's
 	// top level chains
