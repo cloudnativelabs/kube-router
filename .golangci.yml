@@ -23,6 +23,7 @@ linters:
     - nolintlint
     - stylecheck
     - unconvert
+    - unparam
 issues:
   exclude-rules:
     # Excluding single digits from magic number detector because it produces too many obvious results (like klog)

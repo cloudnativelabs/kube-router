@@ -74,11 +74,11 @@ func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
 }
 
 func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []networkPolicyInfo,
-	version string) (map[string]bool, error) {
+	version string) map[string]bool {
 
 	activePodFwChains := make(map[string]bool)
 
-	dropUnmarkedTrafficRules := func(podName, podNamespace, podFwChainName string) error {
+	dropUnmarkedTrafficRules := func(podName, podNamespace, podFwChainName string) {
 		// add rule to log the packets that will be dropped due to network policy enforcement
 		comment := "\"rule to log dropped traffic POD name:" + podName + " namespace: " + podNamespace + "\""
 		args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment,
@@ -87,7 +87,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// This used to be AppendUnique when we were using iptables directly, this checks to make sure we didn't drop
 		// unmarked for this chain already
 		if strings.Contains(npc.filterTableRules.String(), strings.Join(args, " ")) {
-			return nil
+			return
 		}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 
@@ -100,15 +100,10 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// reset mark to let traffic pass through rest of the chains
 		args = []string{"-A", podFwChainName, "-j", "MARK", "--set-mark", "0/0x10000", "\n"}
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
-
-		return nil
 	}
 
 	// loop through the pods running on the node
-	allLocalPods, err := npc.getLocalPods(npc.nodeIP.String())
-	if err != nil {
-		return nil, err
-	}
+	allLocalPods := npc.getLocalPods(npc.nodeIP.String())
 	for _, pod := range *allLocalPods {
 
 		// ensure pod specific firewall chain exist for all the pods that need ingress firewall
@@ -126,10 +121,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// setup rules to intercept inbound traffic to the pods
 		npc.interceptPodOutboundTraffic(pod, podFwChainName)
 
-		err = dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
-		if err != nil {
-			return nil, err
-		}
+		dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
 
 		// set mark to indicate traffic from/to the pod passed network policies.
 		// Mark will be checked to explicitly ACCEPT the traffic
@@ -139,7 +131,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
-	return activePodFwChains, nil
+	return activePodFwChains
 }
 
 // setup rules to jump to applicable network policy chains for the traffic from/to the pod
@@ -256,7 +248,7 @@ func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod podInfo, pod
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
 }
 
-func (npc *NetworkPolicyController) getLocalPods(nodeIP string) (*map[string]podInfo, error) {
+func (npc *NetworkPolicyController) getLocalPods(nodeIP string) *map[string]podInfo {
 	localPods := make(map[string]podInfo)
 	for _, obj := range npc.podLister.List() {
 		pod := obj.(*api.Pod)
@@ -269,7 +261,7 @@ func (npc *NetworkPolicyController) getLocalPods(nodeIP string) (*map[string]pod
 			namespace: pod.ObjectMeta.Namespace,
 			labels:    pod.ObjectMeta.Labels}
 	}
-	return &localPods, nil
+	return &localPods
 }
 
 func podFirewallChainName(namespace, podName string, version string) string {

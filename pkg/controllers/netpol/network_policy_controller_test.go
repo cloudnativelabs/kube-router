@@ -135,7 +135,7 @@ func tNewPodNamespaceMapFromTC(target map[string]string) tPodNamespaceMap {
 
 // tCreateFakePods creates the Pods and Namespaces that will be affected by the network policies
 //	returns a map like map[Namespace]map[PodName]bool
-func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) tPodNamespaceMap {
+func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) {
 	podNamespaceMap := make(tPodNamespaceMap)
 	pods := []podInfo{
 		{name: "Aa", labels: labels.Set{"app": "a"}, namespace: "nsA", ip: "1.1"},
@@ -169,7 +169,6 @@ func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInfo
 	for _, ns := range namespaces {
 		tAddToInformerStore(t, nsInformer, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns.name, Labels: ns.labels}})
 	}
-	return podNamespaceMap
 }
 
 // newFakeNode is a helper function for creating Nodes for testing.
@@ -188,7 +187,7 @@ func newFakeNode(name string, addr string) *v1.Node {
 
 // newUneventfulNetworkPolicyController returns new NetworkPolicyController object without any event handler
 func newUneventfulNetworkPolicyController(podInformer cache.SharedIndexInformer,
-	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) (*NetworkPolicyController, error) {
+	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) *NetworkPolicyController {
 
 	npc := NetworkPolicyController{}
 	npc.syncPeriod = time.Hour
@@ -199,7 +198,7 @@ func newUneventfulNetworkPolicyController(podInformer cache.SharedIndexInformer,
 	npc.nsLister = nsInformer.GetIndexer()
 	npc.npLister = npInformer.GetIndexer()
 
-	return &npc, nil
+	return &npc
 }
 
 // tNetpolTestCase helper struct to define the inputs to the test case (netpols) and
@@ -376,7 +375,7 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 	defer cancel()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
-	krNetPol, _ := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
+	krNetPol := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
 	tCreateFakePods(t, podInformer, nsInformer)
 	for _, test := range testCases {
 		test.netpol.createFakeNetpol(t, netpolInformer)
@@ -532,7 +531,7 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 	defer cancel()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
-	krNetPol, _ := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
+	krNetPol := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
 	tCreateFakePods(t, podInformer, nsInformer)
 	for _, test := range testCases {
 		test.netpol.createFakeNetpol(t, netpolInformer)
