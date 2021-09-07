@@ -45,7 +45,7 @@ FILE_ARCH=x86-64
 DOCKER_ARCH=
 endif
 $(info Building for GOARCH=$(GOARCH))
-all: test kube-router container ## Default target. Runs tests, builds binaries and images.
+all: lint test kube-router container ## Default target. Runs tests, builds binaries and images.
 
 kube-router:
 	@echo Starting kube-router binary build.
