@@ -41,12 +41,13 @@ const (
 	podSubnetsIPSetName  = "kube-router-pod-subnets"
 	nodeAddrsIPSetName   = "kube-router-node-ips"
 
-	nodeASNAnnotation                  = "kube-router.io/node.asn"
-	nodeCommunitiesAnnotation          = "kube-router.io/node.bgp.communities"
-	pathPrependASNAnnotation           = "kube-router.io/path-prepend.as"
-	pathPrependRepeatNAnnotation       = "kube-router.io/path-prepend.repeat-n"
-	peerASNAnnotation                  = "kube-router.io/peer.asns"
-	peerIPAnnotation                   = "kube-router.io/peer.ips"
+	nodeASNAnnotation            = "kube-router.io/node.asn"
+	nodeCommunitiesAnnotation    = "kube-router.io/node.bgp.communities"
+	pathPrependASNAnnotation     = "kube-router.io/path-prepend.as"
+	pathPrependRepeatNAnnotation = "kube-router.io/path-prepend.repeat-n"
+	peerASNAnnotation            = "kube-router.io/peer.asns"
+	peerIPAnnotation             = "kube-router.io/peer.ips"
+	// nolint:gosec // this is not a hardcoded password
 	peerPasswordAnnotation             = "kube-router.io/peer.passwords"
 	peerPortAnnotation                 = "kube-router.io/peer.ports"
 	rrClientAnnotation                 = "kube-router.io/rr.client"
@@ -678,6 +679,7 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 	// this interface
 	out, err = exec.Command("ip", "route", "list", "table", customRouteTableID).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "dev "+tunnelName+" scope") {
+		// nolint:gosec // this exec should be safe from command injection given the parameter's context
 		if out, err = exec.Command("ip", "route", "add", nextHop.String(), "dev", tunnelName, "table",
 			customRouteTableID).CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))

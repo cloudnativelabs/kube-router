@@ -1239,6 +1239,7 @@ func parseSchedFlags(value string) schedFlags {
 
 func shuffle(endPoints []endpointsInfo) []endpointsInfo {
 	for index1 := range endPoints {
+		// nolint:gosec // we don't need cryptographic randomness here
 		index2 := rand.Intn(index1 + 1)
 		endPoints[index1], endPoints[index2] = endPoints[index2], endPoints[index1]
 	}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	// nolint:gosec // we want to unconditionally expose pprof here for advanced troubleshooting scenarios
 	_ "net/http/pprof"
 
 	"github.com/cloudnativelabs/kube-router/pkg/cmd"

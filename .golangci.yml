@@ -15,6 +15,7 @@ linters:
     - gofmt
     - goimports
     - gomnd
+    - gosec
     - misspell
 issues:
   exclude-rules:
@@ -39,6 +40,10 @@ issues:
     - text: "Magic number: 10,"
       linters:
         - gomnd
+    # Exclude file mask security findings as we are always intentional about the file masks we use
+    - text: "G306:"
+      linters:
+        - gosec
 output:
   format: tab
   print-issued-lines: true
