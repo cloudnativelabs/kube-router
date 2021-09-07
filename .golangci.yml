@@ -19,6 +19,7 @@ linters:
     - gosimple
     - govet
     - ineffassign
+    - lll
     - misspell
 issues:
   exclude-rules:
@@ -47,6 +48,10 @@ issues:
     - text: "G306:"
       linters:
         - gosec
+    # Exlude tests from long line linter
+    - linters:
+        - lll
+      path: _test\.go
   # always show all issues rather than only showing 50 at a time
   max-issues-per-linter: 0
   # always show all issues of a type rather than showing 3

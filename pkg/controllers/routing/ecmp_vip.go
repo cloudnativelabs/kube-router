@@ -21,7 +21,8 @@ import (
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
 func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
-	klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
+	klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers",
+		vip, strconv.Itoa(32), nrc.nodeIP.String())
 
 	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 		Origin: 0,
@@ -47,7 +48,8 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
 // bgpWithdrawVIP  unadvertises the service vip
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
-	klog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers", vip, strconv.Itoa(32), nrc.nodeIP.String())
+	klog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers",
+		vip, strconv.Itoa(32), nrc.nodeIP.String())
 
 	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 		Origin: 0,
@@ -114,7 +116,8 @@ func getServiceObject(obj interface{}) (svc *v1core.Service) {
 
 func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 	if !nrc.bgpServerStarted {
-		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
+		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
+			svc.Namespace, svc.Name)
 		return
 	}
 
@@ -137,7 +140,8 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 func (nrc *NetworkRoutingController) handleServiceDelete(svc *v1core.Service) {
 
 	if !nrc.bgpServerStarted {
-		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync", svc.Namespace, svc.Name)
+		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
+			svc.Namespace, svc.Name)
 		return
 	}
 
@@ -172,9 +176,9 @@ func (nrc *NetworkRoutingController) tryHandleServiceUpdate(obj interface{}, log
 		klog.V(1).Infof(logMsgFormat, svc.Namespace, svc.Name)
 
 		// If the service is headless and the previous version of the service is either non-existent or also headless,
-		// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we don't
-		// need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now, it was a
-		// ClusterIP before.
+		// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we
+		// don't need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now,
+		// it was a ClusterIP before.
 		if utils.ServiceIsHeadless(obj) {
 			klog.V(1).Infof("%s/%s is headless, skipping...", svc.Namespace, svc.Name)
 			return
@@ -312,7 +316,8 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 
 	klog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
 	if !nrc.bgpServerStarted {
-		klog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync", ep.Namespace, ep.Name)
+		klog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync",
+			ep.Namespace, ep.Name)
 		return
 	}
 
@@ -406,7 +411,8 @@ OUTER:
 	for _, withdrawVIP := range toWithdrawList {
 		for _, advertiseVIP := range toAdvertiseList {
 			if withdrawVIP == advertiseVIP {
-				// if there is a VIP that is set to both be advertised and withdrawn, don't add it to the final withdraw list
+				// if there is a VIP that is set to both be advertised and withdrawn, don't add it to the final
+				// withdraw list
 				continue OUTER
 			}
 		}
@@ -416,7 +422,8 @@ OUTER:
 	return toAdvertiseList, finalToWithdrawList, nil
 }
 
-func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service, annotation string, defaultValue bool) bool {
+func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service, annotation string,
+	defaultValue bool) bool {
 	returnValue := defaultValue
 	stringValue, exists := svc.Annotations[annotation]
 	if exists {
@@ -426,7 +433,8 @@ func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service,
 	return returnValue
 }
 
-func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service, onlyActiveEndpoints bool) ([]string, []string, error) {
+func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service,
+	onlyActiveEndpoints bool) ([]string, []string, error) {
 
 	advertise := true
 
@@ -468,7 +476,8 @@ func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) [
 
 	// Deprecated: Use service.advertise.loadbalancer=false instead of service.skiplbips.
 	_, skiplbips := svc.Annotations[svcSkipLbIpsAnnotation]
-	advertiseLoadBalancer := nrc.shouldAdvertiseService(svc, svcAdvertiseLoadBalancerAnnotation, nrc.advertiseLoadBalancerIP)
+	advertiseLoadBalancer := nrc.shouldAdvertiseService(svc, svcAdvertiseLoadBalancerAnnotation,
+		nrc.advertiseLoadBalancerIP)
 	if advertiseLoadBalancer && !skiplbips {
 		ipList = append(ipList, nrc.getLoadBalancerIPs(svc)...)
 	}

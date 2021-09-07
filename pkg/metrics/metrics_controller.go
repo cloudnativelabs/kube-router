@@ -169,7 +169,8 @@ type Controller struct {
 }
 
 // Run prometheus metrics controller
-func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
+	wg *sync.WaitGroup) {
 	t := time.NewTicker(metricsControllerTickTime)
 	defer wg.Done()
 	klog.Info("Starting metrics controller")

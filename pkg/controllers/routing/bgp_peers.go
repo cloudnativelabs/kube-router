@@ -182,9 +182,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	}
 }
 
-// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
-func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer, bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration,
-	bgpGracefulRestartTime time.Duration, peerMultihopTTL uint8) error {
+// connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
+func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer, bgpGracefulRestart bool,
+	bgpGracefulRestartDeferralTime time.Duration, bgpGracefulRestartTime time.Duration, peerMultihopTTL uint8) error {
 	for _, n := range peerNeighbors {
 
 		if bgpGracefulRestart {
@@ -303,7 +303,8 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			node := obj.(*v1core.Node)
 			nodeIP, err := utils.GetNodeIP(node)
 			if err != nil {
-				klog.Errorf("New node received, but we were unable to add it as we were couldn't find it's node IP: %v", err)
+				klog.Errorf(
+					"New node received, but we were unable to add it as we were couldn't find it's node IP: %v", err)
 				return
 			}
 
@@ -332,7 +333,8 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			if err == nil {
 				klog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
 			} else {
-				klog.Infof("Received node (IP unavailable) removed update from watch API, so remove node from peer")
+				klog.Infof("Received node (IP unavailable) removed update from watch API, so remove node " +
+					"from peer")
 			}
 
 			nrc.OnNodeUpdate(obj)

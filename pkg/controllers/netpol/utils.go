@@ -18,7 +18,8 @@ const (
 // finds a relevant change, it returns true otherwise it returns false. The things we care about for NetworkPolicies:
 // 1) Is the phase of the pod changing? (matters for catching completed, succeeded, or failed jobs)
 // 2) Is the pod IP changing? (changes how the network policy is applied to the host)
-// 3) Is the pod's host IP changing? (should be caught in the above, with the CNI kube-router runs with but we check this as well for sanity)
+// 3) Is the pod's host IP changing? (should be caught in the above, with the CNI kube-router runs with but we check
+//     this as well for sanity)
 // 4) Is a pod's label changing? (potentially changes which NetworkPolicies select this pod)
 func isPodUpdateNetPolRelevant(oldPod, newPod *api.Pod) bool {
 	return newPod.Status.Phase != oldPod.Status.Phase ||
@@ -33,7 +34,8 @@ func isNetPolActionable(pod *api.Pod) bool {
 }
 
 func isFinished(pod *api.Pod) bool {
-	// nolint:exhaustive // We don't care about PodPending, PodRunning, PodUnknown here as we want those to fall into the false case
+	// nolint:exhaustive // We don't care about PodPending, PodRunning, PodUnknown here as we want those to fall
+	// into the false case
 	switch pod.Status.Phase {
 	case api.PodFailed, api.PodSucceeded, PodCompleted:
 		return true
@@ -46,7 +48,8 @@ func validateNodePortRange(nodePortOption string) (string, error) {
 
 	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]([0-9]+)$`)
 	if matched := nodePortValidator.MatchString(nodePortOption); !matched {
-		return "", fmt.Errorf("failed to parse node port range given: '%s' please see specification in help text", nodePortOption)
+		return "", fmt.Errorf(
+			"failed to parse node port range given: '%s' please see specification in help text", nodePortOption)
 	}
 	matches := nodePortValidator.FindStringSubmatch(nodePortOption)
 	if len(matches) != 3 {

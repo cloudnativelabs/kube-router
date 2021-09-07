@@ -20,14 +20,17 @@ const (
 func attemptNamespaceResetAfterError(hostNSHandle netns.NsHandle) {
 	err := netns.Set(hostNSHandle)
 	if err != nil {
-		klog.Errorf("failed to set hostNetworkNamespace while resetting namespace after a previous error due to " + err.Error())
+		klog.Errorf("failed to set hostNetworkNamespace while resetting namespace after a previous error due to %v",
+			err)
 	}
 	activeNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
-		klog.Errorf("failed to confirm activeNetworkNamespace while resetting namespace after a previous error due to " + err.Error())
+		klog.Errorf("failed to confirm activeNetworkNamespace while resetting namespace after "+
+			"a previous error due to %v", err)
 		return
 	}
-	klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: " + activeNetworkNamespaceHandle.String())
+	klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: %s",
+		activeNetworkNamespaceHandle.String())
 	_ = activeNetworkNamespaceHandle.Close()
 }
 
@@ -86,7 +89,8 @@ func (ln *linuxNetworking) configureContainerForDSR(
 				break
 			}
 			if err.Error() == IfaceNotFound {
-				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying", KubeTunnelIf)
+				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying",
+					KubeTunnelIf)
 				continue
 			} else {
 				break
@@ -98,7 +102,8 @@ func (ln *linuxNetworking) configureContainerForDSR(
 			return fmt.Errorf("failed to get %s tunnel interface handle due to %v", KubeTunnelIf, err)
 		}
 
-		klog.V(2).Infof("Successfully created tunnel interface %s in endpoint %s.", KubeTunnelIf, endpointIP)
+		klog.V(2).Infof("Successfully created tunnel interface %s in endpoint %s.",
+			KubeTunnelIf, endpointIP)
 	}
 
 	// bring the tunnel interface up
@@ -117,7 +122,8 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	klog.Infof("Successfully assigned VIP: %s in endpoint %s.", vip, endpointIP)
 
 	// disable rp_filter on all interface
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter", []byte(strconv.Itoa(0)), 0640)
+	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter",
+		[]byte(strconv.Itoa(0)), 0640)
 	if err != nil {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 		return fmt.Errorf("failed to disable rp_filter on kube-tunnel-if in the endpoint container")
