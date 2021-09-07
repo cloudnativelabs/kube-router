@@ -16,6 +16,9 @@ linters:
     - goimports
     - gomnd
     - gosec
+    - gosimple
+    - govet
+    - ineffassign
     - misspell
 issues:
   exclude-rules:
@@ -44,6 +47,10 @@ issues:
     - text: "G306:"
       linters:
         - gosec
+  # always show all issues rather than only showing 50 at a time
+  max-issues-per-linter: 0
+  # always show all issues of a type rather than showing 3
+  max-same-issues: 0
 output:
   format: tab
   print-issued-lines: true
