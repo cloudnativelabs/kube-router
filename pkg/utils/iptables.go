@@ -72,7 +72,8 @@ func Restore(table string, data []byte) error {
 	return nil
 }
 
-// AppendUnique ensures that rule is in chain only once in the buffer and that the occurrence is at the end of the buffer
+// AppendUnique ensures that rule is in chain only once in the buffer and that the occurrence is at the end of the
+// buffer
 func AppendUnique(buffer bytes.Buffer, chain string, rule []string) bytes.Buffer {
 	var desiredBuffer bytes.Buffer
 

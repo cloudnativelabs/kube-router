@@ -28,61 +28,125 @@ const (
 	// DefaultHasSize Defaul OptionHashSize value.
 	DefaultHasSize = "1024"
 
-	// TypeHashIP The hash:ip set type uses a hash to store IP host addresses (default) or network addresses. Zero valued IP address cannot be stored in a hash:ip type of set.
+	// TypeHashIP The hash:ip set type uses a hash to store IP host addresses (default) or network addresses. Zero
+	// valued IP address cannot be stored in a hash:ip type of set.
 	TypeHashIP = "hash:ip"
-	// TypeHashMac The hash:mac set type uses a hash to store MAC addresses. Zero valued MAC addresses cannot be stored in a hash:mac type of set.
+	// TypeHashMac The hash:mac set type uses a hash to store MAC addresses. Zero valued MAC addresses cannot be stored
+	// in a hash:mac type of set.
 	TypeHashMac = "hash:mac"
-	// TypeHashNet The hash:net set type uses a hash to store different sized IP network addresses. Network address with zero prefix size cannot be stored in this type of sets.
+	// TypeHashNet The hash:net set type uses a hash to store different sized IP network addresses. Network address with
+	// zero prefix size cannot be stored in this type of sets.
 	TypeHashNet = "hash:net"
-	// TypeHashNetNet The hash:net,net set type uses a hash to store pairs of different sized IP network addresses. Bear in mind that the first parameter has precedence over the second, so a nomatch entry could be potentially be ineffective if a more specific first parameter existed with a suitable second parameter. Network address with zero prefix size cannot be stored in this type of set.
+	// TypeHashNetNet The hash:net,net set type uses a hash to store pairs of different sized IP network addresses. Bear
+	// in mind that the first parameter has precedence over the second, so a nomatch entry could be potentially be
+	// ineffective if a more specific first parameter existed with a suitable second parameter. Network address with
+	// zero prefix size cannot be stored in this type of set.
 	TypeHashNetNet = "hash:net,net"
-	// TypeHashIPPort The hash:ip,port set type uses a hash to store IP address and port number pairs. The port number is interpreted together with a protocol (default TCP) and zero protocol number cannot be used.
+	// TypeHashIPPort The hash:ip,port set type uses a hash to store IP address and port number pairs. The port number
+	// is interpreted together with a protocol (default TCP) and zero protocol number cannot be used.
 	TypeHashIPPort = "hash:ip,port"
-	// TypeHashNetPort The hash:net,port set type uses a hash to store different sized IP network address and port pairs. The port number is interpreted together with a protocol (default TCP) and zero protocol number cannot be used. Network address with zero prefix size is not accepted either.
+	// TypeHashNetPort The hash:net,port set type uses a hash to store different sized IP network address and port
+	// pairs. The port number is interpreted together with a protocol (default TCP) and zero protocol number cannot be
+	// used. Network address with zero prefix size is not accepted either.
 	TypeHashNetPort = "hash:net,port"
-	// TypeHashIPPortIP The hash:ip,port,ip set type uses a hash to store IP address, port number and a second IP address triples. The port number is interpreted together with a protocol (default TCP) and zero protocol number cannot be used.
+	// TypeHashIPPortIP The hash:ip,port,ip set type uses a hash to store IP address, port number and a second IP
+	// address triples. The port number is interpreted together with a protocol (default TCP) and zero protocol number
+	// cannot be used.
 	TypeHashIPPortIP = "hash:ip,port,ip"
-	// TypeHashIPPortNet The hash:ip,port,net set type uses a hash to store IP address, port number and IP network address triples. The port number is interpreted together with a protocol (default TCP) and zero protocol number cannot be used. Network address with zero prefix size cannot be stored either.
+	// TypeHashIPPortNet The hash:ip,port,net set type uses a hash to store IP address, port number and IP network
+	// address triples. The port number is interpreted together with a protocol (default TCP) and zero protocol number
+	// cannot be used. Network address with zero prefix size cannot be stored either.
 	TypeHashIPPortNet = "hash:ip,port,net"
 	// TypeHashIPMark The hash:ip,mark set type uses a hash to store IP address and packet mark pairs.
 	TypeHashIPMark = "hash:ip,mark"
-	// TypeHashIPNetPortNet The hash:net,port,net set type behaves similarly to hash:ip,port,net but accepts a cidr value for both the first and last parameter. Either subnet is permitted to be a /0 should you wish to match port between all destinations.
+	// TypeHashIPNetPortNet The hash:net,port,net set type behaves similarly to hash:ip,port,net but accepts a cidr
+	// value for both the first and last parameter. Either subnet is permitted to be a /0 should you wish to match port
+	// between all destinations.
 	TypeHashIPNetPortNet = "hash:net,port,net"
-	// TypeHashNetIface The hash:net,iface set type uses a hash to store different sized IP network address and interface name pairs.
+	// TypeHashNetIface The hash:net,iface set type uses a hash to store different sized IP network address and
+	// interface name pairs.
 	TypeHashNetIface = "hash:net,iface"
 	// TypeListSet The list:set type uses a simple list in which you can store set names.
 	TypeListSet = "list:set"
 
-	// OptionTimeout All set types supports the optional timeout parameter when creating a set and adding entries. The value of the timeout parameter for the create command means the default timeout value (in seconds) for new entries. If a set is created with timeout support, then the same timeout option can be used to specify non-default timeout values when adding entries. Zero timeout value means the entry is added permanent to the set. The timeout value of already added elements can be changed by readding the element using the -exist option. When listing the set, the number of entries printed in the header might be larger than the listed number of entries for sets with the timeout extensions: the number of entries in the set is updated when elements added/deleted to the set and periodically when the garbage colletor evicts the timed out entries.`
+	// OptionTimeout All set types supports the optional timeout parameter when creating a set and adding entries. The
+	// value of the timeout parameter for the create command means the default timeout value (in seconds) for new
+	// entries. If a set is created with timeout support, then the same timeout option can be used to specify
+	// non-default timeout values when adding entries. Zero timeout value means the entry is added permanent to the
+	// set. The timeout value of already added elements can be changed by readding the element using the -exist option.
+	// When listing the set, the number of entries printed in the header might be larger than the listed number of
+	// entries for sets with the timeout extensions: the number of entries in the set is updated when elements
+	// added/deleted to the set and periodically when the garbage colletor evicts the timed out entries.
 	OptionTimeout = "timeout"
-	// OptionCounters All set types support the optional counters option when creating a set. If the option is specified then the set is created with packet and byte counters per element support. The packet and byte counters are initialized to zero when the elements are (re-)added to the set, unless the packet and byte counter values are explicitly specified by the packets and bytes options. An example when an element is added to a set with non-zero counter values.
+	// OptionCounters All set types support the optional counters option when creating a set. If the option is specified
+	// then the set is created with packet and byte counters per element support. The packet and byte counters are
+	// initialized to zero when the elements are (re-)added to the set, unless the packet and byte counter values are
+	// explicitly specified by the packets and bytes options. An example when an element is added to a set with non-zero
+	// counter values.
 	OptionCounters = "counters"
-	// OptionPackets All set types support the optional counters option when creating a set. If the option is specified then the set is created with packet and byte counters per element support. The packet and byte counters are initialized to zero when the elements are (re-)added to the set, unless the packet and byte counter values are explicitly specified by the packets and bytes options. An example when an element is added to a set with non-zero counter values.
+	// OptionPackets All set types support the optional counters option when creating a set. If the option is specified
+	// then the set is created with packet and byte counters per element support. The packet and byte counters are
+	// initialized to zero when the elements are (re-)added to the set, unless the packet and byte counter values are
+	// explicitly specified by the packets and bytes options. An example when an element is added to a set with non-zero
+	// counter values.
 	OptionPackets = "packets"
-	// OptionBytes All set types support the optional counters option when creating a set. If the option is specified then the set is created with packet and byte counters per element support. The packet and byte counters are initialized to zero when the elements are (re-)added to the set, unless the packet and byte counter values are explicitly specified by the packets and bytes options. An example when an element is added to a set with non-zero counter values.
+	// OptionBytes All set types support the optional counters option when creating a set. If the option is specified
+	// then the set is created with packet and byte counters per element support. The packet and byte counters are
+	// initialized to zero when the elements are (re-)added to the set, unless the packet and byte counter values are
+	// explicitly specified by the packets and bytes options. An example when an element is added to a set with non-zero
+	// counter values.
 	OptionBytes = "bytes"
-	// OptionComment All set types support the optional comment extension. Enabling this extension on an ipset enables you to annotate an ipset entry with an arbitrary string. This string is completely ignored by both the kernel and ipset itself and is purely for providing a convenient means to document the reason for an entry's existence. Comments must not contain any quotation marks and the usual escape character (\) has no meaning
+	// OptionComment All set types support the optional comment extension. Enabling this extension on an ipset enables
+	// you to annotate an ipset entry with an arbitrary string. This string is completely ignored by both the kernel and
+	// ipset itself and is purely for providing a convenient means to document the reason for an entry's existence.
+	// Comments must not contain any quotation marks and the usual escape character (\) has no meaning.
 	OptionComment = "comment"
-	// OptionSkbinfo All set types support the optional skbinfo extension. This extension allow to store the metainfo (firewall mark, tc class and hardware queue) with every entry and map it to packets by usage of SET netfilter target with --map-set option. skbmark option format: MARK or MARK/MASK, where MARK and MASK are 32bit hex numbers with 0x prefix. If only mark is specified mask 0xffffffff are used. skbprio option has tc class format: MAJOR:MINOR, where major and minor numbers are hex without 0x prefix. skbqueue option is just decimal number.
+	// OptionSkbinfo All set types support the optional skbinfo extension. This extension allow to store the metainfo
+	// (firewall mark, tc class and hardware queue) with every entry and map it to packets by usage of SET netfilter
+	// target with --map-set option. skbmark option format: MARK or MARK/MASK, where MARK and MASK are 32bit hex numbers
+	// with 0x prefix. If only mark is specified mask 0xffffffff are used. skbprio option has tc class format:
+	// MAJOR:MINOR, where major and minor numbers are hex without 0x prefix. skbqueue option is just decimal number.
 	OptionSkbinfo = "skbinfo"
-	// OptionSkbmark All set types support the optional skbinfo extension. This extension allow to store the metainfo (firewall mark, tc class and hardware queue) with every entry and map it to packets by usage of SET netfilter target with --map-set option. skbmark option format: MARK or MARK/MASK, where MARK and MASK are 32bit hex numbers with 0x prefix. If only mark is specified mask 0xffffffff are used. skbprio option has tc class format: MAJOR:MINOR, where major and minor numbers are hex without 0x prefix. skbqueue option is just decimal number.
+	// OptionSkbmark All set types support the optional skbinfo extension. This extension allow to store the metainfo
+	// (firewall mark, tc class and hardware queue) with every entry and map it to packets by usage of SET netfilter
+	// target with --map-set option. skbmark option format: MARK or MARK/MASK, where MARK and MASK are 32bit hex numbers
+	// with 0x prefix. If only mark is specified mask 0xffffffff are used. skbprio option has tc class format:
+	//MAJOR:MINOR, where major and minor numbers are hex without 0x prefix. skbqueue option is just decimal number.
 	OptionSkbmark = "skbmark"
-	// OptionSkbprio All set types support the optional skbinfo extension. This extension allow to store the metainfo (firewall mark, tc class and hardware queue) with every entry and map it to packets by usage of SET netfilter target with --map-set option. skbmark option format: MARK or MARK/MASK, where MARK and MASK are 32bit hex numbers with 0x prefix. If only mark is specified mask 0xffffffff are used. skbprio option has tc class format: MAJOR:MINOR, where major and minor numbers are hex without 0x prefix. skbqueue option is just decimal number.
+	// OptionSkbprio All set types support the optional skbinfo extension. This extension allow to store the metainfo
+	// (firewall mark, tc class and hardware queue) with every entry and map it to packets by usage of SET netfilter
+	// target with --map-set option. skbmark option format: MARK or MARK/MASK, where MARK and MASK are 32bit hex numbers
+	// with 0x prefix. If only mark is specified mask 0xffffffff are used. skbprio option has tc class format:
+	// MAJOR:MINOR, where major and minor numbers are hex without 0x prefix. skbqueue option is just decimal number.
 	OptionSkbprio = "skbprio"
-	// OptionSkbqueue All set types support the optional skbinfo extension. This extension allow to store the metainfo (firewall mark, tc class and hardware queue) with every entry and map it to packets by usage of SET netfilter target with --map-set option. skbmark option format: MARK or MARK/MASK, where MARK and MASK are 32bit hex numbers with 0x prefix. If only mark is specified mask 0xffffffff are used. skbprio option has tc class format: MAJOR:MINOR, where major and minor numbers are hex without 0x prefix. skbqueue option is just decimal number.
+	// OptionSkbqueue All set types support the optional skbinfo extension. This extension allow to store the metainfo
+	// (firewall mark, tc class and hardware queue) with every entry and map it to packets by usage of SET netfilter
+	// target with --map-set option. skbmark option format: MARK or MARK/MASK, where MARK and MASK are 32bit hex numbers
+	// with 0x prefix. If only mark is specified mask 0xffffffff are used. skbprio option has tc class format:
+	// MAJOR:MINOR, where major and minor numbers are hex without 0x prefix. skbqueue option is just decimal number.
 	OptionSkbqueue = "skbqueue"
-	// OptionHashSize This parameter is valid for the create command of all hash type sets. It defines the initial hash size for the set, default is 1024. The hash size must be a power of two, the kernel automatically rounds up non power of two hash sizes to the first correct value.
+	// OptionHashSize This parameter is valid for the create command of all hash type sets. It defines the initial hash
+	// size for the set, default is 1024. The hash size must be a power of two, the kernel automatically rounds up non
+	// power of two hash sizes to the first correct value.
 	OptionHashSize = "hashsize"
-	// OptionMaxElem This parameter is valid for the create command of all hash type sets. It does define the maximal number of elements which can be stored in the set, default 65536.
+	// OptionMaxElem This parameter is valid for the create command of all hash type sets. It does define the maximal
+	// number of elements which can be stored in the set, default 65536.
 	OptionMaxElem = "maxelem"
-	// OptionFamilly This parameter is valid for the create command of all hash type sets except for hash:mac. It defines the protocol family of the IP addresses to be stored in the set. The default is inet, i.e IPv4.
+	// OptionFamilly This parameter is valid for the create command of all hash type sets except for hash:mac. It
+	// defines the protocol family of the IP addresses to be stored in the set. The default is inet, i.e IPv4.
 	OptionFamilly = "family"
-	// OptionNoMatch The hash set types which can store net type of data (i.e. hash:*net*) support the optional nomatch option when adding entries. When matching elements in the set, entries marked as nomatch are skipped as if those were not added to the set, which makes possible to build up sets with exceptions. See the example at hash type hash:net below. When elements are tested by ipset, the nomatch flags are taken into account. If one wants to test the existence of an element marked with nomatch in a set, then the flag must be specified too.
+	// OptionNoMatch The hash set types which can store net type of data (i.e. hash:*net*) support the optional nomatch
+	// option when adding entries. When matching elements in the set, entries marked as nomatch are skipped as if those
+	// were not added to the set, which makes possible to build up sets with exceptions. See the example at hash type
+	// hash:net below. When elements are tested by ipset, the nomatch flags are taken into account. If one wants to test
+	// the existence of an element marked with nomatch in a set, then the flag must be specified too.
 	OptionNoMatch = "nomatch"
-	// OptionForceAdd All hash set types support the optional forceadd parameter when creating a set. When sets created with this option become full the next addition to the set may succeed and evict a random entry from the set.
+	// OptionForceAdd All hash set types support the optional forceadd parameter when creating a set. When sets created
+	// with this option become full the next addition to the set may succeed and evict a random entry from the set.
 	OptionForceAdd = "forceadd"
 
-	// tmpIPSetPrefix Is the prefix added to temporary ipset names used in the atomic swap operations during ipset restore. You should never see these on your system because they only exist during the restore.
+	// tmpIPSetPrefix Is the prefix added to temporary ipset names used in the atomic swap operations during ipset
+	// restore. You should never see these on your system because they only exist during the restore.
 	tmpIPSetPrefix = "TMP-"
 )
 

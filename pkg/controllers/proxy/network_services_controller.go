@@ -96,7 +96,8 @@ var (
 
 type ipvsCalls interface {
 	ipvsNewService(ipvsSvc *ipvs.Service) error
-	ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
+	ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool,
+		persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
 	ipvsDelService(ipvsSvc *ipvs.Service) error
 	ipvsUpdateService(ipvsSvc *ipvs.Service) error
 	ipvsGetServices() ([]*ipvs.Service, error)
@@ -105,7 +106,8 @@ type ipvsCalls interface {
 	ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
 	ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error)
 	ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
-	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
+	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32,
+		scheduler string, flags schedFlags) (*ipvs.Service, error)
 }
 
 type netlinkCalls interface {
@@ -115,7 +117,8 @@ type netlinkCalls interface {
 	getKubeDummyInterface() (netlink.Link, error)
 	setupRoutesForExternalIPForDSR(serviceInfoMap) error
 	prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) error
-	configureContainerForDSR(vip, endpointIP, containerID string, pid int, hostNetworkNamespaceHandle netns.NsHandle) error
+	configureContainerForDSR(vip, endpointIP, containerID string, pid int,
+		hostNetworkNamespaceHandle netns.NsHandle) error
 	setupPolicyRoutingForDSR() error
 	cleanupMangleTableRule(ip string, protocol string, port string, fwmark string, tcpMSS int) error
 }
@@ -132,7 +135,9 @@ type linuxNetworking struct {
 }
 
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
-	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
+	naddr := &netlink.Addr{IPNet: &net.IPNet{
+		IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255),
+	}, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrDel(iface, naddr)
 	if err != nil && err.Error() != IfaceHasNoAddr {
 		klog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
@@ -140,10 +145,12 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 	}
 	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
 	if err == nil {
-		out, err := exec.Command("ip", "route", "delete", "local", ip, "dev", KubeDummyIf, "table", "local", "proto", "kernel", "scope", "host", "src",
+		out, err := exec.Command("ip", "route", "delete", "local", ip, "dev", KubeDummyIf,
+			"table", "local", "proto", "kernel", "scope", "host", "src",
 			NodeIP.String(), "table", "local").CombinedOutput()
 		if err != nil && !strings.Contains(string(out), "No such process") {
-			klog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KubeDummyIf, err, out)
+			klog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s",
+				ip, KubeDummyIf, err, out)
 		}
 	}
 	return err
@@ -153,7 +160,9 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 // to kube-dummy-if. Also when DSR is used, used to assign VIP to dummy interface
 // inside the container.
 func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute bool) error {
-	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255)}, Scope: syscall.RT_SCOPE_LINK}
+	naddr := &netlink.Addr{IPNet: &net.IPNet{
+		IP: net.ParseIP(ip), Mask: net.IPv4Mask(255, 255, 255, 255),
+	}, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrAdd(iface, naddr)
 	if err != nil && err.Error() != IfaceHasAddr {
 		klog.Errorf("Failed to assign cluster ip %s to dummy interface: %s",
@@ -172,10 +181,12 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 
 	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
 	// route is not replaced. For now do it with command.
-	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KubeDummyIf, "table", "local", "proto", "kernel", "scope", "host", "src",
+	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KubeDummyIf,
+		"table", "local", "proto", "kernel", "scope", "host", "src",
 		NodeIP.String(), "table", "local").CombinedOutput()
 	if err != nil {
-		klog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s", ip, KubeDummyIf, err, out)
+		klog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s",
+			ip, KubeDummyIf, err, out)
 	}
 	return nil
 }
@@ -318,7 +329,8 @@ type endpointsInfo struct {
 type endpointsInfoMap map[string][]endpointsInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
-func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat,
+	stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
 	defer wg.Done()
@@ -657,7 +669,7 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 		ipvsFirewallInputChainRule := getIpvsFirewallInputChainRule()
 		exists, err := iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
 		if err != nil {
-			// Changing to level 1 logging as errors occur when ipsets have already been cleaned and needlessly worries users
+			// Changed to level 1 as errors occur when ipsets have already been cleaned and needlessly worries users
 			klog.V(1).Infof("failed to check if iptables rules exists: %v", err)
 		} else if exists {
 			err = iptablesCmdHandler.Delete("filter", "INPUT", ipvsFirewallInputChainRule...)
@@ -867,7 +879,8 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 
 			if pushMetric {
 
-				klog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)", svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
+				klog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)",
+					svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
 
 				labelValues := []string{
 					svc.namespace,
@@ -950,7 +963,9 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 	defer nsc.mu.Unlock()
 	klog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
 	if !nsc.readyForUpdates {
-		klog.V(3).Infof("Skipping update to endpoint: %s/%s as controller is not ready to process service and endpoints updates", ep.Namespace, ep.Name)
+		klog.V(3).Infof(
+			"Skipping update to endpoint: %s/%s as controller is not ready to process service and endpoints updates",
+			ep.Namespace, ep.Name)
 		return
 	}
 
@@ -968,7 +983,8 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 		return
 	}
 	if utils.ServiceIsHeadless(svc) {
-		klog.V(1).Infof("The service associated with endpoint: %s/%s is headless, skipping...", ep.Namespace, ep.Name)
+		klog.V(1).Infof("The service associated with endpoint: %s/%s is headless, skipping...",
+			ep.Namespace, ep.Name)
 		return
 	}
 
@@ -982,7 +998,8 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *api.Endpoints) {
 		klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
 		nsc.sync(synctypeIpvs)
 	} else {
-		klog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", ep.Namespace, ep.Name)
+		klog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed",
+			ep.Namespace, ep.Name)
 	}
 }
 
@@ -994,7 +1011,9 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *api.Service) {
 
 	klog.V(1).Infof("Received update to service: %s/%s from watch API", svc.Namespace, svc.Name)
 	if !nsc.readyForUpdates {
-		klog.V(3).Infof("Skipping update to service: %s/%s as controller is not ready to process service and endpoints updates", svc.Namespace, svc.Name)
+		klog.V(3).Infof(
+			"Skipping update to service: %s/%s as controller is not ready to process service and endpoints updates",
+			svc.Namespace, svc.Name)
 		return
 	}
 
@@ -1017,7 +1036,8 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *api.Service) {
 		klog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
 		nsc.sync(synctypeIpvs)
 	} else {
-		klog.V(1).Infof("Skipping syncing IPVS services for update to service: %s/%s as nothing changed", svc.Namespace, svc.Name)
+		klog.V(1).Infof("Skipping syncing IPVS services for update to service: %s/%s as nothing changed",
+			svc.Namespace, svc.Name)
 	}
 }
 
@@ -1138,12 +1158,14 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 		svc := obj.(*api.Service)
 
 		if utils.ClusterIPIsNoneOrBlank(svc.Spec.ClusterIP) {
-			klog.V(2).Infof("Skipping service name:%s namespace:%s as there is no cluster IP", svc.Name, svc.Namespace)
+			klog.V(2).Infof("Skipping service name:%s namespace:%s as there is no cluster IP",
+				svc.Name, svc.Namespace)
 			continue
 		}
 
 		if svc.Spec.Type == "ExternalName" {
-			klog.V(2).Infof("Skipping service name:%s namespace:%s due to service Type=%s", svc.Name, svc.Namespace, svc.Spec.Type)
+			klog.V(2).Infof("Skipping service name:%s namespace:%s due to service Type=%s",
+				svc.Name, svc.Namespace, svc.Spec.Type)
 			continue
 		}
 
@@ -1195,7 +1217,8 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == api.ServiceAffinityClientIP
 
 			if svcInfo.sessionAffinity {
-				// Kube-apiserver side guarantees SessionAffinityConfig won't be nil when session affinity type is ClientIP"
+				// Kube-apiserver side guarantees SessionAffinityConfig won't be nil when session affinity
+				// type is ClientIP
 				// https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/v1/defaults.go#L106
 				svcInfo.sessionAffinityTimeoutSeconds = *svc.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds
 			}
@@ -1274,7 +1297,8 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
 	}
-	var args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
+	var args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ",
+		"-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
 	if iptablesCmdHandler.HasRandomFully() {
 		args = append(args, "--random-fully")
 	}
@@ -1299,8 +1323,9 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 	}
 	if len(nsc.podCidr) > 0 {
 		// TODO: ipset should be used for destination podCidr(s) match after multiple podCidr(s) per node get supported
-		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
-			"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()}
+		args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ",
+			"-m", "comment", "--comment", "", "!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr,
+			"-j", "SNAT", "--to-source", nsc.nodeIP.String()}
 		if iptablesCmdHandler.HasRandomFully() {
 			args = append(args, "--random-fully")
 		}
@@ -1322,16 +1347,20 @@ func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
 	}
 
 	var argsBad = [][]string{
-		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "MASQUERADE"},
-		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "MASQUERADE"},
+		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
+			"-j", "MASQUERADE"},
+		{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
+			"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "MASQUERADE"},
 	}
 
 	// If random fully is supported remove the original rules as well
 	if iptablesCmdHandler.HasRandomFully() {
-		argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()})
+		argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ",
+			"-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", nsc.nodeIP.String()})
 
 		if len(nsc.podCidr) > 0 {
-			argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ", "-m", "comment", "--comment", "",
+			argsBad = append(argsBad, []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ",
+				"-m", "comment", "--comment", "",
 				"!", "-s", nsc.podCidr, "!", "-d", nsc.podCidr, "-j", "SNAT", "--to-source", nsc.nodeIP.String()})
 		}
 	}
@@ -1687,7 +1716,8 @@ func changedIpvsSchedFlags(svc *ipvs.Service, s schedFlags) bool {
 	return false
 }
 
-func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16,
+	persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 
 	var err error
 	for _, svc := range svcs {
@@ -1701,7 +1731,8 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 				if err != nil {
 					return nil, err
 				}
-				klog.V(2).Infof("Updated persistence/session-affinity for service: %s", ipvsServiceString(svc))
+				klog.V(2).Infof("Updated persistence/session-affinity for service: %s",
+					ipvsServiceString(svc))
 			}
 
 			if changedIpvsSchedFlags(svc, flags) {
@@ -1764,7 +1795,8 @@ func generateFwmark(ip, protocol, port string) (uint32, error) {
 }
 
 // ipvsAddFWMarkService: creates a IPVS service using FWMARK
-func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool,
+	persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 
 	var protocolStr string
 	switch {
@@ -1800,7 +1832,8 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 				if err != nil {
 					return nil, err
 				}
-				klog.V(2).Infof("Updated persistence/session-affinity for service: %s", ipvsServiceString(svc))
+				klog.V(2).Infof("Updated persistence/session-affinity for service: %s",
+					ipvsServiceString(svc))
 			}
 
 			if changedIpvsSchedFlags(svc, flags) {
@@ -1910,7 +1943,8 @@ func setupMangleTableRule(ip string, protocol string, port string, fwmark string
 	return nil
 }
 
-func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, port string, fwmark string, tcpMSS int) error {
+func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, port string,
+	fwmark string, tcpMSS int) error {
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
@@ -1974,7 +2008,8 @@ func routeVIPTrafficToDirector(fwmark string) error {
 		return errors.New("Failed to verify if `ip rule` exists due to: " + err.Error())
 	}
 	if !strings.Contains(string(out), fwmark) {
-		err = exec.Command("ip", "rule", "add", "prio", "32764", "fwmark", fwmark, "table", customDSRRouteTableID).Run()
+		err = exec.Command("ip", "rule", "add", "prio", "32764", "fwmark", fwmark, "table",
+			customDSRRouteTableID).Run()
 		if err != nil {
 			return errors.New("Failed to add policy rule to lookup traffic to VIP through the custom " +
 				" routing table due to " + err.Error())
@@ -2036,14 +2071,19 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 
 	out, err := exec.Command("ip", "rule", "list").Output()
 	if err != nil {
-		return errors.New("Failed to verify if `ip rule add prio 32765 from all lookup external_ip` exists due to: " + err.Error())
+		return fmt.Errorf("failed to verify if `ip rule add prio 32765 from all lookup external_ip` exists due to: %v",
+			err)
 	}
 
-	if !(strings.Contains(string(out), externalIPRouteTableName) || strings.Contains(string(out), externalIPRouteTableID)) {
-		err = exec.Command("ip", "rule", "add", "prio", "32765", "from", "all", "lookup", externalIPRouteTableID).Run()
+	if !(strings.Contains(string(out), externalIPRouteTableName) ||
+		strings.Contains(string(out), externalIPRouteTableID)) {
+		err = exec.Command("ip", "rule", "add", "prio", "32765", "from", "all", "lookup",
+			externalIPRouteTableID).Run()
 		if err != nil {
-			klog.Infof("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to " + err.Error())
-			return errors.New("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to " + err.Error())
+			klog.Infof("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to %v",
+				err.Error())
+			return fmt.Errorf("failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` "+
+				"due to %v", err)
 		}
 	}
 
@@ -2054,7 +2094,8 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		for _, externalIP := range svc.externalIPs {
 			// Verify the DSR annotation exists
 			if !svc.directServerReturn {
-				klog.V(1).Infof("Skipping service %s/%s as it does not have DSR annotation\n", svc.namespace, svc.name)
+				klog.V(1).Infof("Skipping service %s/%s as it does not have DSR annotation\n",
+					svc.namespace, svc.name)
 				continue
 			}
 
@@ -2063,7 +2104,8 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 			if !strings.Contains(outStr, externalIP) {
 				if err = exec.Command("ip", "route", "add", externalIP, "dev", "kube-bridge", "table",
 					externalIPRouteTableID).Run(); err != nil {
-					klog.Error("Failed to add route for " + externalIP + " in custom route table for external IP's due to: " + err.Error())
+					klog.Errorf("Failed to add route for %s in custom route table for external IP's due to: %v",
+						externalIP, err)
 					continue
 				}
 			}
@@ -2080,7 +2122,8 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 				args := []string{"route", "del", "table", externalIPRouteTableID}
 				args = append(args, route...)
 				if err = exec.Command("ip", args...).Run(); err != nil {
-					klog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s", ip, err)
+					klog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s",
+						ip, err)
 					continue
 				}
 			}
@@ -2143,7 +2186,8 @@ func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 	var dummyVipInterface netlink.Link
 	dummyVipInterface, err := netlink.LinkByName(KubeDummyIf)
 	if err != nil && err.Error() == IfaceNotFound {
-		klog.V(1).Infof("Could not find dummy interface: " + KubeDummyIf + " to assign cluster ip's, creating one")
+		klog.V(1).Infof("Could not find dummy interface: %s to assign cluster ip's, creating one",
+			KubeDummyIf)
 		err = netlink.LinkAdd(&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: KubeDummyIf}})
 		if err != nil {
 			return nil, errors.New("Failed to add dummy interface:  " + err.Error())
@@ -2321,7 +2365,8 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 // NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
-	epInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer, ipsetMutex *sync.Mutex) (*NetworkServicesController, error) {
+	epInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer,
+	ipsetMutex *sync.Mutex) (*NetworkServicesController, error) {
 
 	var err error
 	ln, err := newLinuxNetworking()

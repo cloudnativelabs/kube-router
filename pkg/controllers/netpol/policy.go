@@ -68,7 +68,8 @@ func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
 // is used for matching destination ip address. Each ingress rule in the network
 // policyspec is evaluated to set of matching pods, which are grouped in to a
 // ipset used for source ip addr matching.
-func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo []networkPolicyInfo, version string) (map[string]bool, map[string]bool, error) {
+func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo []networkPolicyInfo,
+	version string) (map[string]bool, map[string]bool, error) {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
@@ -197,7 +198,8 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				// so match on specified source and destination ip with all port and protocol
 				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 					policy.name + " namespace " + policy.namespace
-				if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcPodIPSetName, targetDestPodIPSetName, "", "", ""); err != nil {
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcPodIPSetName, targetDestPodIPSetName,
+					"", "", ""); err != nil {
 					return err
 				}
 			}
@@ -209,7 +211,8 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			for _, portProtocol := range ingressRule.ports {
 				comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
-				if err := npc.appendRuleToPolicyChain(policyChainName, comment, "", targetDestPodIPSetName, portProtocol.protocol, portProtocol.port, portProtocol.endport); err != nil {
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, "", targetDestPodIPSetName,
+					portProtocol.protocol, portProtocol.port, portProtocol.endport); err != nil {
 					return err
 				}
 			}
@@ -221,7 +224,8 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 				comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
-				if err := npc.appendRuleToPolicyChain(policyChainName, comment, "", namedPortIPSetName, eps.protocol, eps.port, eps.endport); err != nil {
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, "", namedPortIPSetName,
+					eps.protocol, eps.port, eps.endport); err != nil {
 					return err
 				}
 			}
@@ -232,7 +236,8 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 		if ingressRule.matchAllSource && ingressRule.matchAllPorts {
 			comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
 				policy.name + " namespace " + policy.namespace
-			if err := npc.appendRuleToPolicyChain(policyChainName, comment, "", targetDestPodIPSetName, "", "", ""); err != nil {
+			if err := npc.appendRuleToPolicyChain(policyChainName, comment, "", targetDestPodIPSetName,
+				"", "", ""); err != nil {
 				return err
 			}
 		}
@@ -246,7 +251,9 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 				for _, portProtocol := range ingressRule.ports {
 					comment := "rule to ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
-					if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcIPBlockIPSetName, targetDestPodIPSetName, portProtocol.protocol, portProtocol.port, portProtocol.endport); err != nil {
+					if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcIPBlockIPSetName,
+						targetDestPodIPSetName, portProtocol.protocol, portProtocol.port,
+						portProtocol.endport); err != nil {
 						return err
 					}
 				}
@@ -258,7 +265,8 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 					comment := "rule to ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
-					if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcIPBlockIPSetName, namedPortIPSetName, eps.protocol, eps.port, eps.endport); err != nil {
+					if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcIPBlockIPSetName,
+						namedPortIPSetName, eps.protocol, eps.port, eps.endport); err != nil {
 						return err
 					}
 				}
@@ -266,7 +274,8 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			if ingressRule.matchAllPorts {
 				comment := "rule to ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
-				if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcIPBlockIPSetName, targetDestPodIPSetName, "", "", ""); err != nil {
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcIPBlockIPSetName,
+					targetDestPodIPSetName, "", "", ""); err != nil {
 					return err
 				}
 			}
@@ -317,7 +326,8 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 
 					comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 						policy.name + " namespace " + policy.namespace
-					if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, namedPortIPSetName, eps.protocol, eps.port, eps.endport); err != nil {
+					if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
+						namedPortIPSetName, eps.protocol, eps.port, eps.endport); err != nil {
 						return err
 					}
 				}
@@ -329,7 +339,8 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 				// so match on specified source and destination ip with all port and protocol
 				comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 					policy.name + " namespace " + policy.namespace
-				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, dstPodIPSetName, "", "", ""); err != nil {
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
+					dstPodIPSetName, "", "", ""); err != nil {
 					return err
 				}
 			}
@@ -341,14 +352,16 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			for _, portProtocol := range egressRule.ports {
 				comment := "rule to ACCEPT traffic from source pods to all destinations selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
-				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, "", portProtocol.protocol, portProtocol.port, portProtocol.endport); err != nil {
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
+					"", portProtocol.protocol, portProtocol.port, portProtocol.endport); err != nil {
 					return err
 				}
 			}
 			for _, portProtocol := range egressRule.namedPorts {
 				comment := "rule to ACCEPT traffic from source pods to all destinations selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
-				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, "", portProtocol.protocol, portProtocol.port, portProtocol.endport); err != nil {
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
+					"", portProtocol.protocol, portProtocol.port, portProtocol.endport); err != nil {
 					return err
 				}
 			}
@@ -359,7 +372,8 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 		if egressRule.matchAllDestinations && egressRule.matchAllPorts {
 			comment := "rule to ACCEPT traffic from source pods to all destinations selected by policy name: " +
 				policy.name + " namespace " + policy.namespace
-			if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, "", "", "", ""); err != nil {
+			if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
+				"", "", "", ""); err != nil {
 				return err
 			}
 		}
@@ -372,7 +386,9 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 				for _, portProtocol := range egressRule.ports {
 					comment := "rule to ACCEPT traffic from source pods to specified ipBlocks selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
-					if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, dstIPBlockIPSetName, portProtocol.protocol, portProtocol.port, portProtocol.endport); err != nil {
+					if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
+						dstIPBlockIPSetName, portProtocol.protocol, portProtocol.port,
+						portProtocol.endport); err != nil {
 						return err
 					}
 				}
@@ -380,7 +396,8 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			if egressRule.matchAllPorts {
 				comment := "rule to ACCEPT traffic from source pods to specified ipBlocks selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
-				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName, dstIPBlockIPSetName, "", "", ""); err != nil {
+				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
+					dstIPBlockIPSetName, "", "", ""); err != nil {
 					return err
 				}
 			}
@@ -389,7 +406,8 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 	return nil
 }
 
-func (npc *NetworkPolicyController) appendRuleToPolicyChain(policyChainName, comment, srcIPSetName, dstIPSetName, protocol, dPort, endDport string) error {
+func (npc *NetworkPolicyController) appendRuleToPolicyChain(policyChainName, comment, srcIPSetName, dstIPSetName,
+	protocol, dPort, endDport string) error {
 
 	args := make([]string, 0)
 	args = append(args, "-A", policyChainName)
@@ -523,7 +541,8 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 				ingressRule.matchAllPorts = true
 			} else {
 				ingressRule.matchAllPorts = false
-				ingressRule.ports, ingressRule.namedPorts = npc.processNetworkPolicyPorts(specIngressRule.Ports, namedPort2IngressEps)
+				ingressRule.ports, ingressRule.namedPorts = npc.processNetworkPolicyPorts(
+					specIngressRule.Ports, namedPort2IngressEps)
 			}
 
 			newPolicy.ingressRules = append(newPolicy.ingressRules, ingressRule)
@@ -538,8 +557,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 			// If this field is empty or missing in the spec, this rule matches all sources
 			if len(specEgressRule.To) == 0 {
 				egressRule.matchAllDestinations = true
-				// if rule.To is empty but rule.Ports not, we must try to grab NamedPort from pods that in same namespace,
-				// so that we can design iptables rule to describe "match all dst but match some named dst-port" egress rule
+				// if rule.To is empty but rule.Ports not, we must try to grab NamedPort from pods that in same
+				// namespace, so that we can design iptables rule to describe "match all dst but match some named
+				// dst-port" egress rule
 				if policyRulePortsHasNamedPort(specEgressRule.Ports) {
 					matchingPeerPods, _ := npc.ListPodsByNamespaceAndLabels(policy.Namespace, labels.Everything())
 					for _, peerPod := range matchingPeerPods {
@@ -577,7 +597,8 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 				egressRule.matchAllPorts = true
 			} else {
 				egressRule.matchAllPorts = false
-				egressRule.ports, egressRule.namedPorts = npc.processNetworkPolicyPorts(specEgressRule.Ports, namedPort2EgressEps)
+				egressRule.ports, egressRule.namedPorts = npc.processNetworkPolicyPorts(
+					specEgressRule.Ports, namedPort2EgressEps)
 			}
 
 			newPolicy.egressRules = append(newPolicy.egressRules, egressRule)
@@ -588,7 +609,8 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 	return NetworkPolicies, nil
 }
 
-func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy, peer networking.NetworkPolicyPeer) ([]*api.Pod, error) {
+func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy,
+	peer networking.NetworkPolicyPeer) ([]*api.Pod, error) {
 
 	var matchingPods []*api.Pod
 	matchingPods = make([]*api.Pod, 0)
@@ -620,7 +642,8 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 	return matchingPods, err
 }
 
-func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networking.NetworkPolicyPort, namedPort2eps namedPort2eps) (numericPorts []protocolAndPort, namedPorts []endPoints) {
+func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networking.NetworkPolicyPort,
+	namedPort2eps namedPort2eps) (numericPorts []protocolAndPort, namedPorts []endPoints) {
 	numericPorts, namedPorts = make([]protocolAndPort, 0), make([]endPoints, 0)
 	for _, npPort := range npPorts {
 		var protocol string
@@ -649,7 +672,8 @@ func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networki
 	return
 }
 
-func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace string, podSelector labels.Selector) (ret []*api.Pod, err error) {
+func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace string,
+	podSelector labels.Selector) (ret []*api.Pod, err error) {
 	podLister := listers.NewPodLister(npc.podLister)
 	allMatchedNameSpacePods, err := podLister.Pods(namespace).List(podSelector)
 	if err != nil {
@@ -671,13 +695,15 @@ func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolic
 	ipBlock := make([][]string, 0)
 	if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
 		if cidr := peer.IPBlock.CIDR; strings.HasSuffix(cidr, "/0") {
-			ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0"}, []string{"128.0.0.0/1", utils.OptionTimeout, "0"})
+			ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0"},
+				[]string{"128.0.0.0/1", utils.OptionTimeout, "0"})
 		} else {
 			ipBlock = append(ipBlock, []string{cidr, utils.OptionTimeout, "0"})
 		}
 		for _, except := range peer.IPBlock.Except {
 			if strings.HasSuffix(except, "/0") {
-				ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch}, []string{"128.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch})
+				ipBlock = append(ipBlock, []string{"0.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch},
+					[]string{"128.0.0.0/1", utils.OptionTimeout, "0", utils.OptionNoMatch})
 			} else {
 				ipBlock = append(ipBlock, []string{except, utils.OptionTimeout, "0", utils.OptionNoMatch})
 			}
@@ -757,13 +783,15 @@ func policyIndexedDestinationIPBlockIPSetName(namespace, policyName string, egre
 }
 
 func policyIndexedIngressNamedPortIPSetName(namespace, policyName string, ingressRuleNo, namedPortNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) + strconv.Itoa(namedPortNo) + "namedport"))
+	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
+		strconv.Itoa(namedPortNo) + "namedport"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIPSetPrefix + encoded[:16]
 }
 
 func policyIndexedEgressNamedPortIPSetName(namespace, policyName string, egressRuleNo, namedPortNo int) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) + strconv.Itoa(namedPortNo) + "namedport"))
+	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
+		strconv.Itoa(namedPortNo) + "namedport"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
 	return kubeDestinationIPSetPrefix + encoded[:16]
 }

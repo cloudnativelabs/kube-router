@@ -62,7 +62,8 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 			awsErr := err.(awserr.Error)
 			if awsErr.Code() == "UnauthorizedOperation" {
 				nrc.ec2IamAuthorized = false
-				klog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping disabling src-dst check.")
+				klog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping " +
+					"disabling src-dst check.")
 				return
 			}
 			klog.Errorf("Failed to disable source destination check due to: %v", err.Error())

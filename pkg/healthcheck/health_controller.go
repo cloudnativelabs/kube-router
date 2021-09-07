@@ -88,7 +88,8 @@ func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 	defer hc.Status.Unlock()
 
 	switch {
-	// The first heartbeat will set the initial gracetime the controller has to report in, A static time is added as well when checking to allow for load variation in sync time
+	// The first heartbeat will set the initial gracetime the controller has to report in, A static time is added as
+	// well when checking to allow for load variation in sync time
 	case beat.Component == "NSC":
 		if hc.Status.NetworkServicesControllerAliveTTL == 0 {
 			hc.Status.NetworkServicesControllerAliveTTL = time.Since(hc.Status.NetworkServicesControllerAlive)
@@ -118,21 +119,24 @@ func (hc *HealthController) CheckHealth() bool {
 	graceTime := defaultGraceTimeDuration
 
 	if hc.Config.RunFirewall {
-		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
+		if time.Since(hc.Status.NetworkPolicyControllerAlive) >
+			hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
 			klog.Error("Network Policy Controller heartbeat missed")
 			health = false
 		}
 	}
 
 	if hc.Config.RunRouter {
-		if time.Since(hc.Status.NetworkRoutingControllerAlive) > hc.Config.RoutesSyncPeriod+hc.Status.NetworkRoutingControllerAliveTTL+graceTime {
+		if time.Since(hc.Status.NetworkRoutingControllerAlive) >
+			hc.Config.RoutesSyncPeriod+hc.Status.NetworkRoutingControllerAliveTTL+graceTime {
 			klog.Error("Network Routing Controller heartbeat missed")
 			health = false
 		}
 	}
 
 	if hc.Config.RunServiceProxy {
-		if time.Since(hc.Status.NetworkServicesControllerAlive) > hc.Config.IpvsSyncPeriod+hc.Status.NetworkServicesControllerAliveTTL+graceTime {
+		if time.Since(hc.Status.NetworkServicesControllerAlive) >
+			hc.Config.IpvsSyncPeriod+hc.Status.NetworkServicesControllerAliveTTL+graceTime {
 			klog.Error("NetworkService Controller heartbeat missed")
 			health = false
 		}
@@ -176,7 +180,8 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 }
 
 // RunCheck starts the HealthController's check
-func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{},
+	wg *sync.WaitGroup) {
 	t := time.NewTicker(healthControllerTickTime)
 	defer wg.Done()
 	for {

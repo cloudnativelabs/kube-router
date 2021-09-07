@@ -60,9 +60,11 @@ func (nsc *NetworkServicesController) addToGracefulQueue(req *gracefulRequest) {
 	defer nsc.gracefulQueue.mu.Unlock()
 	var alreadyExists bool
 	for _, jobQitem := range nsc.gracefulQueue.queue {
-		if jobQitem.ipvsSvc.Address.Equal(req.ipvsSvc.Address) && jobQitem.ipvsSvc.Port == req.ipvsSvc.Port && jobQitem.ipvsSvc.Protocol == req.ipvsSvc.Protocol {
+		if jobQitem.ipvsSvc.Address.Equal(req.ipvsSvc.Address) &&
+			jobQitem.ipvsSvc.Port == req.ipvsSvc.Port && jobQitem.ipvsSvc.Protocol == req.ipvsSvc.Protocol {
 			if jobQitem.ipvsDst.Address.Equal(req.ipvsDst.Address) && jobQitem.ipvsDst.Port == req.ipvsDst.Port {
-				klog.V(2).Infof("Endpoint already scheduled for removal %+v %+v %s", *req.ipvsSvc, *req.ipvsDst, req.gracefulTerminationPeriod.String())
+				klog.V(2).Infof("Endpoint already scheduled for removal %+v %+v %s",
+					*req.ipvsSvc, *req.ipvsDst, req.gracefulTerminationPeriod.String())
 				alreadyExists = true
 				break
 			}
@@ -72,11 +74,14 @@ func (nsc *NetworkServicesController) addToGracefulQueue(req *gracefulRequest) {
 		// try to get get Termination grace period from the pod, if unsuccesfull use the default timeout
 		podObj, err := nsc.getPodObjectForEndpoint(req.ipvsDst.Address.String())
 		if err != nil {
-			klog.V(1).Infof("Failed to find endpoint with ip: %s err: %s", req.ipvsDst.Address.String(), err.Error())
+			klog.V(1).Infof("Failed to find endpoint with ip: %s err: %s",
+				req.ipvsDst.Address.String(), err.Error())
 			req.gracefulTerminationPeriod = nsc.gracefulPeriod
 		} else {
-			klog.V(1).Infof("Found pod termination grace period %d for pod %s", *podObj.Spec.TerminationGracePeriodSeconds, podObj.Name)
-			req.gracefulTerminationPeriod = time.Duration(float64(*podObj.Spec.TerminationGracePeriodSeconds) * float64(time.Second))
+			klog.V(1).Infof("Found pod termination grace period %d for pod %s",
+				*podObj.Spec.TerminationGracePeriodSeconds, podObj.Name)
+			req.gracefulTerminationPeriod =
+				time.Duration(float64(*podObj.Spec.TerminationGracePeriodSeconds) * float64(time.Second))
 		}
 		nsc.gracefulQueue.queue = append(nsc.gracefulQueue.queue, *req)
 	}
@@ -86,7 +91,8 @@ func (nsc *NetworkServicesController) gracefulSync() {
 	nsc.gracefulQueue.mu.Lock()
 	defer nsc.gracefulQueue.mu.Unlock()
 	var newQueue []gracefulRequest
-	// Itterate over our queued destination removals one by one, and don't add them back to the queue if they were processed
+	// Iterate over our queued destination removals one by one, and don't add them back to the queue if they were
+	// processed
 	for _, job := range nsc.gracefulQueue.queue {
 		if removed := nsc.gracefulDeleteIpvsDestination(job); removed {
 			continue
@@ -117,17 +123,20 @@ func (nsc *NetworkServicesController) gracefulDeleteIpvsDestination(req graceful
 	if deleteDestination {
 		klog.V(2).Infof("Deleting IPVS destination: %s", ipvsDestinationString(req.ipvsDst))
 		if err := nsc.ln.ipvsDelDestination(req.ipvsSvc, req.ipvsDst); err != nil {
-			klog.Errorf("Failed to delete IPVS destination: %s, %s", ipvsDestinationString(req.ipvsDst), err.Error())
+			klog.Errorf("Failed to delete IPVS destination: %s, %s",
+				ipvsDestinationString(req.ipvsDst), err.Error())
 		}
 	}
 	return deleteDestination
 }
 
 // getConnStats returns the number of active & inactive connections for the IPVS destination
-func (nsc *NetworkServicesController) getIpvsDestinationConnStats(ipvsSvc *ipvs.Service, dest *ipvs.Destination) (int, int, error) {
+func (nsc *NetworkServicesController) getIpvsDestinationConnStats(ipvsSvc *ipvs.Service,
+	dest *ipvs.Destination) (int, int, error) {
 	destStats, err := nsc.ln.ipvsGetDestinations(ipvsSvc)
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get IPVS destinations for service : %s : %s", ipvsServiceString(ipvsSvc), err.Error())
+		return 0, 0, fmt.Errorf("failed to get IPVS destinations for service : %s : %s",
+			ipvsServiceString(ipvsSvc), err.Error())
 	}
 
 	for _, destStat := range destStats {
@@ -135,12 +144,14 @@ func (nsc *NetworkServicesController) getIpvsDestinationConnStats(ipvsSvc *ipvs.
 			return destStat.ActiveConnections, destStat.InactiveConnections, nil
 		}
 	}
-	return 0, 0, fmt.Errorf("destination %s not found on IPVS service %s ", ipvsDestinationString(dest), ipvsServiceString(ipvsSvc))
+	return 0, 0, fmt.Errorf("destination %s not found on IPVS service %s ",
+		ipvsDestinationString(dest), ipvsServiceString(ipvsSvc))
 }
 
 // flushConntrackUDP flushes UDP conntrack records for the given service destination
 func (nsc *NetworkServicesController) flushConntrackUDP(svc *ipvs.Service) error {
-	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to check output and don't Error when matching
+	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to
+	// check output and don't Error when matching
 	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
 
 	// Shell out and flush conntrack records
@@ -149,7 +160,8 @@ func (nsc *NetworkServicesController) flushConntrackUDP(svc *ipvs.Service) error
 		"--dport", strconv.Itoa(int(svc.Port))).CombinedOutput()
 	if err != nil {
 		if matched := re.MatchString(string(out)); !matched {
-			return fmt.Errorf("failed to delete conntrack entry for endpoint: %s:%d due to %s", svc.Address.String(), svc.Port, err.Error())
+			return fmt.Errorf("failed to delete conntrack entry for endpoint: %s:%d due to %s",
+				svc.Address.String(), svc.Port, err.Error())
 		}
 	}
 	klog.V(1).Infof("Deleted conntrack entry for endpoint: %s:%d", svc.Address.String(), svc.Port)
