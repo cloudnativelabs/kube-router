@@ -110,10 +110,8 @@ func (nrc *NetworkRoutingController) deleteBadPodEgressRules() error {
 		if exists {
 			err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
 			if err != nil {
-				return fmt.Errorf("Failed to delete old/bad iptables rule to "+
-					"masquerade outbound traffic from pods: %s.\n"+
-					"Pod egress might still work, or bugs may persist after upgrade...",
-					err)
+				return fmt.Errorf("failed to delete old/bad iptables rule to masquerade outbound traffic "+
+					"from pods: %s. Pod egress might still work, or bugs may persist after upgrade", err)
 			}
 			klog.Infof("Deleted old/bad iptables rule to masquerade outbound traffic from pods.")
 		}

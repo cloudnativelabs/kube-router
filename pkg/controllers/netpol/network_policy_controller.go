@@ -311,7 +311,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		hash := sha256.Sum256([]byte(chain + strings.Join(*ruleSpec, "")))
 		encoded := base32.StdEncoding.EncodeToString(hash[:])[:16]
 		for idx, part := range *ruleSpec {
-			if "--comment" == part {
+			if part == "--comment" {
 				(*ruleSpec)[idx+1] = (*ruleSpec)[idx+1] + " - " + encoded
 				return encoded, nil
 			}
