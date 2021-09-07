@@ -11,6 +11,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const (
+	defaultGraceTimeDuration = time.Duration(1500) * time.Millisecond
+	healthControllerTickTime = 5000 * time.Millisecond
+)
+
 // ControllerHeartbeat is the structure to hold the heartbeats sent by controllers
 type ControllerHeartbeat struct {
 	Component     string
@@ -110,7 +115,7 @@ func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 // CheckHealth evaluates the time since last heartbeat to decide if the controller is running or not
 func (hc *HealthController) CheckHealth() bool {
 	health := true
-	graceTime := time.Duration(1500) * time.Millisecond
+	graceTime := defaultGraceTimeDuration
 
 	if hc.Config.RunFirewall {
 		if time.Since(hc.Status.NetworkPolicyControllerAlive) > hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
@@ -172,7 +177,7 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 
 // RunCheck starts the HealthController's check
 func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
-	t := time.NewTicker(5000 * time.Millisecond)
+	t := time.NewTicker(healthControllerTickTime)
 	defer wg.Done()
 	for {
 		select {

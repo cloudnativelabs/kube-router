@@ -7,6 +7,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+const (
+	IPInIPHeaderLength = 20
+)
+
 // ServiceForEndpoints given Endpoint object return Service API object if it exists
 func ServiceForEndpoints(ci *cache.Indexer, ep *v1core.Endpoints) (interface{}, bool, error) {
 	key, err := cache.MetaNamespaceKeyFunc(ep)

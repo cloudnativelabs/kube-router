@@ -42,6 +42,8 @@ func isFinished(pod *api.Pod) bool {
 }
 
 func validateNodePortRange(nodePortOption string) (string, error) {
+	const portBitSize = 16
+
 	nodePortValidator := regexp.MustCompile(`^([0-9]+)[:-]([0-9]+)$`)
 	if matched := nodePortValidator.MatchString(nodePortOption); !matched {
 		return "", fmt.Errorf("failed to parse node port range given: '%s' please see specification in help text", nodePortOption)
@@ -50,11 +52,11 @@ func validateNodePortRange(nodePortOption string) (string, error) {
 	if len(matches) != 3 {
 		return "", fmt.Errorf("could not parse port number from range given: '%s'", nodePortOption)
 	}
-	port1, err := strconv.ParseUint(matches[1], 10, 16)
+	port1, err := strconv.ParseUint(matches[1], 10, portBitSize)
 	if err != nil {
 		return "", fmt.Errorf("could not parse first port number from range given: '%s'", nodePortOption)
 	}
-	port2, err := strconv.ParseUint(matches[2], 10, 16)
+	port2, err := strconv.ParseUint(matches[2], 10, portBitSize)
 	if err != nil {
 		return "", fmt.Errorf("could not parse second port number from range given: '%s'", nodePortOption)
 	}

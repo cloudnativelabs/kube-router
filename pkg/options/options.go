@@ -8,8 +8,11 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const DefaultBgpPort = 179
-const DefaultBgpHoldTime = 90 * time.Second
+const (
+	DefaultBgpPort         = 179
+	DefaultBgpHoldTime     = 90 * time.Second
+	defaultHealthCheckPort = 20244
+)
 
 type KubeRouterConfig struct {
 	AdvertiseClusterIP             bool
@@ -72,6 +75,7 @@ type KubeRouterConfig struct {
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
+	// nolint:gomnd // Here we are specifying the names of the literals which is very similar to constant behavior
 	return &KubeRouterConfig{
 		BGPGracefulRestartDeferralTime: 360 * time.Second,
 		BGPGracefulRestartTime:         90 * time.Second,
@@ -132,7 +136,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Excluded CIDRs are used to exclude IPVS rules from deletion.")
 	fs.BoolVar(&s.GlobalHairpinMode, "hairpin-mode", false,
 		"Add iptables rules for every Service Endpoint to support hairpin traffic.")
-	fs.Uint16Var(&s.HealthPort, "health-port", 20244, "Health check port, 0 = Disabled")
+	fs.Uint16Var(&s.HealthPort, "health-port", defaultHealthCheckPort, "Health check port, 0 = Disabled")
 	fs.BoolVarP(&s.HelpRequested, "help", "h", false,
 		"Print usage information.")
 	fs.StringVar(&s.HostnameOverride, "hostname-override", s.HostnameOverride,

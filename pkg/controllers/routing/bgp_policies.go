@@ -411,7 +411,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 	var bgpActions gobgpapi.Actions
 	if nrc.pathPrepend {
-		prependAsn, err := strconv.ParseUint(nrc.pathPrependAS, 10, 32)
+		prependAsn, err := strconv.ParseUint(nrc.pathPrependAS, 10, asnMaxBitSize)
 		if err != nil {
 			return errors.New("Invalid value for kube-router.io/path-prepend.as: " + err.Error())
 		}

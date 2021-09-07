@@ -37,6 +37,8 @@ const (
 	kubeIngressPolicyType = "ingress"
 	kubeEgressPolicyType  = "egress"
 	kubeBothPolicyType    = "both"
+
+	syncVersionBase = 10
 )
 
 var (
@@ -216,7 +218,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 
 	healthcheck.SendHeartBeat(npc.healthChan, "NPC")
 	start := time.Now()
-	syncVersion := strconv.FormatInt(start.UnixNano(), 10)
+	syncVersion := strconv.FormatInt(start.UnixNano(), syncVersionBase)
 	defer func() {
 		endTime := time.Since(start)
 		if npc.MetricsEnabled {
@@ -287,6 +289,10 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 // -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
 // -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
 func (npc *NetworkPolicyController) ensureTopLevelChains() {
+	const serviceVIPPosition = 1
+	const whitelistTCPNodePortsPosition = 2
+	const whitelistUDPNodePortsPosition = 3
+	const externalIPPositionAdditive = 4
 
 	iptablesCmdHandler, err := iptables.New()
 	if err != nil {
@@ -373,7 +379,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	if err != nil {
 		klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 	}
-	ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, 1)
+	ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, serviceVIPPosition)
 
 	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment", "allow LOCAL TCP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
@@ -381,7 +387,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	if err != nil {
 		klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 	}
-	ensureRuleAtPosition(kubeInputChainName, whitelistTCPNodeports, uuid, 2)
+	ensureRuleAtPosition(kubeInputChainName, whitelistTCPNodeports, uuid, whitelistTCPNodePortsPosition)
 
 	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment", "allow LOCAL UDP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
 		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
@@ -389,7 +395,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	if err != nil {
 		klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 	}
-	ensureRuleAtPosition(kubeInputChainName, whitelistUDPNodeports, uuid, 3)
+	ensureRuleAtPosition(kubeInputChainName, whitelistUDPNodeports, uuid, whitelistUDPNodePortsPosition)
 
 	for externalIPIndex, externalIPRange := range npc.serviceExternalIPRanges {
 		whitelistServiceVips := []string{"-m", "comment", "--comment", "allow traffic to external IP range: " + externalIPRange.String(), "-d", externalIPRange.String(), "-j", "RETURN"}
@@ -397,7 +403,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		if err != nil {
 			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 		}
-		ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, externalIPIndex+4)
+		ensureRuleAtPosition(kubeInputChainName, whitelistServiceVips, uuid, externalIPIndex+externalIPPositionAdditive)
 	}
 }
 

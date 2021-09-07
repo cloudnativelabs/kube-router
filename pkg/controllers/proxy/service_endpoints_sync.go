@@ -467,11 +467,13 @@ func (nsc *NetworkServicesController) setupForDSR(serviceInfoMap serviceInfoMap)
 func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap map[string][]string) error {
 	// cleanup stale IPs on dummy interface
 	klog.V(1).Info("Cleaning up if any, old service IPs on dummy interface")
+	// This represents "ip - protocol - port" that is created as the key to activeServiceEndpointMap in generateIPPortID()
+	const expectedServiceIDParts = 3
 	addrActive := make(map[string]bool)
 	for k := range activeServiceEndpointMap {
 		// verify active and its a generateIPPortID() type service
 		if strings.Contains(k, "-") {
-			parts := strings.SplitN(k, "-", 3)
+			parts := strings.SplitN(k, "-", expectedServiceIDParts)
 			addrActive[parts[0]] = true
 		}
 	}

@@ -23,6 +23,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+const healthControllerChannelLength = 10
+
 // KubeRouter holds the information needed to run server
 type KubeRouter struct {
 	Client kubernetes.Interface
@@ -79,7 +81,7 @@ func (kr *KubeRouter) Run() error {
 		os.Exit(0)
 	}
 
-	healthChan := make(chan *healthcheck.ControllerHeartbeat, 10)
+	healthChan := make(chan *healthcheck.ControllerHeartbeat, healthControllerChannelLength)
 	defer close(healthChan)
 	stopCh := make(chan struct{})
 
