@@ -6,7 +6,6 @@ linters:
     - depguard
     - dogsled
     - dupl
-    - errcheck
     - exportloopref
     - exhaustive
     - gochecknoinits
@@ -16,11 +15,12 @@ linters:
     - goimports
     - gomnd
     - gosec
-    - gosimple
     - govet
-    - ineffassign
     - lll
     - misspell
+    - nakedret
+    - noctx
+    - nolintlint
 issues:
   exclude-rules:
     # Excluding single digits from magic number detector because it produces too many obvious results (like klog)
