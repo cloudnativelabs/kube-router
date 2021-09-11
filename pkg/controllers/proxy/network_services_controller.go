@@ -351,25 +351,25 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
-	sysctlErr := utils.SetSysctl("net/ipv4/vs/conntrack", ipvsConntrackEnable)
+	sysctlErr := utils.SetSysctl(utils.IPv4IPVSConntrack, ipvsConntrackEnable)
+	if sysctlErr != nil && sysctlErr.IsFatal() {
+		klog.Error(sysctlErr.Error())
+	}
+
+	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
+	sysctlErr = utils.SetSysctl(utils.IPv4IPVSExpireNodestConn, ipvsExpireNodestConnEnable)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_nodest_conn", ipvsExpireNodestConnEnable)
-	if sysctlErr != nil {
-		klog.Error(sysctlErr.Error())
-	}
-
-	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	sysctlErr = utils.SetSysctl("net/ipv4/vs/expire_quiescent_template", ipvsExpireQuiescentTemplateEnable)
+	sysctlErr = utils.SetSysctl(utils.IPv4IPVSExpireQuiescent, ipvsExpireQuiescentTemplateEnable)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/71114
-	sysctlErr = utils.SetSysctl("net/ipv4/vs/conn_reuse_mode", ipvsConnReuseModeDisableSpecialHandling)
+	sysctlErr = utils.SetSysctl(utils.IPv4IPVSConnReuseMode, ipvsConnReuseModeDisableSpecialHandling)
 	if sysctlErr != nil {
 		// Check if the error is fatal, on older kernels this option does not exist and the same behaviour is default
 		// if option is not found just log it
@@ -381,13 +381,13 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_ignore", arpIgnoreReplyOnlyIfTargetIPIsLocal)
+	sysctlErr = utils.SetSysctl(utils.IPv4ConfAllArpIgnore, arpIgnoreReplyOnlyIfTargetIPIsLocal)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	sysctlErr = utils.SetSysctl("net/ipv4/conf/all/arp_announce", arpAnnounceUseBestLocalAddress)
+	sysctlErr = utils.SetSysctl(utils.IPv4ConfAllArpAnnounce, arpAnnounceUseBestLocalAddress)
 	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}

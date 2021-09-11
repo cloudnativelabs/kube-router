@@ -2,9 +2,7 @@ package proxy
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
@@ -122,23 +120,23 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	klog.Infof("Successfully assigned VIP: %s in endpoint %s.", vip, endpointIP)
 
 	// disable rp_filter on all interface
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/kube-tunnel-if/rp_filter",
-		[]byte(strconv.Itoa(0)), 0640)
-	if err != nil {
+	sysctlErr := utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "kube-tunnel-if", 0)
+	if sysctlErr != nil && sysctlErr.IsFatal() {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to disable rp_filter on kube-tunnel-if in the endpoint container")
+		return fmt.Errorf("failed to disable rp_filter on kube-tunnel-if in the endpoint container: %s",
+			sysctlErr.Error())
 	}
 
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/eth0/rp_filter", []byte(strconv.Itoa(0)), 0640)
-	if err != nil {
+	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "eth0", 0)
+	if sysctlErr != nil && sysctlErr.IsFatal() {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to disable rp_filter on eth0 in the endpoint container")
+		return fmt.Errorf("failed to disable rp_filter on eth0 in the endpoint container: %s", sysctlErr.Error())
 	}
 
-	err = ioutil.WriteFile("/proc/sys/net/ipv4/conf/all/rp_filter", []byte(strconv.Itoa(0)), 0640)
-	if err != nil {
+	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "all", 0)
+	if sysctlErr != nil && sysctlErr.IsFatal() {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to disable rp_filter on `all` in the endpoint container")
+		return fmt.Errorf("failed to disable rp_filter on `all` in the endpoint container: %s", sysctlErr.Error())
 	}
 
 	klog.Infof("Successfully disabled rp_filter in endpoint %s.", endpointIP)
