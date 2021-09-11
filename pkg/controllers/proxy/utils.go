@@ -41,6 +41,8 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	}
 	defer utils.CloseCloserDisregardError(&endpointNamespaceHandle)
 
+	// LINUX NAMESPACE SHIFT - It is important to note that from here until the end of the function (or until an error)
+	// all subsequent commands are executed from within the container's network namespace and NOT the host's namespace.
 	err = netns.Set(endpointNamespaceHandle)
 	if err != nil {
 		return fmt.Errorf("failed to enter endpoint namespace (containerID=%s, pid=%d, error=%v)",
@@ -127,6 +129,10 @@ func (ln *linuxNetworking) configureContainerForDSR(
 			sysctlErr.Error())
 	}
 
+	// TODO: it's bad to rely on eth0 here. While this is inside the container's namespace and is determined by the
+	// container runtime and so far we've been able to count on this being reliably set to eth0, it is possible that
+	// this may shift sometime in the future with a different runtime. It would be better to find a reliable way to
+	// determine the interface name from inside the container.
 	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "eth0", 0)
 	if sysctlErr != nil && sysctlErr.IsFatal() {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
