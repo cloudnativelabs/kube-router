@@ -1117,7 +1117,7 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithDocker(containerID string, e
 // The same as prepareEndpointForDsr but using CRI instead of docker.
 func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) error {
 
-	// Its possible switch namespaces may never work safely in GO without hacks.
+	// It's possible switch namespaces may never work safely in GO without hacks.
 	//	 https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion
 	//	 https://www.weave.works/blog/linux-namespaces-and-go-don-t-mix
 	// Dont know if same issue, but seen namespace issue, so adding
@@ -1793,7 +1793,7 @@ func generateFwmark(ip, protocol, port string) (uint32, error) {
 	return h.Sum32() & maxFwMarkBitSize, err
 }
 
-// ipvsAddFWMarkService: creates a IPVS service using FWMARK
+// ipvsAddFWMarkService: creates an IPVS service using FWMARK
 func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool,
 	persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 
@@ -2093,7 +2093,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		for _, externalIP := range svc.externalIPs {
 			// Verify the DSR annotation exists
 			if !svc.directServerReturn {
-				klog.V(1).Infof("Skipping service %s/%s as it does not have DSR annotation\n",
+				klog.V(1).Infof("Skipping service %s/%s as it does not have DSR annotation",
 					svc.namespace, svc.name)
 				continue
 			}
