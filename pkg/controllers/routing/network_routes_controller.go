@@ -252,13 +252,13 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			"not work: %s", err.Error())
 	}
 	sysctlErr := utils.SetSysctl(utils.BridgeNFCallIPTables, 1)
-	if sysctlErr != nil && sysctlErr.IsFatal() {
+	if sysctlErr != nil {
 		klog.Errorf("Failed to enable iptables for bridge. Network policies and service proxy may "+
 			"not work: %s", sysctlErr.Error())
 	}
 	if nrc.isIpv6 {
 		sysctlErr = utils.SetSysctl(utils.BridgeNFCallIP6Tables, 1)
-		if sysctlErr != nil && sysctlErr.IsFatal() {
+		if sysctlErr != nil {
 			klog.Errorf("Failed to enable ip6tables for bridge. Network policies and service proxy may "+
 				"not work: %s", sysctlErr.Error())
 		}

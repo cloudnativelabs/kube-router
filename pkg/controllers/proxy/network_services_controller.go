@@ -352,7 +352,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
 	sysctlErr := utils.SetSysctl(utils.IPv4IPVSConntrack, ipvsConntrackEnable)
-	if sysctlErr != nil && sysctlErr.IsFatal() {
+	if sysctlErr != nil {
 		klog.Error(sysctlErr.Error())
 	}
 
