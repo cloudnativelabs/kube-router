@@ -123,7 +123,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 
 	// disable rp_filter on all interface
 	sysctlErr := utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "kube-tunnel-if", 0)
-	if sysctlErr != nil && sysctlErr.IsFatal() {
+	if sysctlErr != nil {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 		return fmt.Errorf("failed to disable rp_filter on kube-tunnel-if in the endpoint container: %s",
 			sysctlErr.Error())
@@ -134,13 +134,13 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	// this may shift sometime in the future with a different runtime. It would be better to find a reliable way to
 	// determine the interface name from inside the container.
 	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "eth0", 0)
-	if sysctlErr != nil && sysctlErr.IsFatal() {
+	if sysctlErr != nil {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 		return fmt.Errorf("failed to disable rp_filter on eth0 in the endpoint container: %s", sysctlErr.Error())
 	}
 
 	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "all", 0)
-	if sysctlErr != nil && sysctlErr.IsFatal() {
+	if sysctlErr != nil {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 		return fmt.Errorf("failed to disable rp_filter on `all` in the endpoint container: %s", sysctlErr.Error())
 	}
