@@ -18,7 +18,7 @@ MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
 DOCKER_BUILD_IMAGE?=golang:1.16.7-alpine3.14
-DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.42.0
+DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.42.1
 GOBGP_VERSION= v0.0.0-20210901090119-8ab84f8636ee # v2.31.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v0.162.1
@@ -45,7 +45,7 @@ FILE_ARCH=x86-64
 DOCKER_ARCH=
 endif
 $(info Building for GOARCH=$(GOARCH))
-all: lint test kube-router container ## Default target. Runs tests, builds binaries and images.
+all: lint test kube-router container ## Default target. Lints code, runs tests, builds binaries and images.
 
 kube-router:
 	@echo Starting kube-router binary build.

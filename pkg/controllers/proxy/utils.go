@@ -60,7 +60,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	// TODO: fix boilerplate `netns.Set(hostNetworkNamespaceHandle)` code. Need a robust
 	// way to switch back to old namespace, pretty much all things will go wrong if we dont switch back
 
-	// create a ipip tunnel interface inside the endpoint container
+	// create an ipip tunnel interface inside the endpoint container
 	tunIf, err := netlink.LinkByName(KubeTunnelIf)
 	if err != nil {
 		if err.Error() != IfaceNotFound {

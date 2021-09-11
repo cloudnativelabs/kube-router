@@ -301,7 +301,7 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			nodeIP, err := utils.GetNodeIP(node)
 			if err != nil {
 				klog.Errorf(
-					"New node received, but we were unable to add it as we were couldn't find it's node IP: %v", err)
+					"New node received, but we were unable to add it as we were couldn't find its node IP: %v", err)
 				return
 			}
 

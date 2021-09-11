@@ -1712,7 +1712,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 					t.Errorf("Node suppose to have cluster id '%s' but got %s", testcase.expectedClusterID, testcase.nrc.bgpClusterID)
 				}
 			} else if err == nil {
-				t.Fatal("misconfigured BGP server not suppose to start")
+				t.Fatal("mis-configured BGP server is not supposed to start")
 			}
 		})
 	}

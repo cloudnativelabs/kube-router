@@ -231,7 +231,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			}
 		}
 
-		// case where nether ports nor from details are specified in the ingress rule so match on all ports, protocol,
+		// case where neither ports nor from details are specified in the ingress rule so match on all ports, protocol,
 		// source IP's
 		if ingressRule.matchAllSource && ingressRule.matchAllPorts {
 			comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
