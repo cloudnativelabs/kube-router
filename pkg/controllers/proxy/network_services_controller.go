@@ -1437,22 +1437,17 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 		return errors.New("Failed to initialize iptables executor" + err.Error())
 	}
 
-	// TODO: Factor these variables out
-	hasHairpinChain := false
-
 	// TODO: Factor out this code
+	hasHairpinChain := false
 	chains, err := iptablesCmdHandler.ListChains("nat")
 	if err != nil {
 		return errors.New("Failed to list iptables chains: " + err.Error())
 	}
-
-	// TODO: Factor out this code
 	for _, chain := range chains {
 		if chain == ipvsHairpinChainName {
 			hasHairpinChain = true
 		}
 	}
-
 	// Create a chain for hairpin rules, if needed
 	if !hasHairpinChain {
 		err = iptablesCmdHandler.NewChain("nat", ipvsHairpinChainName)
@@ -1522,15 +1517,12 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 }
 
 func hairpinRuleFrom(serviceIP string, endpointIP string, servicePort int) (string, []string) {
-	// TODO: Factor hairpinChain out
-	hairpinChain := "KUBE-ROUTER-HAIRPIN"
-
 	ruleArgs := []string{"-s", endpointIP + "/32", "-d", endpointIP + "/32",
 		"-m", "ipvs", "--vaddr", serviceIP, "--vport", strconv.Itoa(servicePort),
 		"-j", "SNAT", "--to-source", serviceIP}
 
 	// Trying to ensure this matches iptables.List()
-	ruleString := "-A " + hairpinChain + " -s " + endpointIP + "/32" + " -d " +
+	ruleString := "-A " + ipvsHairpinChainName + " -s " + endpointIP + "/32" + " -d " +
 		endpointIP + "/32" + " -m ipvs" + " --vaddr " + serviceIP + " --vport " +
 		strconv.Itoa(servicePort) + " -j SNAT" + " --to-source " + serviceIP
 
