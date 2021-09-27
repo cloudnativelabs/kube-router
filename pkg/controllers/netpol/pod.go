@@ -190,6 +190,17 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 		"-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT", "\n"}
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
 
+	// ensure statefull firewall drops INVALID state traffic from/to the pod
+	// For full context see: https://bugzilla.netfilter.org/show_bug.cgi?id=693
+	// The NAT engine ignores any packet with state INVALID, because there's no reliable way to determine what kind of
+	// NAT should be performed. So the proper way to prevent the leakage is to drop INVALID packets.
+	// In the future, if we ever allow services or nodes to disable conntrack checking, we may need to make this
+	// conditional so that non-tracked traffic doesn't get dropped as invalid.
+	comment = "\"rule to drop invalid state for pod\""
+	args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment,
+		"-m", "conntrack", "--ctstate", "INVALID", "-j", "DROP", "\n"}
+	npc.filterTableRules.WriteString(strings.Join(args, " "))
+
 	// ensure statefull firewall that permits RELATED,ESTABLISHED traffic from/to the pod
 	comment = "\"rule for stateful firewall for pod\""
 	args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment,
