@@ -1749,10 +1749,8 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 				}
 				klog.V(2).Infof("Updated schedule for the service: %s", ipvsServiceString(svc))
 			}
-			// TODO: Make this debug output when we get log levels
-			// klog.Fatal("ipvs service %s:%s:%s already exists so returning", vip.String(),
-			// 	protocol, strconv.Itoa(int(port)))
 
+			klog.V(2).Infof("ipvs service %s already exists so returning", ipvsServiceString(svc))
 			return svc, nil
 		}
 	}
@@ -1850,10 +1848,8 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 				}
 				klog.V(2).Infof("Updated schedule for the service: %s", ipvsServiceString(svc))
 			}
-			// TODO: Make this debug output when we get log levels
-			// klog.Fatal("ipvs service %s:%s:%s already exists so returning", vip.String(),
-			// 	protocol, strconv.Itoa(int(port)))
 
+			klog.V(2).Infof("ipvs service %s already exists so returning", ipvsServiceString(svc))
 			return svc, nil
 		}
 	}
@@ -1891,9 +1887,8 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 			return fmt.Errorf("failed to update ipvs destination %s to the ipvs service %s due to : %s",
 				ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 		}
-		// TODO: Make this debug output when we get log levels
-		// klog.Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
-		// 	ipvsDestinationString(dest), ipvsServiceString(service))
+		klog.V(2).Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
+			ipvsDestinationString(dest), ipvsServiceString(service))
 	} else {
 		return fmt.Errorf("failed to add ipvs destination %s to the ipvs service %s due to : %s",
 			ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
