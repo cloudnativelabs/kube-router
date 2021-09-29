@@ -48,6 +48,11 @@ const (
 	IpvsSvcFSched2    = "flag-2"
 	IpvsSvcFSched3    = "flag-3"
 
+	customDSRRouteTableID    = "78"
+	customDSRRouteTableName  = "kube-router-dsr"
+	externalIPRouteTableID   = "79"
+	externalIPRouteTableName = "external_ip"
+
 	// Taken from https://github.com/torvalds/linux/blob/master/include/uapi/linux/ip_vs.h#L21
 	ipvsPersistentFlagHex = 0x0001
 	ipvsHashedFlagHex     = 0x0002
@@ -1895,13 +1900,6 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 	}
 	return nil
 }
-
-const (
-	customDSRRouteTableID    = "78"
-	customDSRRouteTableName  = "kube-router-dsr"
-	externalIPRouteTableID   = "79"
-	externalIPRouteTableName = "external_ip"
-)
 
 // setupMangleTableRule: sets up iptables rule to FWMARK the traffic to external IP vip
 func setupMangleTableRule(ip string, protocol string, port string, fwmark string, tcpMSS int) error {
