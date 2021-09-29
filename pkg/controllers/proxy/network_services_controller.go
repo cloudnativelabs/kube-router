@@ -1649,7 +1649,13 @@ func ipvsServiceString(s *ipvs.Service) string {
 		flags += "[flag-3]"
 	}
 
-	return fmt.Sprintf("%s:%s:%v (Flags: %s)", protocol, s.Address, s.Port, flags)
+	// FWMark entries don't contain a protocol, address, or port which means that we need to log them differently so as
+	// not to confuse users
+	if s.FWMark != 0 {
+		return fmt.Sprintf("FWMark:%d (Flags: %s)", s.FWMark, flags)
+	} else {
+		return fmt.Sprintf("%s:%s:%v (Flags: %s)", protocol, s.Address, s.Port, flags)
+	}
 }
 
 func ipvsDestinationString(d *ipvs.Destination) string {
