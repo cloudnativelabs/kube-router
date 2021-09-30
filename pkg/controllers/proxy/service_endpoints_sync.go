@@ -497,7 +497,7 @@ func (nsc *NetworkServicesController) setupForDSR(serviceInfoMap serviceInfoMap)
 		return fmt.Errorf("failed setup custom routing table required to add routes for external IP's due to: %v",
 			err)
 	}
-	klog.V(1).Infof("Custom routing table required for Direct Server Return is setup as expected.",
+	klog.V(1).Infof("Custom routing table required for Direct Server Return (%s) is setup as expected.",
 		externalIPRouteTableName)
 	return nil
 }
