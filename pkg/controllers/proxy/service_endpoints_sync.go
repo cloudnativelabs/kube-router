@@ -320,8 +320,8 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 					klog.Errorf("failed to generate FW mark")
 					continue
 				}
-				ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(fwMark, protocol,
-					uint16(svc.port), svc.sessionAffinity, svc.sessionAffinityTimeoutSeconds, svc.scheduler, svc.flags)
+				ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(ipvsSvcs, fwMark, protocol, uint16(svc.port),
+					svc.sessionAffinity, svc.sessionAffinityTimeoutSeconds, svc.scheduler, svc.flags)
 				if err != nil {
 					klog.Errorf("failed to create IPVS service for External IP: %s due to: %s",
 						externalIP, err.Error())

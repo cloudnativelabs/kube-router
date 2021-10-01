@@ -110,8 +110,8 @@ type ipvsCalls interface {
 	ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
 	ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error)
 	ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
-	ipvsAddFWMarkService(fwMark uint32, protocol, port uint16, persistent bool, persistentTimeout int32,
-		scheduler string, flags schedFlags) (*ipvs.Service, error)
+	ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uint32, protocol, port uint16, persistent bool,
+		persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
 }
 
 type netlinkCalls interface {
@@ -1722,13 +1722,8 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 }
 
 // ipvsAddFWMarkService: creates an IPVS service using FWMARK
-func (ln *linuxNetworking) ipvsAddFWMarkService(fwMark uint32, protocol, port uint16, persistent bool,
-	persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
-	svcs, err := ln.ipvsGetServices()
-	if err != nil {
-		return nil, err
-	}
-
+func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uint32, protocol, port uint16,
+	persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 	for _, svc := range svcs {
 		if fwMark == svc.FWMark {
 			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
@@ -1739,7 +1734,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(fwMark uint32, protocol, port ui
 					ipvsSetSchedFlags(svc, flags)
 				}
 
-				err = ln.ipvsUpdateService(svc)
+				err := ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, err
 				}
@@ -1750,7 +1745,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(fwMark uint32, protocol, port ui
 			if changedIpvsSchedFlags(svc, flags) {
 				ipvsSetSchedFlags(svc, flags)
 
-				err = ln.ipvsUpdateService(svc)
+				err := ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, err
 				}
@@ -1759,7 +1754,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(fwMark uint32, protocol, port ui
 
 			if scheduler != svc.SchedName {
 				svc.SchedName = scheduler
-				err = ln.ipvsUpdateService(svc)
+				err := ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, errors.New("Failed to update the scheduler for the service due to " + err.Error())
 				}
@@ -1782,7 +1777,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(fwMark uint32, protocol, port ui
 	ipvsSetPersistence(&svc, persistent, persistentTimeout)
 	ipvsSetSchedFlags(&svc, flags)
 
-	err = ln.ipvsNewService(&svc)
+	err := ln.ipvsNewService(&svc)
 	if err != nil {
 		return nil, err
 	}
