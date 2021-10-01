@@ -1851,6 +1851,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
 	}
 	if exists {
+		klog.V(2).Infof("removing mangle rule with: iptables -D PREROUTING -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "PREROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
@@ -1861,6 +1862,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
 	}
 	if exists {
+		klog.V(2).Infof("removing mangle rule with: iptables -D OUTPUT -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "OUTPUT", args...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
@@ -1875,6 +1877,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
 	}
 	if exists {
+		klog.V(2).Infof("removing mangle rule with: iptables -D PREROUTING -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "PREROUTING", mtuArgs...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
@@ -1886,6 +1889,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
 	}
 	if exists {
+		klog.V(2).Infof("removing mangle rule with: iptables -D POSTROUTING -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "POSTROUTING", mtuArgs...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())

@@ -305,13 +305,6 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				"for the service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
 			continue
 		}
-		mangleTableRulesDump := bytes.Buffer{}
-		var mangleTableRules []string
-		if err := utils.SaveInto("mangle", &mangleTableRulesDump); err != nil {
-			klog.Errorf("Failed to run iptables-save: %s" + err.Error())
-		} else {
-			mangleTableRules = strings.Split(mangleTableRulesDump.String(), "\n")
-		}
 		for _, externalIP := range extIPSet.List() {
 			var externalIPServiceID string
 			if svc.directServerReturn && svc.directServerReturnMethod == tunnelInterfaceType {
@@ -383,18 +376,6 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 					"additional cleanup", externalIP, svc.protocol, svc.port, fwMark)
 				if err = nsc.cleanupDSRService(fwMark); err != nil {
 					klog.Errorf("failed to cleanup DSR service: %v", err)
-				}
-				fwMarkStr := fmt.Sprint(fwMark)
-				for _, mangleTableRule := range mangleTableRules {
-					if strings.Contains(mangleTableRule, externalIP) && strings.Contains(mangleTableRule, fwMarkStr) {
-						err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMarkStr,
-							nsc.dsrTCPMSS)
-						if err != nil {
-							klog.Errorf("failed to verify and cleanup any mangle table rule to FORWARD the traffic "+
-								"to external IP due to: %v", err)
-							continue
-						}
-					}
 				}
 			}
 
@@ -640,12 +621,44 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 // cleanupDSRService takes an FW mark was its only input and uses that to lookup the service and then remove DSR
 // specific pieces of that service that may be left-over from the service provisioning.
 func (nsc *NetworkServicesController) cleanupDSRService(fwMark uint32) error {
-	// nolint:dogsled // ignore this for now, we'll fix this in the next commit
-	_, _, _, err := nsc.lookupServiceByFWMark(fwMark)
+	ipAddress, proto, port, err := nsc.lookupServiceByFWMark(fwMark)
 	if err != nil {
 		return fmt.Errorf("no service was found for FW mark: %d, service may not be all the way cleaned up: %v",
 			fwMark, err)
 	}
+
+	// cleanup mangle rules
+	klog.V(2).Infof("service %s:%s:%d was found, continuing with DSR service cleanup", ipAddress, proto, port)
+	mangleTableRulesDump := bytes.Buffer{}
+	var mangleTableRules []string
+	if err := utils.SaveInto("mangle", &mangleTableRulesDump); err != nil {
+		klog.Errorf("Failed to run iptables-save: %s" + err.Error())
+	} else {
+		mangleTableRules = strings.Split(mangleTableRulesDump.String(), "\n")
+	}
+
+	// All of the iptables-save output here prints FW marks in hexadecimal, if we are doing string searching, our search
+	// input needs to be in hex also
+	// nolint:gomnd // we're converting to hex here, we don't need to track this as a constant
+	fwMarkStr := strconv.FormatInt(int64(fwMark), 16)
+	for _, mangleTableRule := range mangleTableRules {
+		if strings.Contains(mangleTableRule, ipAddress) && strings.Contains(mangleTableRule, fwMarkStr) {
+			klog.V(2).Infof("found mangle rule to cleanup: %s", mangleTableRule)
+
+			// When we cleanup the iptables rule, we need to pass FW mark as an int string rather than a hex string
+			err = nsc.ln.cleanupMangleTableRule(ipAddress, proto, strconv.Itoa(port), strconv.Itoa(int(fwMark)),
+				nsc.dsrTCPMSS)
+			if err != nil {
+				klog.Errorf("failed to verify and cleanup any mangle table rule to FORWARD the traffic "+
+					"to external IP due to: %v", err)
+				continue
+			} else {
+				// cleanupMangleTableRule will clean all rules in the table, so there is no need to continue looping
+				break
+			}
+		}
+	}
+
 	// cleanup the fwMarkMap to ensure that we don't accidentally build state
 	delete(nsc.fwMarkMap, fwMark)
 	return nil
