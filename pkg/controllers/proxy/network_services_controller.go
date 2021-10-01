@@ -3,7 +3,6 @@ package proxy
 import (
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -111,7 +110,7 @@ type ipvsCalls interface {
 	ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
 	ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error)
 	ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
-	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32,
+	ipvsAddFWMarkService(fwMark uint32, protocol, port uint16, persistent bool, persistentTimeout int32,
 		scheduler string, flags schedFlags) (*ipvs.Service, error)
 }
 
@@ -266,6 +265,7 @@ type NetworkServicesController struct {
 	readyForUpdates     bool
 	ProxyFirewallSetup  *sync.Cond
 	ipsetMutex          *sync.Mutex
+	fwMarkMap           map[uint32]string
 
 	// Map of ipsets that we use.
 	ipsetMap map[string]*utils.Set
@@ -511,22 +511,6 @@ func (nsc *NetworkServicesController) doSync() error {
 		}
 	}
 	return nil
-}
-
-// Lookup service ip, protocol, port by given fwmark value (reverse of generateFwmark)
-func (nsc *NetworkServicesController) lookupServiceByFwMark(fwMark uint32) (string, string, int, error) {
-	for _, svc := range nsc.serviceMap {
-		for _, externalIP := range svc.externalIPs {
-			gfwmark, err := generateFwmark(externalIP, svc.protocol, fmt.Sprint(svc.port))
-			if err != nil {
-				return "", "", 0, err
-			}
-			if fwMark == gfwmark {
-				return externalIP, svc.protocol, svc.port, nil
-			}
-		}
-	}
-	return "", "", 0, nil
 }
 
 func getIpvsFirewallInputChainRule() []string {
@@ -799,11 +783,10 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 			}
 			port = int(ipvsService.Port)
 		} else if ipvsService.FWMark != 0 {
-			address, protocol, port, err = nsc.lookupServiceByFwMark(ipvsService.FWMark)
+			address, protocol, port, err = nsc.lookupServiceByFWMark(ipvsService.FWMark)
 			if err != nil {
-				klog.Errorf("failed to lookup %d by FWMark: %s", ipvsService.FWMark, err)
-			}
-			if address == "" {
+				klog.Warningf("failed to lookup %d by FWMark: %s - this may not be a kube-router controlled service, "+
+					"but if it is, then something's gone wrong", ipvsService.FWMark, err)
 				continue
 			}
 		}
@@ -1780,46 +1763,16 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 	return &svc, nil
 }
 
-// generateFwmark: generate a uint32 hash value using the IP address, port, protocol information
-// TODO: collision can rarely happen but still need to be ruled out
-// TODO: I ran into issues with FWMARK for any value above 2^15. Either policy
-// routing and IPVS FWMARK service was not functioning with value above 2^15
-func generateFwmark(ip, protocol, port string) (uint32, error) {
-	const maxFwMarkBitSize = 0x3FFF
-	h := fnv.New32a()
-	_, err := h.Write([]byte(ip + "-" + protocol + "-" + port))
-	if err != nil {
-		return 0, err
-	}
-	return h.Sum32() & maxFwMarkBitSize, err
-}
-
 // ipvsAddFWMarkService: creates an IPVS service using FWMARK
-func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool,
+func (ln *linuxNetworking) ipvsAddFWMarkService(fwMark uint32, protocol, port uint16, persistent bool,
 	persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
-
-	var protocolStr string
-	switch {
-	case protocol == syscall.IPPROTO_TCP:
-		protocolStr = tcpProtocol
-	case protocol == syscall.IPPROTO_UDP:
-		protocolStr = udpProtocol
-	default:
-		protocolStr = "unknown"
-	}
-
-	// generate a FWMARK value unique to the external IP + protocol+ port combination
-	fwmark, err := generateFwmark(vip.String(), protocolStr, fmt.Sprint(port))
-	if err != nil {
-		return nil, err
-	}
 	svcs, err := ln.ipvsGetServices()
 	if err != nil {
 		return nil, err
 	}
 
 	for _, svc := range svcs {
-		if fwmark == svc.FWMark {
+		if fwMark == svc.FWMark {
 			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
 				(!persistent && (svc.Flags&ipvsPersistentFlagHex) != 0) {
 				ipvsSetPersistence(svc, persistent, persistentTimeout)
@@ -1861,7 +1814,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 	}
 
 	svc := ipvs.Service{
-		FWMark:        fwmark,
+		FWMark:        fwMark,
 		AddressFamily: syscall.AF_INET,
 		Protocol:      protocol,
 		Port:          port,
@@ -2364,7 +2317,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
-	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex, metricsMap: make(map[string][]string)}
+	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex, metricsMap: make(map[string][]string),
+		fwMarkMap: map[uint32]string{}}
 
 	if config.MetricsEnabled {
 		// Register the metrics for this controller

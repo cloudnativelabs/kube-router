@@ -2,7 +2,10 @@ package proxy
 
 import (
 	"fmt"
+	"hash/fnv"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
@@ -159,4 +162,78 @@ func (ln *linuxNetworking) configureContainerForDSR(
 		activeNetworkNamespaceHandle.String())
 	_ = activeNetworkNamespaceHandle.Close()
 	return nil
+}
+
+// generateUniqueFWMark generates a unique uint32 hash value using the IP address, port, and protocol. This can then
+// be used in IPVS, ip rules, and iptables to mark and later identify packets. FWMarks along with ip, port, and protocol
+// are then stored in a map on the NSC and can be used later for lookup and as a general translation layer. If after
+// maxUniqueFWMarkInc tries, generateUniqueFWMark is not able to find a unique permutation to use, an error is returned.
+func (nsc *NetworkServicesController) generateUniqueFWMark(ip, protocol, port string) (uint32, error) {
+	// Generate a unit32 hash value using the IP address, port and protocol. This has been moved to an anonymous
+	// function since calling this without guarantees of uniqueness is unsafe.
+	generateFWMark := func(ip, protocol, port string, increment int) (uint32, error) {
+		const maxFwMarkBitSize = 0x3FFF
+		var err error
+		h := fnv.New32a()
+		if increment == 0 {
+			_, err = h.Write([]byte(ip + "-" + protocol + "-" + port))
+		} else {
+			_, err = h.Write([]byte(ip + "-" + protocol + "-" + port + "-" + fmt.Sprintf("%d", increment)))
+		}
+		if err != nil {
+			return 0, err
+		}
+		return h.Sum32() & maxFwMarkBitSize, err
+	}
+
+	const maxUniqueFWMarkInc = 16380
+	increment := 0
+	serviceKey := fmt.Sprintf("%s-%s-%s", ip, protocol, port)
+	for {
+		potentialFWMark, err := generateFWMark(ip, protocol, port, increment)
+		if err != nil {
+			return potentialFWMark, err
+		}
+		if foundServiceKey, ok := nsc.fwMarkMap[potentialFWMark]; ok {
+			if foundServiceKey != serviceKey {
+				increment++
+				continue
+			}
+		}
+		if increment >= maxUniqueFWMarkInc {
+			return 0, fmt.Errorf("could not obtain a unique FWMark for %s:%s:%s after %d tries",
+				protocol, ip, port, maxUniqueFWMarkInc)
+		}
+		nsc.fwMarkMap[potentialFWMark] = serviceKey
+		return potentialFWMark, nil
+	}
+}
+
+// lookupFWMarkByService finds the related FW mark from the internal fwMarkMap kept by the NetworkServiceController
+// given the related ip, protocol, and port. If it isn't able to find a matching FW mark, then it returns an error.
+func (nsc *NetworkServicesController) lookupFWMarkByService(ip, protocol, port string) (uint32, error) {
+	needle := fmt.Sprintf("%s-%s-%s", ip, protocol, port)
+	for fwMark, serviceKey := range nsc.fwMarkMap {
+		if needle == serviceKey {
+			return fwMark, nil
+		}
+	}
+	return 0, fmt.Errorf("no key matching %s:%s:%s was found in fwMarkMap", protocol, ip, port)
+}
+
+// lookupServiceByFWMark Lookup service ip, protocol, port by given FW Mark value (reverse of lookupFWMarkByService)
+func (nsc *NetworkServicesController) lookupServiceByFWMark(fwMark uint32) (string, string, int, error) {
+	serviceKey, ok := nsc.fwMarkMap[fwMark]
+	if !ok {
+		return "", "", 0, fmt.Errorf("could not find service matching the given FW mark")
+	}
+	serviceKeySplit := strings.Split(serviceKey, "-")
+	if len(serviceKeySplit) != 3 {
+		return "", "", 0, fmt.Errorf("service key for found FW mark did not have 3 parts, this shouldn't be possible")
+	}
+	port, err := strconv.ParseInt(serviceKeySplit[2], 10, 32)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("port number for service key for found FW mark was not a 32-bit int: %v", err)
+	}
+	return serviceKeySplit[0], serviceKeySplit[1], int(port), nil
 }

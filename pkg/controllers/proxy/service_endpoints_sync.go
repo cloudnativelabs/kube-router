@@ -315,77 +315,83 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 		for _, externalIP := range extIPSet.List() {
 			var externalIPServiceID string
 			if svc.directServerReturn && svc.directServerReturnMethod == tunnelInterfaceType {
-				ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(net.ParseIP(externalIP), protocol,
+				fwMark, err := nsc.generateUniqueFWMark(externalIP, svc.protocol, strconv.Itoa(svc.port))
+				if err != nil {
+					klog.Errorf("failed to generate FW mark")
+					continue
+				}
+				ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(fwMark, protocol,
 					uint16(svc.port), svc.sessionAffinity, svc.sessionAffinityTimeoutSeconds, svc.scheduler, svc.flags)
 				if err != nil {
-					klog.Errorf("Failed to create ipvs service for External IP: %s due to: %s",
+					klog.Errorf("failed to create IPVS service for External IP: %s due to: %s",
 						externalIP, err.Error())
 					continue
 				}
 				externalIPServices = append(externalIPServices, externalIPService{ipvsSvc: ipvsExternalIPSvc,
 					externalIP: externalIP})
-				fwMark, err := generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port))
-				if err != nil {
-					klog.Errorf("Failed to generate Fwmark")
-					continue
-				}
+
 				externalIPServiceID = fmt.Sprint(fwMark)
 
 				// ensure there is iptables mangle table rule to FWMARK the packet
 				err = setupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), externalIPServiceID,
 					nsc.dsrTCPMSS)
 				if err != nil {
-					klog.Errorf("Failed to setup mangle table rule to FMWARD the traffic to external IP")
+					klog.Errorf("failed to setup mangle table rule to forward the traffic to external IP")
 					continue
 				}
 
 				// ensure VIP less director. we dont assign VIP to any interface
 				err = nsc.ln.ipAddrDel(dummyVipInterface, externalIP)
 				if err != nil && err.Error() != IfaceHasNoAddr {
-					klog.Errorf("Failed to delete external ip address from dummyVipInterface due to %s", err)
+					klog.Errorf("failed to delete external ip address from dummyVipInterface due to %v", err)
 					continue
 				}
 				// do policy routing to deliver the packet locally so that IPVS can pick the packet
 				err = routeVIPTrafficToDirector("0x" + fmt.Sprintf("%x", fwMark))
 				if err != nil {
-					klog.Errorf("Failed to setup ip rule to lookup traffic to external IP: %s through custom "+
-						"route table due to %s", externalIP, err.Error())
+					klog.Errorf("failed to setup ip rule to lookup traffic to external IP: %s through custom "+
+						"route table due to %v", externalIP, err)
 					continue
 				}
 			} else {
 				// ensure director with vip assigned
 				err := nsc.ln.ipAddrAdd(dummyVipInterface, externalIP, true)
 				if err != nil && err.Error() != IfaceHasAddr {
-					klog.Errorf("Failed to assign external ip %s to dummy interface %s due to %s",
-						externalIP, KubeDummyIf, err.Error())
+					klog.Errorf("failed to assign external ip %s to dummy interface %s due to %v",
+						externalIP, KubeDummyIf, err)
 				}
 
 				// create IPVS service for the service to be exposed through the external ip
 				ipvsExternalIPSvc, err := nsc.ln.ipvsAddService(ipvsSvcs, net.ParseIP(externalIP), protocol,
 					uint16(svc.port), svc.sessionAffinity, svc.sessionAffinityTimeoutSeconds, svc.scheduler, svc.flags)
 				if err != nil {
-					klog.Errorf("Failed to create ipvs service for external ip: %s due to %s",
-						externalIP, err.Error())
+					klog.Errorf("failed to create ipvs service for external ip: %s due to %v",
+						externalIP, err)
 					continue
 				}
 				externalIPServices = append(externalIPServices, externalIPService{
 					ipvsSvc: ipvsExternalIPSvc, externalIP: externalIP})
 				externalIPServiceID = generateIPPortID(externalIP, svc.protocol, strconv.Itoa(svc.port))
 
-				// ensure there is NO iptables mangle table rule to FWMARK the packet
-				fwmark, err := generateFwmark(externalIP, svc.protocol, strconv.Itoa(svc.port))
+				// ensure there is NO iptables mangle table rule to FW mark the packet
+				fwMark, err := nsc.lookupFWMarkByService(externalIP, svc.protocol, strconv.Itoa(svc.port))
 				if err != nil {
-					klog.Errorf("Failed to generate a fwmark due to " + err.Error())
+					klog.V(1).Infof("no FW mark found for service, nothing to cleanup: %v", err)
 					continue
 				}
-				fwMark := fmt.Sprint(fwmark)
+				klog.V(1).Infof("the following service '%s:%s:%d' had fwMark associated with it: %d doing "+
+					"additional cleanup", externalIP, svc.protocol, svc.port, fwMark)
+				if err = nsc.cleanupDSRService(fwMark); err != nil {
+					klog.Errorf("failed to cleanup DSR service: %v", err)
+				}
+				fwMarkStr := fmt.Sprint(fwMark)
 				for _, mangleTableRule := range mangleTableRules {
-					if strings.Contains(mangleTableRule, externalIP) && strings.Contains(mangleTableRule, fwMark) {
-						err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMark,
+					if strings.Contains(mangleTableRule, externalIP) && strings.Contains(mangleTableRule, fwMarkStr) {
+						err = nsc.ln.cleanupMangleTableRule(externalIP, svc.protocol, strconv.Itoa(svc.port), fwMarkStr,
 							nsc.dsrTCPMSS)
 						if err != nil {
-							klog.Errorf("Failed to verify and cleanup any mangle table rule to FMWARD the traffic " +
-								"to external IP due to " + err.Error())
+							klog.Errorf("failed to verify and cleanup any mangle table rule to FORWARD the traffic "+
+								"to external IP due to: %v", err)
 							continue
 						}
 					}
@@ -552,6 +558,8 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 
 	var protocol string
 	for _, ipvsSvc := range ipvsSvcs {
+		// Note that this isn't all that safe of an assumption because FWMark services have a completely different
+		// protocol. So do SCTP services. However, we don't deal with SCTP in kube-router and FWMark is handled below.
 		if ipvsSvc.Protocol == syscall.IPPROTO_TCP {
 			protocol = tcpProtocol
 		} else {
@@ -587,7 +595,15 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 
 			klog.V(1).Infof("Found a IPVS service %s which is no longer needed so cleaning up",
 				ipvsServiceString(ipvsSvc))
-			err := nsc.ln.ipvsDelService(ipvsSvc)
+			if ipvsSvc.FWMark != 0 {
+				_, _, _, err = nsc.lookupServiceByFWMark(ipvsSvc.FWMark)
+				if err != nil {
+					klog.V(1).Infof("no FW mark found for service, nothing to cleanup: %v", err)
+				} else if err = nsc.cleanupDSRService(ipvsSvc.FWMark); err != nil {
+					klog.Errorf("failed to cleanup DSR service: %v", err)
+				}
+			}
+			err = nsc.ln.ipvsDelService(ipvsSvc)
 			if err != nil {
 				klog.Errorf("Failed to delete stale IPVS service %s due to: %s",
 					ipvsServiceString(ipvsSvc), err.Error())
@@ -618,6 +634,20 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 			}
 		}
 	}
+	return nil
+}
+
+// cleanupDSRService takes an FW mark was its only input and uses that to lookup the service and then remove DSR
+// specific pieces of that service that may be left-over from the service provisioning.
+func (nsc *NetworkServicesController) cleanupDSRService(fwMark uint32) error {
+	// nolint:dogsled // ignore this for now, we'll fix this in the next commit
+	_, _, _, err := nsc.lookupServiceByFWMark(fwMark)
+	if err != nil {
+		return fmt.Errorf("no service was found for FW mark: %d, service may not be all the way cleaned up: %v",
+			fwMark, err)
+	}
+	// cleanup the fwMarkMap to ensure that we don't accidentally build state
+	delete(nsc.fwMarkMap, fwMark)
 	return nil
 }
 

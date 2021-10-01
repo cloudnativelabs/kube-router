@@ -185,8 +185,8 @@ var _ = Describe("NetworkServicesController", func() {
 			Expect(syncErr).To(Succeed())
 		})
 		It("Should have called cleanupMangleTableRule for ExternalIPs", func() {
-			fwmark1, _ := generateFwmark("1.1.1.1", tcpProtocol, "8080")
-			fwmark2, _ := generateFwmark("2.2.2.2", tcpProtocol, "8080")
+			fwmark1, _ := nsc.generateUniqueFWMark("1.1.1.1", tcpProtocol, "8080")
+			fwmark2, _ := nsc.generateUniqueFWMark("2.2.2.2", tcpProtocol, "8080")
 			Expect(
 				fmt.Sprintf("%v", mockedLinuxNetworking.cleanupMangleTableRuleCalls())).To(
 				Equal(
