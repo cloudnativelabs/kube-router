@@ -274,8 +274,8 @@ type NetworkServicesController struct {
 	epLister  cache.Indexer
 	podLister cache.Indexer
 
-	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
+	ServiceEventHandler   cache.ResourceEventHandler
 
 	gracefulPeriod      time.Duration
 	gracefulQueue       gracefulQueue

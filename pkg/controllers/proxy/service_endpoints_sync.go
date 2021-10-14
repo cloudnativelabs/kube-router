@@ -368,14 +368,17 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 
 				// ensure there is NO iptables mangle table rule to FW mark the packet
 				fwMark, err := nsc.lookupFWMarkByService(externalIP, svc.protocol, strconv.Itoa(svc.port))
-				if err != nil {
-					klog.V(1).Infof("no FW mark found for service, nothing to cleanup: %v", err)
-					continue
-				}
-				klog.V(1).Infof("the following service '%s:%s:%d' had fwMark associated with it: %d doing "+
-					"additional cleanup", externalIP, svc.protocol, svc.port, fwMark)
-				if err = nsc.cleanupDSRService(fwMark); err != nil {
-					klog.Errorf("failed to cleanup DSR service: %v", err)
+				switch {
+				case err != nil:
+					klog.Errorf("failed to find FW mark for the service: %v", err)
+				case fwMark == 0:
+					klog.V(2).Infof("no FW mark found for service, nothing to cleanup")
+				case fwMark != 0:
+					klog.V(2).Infof("the following service '%s:%s:%d' had fwMark associated with it: %d doing "+
+						"additional cleanup", externalIP, svc.protocol, svc.port, fwMark)
+					if err = nsc.cleanupDSRService(fwMark); err != nil {
+						klog.Errorf("failed to cleanup DSR service: %v", err)
+					}
 				}
 			}
 
