@@ -225,33 +225,6 @@ If you want to also hairpin externalIPs declared for Service `my-service` (note,
 kubectl annotate service my-service "kube-router.io/service.hairpin.externalips="
 ```
 
-## Direct server return
-
-Please read below blog on how to user DSR in combination with `--advertise-external-ip` to build highly scalable and available ingress.
-https://cloudnativelabs.github.io/post/2017-11-01-kube-high-available-ingress/
-
-You can enable DSR(Direct Server Return) functionality per service. When enabled service endpoint
-will directly respond to the client by passing the service proxy. When DSR is enabled Kube-router 
-will uses LVS's tunneling mode to achieve this.
-
-To enable DSR you need to annotate service with `kube-router.io/service.dsr=tunnel` annotation. For e.g.
-
-```
-kubectl annotate service my-service "kube-router.io/service.dsr=tunnel"
-```
-
-**In the current implementation when annotation is applied on the service, DSR will be applicable only to the external IP's.**
-
-**Also when DSR is used, current implementation does not support port remapping. So you need to use same port and target port for the service**
-
-You will need to enable `hostIPC: true` and `hostPID: true` in kube-router daemonset manifest.
-Also host path `/var/run/docker.sock` must be made a volumemount to kube-router.
-
-Above changes are required for kube-router to enter pod namespeace and create ipip tunnel in the pod and to 
-assign the external IP to the VIP. 
-
-For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirements enabled.
-
 ## SNATing Service Traffic
 By default, as traffic ingresses into the cluster, kube-router will source nat the traffic to ensure symmetric routing if it needs to proxy that traffic to ensure it gets to a node that has a service pod that is capable of servicing the traffic. This has a potential to cause issues when network policies are applied to that service since now the traffic will appear to be coming from a node in your cluster instead of the traffic originator.
 

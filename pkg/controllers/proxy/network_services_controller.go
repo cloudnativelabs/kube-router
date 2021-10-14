@@ -3,7 +3,6 @@ package proxy
 import (
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -47,6 +46,11 @@ const (
 	IpvsSvcFSched1    = "flag-1"
 	IpvsSvcFSched2    = "flag-2"
 	IpvsSvcFSched3    = "flag-3"
+
+	customDSRRouteTableID    = "78"
+	customDSRRouteTableName  = "kube-router-dsr"
+	externalIPRouteTableID   = "79"
+	externalIPRouteTableName = "external_ip"
 
 	// Taken from https://github.com/torvalds/linux/blob/master/include/uapi/linux/ip_vs.h#L21
 	ipvsPersistentFlagHex = 0x0001
@@ -106,8 +110,8 @@ type ipvsCalls interface {
 	ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
 	ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error)
 	ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
-	ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32,
-		scheduler string, flags schedFlags) (*ipvs.Service, error)
+	ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uint32, protocol, port uint16, persistent bool,
+		persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
 }
 
 type netlinkCalls interface {
@@ -261,6 +265,7 @@ type NetworkServicesController struct {
 	readyForUpdates     bool
 	ProxyFirewallSetup  *sync.Cond
 	ipsetMutex          *sync.Mutex
+	fwMarkMap           map[uint32]string
 
 	// Map of ipsets that we use.
 	ipsetMap map[string]*utils.Set
@@ -269,8 +274,8 @@ type NetworkServicesController struct {
 	epLister  cache.Indexer
 	podLister cache.Indexer
 
-	ServiceEventHandler   cache.ResourceEventHandler
 	EndpointsEventHandler cache.ResourceEventHandler
+	ServiceEventHandler   cache.ResourceEventHandler
 
 	gracefulPeriod      time.Duration
 	gracefulQueue       gracefulQueue
@@ -506,22 +511,6 @@ func (nsc *NetworkServicesController) doSync() error {
 		}
 	}
 	return nil
-}
-
-// Lookup service ip, protocol, port by given fwmark value (reverse of generateFwmark)
-func (nsc *NetworkServicesController) lookupServiceByFwMark(fwMark uint32) (string, string, int, error) {
-	for _, svc := range nsc.serviceMap {
-		for _, externalIP := range svc.externalIPs {
-			gfwmark, err := generateFwmark(externalIP, svc.protocol, fmt.Sprint(svc.port))
-			if err != nil {
-				return "", "", 0, err
-			}
-			if fwMark == gfwmark {
-				return externalIP, svc.protocol, svc.port, nil
-			}
-		}
-	}
-	return "", "", 0, nil
 }
 
 func getIpvsFirewallInputChainRule() []string {
@@ -794,11 +783,10 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 			}
 			port = int(ipvsService.Port)
 		} else if ipvsService.FWMark != 0 {
-			address, protocol, port, err = nsc.lookupServiceByFwMark(ipvsService.FWMark)
+			address, protocol, port, err = nsc.lookupServiceByFWMark(ipvsService.FWMark)
 			if err != nil {
-				klog.Errorf("failed to lookup %d by FWMark: %s", ipvsService.FWMark, err)
-			}
-			if address == "" {
+				klog.Warningf("failed to lookup %d by FWMark: %s - this may not be a kube-router controlled service, "+
+					"but if it is, then something's gone wrong", ipvsService.FWMark, err)
 				continue
 			}
 		}
@@ -908,48 +896,6 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		}
 	}
 	return nil
-}
-
-// TODO Move to utils
-func unsortedListsEquivalent(a, b []endpointsInfo) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	values := make(map[interface{}]int)
-	for _, val := range a {
-		values[val] = 1
-	}
-	for _, val := range b {
-		values[val]++
-	}
-
-	for _, val := range values {
-		if val == 1 {
-			return false
-		}
-	}
-
-	return true
-}
-
-func endpointsMapsEquivalent(a, b endpointsInfoMap) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for key, valA := range a {
-		valB, ok := b[key]
-		if !ok {
-			return false
-		}
-
-		if !unsortedListsEquivalent(valA, valB) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
@@ -1644,7 +1590,13 @@ func ipvsServiceString(s *ipvs.Service) string {
 		flags += "[flag-3]"
 	}
 
-	return fmt.Sprintf("%s:%s:%v (Flags: %s)", protocol, s.Address, s.Port, flags)
+	// FWMark entries don't contain a protocol, address, or port which means that we need to log them differently so as
+	// not to confuse users
+	if s.FWMark != 0 {
+		return fmt.Sprintf("FWMark:%d (Flags: %s)", s.FWMark, flags)
+	} else {
+		return fmt.Sprintf("%s:%s:%v (Flags: %s)", protocol, s.Address, s.Port, flags)
+	}
 }
 
 func ipvsDestinationString(d *ipvs.Destination) string {
@@ -1744,10 +1696,8 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 				}
 				klog.V(2).Infof("Updated schedule for the service: %s", ipvsServiceString(svc))
 			}
-			// TODO: Make this debug output when we get log levels
-			// klog.Fatal("ipvs service %s:%s:%s already exists so returning", vip.String(),
-			// 	protocol, strconv.Itoa(int(port)))
 
+			klog.V(2).Infof("ipvs service %s already exists so returning", ipvsServiceString(svc))
 			return svc, nil
 		}
 	}
@@ -1771,46 +1721,11 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 	return &svc, nil
 }
 
-// generateFwmark: generate a uint32 hash value using the IP address, port, protocol information
-// TODO: collision can rarely happen but still need to be ruled out
-// TODO: I ran into issues with FWMARK for any value above 2^15. Either policy
-// routing and IPVS FWMARK service was not functioning with value above 2^15
-func generateFwmark(ip, protocol, port string) (uint32, error) {
-	const maxFwMarkBitSize = 0x3FFF
-	h := fnv.New32a()
-	_, err := h.Write([]byte(ip + "-" + protocol + "-" + port))
-	if err != nil {
-		return 0, err
-	}
-	return h.Sum32() & maxFwMarkBitSize, err
-}
-
 // ipvsAddFWMarkService: creates an IPVS service using FWMARK
-func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint16, persistent bool,
-	persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
-
-	var protocolStr string
-	switch {
-	case protocol == syscall.IPPROTO_TCP:
-		protocolStr = tcpProtocol
-	case protocol == syscall.IPPROTO_UDP:
-		protocolStr = udpProtocol
-	default:
-		protocolStr = "unknown"
-	}
-
-	// generate a FWMARK value unique to the external IP + protocol+ port combination
-	fwmark, err := generateFwmark(vip.String(), protocolStr, fmt.Sprint(port))
-	if err != nil {
-		return nil, err
-	}
-	svcs, err := ln.ipvsGetServices()
-	if err != nil {
-		return nil, err
-	}
-
+func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uint32, protocol, port uint16,
+	persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
 	for _, svc := range svcs {
-		if fwmark == svc.FWMark {
+		if fwMark == svc.FWMark {
 			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
 				(!persistent && (svc.Flags&ipvsPersistentFlagHex) != 0) {
 				ipvsSetPersistence(svc, persistent, persistentTimeout)
@@ -1819,7 +1734,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 					ipvsSetSchedFlags(svc, flags)
 				}
 
-				err = ln.ipvsUpdateService(svc)
+				err := ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, err
 				}
@@ -1830,7 +1745,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 			if changedIpvsSchedFlags(svc, flags) {
 				ipvsSetSchedFlags(svc, flags)
 
-				err = ln.ipvsUpdateService(svc)
+				err := ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, err
 				}
@@ -1839,22 +1754,20 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 
 			if scheduler != svc.SchedName {
 				svc.SchedName = scheduler
-				err = ln.ipvsUpdateService(svc)
+				err := ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, errors.New("Failed to update the scheduler for the service due to " + err.Error())
 				}
 				klog.V(2).Infof("Updated schedule for the service: %s", ipvsServiceString(svc))
 			}
-			// TODO: Make this debug output when we get log levels
-			// klog.Fatal("ipvs service %s:%s:%s already exists so returning", vip.String(),
-			// 	protocol, strconv.Itoa(int(port)))
 
+			klog.V(2).Infof("ipvs service %s already exists so returning", ipvsServiceString(svc))
 			return svc, nil
 		}
 	}
 
 	svc := ipvs.Service{
-		FWMark:        fwmark,
+		FWMark:        fwMark,
 		AddressFamily: syscall.AF_INET,
 		Protocol:      protocol,
 		Port:          port,
@@ -1864,7 +1777,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(vip net.IP, protocol, port uint1
 	ipvsSetPersistence(&svc, persistent, persistentTimeout)
 	ipvsSetSchedFlags(&svc, flags)
 
-	err = ln.ipvsNewService(&svc)
+	err := ln.ipvsNewService(&svc)
 	if err != nil {
 		return nil, err
 	}
@@ -1886,22 +1799,14 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 			return fmt.Errorf("failed to update ipvs destination %s to the ipvs service %s due to : %s",
 				ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 		}
-		// TODO: Make this debug output when we get log levels
-		// klog.Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
-		// 	ipvsDestinationString(dest), ipvsServiceString(service))
+		klog.V(2).Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
+			ipvsDestinationString(dest), ipvsServiceString(service))
 	} else {
 		return fmt.Errorf("failed to add ipvs destination %s to the ipvs service %s due to : %s",
 			ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 	}
 	return nil
 }
-
-const (
-	customDSRRouteTableID    = "78"
-	customDSRRouteTableName  = "kube-router-dsr"
-	externalIPRouteTableID   = "79"
-	externalIPRouteTableName = "external_ip"
-)
 
 // setupMangleTableRule: sets up iptables rule to FWMARK the traffic to external IP vip
 func setupMangleTableRule(ip string, protocol string, port string, fwmark string, tcpMSS int) error {
@@ -1946,6 +1851,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
 	}
 	if exists {
+		klog.V(2).Infof("removing mangle rule with: iptables -D PREROUTING -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "PREROUTING", args...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
@@ -1956,6 +1862,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
 	}
 	if exists {
+		klog.V(2).Infof("removing mangle rule with: iptables -D OUTPUT -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "OUTPUT", args...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
@@ -1970,6 +1877,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
 	}
 	if exists {
+		klog.V(2).Infof("removing mangle rule with: iptables -D PREROUTING -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "PREROUTING", mtuArgs...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
@@ -1981,6 +1889,7 @@ func (ln *linuxNetworking) cleanupMangleTableRule(ip string, protocol string, po
 		return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
 	}
 	if exists {
+		klog.V(2).Infof("removing mangle rule with: iptables -D POSTROUTING -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "POSTROUTING", mtuArgs...)
 		if err != nil {
 			return errors.New("Failed to cleanup iptables command to set up TCPMSS due to " + err.Error())
@@ -2365,7 +2274,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
-	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex, metricsMap: make(map[string][]string)}
+	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex, metricsMap: make(map[string][]string),
+		fwMarkMap: map[uint32]string{}}
 
 	if config.MetricsEnabled {
 		// Register the metrics for this controller
