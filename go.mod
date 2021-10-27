@@ -15,7 +15,7 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.11.0
-	github.com/osrg/gobgp v0.0.0-20210901090119-8ab84f8636ee
+	github.com/osrg/gobgp v0.0.0-20211001064702-91b91278600d
 	github.com/prometheus/client_golang v1.11.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
