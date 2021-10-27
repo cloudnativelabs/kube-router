@@ -13,9 +13,9 @@ on:
     - v[1-9].*
 
 env:
-  BUILDTIME_BASE: "golang:1.16.7-alpine3.14"
+  BUILDTIME_BASE: "golang:1.16.9-alpine3.14"
   RUNTIME_BASE: "alpine:3.14"
-  GO_VERSION: "~1.16.7"
+  GO_VERSION: "~1.16.9"
 
 jobs:
   # Runs Golangci-lint on the source code
