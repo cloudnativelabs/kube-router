@@ -9,12 +9,12 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v20.10.10+incompatible
 	github.com/docker/go-connections v0.4.0 // indirect
-	github.com/golang/protobuf v1.4.3
+	github.com/golang/protobuf v1.5.2
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/moby/ipvs v1.0.1
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.11.0
+	github.com/onsi/gomega v1.16.0
 	github.com/osrg/gobgp v0.0.0-20211001064702-91b91278600d
 	github.com/prometheus/client_golang v1.11.0
 	github.com/spf13/pflag v1.0.5
