@@ -1907,7 +1907,7 @@ func routeVIPTrafficToDirector(fwmark string) error {
 	if err != nil {
 		return errors.New("Failed to verify if `ip rule` exists due to: " + err.Error())
 	}
-	if !strings.Contains(string(out), fwmark) {
+	if !strings.Contains(string(out), fwmark+" ") {
 		err = exec.Command("ip", "rule", "add", "prio", "32764", "fwmark", fwmark, "table",
 			customDSRRouteTableID).Run()
 		if err != nil {
