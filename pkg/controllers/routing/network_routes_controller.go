@@ -618,12 +618,10 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 }
 
 func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, error) {
-	var peerDisconnected bool
+	var peerConnected bool
 	peerFunc := func(peer *gobgpapi.Peer) {
-		if peer.Conf.NeighborAddress == peerIP {
-			if peer.State.SessionState != gobgpapi.PeerState_ESTABLISHED {
-				peerDisconnected = true
-			}
+		if peer.Conf.NeighborAddress == peerIP && peer.State.SessionState == gobgpapi.PeerState_ESTABLISHED {
+			peerConnected = true
 		}
 	}
 	err := nrc.bgpServer.ListPeer(context.Background(), &gobgpapi.ListPeerRequest{
@@ -633,7 +631,7 @@ func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, err
 		return false, fmt.Errorf("unable to list peers to see if tunnel & routes need to be removed: %v", err)
 	}
 
-	return peerDisconnected, nil
+	return peerConnected, nil
 }
 
 // cleanupTunnel removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer
