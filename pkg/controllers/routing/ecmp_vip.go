@@ -516,14 +516,8 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 
 	for _, subset := range ep.Subsets {
 		for _, address := range subset.Addresses {
-			if address.NodeName != nil {
-				if *address.NodeName == nrc.nodeName {
-					return true, nil
-				}
-			} else {
-				if address.IP == nrc.nodeIP.String() {
-					return true, nil
-				}
+			if (address.NodeName != nil && *address.NodeName == nrc.nodeName) || address.IP == nrc.nodeIP.String() {
+				return true, nil
 			}
 		}
 	}
