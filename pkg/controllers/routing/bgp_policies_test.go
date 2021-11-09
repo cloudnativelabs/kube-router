@@ -74,7 +74,7 @@ func Test_AddPolicies(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
+						Type:        v1core.ServiceTypeClusterIP,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -224,7 +224,7 @@ func Test_AddPolicies(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
+						Type:        v1core.ServiceTypeClusterIP,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -395,7 +395,7 @@ func Test_AddPolicies(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
+						Type:        v1core.ServiceTypeClusterIP,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -551,7 +551,7 @@ func Test_AddPolicies(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
+						Type:        v1core.ServiceTypeClusterIP,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -727,7 +727,7 @@ func Test_AddPolicies(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
+						Type:        v1core.ServiceTypeClusterIP,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
@@ -904,7 +904,7 @@ func Test_AddPolicies(t *testing.T) {
 						Name: "svc-1",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
+						Type:        v1core.ServiceTypeClusterIP,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},

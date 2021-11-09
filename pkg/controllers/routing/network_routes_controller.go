@@ -62,10 +62,6 @@ const (
 	// Deprecated: use kube-router.io/service.advertise.loadbalancer instead
 	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"
 
-	LoadBalancerST = "LoadBalancer"
-	ClusterIPST    = "ClusterIP"
-	NodePortST     = "NodePort"
-
 	prependPathMaxBits      = 8
 	asnMaxBitSize           = 32
 	bgpCommunityMaxSize     = 32

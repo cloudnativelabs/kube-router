@@ -337,7 +337,9 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 
 func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) string {
 	clusterIP := ""
-	if svc.Spec.Type == ClusterIPST || svc.Spec.Type == NodePortST || svc.Spec.Type == LoadBalancerST {
+	if svc.Spec.Type == v1core.ServiceTypeClusterIP ||
+		svc.Spec.Type == v1core.ServiceTypeNodePort ||
+		svc.Spec.Type == v1core.ServiceTypeLoadBalancer {
 
 		// skip headless services
 		if !utils.ClusterIPIsNoneOrBlank(svc.Spec.ClusterIP) {
@@ -349,7 +351,9 @@ func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) string {
 
 func (nrc *NetworkRoutingController) getExternalIPs(svc *v1core.Service) []string {
 	externalIPList := make([]string, 0)
-	if svc.Spec.Type == ClusterIPST || svc.Spec.Type == NodePortST || svc.Spec.Type == LoadBalancerST {
+	if svc.Spec.Type == v1core.ServiceTypeClusterIP ||
+		svc.Spec.Type == v1core.ServiceTypeNodePort ||
+		svc.Spec.Type == v1core.ServiceTypeLoadBalancer {
 
 		// skip headless services
 		if !utils.ClusterIPIsNoneOrBlank(svc.Spec.ClusterIP) {
@@ -361,7 +365,7 @@ func (nrc *NetworkRoutingController) getExternalIPs(svc *v1core.Service) []strin
 
 func (nrc *NetworkRoutingController) getLoadBalancerIPs(svc *v1core.Service) []string {
 	loadBalancerIPList := make([]string, 0)
-	if svc.Spec.Type == LoadBalancerST {
+	if svc.Spec.Type == v1core.ServiceTypeLoadBalancer {
 		// skip headless services
 		if !utils.ClusterIPIsNoneOrBlank(svc.Spec.ClusterIP) {
 			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
