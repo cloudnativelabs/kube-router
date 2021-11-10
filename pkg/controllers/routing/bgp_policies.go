@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -125,7 +126,14 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 			&gobgpapi.AddDefinedSetRequest{DefinedSet: clusterIPPrefixSet})
 	}
 
-	if reflect.DeepEqual(advIPPrefixList, currentDefinedSet.Prefixes) {
+	currentPrefixes := currentDefinedSet.Prefixes
+	sort.SliceStable(advIPPrefixList, func(i, j int) bool {
+		return advIPPrefixList[i].IpPrefix < advIPPrefixList[j].IpPrefix
+	})
+	sort.SliceStable(currentPrefixes, func(i, j int) bool {
+		return currentPrefixes[i].IpPrefix < currentPrefixes[j].IpPrefix
+	})
+	if reflect.DeepEqual(advIPPrefixList, currentPrefixes) {
 		return nil
 	}
 	toAdd := make([]*gobgpapi.Prefix, 0)
@@ -243,7 +251,10 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 		return iBGPPeerCIDRs, err
 	}
 
-	if reflect.DeepEqual(iBGPPeerCIDRs, currentDefinedSet.List) {
+	currentCIDRs := currentDefinedSet.List
+	sort.Strings(iBGPPeerCIDRs)
+	sort.Strings(currentCIDRs)
+	if reflect.DeepEqual(iBGPPeerCIDRs, currentCIDRs) {
 		return iBGPPeerCIDRs, nil
 	}
 	toAdd := make([]string, 0)
