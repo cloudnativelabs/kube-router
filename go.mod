@@ -15,6 +15,7 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.11.0
+	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/osrg/gobgp v0.0.0-20211001064702-91b91278600d
 	github.com/prometheus/client_golang v1.11.0
 	github.com/spf13/pflag v1.0.5
@@ -33,5 +34,7 @@ require (
 )
 
 replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.8 // CVE-2021-32760 & CVE-2021-41103
+
+replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2 // CVE-2021-41190
 
 go 1.16
