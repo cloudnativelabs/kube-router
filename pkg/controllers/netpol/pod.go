@@ -185,7 +185,7 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 		npc.filterTableRules.WriteString(strings.Join(args, " "))
 	}
 
-	comment := "\"rule to permit the traffic traffic to pods when source is the pod's local node\""
+	comment := "\"rule to permit the traffic to pods when source is the pod's local node\""
 	args := []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment,
 		"-m", "addrtype", "--src-type", "LOCAL", "-d", pod.ip, "-j", "ACCEPT", "\n"}
 	npc.filterTableRules.WriteString(strings.Join(args, " "))
