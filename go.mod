@@ -23,6 +23,7 @@ require (
 	github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
 	golang.org/x/net v0.0.0-20211020060615-d418f374d309
 	google.golang.org/grpc v1.41.0
+	google.golang.org/protobuf v1.26.0
 	gopkg.in/yaml.v3 v3.0.0-20200601152816-913338de1bd2 // indirect
 	k8s.io/api v0.21.4
 	k8s.io/apimachinery v0.21.4
