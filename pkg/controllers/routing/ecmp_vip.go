@@ -10,6 +10,7 @@ import (
 
 	"strings"
 
+	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	gobgpapi "github.com/osrg/gobgp/api"
@@ -24,13 +25,16 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 	klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers",
 		vip, strconv.Itoa(32), nrc.nodeIP.String())
 
+	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 		Origin: 0,
 	})
+	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
 		NextHop: nrc.nodeIP.String(),
 	})
 	attrs := []*any.Any{a1, a2}
+	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	nlri1, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
 		Prefix:    vip,
 		PrefixLen: 32,
@@ -51,13 +55,16 @@ func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 	klog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers",
 		vip, strconv.Itoa(32), nrc.nodeIP.String())
 
+	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 		Origin: 0,
 	})
+	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
 		NextHop: nrc.nodeIP.String(),
 	})
 	attrs := []*any.Any{a1, a2}
+	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
 		Prefix:    vip,
 		PrefixLen: 32,
