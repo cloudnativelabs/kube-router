@@ -367,10 +367,8 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				externalIPServiceID = generateIPPortID(externalIP, svc.protocol, strconv.Itoa(svc.port))
 
 				// ensure there is NO iptables mangle table rule to FW mark the packet
-				fwMark, err := nsc.lookupFWMarkByService(externalIP, svc.protocol, strconv.Itoa(svc.port))
+				fwMark := nsc.lookupFWMarkByService(externalIP, svc.protocol, strconv.Itoa(svc.port))
 				switch {
-				case err != nil:
-					klog.Errorf("failed to find FW mark for the service: %v", err)
 				case fwMark == 0:
 					klog.V(2).Infof("no FW mark found for service, nothing to cleanup")
 				case fwMark != 0:

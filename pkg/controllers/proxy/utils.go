@@ -211,14 +211,14 @@ func (nsc *NetworkServicesController) generateUniqueFWMark(ip, protocol, port st
 
 // lookupFWMarkByService finds the related FW mark from the internal fwMarkMap kept by the NetworkServiceController
 // given the related ip, protocol, and port. If it isn't able to find a matching FW mark, then it returns an error.
-func (nsc *NetworkServicesController) lookupFWMarkByService(ip, protocol, port string) (uint32, error) {
+func (nsc *NetworkServicesController) lookupFWMarkByService(ip, protocol, port string) uint32 {
 	needle := fmt.Sprintf("%s-%s-%s", ip, protocol, port)
 	for fwMark, serviceKey := range nsc.fwMarkMap {
 		if needle == serviceKey {
-			return fwMark, nil
+			return fwMark
 		}
 	}
-	return 0, fmt.Errorf("no key matching %s:%s:%s was found in fwMarkMap", protocol, ip, port)
+	return 0
 }
 
 // lookupServiceByFWMark Lookup service ip, protocol, port by given FW Mark value (reverse of lookupFWMarkByService)
