@@ -87,21 +87,17 @@ func TestNetworkServicesController_lookupFWMarkByService(t *testing.T) {
 	t.Run("ensure existing FW mark is found in lookup", func(t *testing.T) {
 		nsc := getMoqNSC()
 		fwMark1, err1 := nsc.generateUniqueFWMark("10.255.0.1", "TCP", "80")
-		fwMark2, err2 := nsc.lookupFWMarkByService("10.255.0.1", "TCP", "80")
+		fwMark2 := nsc.lookupFWMarkByService("10.255.0.1", "TCP", "80")
 
 		assert.NoError(t, err1, "there shouldn't have been an error calling generateUniqueFWMark")
-		assert.NoError(t, err2, "there shouldn't have been an error calling lookupFWMarkByService")
 
 		assert.Equal(t, fwMark1, fwMark2,
 			"given the same inputs, lookupFWMarkByService should be able to find the previously generated FW mark")
 	})
 	t.Run("ensure error is returned when a service doesn't exist in FW mark map", func(t *testing.T) {
 		nsc := getMoqNSC()
-		fwMark, err := nsc.lookupFWMarkByService("10.255.0.1", "TCP", "80")
+		fwMark := nsc.lookupFWMarkByService("10.255.0.1", "TCP", "80")
 
-		assert.EqualErrorf(t, err,
-			fmt.Sprintf("no key matching %s:%s:%s was found in fwMarkMap", "TCP", "10.255.0.1", "80"),
-			"expected to get an error when service had not yet been added to fwMarkMap")
 		assert.Equal(t, uint32(0), fwMark, "expected FW mark to be 0 on error condition")
 	})
 }
