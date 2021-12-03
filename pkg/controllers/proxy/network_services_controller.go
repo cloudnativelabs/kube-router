@@ -451,10 +451,14 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				klog.V(1).Info("Performing requested sync of ipvs services")
 				nsc.mu.Lock()
 				err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
-				nsc.mu.Unlock()
 				if err != nil {
 					klog.Errorf("Error during ipvs sync in network service controller. Error: " + err.Error())
 				}
+				err = nsc.syncHairpinIptablesRules()
+				if err != nil {
+					klog.Errorf("Error syncing hairpin iptables rules: %s", err.Error())
+				}
+				nsc.mu.Unlock()
 			}
 			if err == nil {
 				healthcheck.SendHeartBeat(healthChan, "NSC")
