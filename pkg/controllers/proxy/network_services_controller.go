@@ -440,14 +440,17 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			switch perform {
 			case synctypeAll:
 				klog.V(1).Info("Performing requested full sync of services")
-				err := nsc.doSync()
+				err = nsc.doSync()
 				if err != nil {
 					klog.Errorf("Error during full sync in network service controller. Error: " + err.Error())
 				}
 			case synctypeIpvs:
+				// We call the component pieces of doSync() here because for methods that send this on the channel they
+				// have already done expensive pieces of the doSync() method like building service and endpoint info
+				// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
 				klog.V(1).Info("Performing requested sync of ipvs services")
 				nsc.mu.Lock()
-				err := nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+				err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 				nsc.mu.Unlock()
 				if err != nil {
 					klog.Errorf("Error during ipvs sync in network service controller. Error: " + err.Error())
