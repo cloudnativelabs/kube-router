@@ -16,7 +16,7 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
 	github.com/opencontainers/image-spec v1.0.2 // indirect
-	github.com/osrg/gobgp v0.0.0-20211001064702-91b91278600d
+	github.com/osrg/gobgp v0.0.0-20211201041502-6248c576b118
 	github.com/prometheus/client_golang v1.11.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
