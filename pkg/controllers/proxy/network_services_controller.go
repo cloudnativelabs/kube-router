@@ -1423,11 +1423,11 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	}
 
 	// Apply the rules we need
-	for _, ruleArgs := range rulesNeeded {
+	for rule, ruleArgs := range rulesNeeded {
 		ruleExists := false
 		for _, ruleFromNode := range rulesFromNode {
-			_, ruleExists = rulesNeeded[ruleFromNode]
-			if ruleExists {
+			if rule == ruleFromNode {
+				ruleExists = true
 				break
 			}
 		}
