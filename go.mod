@@ -3,8 +3,8 @@ module github.com/cloudnativelabs/kube-router
 require (
 	github.com/aws/aws-sdk-go v1.38.70
 	github.com/containerd/containerd v1.5.4 // indirect
-	github.com/containernetworking/cni v0.8.1
-	github.com/containernetworking/plugins v0.9.1
+	github.com/containernetworking/cni v1.0.1
+	github.com/containernetworking/plugins v1.0.1
 	github.com/coreos/go-iptables v0.6.0
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v20.10.10+incompatible
