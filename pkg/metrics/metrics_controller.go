@@ -100,18 +100,6 @@ var (
 		Name:      "controller_iptables_sync_time",
 		Help:      "Time it took for controller to sync iptables",
 	})
-	// ControllerIptablesSyncTotalTime Time it took for controller to sync iptables
-	ControllerIptablesSyncTotalTime = prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: namespace,
-		Name:      "controller_iptables_sync_total_time",
-		Help:      "Time it took for controller to sync iptables as a counter",
-	})
-	// ControllerIptablesSyncTotalCount Number of times the controller synced iptables for individual pods
-	ControllerIptablesSyncTotalCount = prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: namespace,
-		Name:      "controller_iptables_sync_total_count",
-		Help:      "Total number of times kube-router synced iptables",
-	})
 	// ControllerIpvsServicesSyncTime Time it took for controller to sync ipvs services
 	ControllerIpvsServicesSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
