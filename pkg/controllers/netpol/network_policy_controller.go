@@ -229,8 +229,6 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		endTime := time.Since(start)
 		if npc.MetricsEnabled {
 			metrics.ControllerIptablesSyncTime.Observe(endTime.Seconds())
-			metrics.ControllerIptablesSyncTotalTime.Add(endTime.Seconds())
-			metrics.ControllerIptablesSyncTotalCount.Add(1)
 		}
 		klog.V(1).Infof("sync iptables took %v", endTime)
 	}()
@@ -658,8 +656,6 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		// Register the metrics for this controller
 		prometheus.MustRegister(metrics.ControllerIptablesSyncTime)
 		prometheus.MustRegister(metrics.ControllerPolicyChainsSyncTime)
-		prometheus.MustRegister(metrics.ControllerIptablesSyncTotalTime)
-		prometheus.MustRegister(metrics.ControllerIptablesSyncTotalCount)
 		npc.MetricsEnabled = true
 	}
 
