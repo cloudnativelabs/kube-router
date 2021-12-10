@@ -1353,7 +1353,18 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	// Generate the rules that we need
 	for svcName, svcInfo := range nsc.serviceMap {
 		if nsc.globalHairpin || svcInfo.hairpin {
+			// If this service doesn't have any active & local endpoints on this node, then skip it as only local
+			// endpoints matter for hairpinning
+			if !hasActiveEndpoints(nsc.endpointsMap[svcName]) {
+				continue
+			}
+
 			for _, ep := range nsc.endpointsMap[svcName] {
+				// If this specific endpoint is not local, then skip it as only local endpoints matter for hairpinning
+				if !ep.isLocal {
+					continue
+				}
+
 				// Handle ClusterIP Service
 				rule, ruleArgs := hairpinRuleFrom(svcInfo.clusterIP.String(), ep.ip, svcInfo.port)
 				rulesNeeded[rule] = ruleArgs
