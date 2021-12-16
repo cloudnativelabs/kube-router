@@ -12,8 +12,8 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
-	gobgpapi "github.com/osrg/gobgp/api"
-	gobgp "github.com/osrg/gobgp/pkg/server"
+	gobgpapi "github.com/osrg/gobgp/v3/api"
+	gobgp "github.com/osrg/gobgp/v3/pkg/server"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -98,7 +98,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		n := &gobgpapi.Peer{
 			Conf: &gobgpapi.PeerConf{
 				NeighborAddress: nodeIP.String(),
-				PeerAs:          nrc.nodeAsnNumber,
+				PeerAsn:         nrc.nodeAsnNumber,
 			},
 			Transport: &gobgpapi.Transport{
 				LocalAddress: nrc.nodeIP.String(),
@@ -237,7 +237,7 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpap
 				"%q due to: %s", n.Conf.NeighborAddress, err)
 		}
 		klog.V(2).Infof("Successfully configured %s in ASN %v as BGP peer to the node",
-			n.Conf.NeighborAddress, n.Conf.PeerAs)
+			n.Conf.NeighborAddress, n.Conf.PeerAsn)
 	}
 	return nil
 }
@@ -281,7 +281,7 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 		peer := &gobgpapi.Peer{
 			Conf: &gobgpapi.PeerConf{
 				NeighborAddress: ips[i].String(),
-				PeerAs:          asns[i],
+				PeerAsn:         asns[i],
 			},
 			Timers: &gobgpapi.Timers{Config: &gobgpapi.TimersConfig{HoldTime: uint64(holdtime)}},
 			Transport: &gobgpapi.Transport{

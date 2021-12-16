@@ -15,17 +15,15 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/types/known/anypb"
+
 	"github.com/cloudnativelabs/kube-router/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
-	"github.com/golang/protobuf/ptypes/any"
-
-	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-	"github.com/golang/protobuf/ptypes"
-	gobgpapi "github.com/osrg/gobgp/api"
-	gobgp "github.com/osrg/gobgp/pkg/server"
+	gobgpapi "github.com/osrg/gobgp/v3/api"
+	gobgp "github.com/osrg/gobgp/v3/pkg/server"
 	"k8s.io/klog/v2"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -441,23 +439,31 @@ func (nrc *NetworkRoutingController) autoConfigureMTU() error {
 }
 
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
-	pathWatch := func(path *gobgpapi.Path) {
-		if nrc.MetricsEnabled {
-			metrics.ControllerBGPadvertisementsReceived.Inc()
-		}
-		if path.NeighborIp == "<nil>" {
-			return
-		}
-		klog.V(2).Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
-		if err := nrc.injectRoute(path); err != nil {
-			klog.Errorf("Failed to inject routes due to: " + err.Error())
+	pathWatch := func(r *gobgpapi.WatchEventResponse) {
+		if table := r.GetTable(); table != nil {
+			for _, path := range table.Paths {
+				if path.Family.Afi == gobgpapi.Family_AFI_IP || path.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+					if nrc.MetricsEnabled {
+						metrics.ControllerBGPadvertisementsReceived.Inc()
+					}
+					if path.NeighborIp == "<nil>" {
+						return
+					}
+					klog.V(2).Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
+					if err := nrc.injectRoute(path); err != nil {
+						klog.Errorf("Failed to inject routes due to: " + err.Error())
+					}
+				}
+			}
 		}
 	}
-	err := nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
-		TableType: gobgpapi.TableType_GLOBAL,
-		Family: &gobgpapi.Family{
-			Afi:  gobgpapi.Family_AFI_IP,
-			Safi: gobgpapi.Family_SAFI_UNICAST,
+	err := nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
+		Table: &gobgpapi.WatchEventRequest_Table{
+			Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
+				{
+					Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
+				},
+			},
 		},
 	}, pathWatch)
 	if err != nil {
@@ -483,26 +489,23 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 			Afi:  gobgpapi.Family_AFI_IP6,
 			Safi: gobgpapi.Family_SAFI_UNICAST,
 		}
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-		nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
+		nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
 			PrefixLen: uint32(cidrLen),
 			Prefix:    cidrStr[0],
 		})
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-		a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
+		a1, _ := anypb.New(&gobgpapi.OriginAttribute{
 			Origin: 0,
 		})
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-		v6Attrs, _ := ptypes.MarshalAny(&gobgpapi.MpReachNLRIAttribute{
+		v6Attrs, _ := anypb.New(&gobgpapi.MpReachNLRIAttribute{
 			Family:   v6Family,
 			NextHops: []string{nrc.nodeIP.String()},
-			Nlris:    []*any.Any{nlri},
+			Nlris:    []*anypb.Any{nlri},
 		})
 		_, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
 			Path: &gobgpapi.Path{
 				Family: v6Family,
 				Nlri:   nlri,
-				Pattrs: []*any.Any{a1, v6Attrs},
+				Pattrs: []*anypb.Any{a1, v6Attrs},
 			},
 		})
 		if err != nil {
@@ -511,21 +514,18 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	} else {
 
 		klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers", subnet, cidrLen, nrc.nodeIP.String())
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-		nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
+		nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
 			PrefixLen: uint32(cidrLen),
 			Prefix:    cidrStr[0],
 		})
 
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-		a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
+		a1, _ := anypb.New(&gobgpapi.OriginAttribute{
 			Origin: 0,
 		})
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-		a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
+		a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
 			NextHop: nrc.nodeIP.String(),
 		})
-		attrs := []*any.Any{a1, a2}
+		attrs := []*anypb.Any{a1, a2}
 
 		_, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
 			Path: &gobgpapi.Path{
@@ -1036,7 +1036,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	global := &gobgpapi.Global{
-		As:              nodeAsnNumber,
+		Asn:             nodeAsnNumber,
 		RouterId:        nrc.routerID,
 		ListenAddresses: localAddressList,
 		ListenPort:      int32(nrc.bgpPort),

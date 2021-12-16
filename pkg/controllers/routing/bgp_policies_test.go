@@ -12,8 +12,8 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 
-	gobgpapi "github.com/osrg/gobgp/api"
-	gobgp "github.com/osrg/gobgp/pkg/server"
+	gobgpapi "github.com/osrg/gobgp/v3/api"
+	gobgp "github.com/osrg/gobgp/v3/pkg/server"
 )
 
 type PolicyTestCase struct {
@@ -124,12 +124,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "podcidrdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "podcidrdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "iBGPpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "iBGPpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -143,12 +143,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -160,12 +160,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "defaultroutedefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "defaultroutedefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -289,12 +289,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "podcidrdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "podcidrdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "iBGPpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "iBGPpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -308,12 +308,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -325,12 +325,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "defaultroutedefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "defaultroutedefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -342,12 +342,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt2",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "customimportrejectdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "customimportrejectdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -465,12 +465,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "podcidrdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "podcidrdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "iBGPpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "iBGPpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -482,12 +482,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "externalpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "externalpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -501,12 +501,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -518,12 +518,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "defaultroutedefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "defaultroutedefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -641,12 +641,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "externalpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "externalpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -660,12 +660,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -677,12 +677,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "defaultroutedefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "defaultroutedefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -802,12 +802,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "podcidrdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "podcidrdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "iBGPpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "iBGPpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -819,12 +819,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "externalpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "externalpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -842,12 +842,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -859,12 +859,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "defaultroutedefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "defaultroutedefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -983,12 +983,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "podcidrdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "podcidrdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "iBGPpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "iBGPpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -1000,12 +1000,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "externalpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "externalpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -1023,12 +1023,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -1040,12 +1040,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "defaultroutedefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "defaultroutedefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -1165,18 +1165,18 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "externalpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "externalpeerset",
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						Community: &gobgpapi.CommunityAction{
-							ActionType:  gobgpapi.CommunityActionType_COMMUNITY_ADD,
+							Type:        gobgpapi.CommunityAction_ADD,
 							Communities: []string{"65535:65281"}, // corresponds to no-export
 						},
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -1186,18 +1186,18 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "podcidrdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "podcidrdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "externalpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "externalpeerset",
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						Community: &gobgpapi.CommunityAction{
-							ActionType:  gobgpapi.CommunityActionType_COMMUNITY_ADD,
+							Type:        gobgpapi.CommunityAction_ADD,
 							Communities: []string{"65535:65281"}, // corresponds to no-export
 						},
 						RouteAction: gobgpapi.RouteAction_ACCEPT,
@@ -1209,12 +1209,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "servicevipsdefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "servicevipsdefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
@@ -1226,12 +1226,12 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "defaultroutedefinedset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "defaultroutedefinedset",
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							MatchType: gobgpapi.MatchType_ANY,
-							Name:      "allpeerset",
+							Type: gobgpapi.MatchSet_ANY,
+							Name: "allpeerset",
 						},
 						RpkiResult: -1,
 					},
