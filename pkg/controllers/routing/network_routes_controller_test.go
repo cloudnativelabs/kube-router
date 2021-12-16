@@ -16,10 +16,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 
-	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-	"github.com/golang/protobuf/ptypes"
-	gobgpapi "github.com/osrg/gobgp/api"
-	gobgp "github.com/osrg/gobgp/pkg/server"
+	gobgpapi "github.com/osrg/gobgp/v3/api"
+	gobgp "github.com/osrg/gobgp/v3/pkg/server"
 )
 
 func Test_advertiseClusterIPs(t *testing.T) {
@@ -168,7 +166,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
-				As:         1,
+				Asn:        1,
 				RouterId:   "10.0.0.0",
 				ListenPort: 10000,
 			}
@@ -177,7 +175,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
 			defer func() {
-				if err := testcase.nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{}); err != nil {
+				if err = testcase.nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{}); err != nil {
 					t.Fatalf("failed to stop BGP server : %s", err)
 				}
 			}()
@@ -193,14 +191,22 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
 			var events []*gobgpapi.Path
-			pathWatch := func(path *gobgpapi.Path) {
-				events = append(events, path)
+			pathWatch := func(r *gobgpapi.WatchEventResponse) {
+				if table := r.GetTable(); table != nil {
+					for _, p := range table.Paths {
+						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+							events = append(events, p)
+						}
+					}
+				}
 			}
-			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
-				TableType: gobgpapi.TableType_GLOBAL,
-				Family: &gobgpapi.Family{
-					Afi:  gobgpapi.Family_AFI_IP,
-					Safi: gobgpapi.Family_SAFI_UNICAST,
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
+				Table: &gobgpapi.WatchEventRequest_Table{
+					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
+						{
+							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
+						},
+					},
 				},
 			}, pathWatch)
 			if err != nil {
@@ -231,8 +237,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-				err := ptypes.UnmarshalAny(nlri, &prefix)
+				err = nlri.UnmarshalTo(&prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
 				}
@@ -522,7 +527,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
-				As:         1,
+				Asn:        1,
 				RouterId:   "10.0.0.0",
 				ListenPort: 10000,
 			}
@@ -537,14 +542,22 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			}()
 
 			var events []*gobgpapi.Path
-			pathWatch := func(path *gobgpapi.Path) {
-				events = append(events, path)
+			pathWatch := func(r *gobgpapi.WatchEventResponse) {
+				if table := r.GetTable(); table != nil {
+					for _, p := range table.Paths {
+						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+							events = append(events, p)
+						}
+					}
+				}
 			}
-			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
-				TableType: gobgpapi.TableType_GLOBAL,
-				Family: &gobgpapi.Family{
-					Afi:  gobgpapi.Family_AFI_IP,
-					Safi: gobgpapi.Family_SAFI_UNICAST,
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
+				Table: &gobgpapi.WatchEventRequest_Table{
+					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
+						{
+							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
+						},
+					},
 				},
 			}, pathWatch)
 			if err != nil {
@@ -585,8 +598,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-				err := ptypes.UnmarshalAny(nlri, &prefix)
+				err = nlri.UnmarshalTo(&prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
 				}
@@ -713,7 +725,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
-				As:         1,
+				Asn:        1,
 				RouterId:   "10.0.0.0",
 				ListenPort: 10000,
 			}
@@ -728,14 +740,22 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			}()
 
 			var events []*gobgpapi.Path
-			pathWatch := func(path *gobgpapi.Path) {
-				events = append(events, path)
+			pathWatch := func(r *gobgpapi.WatchEventResponse) {
+				if table := r.GetTable(); table != nil {
+					for _, p := range table.Paths {
+						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+							events = append(events, p)
+						}
+					}
+				}
 			}
-			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
-				TableType: gobgpapi.TableType_GLOBAL,
-				Family: &gobgpapi.Family{
-					Afi:  gobgpapi.Family_AFI_IP,
-					Safi: gobgpapi.Family_SAFI_UNICAST,
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
+				Table: &gobgpapi.WatchEventRequest_Table{
+					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
+						{
+							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
+						},
+					},
 				},
 			}, pathWatch)
 			if err != nil {
@@ -777,8 +797,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-				err := ptypes.UnmarshalAny(nlri, &prefix)
+				err = nlri.UnmarshalTo(&prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
 				}
@@ -937,7 +956,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
-				As:         1,
+				Asn:        1,
 				RouterId:   "10.0.0.0",
 				ListenPort: 10000,
 			}
@@ -952,14 +971,22 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			}()
 
 			var events []*gobgpapi.Path
-			pathWatch := func(path *gobgpapi.Path) {
-				events = append(events, path)
+			pathWatch := func(r *gobgpapi.WatchEventResponse) {
+				if table := r.GetTable(); table != nil {
+					for _, p := range table.Paths {
+						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+							events = append(events, p)
+						}
+					}
+				}
 			}
-			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
-				TableType: gobgpapi.TableType_GLOBAL,
-				Family: &gobgpapi.Family{
-					Afi:  gobgpapi.Family_AFI_IP,
-					Safi: gobgpapi.Family_SAFI_UNICAST,
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
+				Table: &gobgpapi.WatchEventRequest_Table{
+					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
+						{
+							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
+						},
+					},
 				},
 			}, pathWatch)
 			if err != nil {
@@ -1002,8 +1029,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-				err := ptypes.UnmarshalAny(nlri, &prefix)
+				err = nlri.UnmarshalTo(&prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
 				}
@@ -1235,7 +1261,7 @@ func Test_advertisePodRoute(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
-				As:         1,
+				Asn:        1,
 				RouterId:   "10.0.0.0",
 				ListenPort: 10000,
 			}
@@ -1250,14 +1276,22 @@ func Test_advertisePodRoute(t *testing.T) {
 			}()
 
 			var events []*gobgpapi.Path
-			pathWatch := func(path *gobgpapi.Path) {
-				events = append(events, path)
+			pathWatch := func(r *gobgpapi.WatchEventResponse) {
+				if table := r.GetTable(); table != nil {
+					for _, p := range table.Paths {
+						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+							events = append(events, p)
+						}
+					}
+				}
 			}
-			err = testcase.nrc.bgpServer.MonitorTable(context.Background(), &gobgpapi.MonitorTableRequest{
-				TableType: gobgpapi.TableType_GLOBAL,
-				Family: &gobgpapi.Family{
-					Afi:  gobgpapi.Family_AFI_IP,
-					Safi: gobgpapi.Family_SAFI_UNICAST,
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
+				Table: &gobgpapi.WatchEventRequest_Table{
+					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
+						{
+							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
+						},
+					},
 				},
 			}, pathWatch)
 			if err != nil {
@@ -1271,8 +1305,8 @@ func Test_advertisePodRoute(t *testing.T) {
 			}
 			testcase.nrc.clientset = clientset
 
-			os.Setenv("NODE_NAME", testcase.envNodeName)
-			defer os.Unsetenv("NODE_NAME")
+			_ = os.Setenv("NODE_NAME", testcase.envNodeName)
+			defer func() { _ = os.Unsetenv("NODE_NAME") }()
 
 			err = testcase.nrc.advertisePodRoute()
 			if !reflect.DeepEqual(err, testcase.err) {
@@ -1298,8 +1332,7 @@ func Test_advertisePodRoute(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-				err := ptypes.UnmarshalAny(nlri, &prefix)
+				err = nlri.UnmarshalTo(&prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
 				}
@@ -1470,7 +1503,7 @@ func Test_syncInternalPeers(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
-				As:         1,
+				Asn:        1,
 				RouterId:   "10.0.0.0",
 				ListenPort: 10000,
 			}

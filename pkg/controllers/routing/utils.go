@@ -9,10 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-	"github.com/golang/protobuf/ptypes"
-	gobgpapi "github.com/osrg/gobgp/api"
-	"github.com/osrg/gobgp/pkg/packet/bgp"
+	gobgpapi "github.com/osrg/gobgp/v3/api"
+	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 	"github.com/vishvananda/netlink/nl"
 	"k8s.io/klog/v2"
 
@@ -176,19 +174,17 @@ func validateCommunity(arg string) error {
 // can't parse a next hop IP from the GoBGP Path, it returns an error.
 func parseBGPNextHop(path *gobgpapi.Path) (net.IP, error) {
 	for _, pAttr := range path.GetPattrs() {
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-		var value ptypes.DynamicAny
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-		if err := ptypes.UnmarshalAny(pAttr, &value); err != nil {
+		unmarshalNew, err := pAttr.UnmarshalNew()
+		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal path attribute: %s", err)
 		}
-		// nolint:gocritic // We can't change this to an if condition because it is a .(type) expression
-		switch a := value.Message.(type) {
+		// nolint:gocritic // this is the correct way to use a switch statement regardless of how many case statements
+		switch t := unmarshalNew.(type) {
 		case *gobgpapi.NextHopAttribute:
-			nextHop := net.ParseIP(a.NextHop).To4()
+			nextHop := net.ParseIP(t.NextHop).To4()
 			if nextHop == nil {
-				if nextHop = net.ParseIP(a.NextHop).To16(); nextHop == nil {
-					return nil, fmt.Errorf("invalid nextHop address: %s", a.NextHop)
+				if nextHop = net.ParseIP(t.NextHop).To16(); nextHop == nil {
+					return nil, fmt.Errorf("invalid nextHop address: %s", t.NextHop)
 				}
 			}
 			return nextHop, nil
@@ -208,8 +204,7 @@ func parseBGPPath(path *gobgpapi.Path) (*net.IPNet, net.IP, error) {
 
 	nlri := path.GetNlri()
 	var prefix gobgpapi.IPAddressPrefix
-	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
-	err = ptypes.UnmarshalAny(nlri, &prefix)
+	err = nlri.UnmarshalTo(&prefix)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid nlri in advertised path")
 	}
