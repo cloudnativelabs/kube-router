@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/klog/v2"
 
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1alpha2"
@@ -46,7 +47,8 @@ func NewRemoteRuntimeService(endpoint string, connectionTimeout time.Duration) (
 	ctx, cancel := context.WithTimeout(context.Background(), connectionTimeout)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithContextDialer(dialer),
+	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(dialer),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxMsgSize)))
 	if err != nil {
 		klog.Errorf("Connect remote runtime %s failed: %v", addr, err)
