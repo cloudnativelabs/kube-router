@@ -1,7 +1,7 @@
 module github.com/cloudnativelabs/kube-router
 
 require (
-	github.com/aws/aws-sdk-go v1.42.27
+	github.com/aws/aws-sdk-go v1.42.31
 	github.com/containernetworking/cni v1.0.1
 	github.com/containernetworking/plugins v1.0.1
 	github.com/coreos/go-iptables v0.6.0
@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
 	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74
-	golang.org/x/net v0.0.0-20220105145211-5b0dc2dfae98
+	golang.org/x/net v0.0.0-20220111093109-d55c255bac03
 	google.golang.org/grpc v1.43.0
 	k8s.io/api v0.22.5
 	k8s.io/apimachinery v0.22.5
@@ -92,7 +92,7 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
-replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.8 // CVE-2021-32760 & CVE-2021-41103
+replace github.com/containerd/containerd => github.com/containerd/containerd v1.5.9 // CVE-2021-32760 & CVE-2021-41103 & CVE-2021-43816
 
 replace github.com/opencontainers/image-spec => github.com/opencontainers/image-spec v1.0.2 // CVE-2021-41190
 
