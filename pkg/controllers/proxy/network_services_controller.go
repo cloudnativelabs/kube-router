@@ -2368,8 +2368,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 	// Sets it to 60 bytes less than the auto-detected MTU to account for additional ip-ip headers needed for DSR, above
 	// method GetMTUFromNodeIP() already accounts for the overhead of ip-ip overlay networking, so we need to
-	// remove 60 bytes (internet headers and additional ip-ip because mtu includes also internet headers MSS does not.)
-        // This needs also a contition to deal with auto-mtu=false
+	// remove 60 bytes (internet headers and additional ip-ip because MTU includes internet headers. MSS does not.)
+        // This needs also a condition to deal with auto-mtu=false
 	nsc.dsrTCPMSS = automtu - utils.IPInIPHeaderLength * 3
 
 	nsc.podLister = podInformer.GetIndexer()
