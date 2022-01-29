@@ -17,7 +17,7 @@ require (
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
 	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74
 	golang.org/x/net v0.0.0-20220111093109-d55c255bac03
-	google.golang.org/grpc v1.43.0
+	google.golang.org/grpc v1.44.0
 	k8s.io/api v0.22.5
 	k8s.io/apimachinery v0.22.5
 	k8s.io/client-go v0.22.5
