@@ -299,6 +299,19 @@ func convertSvcProtoToSysCallProto(svcProtocol string) uint16 {
 	}
 }
 
+// convertSysCallProtoToSvcProto converts a syscall based protocol version to a string representation that Kubernetes
+// and other parts of kube-router understand
+func convertSysCallProtoToSvcProto(sysProtocol uint16) string {
+	switch sysProtocol {
+	case syscall.IPPROTO_TCP:
+		return tcpProtocol
+	case syscall.IPPROTO_UDP:
+		return udpProtocol
+	default:
+		return noneProtocol
+	}
+}
+
 // addDSRIPInsidePodNetNamespace takes a given external IP and endpoint IP for a DSR service and then uses the container
 // runtime to add the external IP to a virtual interface inside the pod so that it can receive DSR traffic inside its
 // network namespace.
