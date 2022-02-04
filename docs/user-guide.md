@@ -72,6 +72,7 @@ Usage of kube-router:
       --kubeconfig string                             Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --masquerade-all                                SNAT all traffic to cluster IP/node port.
       --master string                                 The address of the Kubernetes API server (overrides any value in kubeconfig).
+      --metrics-addr string                           Prometheus metrics address to listen on, (Default: all interfaces)
       --metrics-path string                           Prometheus metrics path (default "/metrics")
       --metrics-port uint16                           Prometheus metrics port, (Default 0, Disabled)
       --nodeport-bindon-all-ip                        For service of NodePort type create IPVS service that listens on all IP's of the node.
