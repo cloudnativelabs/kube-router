@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 )
 
@@ -85,4 +87,15 @@ func SliceContainsString(needle string, haystack []string) bool {
 		}
 	}
 	return false
+}
+
+// TCPAddressBindable checks to see if an IP/port is bindable by attempting to open a listener then closing it
+// returns nil if successful
+func TCPAddressBindable(addr string, port uint16) error {
+	endpoint := addr + ":" + strconv.Itoa(int(port))
+	ln, err := net.Listen("tcp", endpoint)
+	if err != nil {
+		return fmt.Errorf("unable to open %s: %w", endpoint, err)
+	}
+	return ln.Close()
 }

@@ -214,6 +214,7 @@ var (
 // Controller Holds settings for the metrics controller
 type Controller struct {
 	MetricsPath string
+	MetricsAddr string
 	MetricsPort uint16
 }
 
@@ -236,7 +237,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 	DefaultRegisterer.MustRegister(ControllerIpvsMetricsExportTime)
 
 	srv := &http.Server{
-		Addr:              ":" + strconv.Itoa(int(mc.MetricsPort)),
+		Addr:              mc.MetricsAddr + ":" + strconv.Itoa(int(mc.MetricsPort)),
 		Handler:           http.DefaultServeMux,
 		ReadHeaderTimeout: 5 * time.Second}
 
@@ -267,6 +268,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 // NewMetricsController returns new MetricController object
 func NewMetricsController(config *options.KubeRouterConfig) (*Controller, error) {
 	mc := Controller{}
+	mc.MetricsAddr = config.MetricsAddr
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort
 	return &mc, nil
