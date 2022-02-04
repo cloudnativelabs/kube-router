@@ -198,11 +198,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 // NewMetricsController returns new MetricController object
 func NewMetricsController(config *options.KubeRouterConfig) (*Controller, error) {
 	mc := Controller{}
-	if config.MetricsAddr == "" {
-		mc.MetricsAddr = ":"
-	} else {
-		mc.MetricsAddr = config.MetricsAddr
-	}
+	mc.MetricsAddr = config.MetricsAddr + ":"
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort
 	return &mc, nil
