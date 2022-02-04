@@ -994,11 +994,6 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *api.Service) {
 	}
 }
 
-type externalIPService struct {
-	ipvsSvc    *ipvs.Service
-	externalIP string
-}
-
 func hasActiveEndpoints(endpoints []endpointsInfo) bool {
 	for _, endpoint := range endpoints {
 		if endpoint.isLocal {

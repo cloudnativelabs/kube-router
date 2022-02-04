@@ -6,8 +6,10 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/pkg/cri"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
@@ -281,4 +283,65 @@ func endpointsMapsEquivalent(a, b endpointsInfoMap) bool {
 	}
 
 	return true
+}
+
+// convertSvcProtoToSysCallProto converts a string based protocol that we receive from Kubernetes via something like the
+// serviceInfo object into the uint16 syscall version of the protocol that is capable of interfacing with aspects of the
+// Linux sub-sysem like IPVS
+func convertSvcProtoToSysCallProto(svcProtocol string) uint16 {
+	switch svcProtocol {
+	case tcpProtocol:
+		return syscall.IPPROTO_TCP
+	case udpProtocol:
+		return syscall.IPPROTO_UDP
+	default:
+		return syscall.IPPROTO_NONE
+	}
+}
+
+// addDSRIPInsidePodNetNamespace takes a given external IP and endpoint IP for a DSR service and then uses the container
+// runtime to add the external IP to a virtual interface inside the pod so that it can receive DSR traffic inside its
+// network namespace.
+func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, endpointIP string) error {
+	podObj, err := nsc.getPodObjectForEndpoint(endpointIP)
+	if err != nil {
+		return fmt.Errorf("failed to find endpoint with ip: %s. so skipping preparing endpoint for DSR",
+			endpointIP)
+	}
+
+	// we are only concerned with endpoint pod running on current node
+	if strings.Compare(podObj.Status.HostIP, nsc.nodeIP.String()) != 0 {
+		return nil
+	}
+
+	containerURL := podObj.Status.ContainerStatuses[0].ContainerID
+	runtime, containerID, err := cri.EndpointParser(containerURL)
+	if err != nil {
+		return fmt.Errorf("couldn't get containerID (container=%s, pod=%s). Skipping DSR endpoint set up",
+			podObj.Spec.Containers[0].Name, podObj.Name)
+	}
+
+	if containerID == "" {
+		return fmt.Errorf("failed to find container id for the endpoint with ip: %s so skipping preparing "+
+			"endpoint for DSR", endpointIP)
+	}
+
+	if runtime == "docker" {
+		// WARN: This method is deprecated and will be removed once docker-shim is removed from kubelet.
+		err = nsc.ln.prepareEndpointForDsrWithDocker(containerID, endpointIP, externalIP)
+		if err != nil {
+			return fmt.Errorf("failed to prepare endpoint %s to do direct server return due to %v",
+				endpointIP, err)
+		}
+	} else {
+		// We expect CRI compliant runtimes here
+		// ugly workaround, refactoring of pkg/Proxy is required
+		err = nsc.ln.(*linuxNetworking).prepareEndpointForDsrWithCRI(nsc.dsr.runtimeEndpoint,
+			containerID, endpointIP, externalIP)
+		if err != nil {
+			return fmt.Errorf("failed to prepare endpoint %s to do DSR due to: %v", endpointIP, err)
+		}
+	}
+
+	return nil
 }
