@@ -153,6 +153,7 @@ var (
 // Controller Holds settings for the metrics controller
 type Controller struct {
 	MetricsPath string
+	MetricsAddr string
 	MetricsPort uint16
 }
 
@@ -168,7 +169,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 	prometheus.MustRegister(BuildInfo)
 	prometheus.MustRegister(ControllerIpvsMetricsExportTime)
 
-	srv := &http.Server{Addr: ":" + strconv.Itoa(int(mc.MetricsPort)), Handler: http.DefaultServeMux}
+	srv := &http.Server{Addr: mc.MetricsAddr + strconv.Itoa(int(mc.MetricsPort)), Handler: http.DefaultServeMux}
 
 	// add prometheus handler on metrics path
 	http.Handle(mc.MetricsPath, promhttp.Handler())
@@ -197,6 +198,11 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 // NewMetricsController returns new MetricController object
 func NewMetricsController(config *options.KubeRouterConfig) (*Controller, error) {
 	mc := Controller{}
+	if config.MetricsAddr == "" {
+		mc.MetricsAddr = ":"
+	} else {
+		mc.MetricsAddr = config.MetricsAddr
+	}
 	mc.MetricsPath = config.MetricsPath
 	mc.MetricsPort = config.MetricsPort
 	return &mc, nil
