@@ -16,6 +16,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/version"
 	"k8s.io/klog/v2"
 
@@ -115,6 +116,15 @@ func (kr *KubeRouter) Run() error {
 	go hc.RunCheck(healthChan, stopCh, &wg)
 
 	if kr.Config.MetricsPort > 0 && kr.Config.MetricsPort < 65535 {
+
+		// Verify the metrics address/port combo provided is listenable
+		if err := utils.TCPAddressBindable(kr.Config.MetricsAddr, kr.Config.MetricsPort); err != nil {
+			return fmt.Errorf("failed to listen on %s:%d for metrics: %w",
+				kr.Config.MetricsAddr,
+				int(kr.Config.MetricsPort),
+				err)
+		}
+
 		kr.Config.MetricsEnabled = true
 		mc, err := metrics.NewMetricsController(kr.Config)
 		if err != nil {

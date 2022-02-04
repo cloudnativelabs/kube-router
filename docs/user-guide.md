@@ -102,6 +102,7 @@ Usage of kube-router:
       --loadbalancer-sync-period duration             The delay between checking for missed services (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
       --masquerade-all                                SNAT all traffic to cluster IP/node port.
       --master string                                 The address of the Kubernetes API server (overrides any value in kubeconfig).
+      --metrics-addr string                           Prometheus metrics address to listen on, (Default: all interfaces)
       --metrics-path string                           Prometheus metrics path (default "/metrics")
       --metrics-port uint16                           Prometheus metrics port, (Default 0, Disabled)
       --nodeport-bindon-all-ip                        For service of NodePort type create IPVS service that listens on all IP's of the node.
