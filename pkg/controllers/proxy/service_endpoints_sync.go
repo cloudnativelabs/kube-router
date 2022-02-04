@@ -96,16 +96,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		return errors.New("Failed get list of IPVS services due to: " + err.Error())
 	}
 	for k, svc := range serviceInfoMap {
-		var protocol uint16
-
-		switch svc.protocol {
-		case tcpProtocol:
-			protocol = syscall.IPPROTO_TCP
-		case udpProtocol:
-			protocol = syscall.IPPROTO_UDP
-		default:
-			protocol = syscall.IPPROTO_NONE
-		}
+		protocol := convertSvcProtoToSysCallProto(svc.protocol)
 
 		endpoints := endpointsInfoMap[k]
 		dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
@@ -165,16 +156,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 		return errors.New("Failed get list of IPVS services due to: " + err.Error())
 	}
 	for k, svc := range serviceInfoMap {
-		var protocol uint16
-
-		switch svc.protocol {
-		case tcpProtocol:
-			protocol = syscall.IPPROTO_TCP
-		case udpProtocol:
-			protocol = syscall.IPPROTO_UDP
-		default:
-			protocol = syscall.IPPROTO_NONE
-		}
+		protocol := convertSvcProtoToSysCallProto(svc.protocol)
 
 		if svc.nodePort == 0 {
 			// service is not NodePort type
@@ -542,11 +524,13 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 	for _, ipvsSvc := range ipvsSvcs {
 		// Note that this isn't all that safe of an assumption because FWMark services have a completely different
 		// protocol. So do SCTP services. However, we don't deal with SCTP in kube-router and FWMark is handled below.
-		if ipvsSvc.Protocol == syscall.IPPROTO_TCP {
-			protocol = tcpProtocol
-		} else {
-			protocol = udpProtocol
+		protocol = convertSysCallProtoToSvcProto(ipvsSvc.Protocol)
+		if protocol == noneProtocol {
+			klog.Warningf("failed to convert protocol %d to a valid IPVS protocol for service: %s skipping",
+				ipvsSvc.Protocol, ipvsSvc.Address.String())
+			continue
 		}
+
 		var key string
 		switch {
 		case ipvsSvc.Address != nil:

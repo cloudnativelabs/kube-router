@@ -89,6 +89,7 @@ const (
 
 	tcpProtocol         = "tcp"
 	udpProtocol         = "udp"
+	noneProtocol        = "none"
 	tunnelInterfaceType = "tunnel"
 
 	gracefulTermServiceTickTime = 5 * time.Second
@@ -783,10 +784,11 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 		var port int
 		if ipvsService.Address != nil {
 			address = ipvsService.Address.String()
-			if ipvsService.Protocol == syscall.IPPROTO_TCP {
-				protocol = tcpProtocol
-			} else {
-				protocol = udpProtocol
+			protocol = convertSysCallProtoToSvcProto(ipvsService.Protocol)
+			if protocol == noneProtocol {
+				klog.Warningf("failed to convert protocol %d to a valid IPVS protocol for service: %s skipping",
+					ipvsService.Protocol, ipvsService.Address.String())
+				continue
 			}
 			port = int(ipvsService.Port)
 		} else if ipvsService.FWMark != 0 {
@@ -842,14 +844,7 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		var pushMetric bool
 		var svcVip string
 
-		switch aProtocol := svc.protocol; aProtocol {
-		case tcpProtocol:
-			protocol = syscall.IPPROTO_TCP
-		case udpProtocol:
-			protocol = syscall.IPPROTO_UDP
-		default:
-			protocol = syscall.IPPROTO_NONE
-		}
+		protocol = convertSvcProtoToSysCallProto(svc.protocol)
 		for _, ipvsSvc := range ipvsSvcs {
 
 			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
@@ -1570,14 +1565,7 @@ func deleteMasqueradeIptablesRule() error {
 func ipvsServiceString(s *ipvs.Service) string {
 	var flags, protocol string
 
-	switch s.Protocol {
-	case syscall.IPPROTO_TCP:
-		protocol = "TCP"
-	case syscall.IPPROTO_UDP:
-		protocol = "UDP"
-	default:
-		protocol = "UNKNOWN"
-	}
+	protocol = convertSysCallProtoToSvcProto(s.Protocol)
 
 	if s.Flags&ipvsPersistentFlagHex != 0 {
 		flags += "[persistent port]"
