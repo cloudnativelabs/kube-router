@@ -985,8 +985,13 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	if grpcServer {
-		nrc.bgpServer = gobgp.NewBgpServer(
-			gobgp.GrpcListenAddress(nrc.nodeIP.String() + ":50051" + "," + "127.0.0.1:50051"))
+		var addr string
+		if nrc.isIpv6 {
+			addr = "[" + nrc.nodeIP.String() + "]:50051" + "," + "[::1]:50051"
+		} else {
+			addr = nrc.nodeIP.String() + ":50051" + "," + "127.0.0.1:50051"
+		}
+		nrc.bgpServer = gobgp.NewBgpServer(gobgp.GrpcListenAddress(addr))
 	} else {
 		nrc.bgpServer = gobgp.NewBgpServer()
 	}
