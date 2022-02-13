@@ -63,6 +63,7 @@ var (
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
 	nodeIP                  net.IP
+	isIpv6                  bool
 	nodeHostName            string
 	serviceClusterIPRange   net.IPNet
 	serviceExternalIPRanges []net.IPNet
@@ -296,7 +297,7 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	const whitelistUDPNodePortsPosition = 3
 	const externalIPPositionAdditive = 4
 
-	iptablesCmdHandler, err := iptables.New()
+	iptablesCmdHandler, err := npc.newIptablesCmdHandler()
 	if err != nil {
 		klog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
 	}
@@ -430,7 +431,7 @@ func (npc *NetworkPolicyController) ensureExplicitAccept() {
 // Creates custom chains KUBE-NWPLCY-DEFAULT
 func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
 
-	iptablesCmdHandler, err := iptables.New()
+	iptablesCmdHandler, err := npc.newIptablesCmdHandler()
 	if err != nil {
 		klog.Fatalf("Failed to initialize iptables executor due to %s", err.Error())
 	}
@@ -457,6 +458,13 @@ func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
 	}
 }
 
+func (npc *NetworkPolicyController) newIptablesCmdHandler() (*iptables.IPTables, error) {
+	if npc.isIpv6 {
+		return iptables.NewWithProtocol(iptables.ProtocolIPv6)
+	}
+	return iptables.NewWithProtocol(iptables.ProtocolIPv4)
+}
+
 func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool,
 	deleteDefaultChains bool) error {
 
@@ -464,7 +472,7 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 	cleanupPolicyChains := make([]string, 0)
 
 	// initialize tool sets for working with iptables and ipset
-	iptablesCmdHandler, err := iptables.New()
+	iptablesCmdHandler, err := npc.newIptablesCmdHandler()
 	if err != nil {
 		return fmt.Errorf("failed to initialize iptables command executor due to %s", err.Error())
 	}
@@ -558,7 +566,7 @@ func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[st
 		}()
 	}
 
-	ipsets, err := utils.NewIPSet(false)
+	ipsets, err := utils.NewIPSet(npc.isIpv6)
 	if err != nil {
 		return fmt.Errorf("failed to create ipsets command executor due to %s", err.Error())
 	}
@@ -673,6 +681,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		return nil, err
 	}
 	npc.nodeIP = nodeIP
+	npc.isIpv6 = nodeIP.To4() == nil
 
 	npc.podLister = podInformer.GetIndexer()
 	npc.PodEventHandler = npc.newPodEventHandler()
