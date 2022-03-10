@@ -99,10 +99,6 @@ Successfully tagged quay.io/bzub/kube-router-git:custom
   for testing purposes.
   Example (DEV-SUFFIX=master-latest): quay.io/cloudnativelabs/kube-router-git:master-latest
 
-## Testing kube-router
-
-Please read the [testing documentation](testing.md) for details.
-
 ## Release Workflow
 
 These instructions show how official kube-router releases are performed.
