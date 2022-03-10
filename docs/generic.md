@@ -44,18 +44,33 @@ This runs kube-router in Kubernetes v1.8+ with pod/service networking, the netwo
 If [kube-proxy](https://kubernetes.io/docs/reference/generated/kube-proxy/) was never deployed to the cluster, this can likely be skipped.
 
 Remove any previously running kube-proxy and all iptables rules it created. Start by deleting the kube-proxy daemonset:
-
-    kubectl -n kube-system delete ds kube-proxy
+```sh
+kubectl -n kube-system delete ds kube-proxy
+```
 
 Any iptables rules kube-proxy left around will also need to be cleaned up. This command might differ based on how kube-proxy was setup or configured:
 
-    docker run --privileged --net=host gcr.io/google_containers/kube-proxy-amd64:v1.7.3 kube-proxy --cleanup-iptables
+To cleanup kube-proxy we can do this with docker or containerd:
+
+docker:
+```sh
+docker run --privileged -v /lib/modules:/lib/modules --net=host k8s.gcr.io/kube-proxy-amd64:v1.23.4 kube-proxy --cleanup
+```
+
+containerd:
+```sh
+ctr images pull k8s.gcr.io/kube-proxy-amd64:v1.23.4
+ctr run --rm --privileged --net-host --mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro \
+    k8s.gcr.io/kube-proxy-amd64:v1.23.4 kube-proxy-cleanup kube-proxy --cleanup
+```
 
 ## Running kube-router without the service proxy
 
 This runs kube-router in Kubernetes v1.8+ with pod/service networking and the network policy firewall. The Services proxy is disabled.
 
-    kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml
+```sh
+kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/generic-kuberouter.yaml
+```
 
 In this mode kube-router relies on for example [kube-proxy](https://kubernetes.io/docs/reference/generated/kube-proxy/) to provide service networking.
 
