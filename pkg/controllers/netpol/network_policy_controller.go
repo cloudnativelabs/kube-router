@@ -420,9 +420,8 @@ func (npc *NetworkPolicyController) ensureExplicitAccept() {
 	// for the traffic to/from the local pod's let network policy controller be
 	// authoritative entity to ACCEPT the traffic if it complies to network policies
 	for _, chain := range defaultChains {
-		comment := "\"rule to explicitly ACCEPT traffic that comply to network policies\""
-		args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "--mark", "0x20000/0x20000",
-			"-j", "ACCEPT"}
+		args := []string{"-m", "comment", "--comment", "rule to explicitly ACCEPT traffic that comply to network policies",
+			"-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT"}
 		npc.filterTableRules = utils.AppendUnique(npc.filterTableRules, chain, args)
 	}
 }

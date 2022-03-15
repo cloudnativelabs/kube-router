@@ -84,10 +84,8 @@ func AppendUnique(buffer bytes.Buffer, chain string, rule []string) bytes.Buffer
 		rules = rules[:len(rules)-1]
 	}
 	for _, foundRule := range rules {
-		if strings.Contains(foundRule, chain) {
-			if strings.Contains(foundRule, strings.Join(rule, " ")) {
-				continue
-			}
+		if strings.Contains(foundRule, chain) && strings.Contains(foundRule, strings.Join(rule, " ")) {
+			continue
 		}
 		desiredBuffer.WriteString(foundRule + "\n")
 	}
@@ -99,7 +97,7 @@ func AppendUnique(buffer bytes.Buffer, chain string, rule []string) bytes.Buffer
 
 // Append appends rule to chain at the end of buffer
 func Append(buffer bytes.Buffer, chain string, rule []string) bytes.Buffer {
-	ruleStr := strings.Join(append(append([]string{"-A", chain}, rule...), "\n"), " ")
-	buffer.WriteString(ruleStr)
+	ruleStr := strings.Join(append([]string{"-A", chain}, rule...), " ")
+	buffer.WriteString(ruleStr + "\n")
 	return buffer
 }
