@@ -74,6 +74,7 @@ const (
 	bgpCommunityMaxSize     = 32
 	bgpCommunityMaxPartSize = 16
 	routeReflectorMaxID     = 32
+	ipv4MaskMinBits         = 32
 	// Taken from: https://github.com/torvalds/linux/blob/master/include/uapi/linux/rtnetlink.h#L284
 	zebraRouteOriginator = 0x11
 )

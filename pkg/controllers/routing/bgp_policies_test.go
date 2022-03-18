@@ -265,22 +265,22 @@ func Test_AddPolicies(t *testing.T) {
 					{
 						IpPrefix:      "10.0.0.0/16",
 						MaskLengthMin: 16,
-						MaskLengthMax: 16,
+						MaskLengthMax: ipv4MaskMinBits,
 					},
 					{
 						IpPrefix:      "192.168.1.0/24",
 						MaskLengthMin: 24,
-						MaskLengthMax: 24,
+						MaskLengthMax: ipv4MaskMinBits,
 					},
 					{
 						IpPrefix:      "192.168.2.0/25",
 						MaskLengthMin: 25,
-						MaskLengthMax: 25,
+						MaskLengthMax: ipv4MaskMinBits,
 					},
 					{
 						IpPrefix:      "192.168.3.0/24",
 						MaskLengthMin: 24,
-						MaskLengthMax: 24,
+						MaskLengthMax: ipv4MaskMinBits,
 					},
 				},
 			},

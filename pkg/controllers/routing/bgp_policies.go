@@ -237,7 +237,7 @@ func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
 			prefix.IpPrefix = ipNet.String()
 			mask, _ := ipNet.Mask.Size()
 			prefix.MaskLengthMin = uint32(mask)
-			prefix.MaskLengthMax = uint32(mask)
+			prefix.MaskLengthMax = uint32(ipv4MaskMinBits)
 			prefixes = append(prefixes, prefix)
 		}
 		customImportRejectDefinedSet := &gobgpapi.DefinedSet{
