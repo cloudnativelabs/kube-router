@@ -90,7 +90,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		NodePortRange:                  "30000-32767",
 		OverlayType:                    "subnet",
 		RoutesSyncPeriod:               5 * time.Minute,
-		InjectedRoutesSyncPeriod:       15 * time.Second,
+		InjectedRoutesSyncPeriod:       60 * time.Second,
 	}
 }
 

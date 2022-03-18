@@ -64,7 +64,7 @@ Usage of kube-router:
       --health-port uint16                            Health check port, 0 = Disabled (default 20244)
   -h, --help                                          Print usage information.
       --hostname-override string                      Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
-      --injected-routes-sync-period duration          The delay between route table synchronizations  (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 15s)
+      --injected-routes-sync-period duration          The delay between route table synchronizations  (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
       --iptables-sync-period duration                 The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
       --ipvs-graceful-period duration                 The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 30s)
       --ipvs-graceful-termination                     Enables the experimental IPVS graceful terminaton capability
