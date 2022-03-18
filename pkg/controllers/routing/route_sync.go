@@ -13,6 +13,7 @@ type routeSyncer struct {
 	routeTableStateMap       map[string]*netlink.Route
 	injectedRoutesSyncPeriod time.Duration
 	mutex                    sync.Mutex
+	routeReplacer            func(route *netlink.Route) error
 }
 
 // addInjectedRoute adds a route to the route map that is regularly synced to the kernel's routing table
@@ -40,7 +41,7 @@ func (rs *routeSyncer) syncLocalRouteTable() {
 	klog.V(2).Infof("Running local route table synchronization")
 	for dst, route := range rs.routeTableStateMap {
 		klog.V(3).Infof("Syncing route: %s", dst)
-		err := netlink.RouteReplace(route)
+		err := rs.routeReplacer(route)
 		if err != nil {
 			klog.Errorf("Route could not be replaced due to : " + err.Error())
 		}
@@ -74,5 +75,7 @@ func newRouteSyncer(syncPeriod time.Duration) *routeSyncer {
 	rs.routeTableStateMap = make(map[string]*netlink.Route)
 	rs.injectedRoutesSyncPeriod = syncPeriod
 	rs.mutex = sync.Mutex{}
+	// We substitute the RouteReplace function here so that we can easily monkey patch it in our unit tests
+	rs.routeReplacer = netlink.RouteReplace
 	return &rs
 }
