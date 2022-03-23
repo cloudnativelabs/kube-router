@@ -22,7 +22,7 @@ require (
 	k8s.io/apimachinery v0.22.7
 	k8s.io/client-go v0.22.7
 	k8s.io/cri-api v0.22.7
-	k8s.io/klog/v2 v2.40.1
+	k8s.io/klog/v2 v2.60.1
 )
 
 require (
