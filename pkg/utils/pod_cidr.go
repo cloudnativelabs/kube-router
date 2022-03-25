@@ -9,7 +9,9 @@ import (
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/plugins/plugins/ipam/host-local/backend/allocator"
+	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	netutils "k8s.io/utils/net"
 )
 
 const (
@@ -141,4 +143,35 @@ func GetPodCidrFromNodeSpec(clientset kubernetes.Interface, hostnameOverride str
 	}
 
 	return node.Spec.PodCIDR, nil
+}
+
+func GetPodCidrsFromNodeSpecDualStack(node *v1core.Node) (string, string, error) {
+	var podCidrv4, podCidrv6 string
+
+	if cidrs, ok := node.Annotations[podCIDRAnnotation]; ok {
+		for _, cidr := range strings.Split(cidrs, ",") {
+			if podCidrv4 == "" && netutils.IsIPv4CIDRString(cidr) {
+				podCidrv4 = cidr
+			}
+			if podCidrv6 == "" && netutils.IsIPv6CIDRString(cidr) {
+				podCidrv6 = cidr
+			}
+		}
+		return podCidrv4, podCidrv6, nil
+	}
+
+	if len(node.Spec.PodCIDRs) == 0 {
+		return "", "", fmt.Errorf("node.Spec.PodCIDRs empty for node: %v", node.Name)
+	}
+
+	for _, cidr := range node.Spec.PodCIDRs {
+		if podCidrv4 == "" && netutils.IsIPv4CIDRString(cidr) {
+			podCidrv4 = cidr
+		}
+		if podCidrv6 == "" && netutils.IsIPv6CIDRString(cidr) {
+			podCidrv6 = cidr
+		}
+	}
+
+	return podCidrv4, podCidrv6, nil
 }

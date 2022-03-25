@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coreos/go-iptables/iptables"
+
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -23,6 +25,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/cloudnativelabs/kube-router/pkg/options"
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 )
 
 // newFakeInformersFromClient creates the different informers used in the uneventful network policy controller
@@ -139,14 +142,14 @@ func tNewPodNamespaceMapFromTC(target map[string]string) tPodNamespaceMap {
 func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) {
 	podNamespaceMap := make(tPodNamespaceMap)
 	pods := []podInfo{
-		{name: "Aa", labels: labels.Set{"app": "a"}, namespace: "nsA", ip: "1.1"},
-		{name: "Aaa", labels: labels.Set{"app": "a", "component": "a"}, namespace: "nsA", ip: "1.2"},
-		{name: "Aab", labels: labels.Set{"app": "a", "component": "b"}, namespace: "nsA", ip: "1.3"},
-		{name: "Aac", labels: labels.Set{"app": "a", "component": "c"}, namespace: "nsA", ip: "1.4"},
-		{name: "Ba", labels: labels.Set{"app": "a"}, namespace: "nsB", ip: "2.1"},
-		{name: "Baa", labels: labels.Set{"app": "a", "component": "a"}, namespace: "nsB", ip: "2.2"},
-		{name: "Bab", labels: labels.Set{"app": "a", "component": "b"}, namespace: "nsB", ip: "2.3"},
-		{name: "Ca", labels: labels.Set{"app": "a"}, namespace: "nsC", ip: "3.1"},
+		{name: "Aa", labels: labels.Set{"app": "a"}, namespace: "nsA", ips: []v1.PodIP{{IP: "1.1.1.1"}}},
+		{name: "Aaa", labels: labels.Set{"app": "a", "component": "a"}, namespace: "nsA", ips: []v1.PodIP{{IP: "1.2.3.4"}}},
+		{name: "Aab", labels: labels.Set{"app": "a", "component": "b"}, namespace: "nsA", ips: []v1.PodIP{{IP: "1.3.2.2"}}},
+		{name: "Aac", labels: labels.Set{"app": "a", "component": "c"}, namespace: "nsA", ips: []v1.PodIP{{IP: "1.4.2.2"}}},
+		{name: "Ba", labels: labels.Set{"app": "a"}, namespace: "nsB", ips: []v1.PodIP{{IP: "2.1.1.1"}}},
+		{name: "Baa", labels: labels.Set{"app": "a", "component": "a"}, namespace: "nsB", ips: []v1.PodIP{{IP: "2.2.2.2"}}},
+		{name: "Bab", labels: labels.Set{"app": "a", "component": "b"}, namespace: "nsB", ips: []v1.PodIP{{IP: "2.3.2.2"}}},
+		{name: "Ca", labels: labels.Set{"app": "a"}, namespace: "nsC", ips: []v1.PodIP{{IP: "3.1"}}},
 	}
 	namespaces := []tNamespaceMeta{
 		{name: "nsA", labels: labels.Set{"name": "a", "team": "a"}},
@@ -157,7 +160,8 @@ func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInfo
 	ipsUsed := make(map[string]bool)
 	for _, pod := range pods {
 		podNamespaceMap.addPod(pod)
-		ipaddr := "1.1." + pod.ip
+		// TODO: test multiple IPs
+		ipaddr := pod.ips[0].IP
 		if ipsUsed[ipaddr] {
 			t.Fatalf("there is another pod with the same Ip address %s as this pod %s namespace %s",
 				ipaddr, pod.name, pod.name)
@@ -193,8 +197,21 @@ func newUneventfulNetworkPolicyController(podInformer cache.SharedIndexInformer,
 	npc := NetworkPolicyController{}
 	npc.syncPeriod = time.Hour
 
+	npc.iptablesCmdHandlers = make(map[v1.IPFamily]utils.IPTablesHandler)
+	npc.iptablesSaveRestore = make(map[v1.IPFamily]*utils.IPTablesSaveRestore)
+	npc.filterTableRules = make(map[v1.IPFamily]*bytes.Buffer)
+	npc.ipSetHandlers = make(map[v1.IPFamily]utils.IPSetHandler)
+	npc.nodeIPs = make(map[v1.IPFamily]net.IP)
+
+	// TODO: Handle both IP families
+	npc.iptablesCmdHandlers[v1.IPv4Protocol] = newFakeIPTables(iptables.ProtocolIPv4)
+	npc.iptablesSaveRestore[v1.IPv4Protocol] = utils.NewIPTablesSaveRestore(v1.IPv4Protocol)
+	var buf bytes.Buffer
+	npc.filterTableRules[v1.IPv4Protocol] = &buf
+	npc.ipSetHandlers[v1.IPv4Protocol] = &fakeIPSet{}
+	npc.nodeIPs[v1.IPv4Protocol] = net.IPv4(10, 10, 10, 10)
+
 	npc.nodeHostName = "node"
-	npc.nodeIP = net.IPv4(10, 10, 10, 10)
 	npc.podLister = podInformer.GetIndexer()
 	npc.nsLister = nsInformer.GetIndexer()
 	npc.npLister = npInformer.GetIndexer()
@@ -428,8 +445,8 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-QHFGOTFJZFXUJVTH -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-QHFGOTFJZFXUJVTH -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-C23KD7UE4TAT3Y5M -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-C23KD7UE4TAT3Y5M -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Simple Ingress/Egress Destination Port",
@@ -462,10 +479,10 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-KO52PWL34ABMMBI7 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-KO52PWL34ABMMBI7 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
-				"-A KUBE-NWPLCY-KO52PWL34ABMMBI7 -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\" --dport 37000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-KO52PWL34ABMMBI7 -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\" --dport 37000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
+				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\" --dport 37000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\" --dport 37000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Simple Egress Destination Port Range",
@@ -494,10 +511,10 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-SQYQ7PVNG6A6Q3DU -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-SQYQ7PVNG6A6Q3DU -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
-				"-A KUBE-NWPLCY-SQYQ7PVNG6A6Q3DU -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-SQYQ7PVNG6A6Q3DU -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
+				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Port > EndPort (invalid condition, should drop endport)",
@@ -522,8 +539,8 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-2A4DPWPR5REBS66I -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\" --dport 34000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-2A4DPWPR5REBS66I -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\" --dport 34000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-N5DQE4SCQ56JEMH7 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\" --dport 34000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-N5DQE4SCQ56JEMH7 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\" --dport 34000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 	}
 
@@ -541,40 +558,185 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 		if err != nil {
 			t.Errorf("Problems building policies: %s", err)
 		}
-		for _, np := range netpols {
-			fmt.Printf(np.policyType)
-			if np.policyType == kubeEgressPolicyType || np.policyType == kubeBothPolicyType {
-				err = krNetPol.processEgressRules(np, "", nil, "1")
-				if err != nil {
-					t.Errorf("Error syncing the rules: %s", err)
+		for ipFamily, filterTableRules := range krNetPol.filterTableRules {
+			for _, np := range netpols {
+				fmt.Printf(np.policyType)
+				if np.policyType == kubeEgressPolicyType || np.policyType == kubeBothPolicyType {
+					err = krNetPol.processEgressRules(np, "", nil, "1", ipFamily)
+					if err != nil {
+						t.Errorf("Error syncing the rules: %s", err)
+					}
+				}
+				if np.policyType == kubeIngressPolicyType || np.policyType == kubeBothPolicyType {
+					err = krNetPol.processIngressRules(np, "", nil, "1", ipFamily)
+					if err != nil {
+						t.Errorf("Error syncing the rules: %s", err)
+					}
 				}
 			}
-			if np.policyType == kubeIngressPolicyType || np.policyType == kubeBothPolicyType {
-				err = krNetPol.processIngressRules(np, "", nil, "1")
-				if err != nil {
-					t.Errorf("Error syncing the rules: %s", err)
-				}
-			}
-		}
 
-		if !bytes.Equal([]byte(test.expectedRule), krNetPol.filterTableRules.Bytes()) {
-			t.Errorf("Invalid rule %s created:\nExpected:\n%s \nGot:\n%s", test.name, test.expectedRule, krNetPol.filterTableRules.String())
-		}
-		key := fmt.Sprintf("%s/%s", test.netpol.namespace, test.netpol.name)
-		obj, exists, err := krNetPol.npLister.GetByKey(key)
-		if err != nil {
-			t.Errorf("Failed to get Netpol from store: %s", err)
-		}
-		if exists {
-			err = krNetPol.npLister.Delete(obj)
+			if !bytes.Equal([]byte(test.expectedRule), filterTableRules.Bytes()) {
+				t.Errorf("Invalid rule %s created:\nExpected:\n%s \nGot:\n%s", test.name, test.expectedRule, filterTableRules.String())
+			}
+			key := fmt.Sprintf("%s/%s", test.netpol.namespace, test.netpol.name)
+			obj, exists, err := krNetPol.npLister.GetByKey(key)
 			if err != nil {
-				t.Errorf("Failed to remove Netpol from store: %s", err)
+				t.Errorf("Failed to get Netpol from store: %s", err)
 			}
+			if exists {
+				err = krNetPol.npLister.Delete(obj)
+				if err != nil {
+					t.Errorf("Failed to remove Netpol from store: %s", err)
+				}
+			}
+			filterTableRules.Reset()
 		}
-		krNetPol.filterTableRules.Reset()
-
 	}
 
+}
+
+type fakeIPTables struct {
+	protocol iptables.Protocol
+}
+
+func newFakeIPTables(protocol iptables.Protocol) *fakeIPTables {
+	return &fakeIPTables{protocol}
+}
+
+func (ipt *fakeIPTables) Proto() iptables.Protocol {
+	return ipt.protocol
+}
+
+func (ipt *fakeIPTables) Exists(table, chain string, rulespec ...string) (bool, error) {
+	return true, nil
+}
+
+func (ipt *fakeIPTables) Insert(table, chain string, pos int, rulespec ...string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) Append(table, chain string, rulespec ...string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) AppendUnique(table, chain string, rulespec ...string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) Delete(table, chain string, rulespec ...string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) DeleteIfExists(table, chain string, rulespec ...string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) List(table, chain string) ([]string, error) {
+	return nil, nil
+}
+
+func (ipt *fakeIPTables) ListWithCounters(table, chain string) ([]string, error) {
+	return nil, nil
+}
+
+func (ipt *fakeIPTables) ListChains(table string) ([]string, error) {
+	return nil, nil
+}
+
+func (ipt *fakeIPTables) ChainExists(table, chain string) (bool, error) {
+	return true, nil
+}
+
+func (ipt *fakeIPTables) Stats(table, chain string) ([][]string, error) {
+	return nil, nil
+}
+
+func (ipt *fakeIPTables) ParseStat(stat []string) (iptables.Stat, error) {
+	return iptables.Stat{}, nil
+}
+
+func (ipt *fakeIPTables) StructuredStats(table, chain string) ([]iptables.Stat, error) {
+	return nil, nil
+}
+
+func (ipt *fakeIPTables) NewChain(table, chain string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) ClearChain(table, chain string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) RenameChain(table, oldChain, newChain string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) DeleteChain(table, chain string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) ClearAndDeleteChain(table, chain string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) ClearAll() error {
+	return nil
+}
+
+func (ipt *fakeIPTables) DeleteAll() error {
+	return nil
+}
+
+func (ipt *fakeIPTables) ChangePolicy(table, chain, target string) error {
+	return nil
+}
+
+func (ipt *fakeIPTables) HasRandomFully() bool {
+	return true
+}
+
+func (ipt *fakeIPTables) GetIptablesVersion() (int, int, int) {
+	return 1, 8, 0
+}
+
+type fakeIPSet struct{}
+
+func (ips *fakeIPSet) Create(setName string, createOptions ...string) (*utils.Set, error) {
+	return nil, nil
+}
+
+func (ips *fakeIPSet) Add(set *utils.Set) error {
+	return nil
+}
+
+func (ips *fakeIPSet) RefreshSet(setName string, entriesWithOptions [][]string, setType string) {}
+
+func (ips *fakeIPSet) Destroy(setName string) error {
+	return nil
+}
+
+func (ips *fakeIPSet) DestroyAllWithin() error {
+	return nil
+}
+
+func (ips *fakeIPSet) Save() error {
+	return nil
+}
+
+func (ips *fakeIPSet) Restore() error {
+	return nil
+}
+
+func (ips *fakeIPSet) Flush() error {
+	return nil
+}
+
+func (ips *fakeIPSet) Get(setName string) *utils.Set {
+	return nil
+}
+
+func (ips *fakeIPSet) Sets() map[string]*utils.Set {
+	return nil
 }
 
 func TestNetworkPolicyController(t *testing.T) {
@@ -610,6 +772,18 @@ func TestNetworkPolicyController(t *testing.T) {
 			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10.10",
 		},
 		{
+			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv4)",
+			newMinimalKubeRouterConfig("10.96.0.0/12,10.244.0.0/16,2001:db8:42:1::/112", "", "node", nil),
+			true,
+			"too many CIDRs provided in --service-cluster-ip-range parameter, only two addresses are allowed at once for dual-stack",
+		},
+		{
+			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv6)",
+			newMinimalKubeRouterConfig("10.96.0.0/12,2001:db8:42:0::/56,2001:db8:42:1::/112", "", "node", nil),
+			true,
+			"too many CIDRs provided in --service-cluster-ip-range parameter, only two addresses are allowed at once for dual-stack",
+		},
+		{
 			"Test good cluster CIDR (using single IP with a /32)",
 			newMinimalKubeRouterConfig("10.10.10.10/32", "", "node", nil),
 			false,
@@ -618,6 +792,18 @@ func TestNetworkPolicyController(t *testing.T) {
 		{
 			"Test good cluster CIDR (using normal range with /24)",
 			newMinimalKubeRouterConfig("10.10.10.0/24", "", "node", nil),
+			false,
+			"",
+		},
+		{
+			"Test good cluster CIDR (using ipv6)",
+			newMinimalKubeRouterConfig("2001:db8:42:1::/112", "", "node", nil),
+			false,
+			"",
+		},
+		{
+			"Test good cluster CIDRs (with dual-stack)",
+			newMinimalKubeRouterConfig("10.96.0.0/12,2001:db8:42:1::/112", "", "node", nil),
 			false,
 			"",
 		},
@@ -704,7 +890,14 @@ func TestNetworkPolicyController(t *testing.T) {
 	_, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer, &sync.Mutex{})
+			// TODO: Handle IPv6
+			iptablesHandlers := make(map[v1.IPFamily]utils.IPTablesHandler, 1)
+			iptablesHandlers[v1.IPv4Protocol] = newFakeIPTables(iptables.ProtocolIPv4)
+			ipSetHandlers := make(map[v1.IPFamily]utils.IPSetHandler, 1)
+			ipSetHandlers[v1.IPv4Protocol] = &fakeIPSet{}
+
+			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer, &sync.Mutex{},
+				iptablesHandlers, ipSetHandlers)
 			if err == nil && test.expectError {
 				t.Error("This config should have failed, but it was successful instead")
 			} else if err != nil {
