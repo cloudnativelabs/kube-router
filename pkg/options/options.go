@@ -32,6 +32,8 @@ type KubeRouterConfig struct {
 	DisableSrcDstCheck             bool
 	EnableCNI                      bool
 	EnableiBGP                     bool
+	EnableIPv4                     bool
+	EnableIPv6                     bool
 	EnableOverlay                  bool
 	EnablePodEgress                bool
 	EnablePprof                    bool
@@ -84,6 +86,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		CacheSyncTimeout:               1 * time.Minute,
 		ClusterIPCIDR:                  "10.96.0.0/12",
 		EnableOverlay:                  true,
+		EnableIPv4:                     true,
 		IPTablesSyncPeriod:             5 * time.Minute,
 		IpvsGracefulPeriod:             30 * time.Second,
 		IpvsSyncPeriod:                 5 * time.Minute,
@@ -133,6 +136,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin.")
 	fs.BoolVar(&s.EnableiBGP, "enable-ibgp", true,
 		"Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers")
+	fs.BoolVar(&s.EnableIPv4, "enable-ipv4", true, "Enables IPv4 support")
+	fs.BoolVar(&s.EnableIPv6, "enable-ipv6", true, "Enables IPv6 support")
 	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,
 		"When enable-overlay is set to true, IP-in-IP tunneling is used for pod-to-pod networking across "+
 			"nodes in different subnets. When set to false no tunneling is used and routing infrastructure is "+

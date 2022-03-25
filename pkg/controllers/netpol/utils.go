@@ -8,6 +8,8 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	api "k8s.io/api/core/v1"
+	klog "k8s.io/klog/v2"
+	utilsnet "k8s.io/utils/net"
 )
 
 const (
@@ -69,40 +71,74 @@ func validateNodePortRange(nodePortOption string) (string, error) {
 	return fmt.Sprintf("%d:%d", port1, port2), nil
 }
 
-func getIPsFromPods(pods []podInfo) []string {
-	ips := make([]string, len(pods))
-	for idx, pod := range pods {
-		ips[idx] = pod.ip
+func getIPsFromPods(pods []podInfo, family api.IPFamily) []string {
+	var ips []string
+	for _, pod := range pods {
+		switch family {
+		case api.IPv4Protocol:
+			ip, err := getPodIPv4Address(pod)
+			if err != nil {
+				klog.Warningf("Could not get IPv4 addresses of all pods: %v", err)
+				continue
+			}
+			ips = append(ips, ip)
+		case api.IPv6Protocol:
+			ip, err := getPodIPv6Address(pod)
+			if err != nil {
+				klog.Warningf("Could not get IPv6 addresses of all pods: %v", err)
+				continue
+			}
+			ips = append(ips, ip)
+		}
 	}
 	return ips
 }
 
-func (npc *NetworkPolicyController) createGenericHashIPSet(ipsetName, hashType string, ips []string) {
+func (npc *NetworkPolicyController) createGenericHashIPSet(
+	ipsetName, hashType string, ips []string, ipFamily api.IPFamily) {
 	setEntries := make([][]string, 0)
 	for _, ip := range ips {
 		setEntries = append(setEntries, []string{ip, utils.OptionTimeout, "0"})
 	}
-	npc.ipSetHandler.RefreshSet(ipsetName, setEntries, hashType)
+	npc.ipSetHandlers[ipFamily].RefreshSet(ipsetName, setEntries, hashType)
 }
 
 // createPolicyIndexedIPSet creates a policy based ipset and indexes it as an active ipset
 func (npc *NetworkPolicyController) createPolicyIndexedIPSet(
-	activePolicyIPSets map[string]bool, ipsetName, hashType string, ips []string) {
+	activePolicyIPSets map[string]bool, ipsetName, hashType string, ips []string, ipFamily api.IPFamily) {
 	activePolicyIPSets[ipsetName] = true
-	npc.createGenericHashIPSet(ipsetName, hashType, ips)
+	npc.createGenericHashIPSet(ipsetName, hashType, ips, ipFamily)
 }
 
 // createPodWithPortPolicyRule handles the case where port details are provided by the ingress/egress rule and creates
 // an iptables rule that matches on both the source/dest IPs and the port
-func (npc *NetworkPolicyController) createPodWithPortPolicyRule(
-	ports []protocolAndPort, policy networkPolicyInfo, policyName string, srcSetName string, dstSetName string) error {
+func (npc *NetworkPolicyController) createPodWithPortPolicyRule(ports []protocolAndPort,
+	policy networkPolicyInfo, policyName string, srcSetName string, dstSetName string, ipFamily api.IPFamily) error {
 	for _, portProtocol := range ports {
 		comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 			policy.name + " namespace " + policy.namespace
 		if err := npc.appendRuleToPolicyChain(policyName, comment, srcSetName, dstSetName, portProtocol.protocol,
-			portProtocol.port, portProtocol.endport); err != nil {
+			portProtocol.port, portProtocol.endport, ipFamily); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func getPodIPv6Address(pod podInfo) (string, error) {
+	for _, ip := range pod.ips {
+		if utilsnet.IsIPv6String(ip.IP) {
+			return ip.IP, nil
+		}
+	}
+	return "", fmt.Errorf("pod %s has no IPv6Address", pod.name)
+}
+
+func getPodIPv4Address(pod podInfo) (string, error) {
+	for _, ip := range pod.ips {
+		if utilsnet.IsIPv4String(ip.IP) {
+			return ip.IP, nil
+		}
+	}
+	return "", fmt.Errorf("pod %s has no IPv4Address", pod.name)
 }
