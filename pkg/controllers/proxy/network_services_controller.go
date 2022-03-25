@@ -719,21 +719,21 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 		return
 	}
 
-	if _, ok := ipSetHandler.Sets[localIPsIPSetName]; ok {
+	if _, ok := ipSetHandler.Sets()[localIPsIPSetName]; ok {
 		err = ipSetHandler.Destroy(localIPsIPSetName)
 		if err != nil {
 			klog.Errorf("failed to destroy ipset: %s", err.Error())
 		}
 	}
 
-	if _, ok := ipSetHandler.Sets[serviceIPsIPSetName]; ok {
+	if _, ok := ipSetHandler.Sets()[serviceIPsIPSetName]; ok {
 		err = ipSetHandler.Destroy(serviceIPsIPSetName)
 		if err != nil {
 			klog.Errorf("failed to destroy ipset: %s", err.Error())
 		}
 	}
 
-	if _, ok := ipSetHandler.Sets[ipvsServicesIPSetName]; ok {
+	if _, ok := ipSetHandler.Sets()[ipvsServicesIPSetName]; ok {
 		err = ipSetHandler.Destroy(ipvsServicesIPSetName)
 		if err != nil {
 			klog.Errorf("failed to destroy ipset: %s", err.Error())
