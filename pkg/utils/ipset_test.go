@@ -19,7 +19,7 @@ func Test_buildIPSetRestore(t *testing.T) {
 		{
 			name: "simple-restore",
 			args: args{
-				ipset: &IPSet{Sets: map[string]*Set{
+				ipset: &IPSet{sets: map[string]*Set{
 					"foo": {
 						Name:    "foo",
 						Options: []string{"hash:ip", "yolo", "things", "12345"},
