@@ -5,7 +5,7 @@ require (
 	github.com/containernetworking/cni v1.0.1
 	github.com/containernetworking/plugins v1.1.1
 	github.com/coreos/go-iptables v0.6.0
-	github.com/docker/docker v20.10.13+incompatible
+	github.com/docker/docker v20.10.14+incompatible
 	github.com/golang/protobuf v1.5.2
 	github.com/moby/ipvs v1.0.1
 	github.com/onsi/ginkgo v1.16.5
