@@ -27,49 +27,46 @@ func init() {
 	hasWait = strings.Contains(string(cmdOutput), "wait")
 }
 
-// SaveInto calls `iptables-save` for given table and stores result in a given buffer.
-func SaveInto(table string, buffer *bytes.Buffer) error {
-	path, err := exec.LookPath("iptables-save")
+// iptablesExec contains the common logic for calling save and restore
+// commands.
+func iptablesExec(cmdName string, args []string, data []byte, stdoutBuffer *bytes.Buffer) error {
+	path, err := exec.LookPath(cmdName)
 	if err != nil {
 		return err
 	}
 	stderrBuffer := bytes.NewBuffer(nil)
-	args := []string{"iptables-save", "-t", table}
 	cmd := exec.Cmd{
 		Path:   path,
-		Args:   args,
-		Stdout: buffer,
+		Args:   append([]string{cmdName}, args...),
 		Stderr: stderrBuffer,
 	}
+	if data != nil {
+		cmd.Stdin = bytes.NewBuffer(data)
+	}
+	if stdoutBuffer != nil {
+		cmd.Stdout = stdoutBuffer
+	}
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%v (%s)", err, stderrBuffer)
+		return fmt.Errorf("failed to call %s %v: %w, (%s)", cmdName, args, err, stderrBuffer.String())
 	}
 	return nil
 }
 
+// SaveInto calls `iptables-save` for given table and stores result in a given buffer.
+func SaveInto(table string, buffer *bytes.Buffer) error {
+	return iptablesExec("iptables-save", []string{"-t", table}, nil, buffer)
+}
+
 // Restore runs `iptables-restore` passing data through []byte.
 func Restore(table string, data []byte) error {
-	path, err := exec.LookPath("iptables-restore")
-	if err != nil {
-		return err
-	}
 	var args []string
 	if hasWait {
-		args = []string{"iptables-restore", "--wait", "-T", table}
+		args = []string{"--wait", "-T", table}
 	} else {
-		args = []string{"iptables-restore", "-T", table}
-	}
-	cmd := exec.Cmd{
-		Path:  path,
-		Args:  args,
-		Stdin: bytes.NewBuffer(data),
-	}
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%v (%s)", err, b)
+		args = []string{"-T", table}
 	}
 
-	return nil
+	return iptablesExec("iptables-restore", args, data, nil)
 }
 
 // AppendUnique ensures that rule is in chain only once in the buffer and that the occurrence is at the end of the
