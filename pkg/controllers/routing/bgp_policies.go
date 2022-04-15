@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	gobgpapi "github.com/osrg/gobgp/api"
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
@@ -260,7 +260,7 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 	// Get the current list of the nodes from the local cache
 	nodes := nrc.nodeLister.List()
 	for _, node := range nodes {
-		nodeObj := node.(*v1core.Node)
+		nodeObj := node.(*corev1.Node)
 		nodeIP, err := utils.GetNodeIP(nodeObj)
 		if err != nil {
 			klog.Errorf("Failed to find a node IP and therefore cannot add internal BGP Peer: %v", err)

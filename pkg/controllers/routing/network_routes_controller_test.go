@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -26,7 +26,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 	testcases := []struct {
 		name             string
 		nrc              *NetworkRoutingController
-		existingServices []*v1core.Service
+		existingServices []*corev1.Service
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -37,12 +37,12 @@ func Test_advertiseClusterIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      ClusterIPST,
 						ClusterIP: "10.0.0.1",
 					},
@@ -58,12 +58,12 @@ func Test_advertiseClusterIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      ClusterIPST,
 						ClusterIP: "10.0.0.1",
 					},
@@ -72,7 +72,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.2",
 					},
@@ -81,7 +81,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      NodePortST,
 						ClusterIP: "10.0.0.3",
 					},
@@ -99,12 +99,12 @@ func Test_advertiseClusterIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      ClusterIPST,
 						ClusterIP: "10.0.0.1",
 					},
@@ -113,7 +113,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      "AnotherType",
 						ClusterIP: "10.0.0.2",
 					},
@@ -129,12 +129,12 @@ func Test_advertiseClusterIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      ClusterIPST,
 						ClusterIP: "10.0.0.1",
 					},
@@ -143,7 +143,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      ClusterIPST,
 						ClusterIP: "None",
 					},
@@ -152,7 +152,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      ClusterIPST,
 						ClusterIP: "",
 					},
@@ -249,7 +249,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 	testcases := []struct {
 		name             string
 		nrc              *NetworkRoutingController
-		existingServices []*v1core.Service
+		existingServices []*corev1.Service
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -259,12 +259,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
@@ -282,12 +282,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -297,7 +297,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        LoadBalancerST,
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2"},
@@ -307,7 +307,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        NodePortST,
 						ClusterIP:   "10.0.0.3",
 						ExternalIPs: []string{"3.3.3.3", "4.4.4.4"},
@@ -327,12 +327,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -342,7 +342,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        "AnotherType",
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2"},
@@ -359,12 +359,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -374,7 +374,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "None",
 						ExternalIPs: []string{"2.2.2.2"},
@@ -384,7 +384,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "",
 						ExternalIPs: []string{"3.3.3.3"},
@@ -401,18 +401,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.1",
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{
 									Hostname: "foo-bar.zone.elb.example.com",
 								},
@@ -429,18 +429,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.1",
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{
 									IP: "10.0.255.1",
 								},
@@ -463,18 +463,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.1",
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{},
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{},
 						},
 					},
 				},
@@ -487,7 +487,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
@@ -495,13 +495,13 @@ func Test_advertiseExternalIPs(t *testing.T) {
 							svcSkipLbIpsAnnotation: "true",
 						},
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.1",
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{
 									IP: "10.0.255.1",
 								},
@@ -603,7 +603,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 	testcases := []struct {
 		name             string
 		nrc              *NetworkRoutingController
-		existingServices []*v1core.Service
+		existingServices []*corev1.Service
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -613,12 +613,12 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.1.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -628,7 +628,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        NodePortST,
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
@@ -638,14 +638,14 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        LoadBalancerST,
 						ClusterIP:   "10.0.0.3",
 						ExternalIPs: []string{"4.4.4.4"},
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{
 									IP: "10.0.255.1",
 								},
@@ -675,7 +675,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.1.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
@@ -685,14 +685,14 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 							svcAdvertiseLoadBalancerAnnotation: "false",
 						},
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        LoadBalancerST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{
 									IP: "10.0.255.1",
 								},
@@ -795,7 +795,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 	testcases := []struct {
 		name             string
 		nrc              *NetworkRoutingController
-		existingServices []*v1core.Service
+		existingServices []*corev1.Service
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -805,12 +805,12 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.1.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -820,7 +820,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-2",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        NodePortST,
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
@@ -830,16 +830,16 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-3",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.3",
 						// ignored since LoadBalancer services don't
 						// advertise external IPs.
 						ExternalIPs: []string{"4.4.4.4"},
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{
 									IP: "10.0.255.1",
 								},
@@ -859,7 +859,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				bgpServer: gobgp.NewBgpServer(),
 				nodeIP:    net.ParseIP("10.0.1.1"),
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
@@ -869,7 +869,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 							svcAdvertiseLoadBalancerAnnotation: "true",
 						},
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -884,7 +884,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 							svcAdvertiseLoadBalancerAnnotation: "true",
 						},
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        NodePortST,
 						ClusterIP:   "10.0.0.2",
 						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
@@ -899,14 +899,14 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 							svcAdvertiseLoadBalancerAnnotation: "true",
 						},
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        LoadBalancerST,
 						ClusterIP:   "10.0.0.3",
 						ExternalIPs: []string{"4.4.4.4"},
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{
 									IP: "10.0.255.1",
 								},
@@ -1020,8 +1020,8 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 	testcases := []struct {
 		name             string
 		nrc              *NetworkRoutingController
-		existingService  *v1core.Service
-		existingEndpoint *v1core.Endpoints
+		existingService  *corev1.Service
+		existingEndpoint *corev1.Endpoints
 		nodeHasEndpoints bool
 		err              error
 	}{
@@ -1030,25 +1030,25 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 			&NetworkRoutingController{
 				nodeName: "node-1",
 			},
-			&v1core.Service{
+			&corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "svc-1",
 					Namespace: "default",
 				},
-				Spec: v1core.ServiceSpec{
+				Spec: corev1.ServiceSpec{
 					Type:        ClusterIPST,
 					ClusterIP:   "10.0.0.1",
 					ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
 				},
 			},
-			&v1core.Endpoints{
+			&corev1.Endpoints{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "svc-1",
 					Namespace: "default",
 				},
-				Subsets: []v1core.EndpointSubset{
+				Subsets: []corev1.EndpointSubset{
 					{
-						Addresses: []v1core.EndpointAddress{
+						Addresses: []corev1.EndpointAddress{
 							{
 								IP:       "172.20.1.1",
 								NodeName: ptrToString("node-1"),
@@ -1069,25 +1069,25 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 			&NetworkRoutingController{
 				nodeName: "node-1",
 			},
-			&v1core.Service{
+			&corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "svc-1",
 					Namespace: "default",
 				},
-				Spec: v1core.ServiceSpec{
+				Spec: corev1.ServiceSpec{
 					Type:        ClusterIPST,
 					ClusterIP:   "10.0.0.1",
 					ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
 				},
 			},
-			&v1core.Endpoints{
+			&corev1.Endpoints{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "svc-1",
 					Namespace: "default",
 				},
-				Subsets: []v1core.EndpointSubset{
+				Subsets: []corev1.EndpointSubset{
 					{
-						Addresses: []v1core.EndpointAddress{
+						Addresses: []corev1.EndpointAddress{
 							{
 								IP:       "172.20.1.1",
 								NodeName: ptrToString("node-2"),
@@ -1144,7 +1144,7 @@ func Test_advertisePodRoute(t *testing.T) {
 		name        string
 		nrc         *NetworkRoutingController
 		envNodeName string
-		node        *v1core.Node
+		node        *corev1.Node
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 		err         error
@@ -1157,11 +1157,11 @@ func Test_advertisePodRoute(t *testing.T) {
 				nodeIP:    net.ParseIP("10.0.0.1"),
 			},
 			"node-1",
-			&v1core.Node{
+			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node-1",
 				},
-				Spec: v1core.NodeSpec{
+				Spec: corev1.NodeSpec{
 					PodCIDR: "172.20.0.0/24",
 				},
 			},
@@ -1179,11 +1179,11 @@ func Test_advertisePodRoute(t *testing.T) {
 				nodeIP:           net.ParseIP("10.0.0.1"),
 			},
 			"",
-			&v1core.Node{
+			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node-1",
 				},
-				Spec: v1core.NodeSpec{
+				Spec: corev1.NodeSpec{
 					PodCIDR: "172.20.0.0/24",
 				},
 			},
@@ -1200,11 +1200,11 @@ func Test_advertisePodRoute(t *testing.T) {
 					bgpServer: gobgp.NewBgpServer(),
 				},
 				"",
-				&v1core.Node{
+				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "172.20.0.0/24",
 					},
 				},
@@ -1217,11 +1217,11 @@ func Test_advertisePodRoute(t *testing.T) {
 					bgpServer: gobgp.NewBgpServer(),
 				},
 				"node-1",
-				&v1core.Node{
+				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "",
 					},
 				},
@@ -1316,7 +1316,7 @@ func Test_syncInternalPeers(t *testing.T) {
 	testcases := []struct {
 		name          string
 		nrc           *NetworkRoutingController
-		existingNodes []*v1core.Node
+		existingNodes []*corev1.Node
 		neighbors     map[string]bool
 	}{
 		{
@@ -1328,15 +1328,15 @@ func Test_syncInternalPeers(t *testing.T) {
 				bgpServer:       gobgp.NewBgpServer(),
 				activeNodes:     make(map[string]bool),
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
@@ -1356,15 +1356,15 @@ func Test_syncInternalPeers(t *testing.T) {
 				bgpServer:       gobgp.NewBgpServer(),
 				activeNodes:     make(map[string]bool),
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
@@ -1374,10 +1374,10 @@ func Test_syncInternalPeers(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-2",
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.2",
 							},
 						},
@@ -1400,15 +1400,15 @@ func Test_syncInternalPeers(t *testing.T) {
 					"10.0.0.2": true,
 				},
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
@@ -1429,7 +1429,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				activeNodes:     make(map[string]bool),
 				nodeAsnNumber:   100,
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
@@ -1437,10 +1437,10 @@ func Test_syncInternalPeers(t *testing.T) {
 							"kube-router.io/node.asn": "100",
 						},
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
@@ -1450,10 +1450,10 @@ func Test_syncInternalPeers(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-2",
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.2",
 							},
 						},
@@ -1521,7 +1521,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 	testcases := []struct {
 		name               string
 		nrc                *NetworkRoutingController
-		node               *v1core.Node
+		node               *corev1.Node
 		expectedRRServer   bool
 		expectedRRClient   bool
 		expectedClusterID  string
@@ -1540,7 +1540,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				nodeAsnNumber:    100,
 				hostnameOverride: "node-1",
 			},
-			&v1core.Node{
+			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node-1",
 					Annotations: map[string]string{
@@ -1567,7 +1567,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				nodeAsnNumber:    100,
 				hostnameOverride: "node-1",
 			},
-			&v1core.Node{
+			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node-1",
 					Annotations: map[string]string{
@@ -1594,7 +1594,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				nodeAsnNumber:    100,
 				hostnameOverride: "node-1",
 			},
-			&v1core.Node{
+			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node-1",
 					Annotations: map[string]string{
@@ -1621,7 +1621,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				nodeAsnNumber:    100,
 				hostnameOverride: "node-1",
 			},
-			&v1core.Node{
+			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node-1",
 					Annotations: map[string]string{
@@ -1647,7 +1647,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				nodeAsnNumber:    100,
 				hostnameOverride: "node-1",
 			},
-			&v1core.Node{
+			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node-1",
 					Annotations: map[string]string{
@@ -1673,7 +1673,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				nodeAsnNumber:    100,
 				hostnameOverride: "node-1",
 			},
-			&v1core.Node{
+			&corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "node-1",
 					Annotations: map[string]string{
@@ -1691,7 +1691,7 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			if err := createNodes(testcase.nrc.clientset, []*v1core.Node{testcase.node}); err != nil {
+			if err := createNodes(testcase.nrc.clientset, []*corev1.Node{testcase.node}); err != nil {
 				t.Errorf("failed to create existing nodes: %v", err)
 			}
 
@@ -1743,14 +1743,14 @@ func Test_OnNodeUpdate(t *testing.T) {
 			},
 			[]*watchers.NodeUpdate{
 				{
-					Node: &v1core.Node{
+					Node: &corev1.Node{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "node-1",
 						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
+						Status: corev1.NodeStatus{
+							Addresses: []corev1.NodeAddress{
 								{
-									Type:    v1core.NodeInternalIP,
+									Type:    corev1.NodeInternalIP,
 									Address: "10.0.0.1",
 								},
 							},
@@ -1773,14 +1773,14 @@ func Test_OnNodeUpdate(t *testing.T) {
 			},
 			[]*watchers.NodeUpdate{
 				{
-					Node: &v1core.Node{
+					Node: &corev1.Node{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "node-1",
 						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
+						Status: corev1.NodeStatus{
+							Addresses: []corev1.NodeAddress{
 								{
-									Type:    v1core.NodeInternalIP,
+									Type:    corev1.NodeInternalIP,
 									Address: "10.0.0.1",
 								},
 							},
@@ -1789,14 +1789,14 @@ func Test_OnNodeUpdate(t *testing.T) {
 					Op: watchers.ADD,
 				},
 				{
-					Node: &v1core.Node{
+					Node: &corev1.Node{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "node-2",
 						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
+						Status: corev1.NodeStatus{
+							Addresses: []corev1.NodeAddress{
 								{
-									Type:    v1core.NodeExternalIP,
+									Type:    corev1.NodeExternalIP,
 									Address: "1.1.1.1",
 								},
 							},
@@ -1820,14 +1820,14 @@ func Test_OnNodeUpdate(t *testing.T) {
 			},
 			[]*watchers.NodeUpdate{
 				{
-					Node: &v1core.Node{
+					Node: &corev1.Node{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "node-1",
 						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
+						Status: corev1.NodeStatus{
+							Addresses: []corev1.NodeAddress{
 								{
-									Type:    v1core.NodeInternalIP,
+									Type:    corev1.NodeInternalIP,
 									Address: "10.0.0.1",
 								},
 							},
@@ -1836,14 +1836,14 @@ func Test_OnNodeUpdate(t *testing.T) {
 					Op: watchers.ADD,
 				},
 				{
-					Node: &v1core.Node{
+					Node: &corev1.Node{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "node-1",
 						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
+						Status: corev1.NodeStatus{
+							Addresses: []corev1.NodeAddress{
 								{
-									Type:    v1core.NodeInternalIP,
+									Type:    corev1.NodeInternalIP,
 									Address: "10.0.0.1",
 								},
 							},
@@ -1924,7 +1924,7 @@ func Test_generateTunnelName(t *testing.T) {
 	}
 }
 
-func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) error {
+func createServices(clientset kubernetes.Interface, svcs []*corev1.Service) error {
 	for _, svc := range svcs {
 		_, err := clientset.CoreV1().Services("default").Create(context.Background(), svc, metav1.CreateOptions{})
 		if err != nil {
@@ -1935,7 +1935,7 @@ func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) erro
 	return nil
 }
 
-func createNodes(clientset kubernetes.Interface, nodes []*v1core.Node) error {
+func createNodes(clientset kubernetes.Interface, nodes []*corev1.Node) error {
 	for _, node := range nodes {
 		_, err := clientset.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
 		if err != nil {

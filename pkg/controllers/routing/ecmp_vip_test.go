@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -23,19 +23,19 @@ func Equal(a, b []string) bool {
 }
 
 type ServiceAdvertisedIPs struct {
-	service       *v1core.Service
+	service       *corev1.Service
 	advertisedIPs []string
 	withdrawnIPs  []string
 	annotations   map[string]string
 }
 
 func Test_getVIPsForService(t *testing.T) {
-	services := map[string]*v1core.Service{
+	services := map[string]*corev1.Service{
 		"cluster": {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "svc-cluster",
 			},
-			Spec: v1core.ServiceSpec{
+			Spec: corev1.ServiceSpec{
 				Type:      ClusterIPST,
 				ClusterIP: "10.0.0.1",
 			},
@@ -44,7 +44,7 @@ func Test_getVIPsForService(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "svc-external",
 			},
-			Spec: v1core.ServiceSpec{
+			Spec: corev1.ServiceSpec{
 				Type:        ClusterIPST,
 				ClusterIP:   "10.0.0.1",
 				ExternalIPs: []string{"1.1.1.1"},
@@ -54,7 +54,7 @@ func Test_getVIPsForService(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "svc-nodeport",
 			},
-			Spec: v1core.ServiceSpec{
+			Spec: corev1.ServiceSpec{
 				Type:        NodePortST,
 				ClusterIP:   "10.0.0.1",
 				ExternalIPs: []string{"1.1.1.1"},
@@ -64,14 +64,14 @@ func Test_getVIPsForService(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "svc-loadbalancer",
 			},
-			Spec: v1core.ServiceSpec{
+			Spec: corev1.ServiceSpec{
 				Type:        LoadBalancerST,
 				ClusterIP:   "10.0.0.1",
 				ExternalIPs: []string{"1.1.1.1"},
 			},
-			Status: v1core.ServiceStatus{
-				LoadBalancer: v1core.LoadBalancerStatus{
-					Ingress: []v1core.LoadBalancerIngress{
+			Status: corev1.ServiceStatus{
+				LoadBalancer: corev1.LoadBalancerStatus{
+					Ingress: []corev1.LoadBalancerIngress{
 						{
 							IP: "10.0.255.1",
 						},

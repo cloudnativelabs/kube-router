@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"k8s.io/klog/v2"
 
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -28,7 +28,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 	nodes := nrc.nodeLister.List()
 
 	for _, obj := range nodes {
-		node := obj.(*v1core.Node)
+		node := obj.(*corev1.Node)
 		if node.Spec.ProviderID == "" || !strings.HasPrefix(node.Spec.ProviderID, "aws") {
 			return
 		}

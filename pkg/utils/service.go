@@ -3,7 +3,7 @@ package utils
 import (
 	"strings"
 
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -12,7 +12,7 @@ const (
 )
 
 // ServiceForEndpoints given Endpoint object return Service API object if it exists
-func ServiceForEndpoints(ci *cache.Indexer, ep *v1core.Endpoints) (interface{}, bool, error) {
+func ServiceForEndpoints(ci *cache.Indexer, ep *corev1.Endpoints) (interface{}, bool, error) {
 	key, err := cache.MetaNamespaceKeyFunc(ep)
 	if err != nil {
 		return nil, false, err
@@ -35,8 +35,8 @@ func ServiceForEndpoints(ci *cache.Indexer, ep *v1core.Endpoints) (interface{}, 
 // parameter so that it can be used more easily in early processing if needed. If a non-service object is given,
 // function will return false.
 func ServiceIsHeadless(obj interface{}) bool {
-	if svc, _ := obj.(*v1core.Service); svc != nil {
-		if svc.Spec.Type == v1core.ServiceTypeClusterIP {
+	if svc, _ := obj.(*corev1.Service); svc != nil {
+		if svc.Spec.Type == corev1.ServiceTypeClusterIP {
 			if ClusterIPIsNone(svc.Spec.ClusterIP) && containsOnlyNone(svc.Spec.ClusterIPs) {
 				return true
 			}

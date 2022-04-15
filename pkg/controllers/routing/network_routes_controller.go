@@ -30,7 +30,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
@@ -798,7 +798,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	currentPodCidrs := make([]string, 0)
 	currentNodeIPs := make([]string, 0)
 	for _, obj := range nodes {
-		node := obj.(*v1core.Node)
+		node := obj.(*corev1.Node)
 		podCIDR := node.GetAnnotations()["kube-router.io/pod-cidr"]
 		if podCIDR == "" {
 			podCIDR = node.Spec.PodCIDR

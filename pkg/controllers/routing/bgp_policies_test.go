@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
@@ -19,8 +19,8 @@ import (
 type PolicyTestCase struct {
 	name                         string
 	nrc                          *NetworkRoutingController
-	existingNodes                []*v1core.Node
-	existingServices             []*v1core.Service
+	existingNodes                []*corev1.Node
+	existingServices             []*corev1.Service
 	podDefinedSet                *gobgpapi.DefinedSet
 	clusterIPDefinedSet          *gobgpapi.DefinedSet
 	externalPeerDefinedSet       *gobgpapi.DefinedSet
@@ -48,7 +48,7 @@ func Test_AddPolicies(t *testing.T) {
 				nodeAsnNumber:     100,
 				podCidr:           "172.20.0.0/24",
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
@@ -56,25 +56,25 @@ func Test_AddPolicies(t *testing.T) {
 							"kube-router.io/node.asn": "100",
 						},
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "172.20.0.0/24",
 					},
 				},
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -191,7 +191,7 @@ func Test_AddPolicies(t *testing.T) {
 				nodeAsnNumber:     100,
 				podCidr:           "172.20.0.0/24",
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
@@ -200,25 +200,25 @@ func Test_AddPolicies(t *testing.T) {
 							"kube-router.io/node.bgp.customimportreject": "192.168.1.0/24,192.168.3.0/24,192.168.2.0/25, 10.0.0.0/16",
 						},
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "172.20.0.0/24",
 					},
 				},
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        "ClusterIP",
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -385,7 +385,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 				nodeAsnNumber: 100,
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
@@ -393,25 +393,25 @@ func Test_AddPolicies(t *testing.T) {
 							"kube-router.io/node.asn": "100",
 						},
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "172.20.0.0/24",
 					},
 				},
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -561,7 +561,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 				nodeAsnNumber: 100,
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
@@ -569,25 +569,25 @@ func Test_AddPolicies(t *testing.T) {
 							"kube-router.io/node.asn": "100",
 						},
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "172.20.0.0/24",
 					},
 				},
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -720,7 +720,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 				nodeAsnNumber: 100,
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
@@ -730,25 +730,25 @@ func Test_AddPolicies(t *testing.T) {
 							"kube-router.io/path-prepend.repeat-n": "5",
 						},
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "172.20.0.0/24",
 					},
 				},
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -902,7 +902,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 				nodeAsnNumber: 100,
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
@@ -911,25 +911,25 @@ func Test_AddPolicies(t *testing.T) {
 							"kube-router.io/path-prepend.as": "65100",
 						},
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "172.20.0.0/24",
 					},
 				},
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
@@ -1084,7 +1084,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 				nodeAsnNumber: 100,
 			},
-			[]*v1core.Node{
+			[]*corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "node-1",
@@ -1093,25 +1093,25 @@ func Test_AddPolicies(t *testing.T) {
 							"kube-router.io/node.bgp.communities": "no-export",
 						},
 					},
-					Status: v1core.NodeStatus{
-						Addresses: []v1core.NodeAddress{
+					Status: corev1.NodeStatus{
+						Addresses: []corev1.NodeAddress{
 							{
-								Type:    v1core.NodeInternalIP,
+								Type:    corev1.NodeInternalIP,
 								Address: "10.0.0.1",
 							},
 						},
 					},
-					Spec: v1core.NodeSpec{
+					Spec: corev1.NodeSpec{
 						PodCIDR: "172.20.0.0/24",
 					},
 				},
 			},
-			[]*v1core.Service{
+			[]*corev1.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        ClusterIPST,
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1"},

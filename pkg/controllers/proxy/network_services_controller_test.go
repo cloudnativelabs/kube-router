@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -103,8 +103,8 @@ func waitForListerWithTimeoutG(lister cache.Indexer, timeout time.Duration) {
 }
 
 type TestCaseSvcEPs struct {
-	existingService  *v1core.Service
-	existingEndpoint *v1core.Endpoints
+	existingService  *corev1.Service
+	existingEndpoint *corev1.Endpoints
 	nodeHasEndpoints bool
 }
 
@@ -160,18 +160,18 @@ var _ = Describe("NetworkServicesController", func() {
 		var syncErr error
 		BeforeEach(func() {
 			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{Name: "svc-1"},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        "ClusterIP",
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
+						Ports: []corev1.ServicePort{
 							{Name: "port-1", Port: 8080, Protocol: "TCP"},
 						},
 					},
 				},
-				&v1core.Endpoints{},
+				&corev1.Endpoints{},
 				false,
 			}
 		})
@@ -245,28 +245,28 @@ var _ = Describe("NetworkServicesController", func() {
 		var syncErr error
 		BeforeEach(func() {
 			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        "LoadBalancer",
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
+						Ports: []corev1.ServicePort{
 							{Name: "port-1", Protocol: "TCP", Port: 8080},
 						},
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{IP: "10.255.0.1"},
 								{IP: "10.255.0.2"},
 							},
 						},
 					},
 				},
-				&v1core.Endpoints{},
+				&corev1.Endpoints{},
 				false,
 			}
 		})
@@ -309,31 +309,31 @@ var _ = Describe("NetworkServicesController", func() {
 		var syncErr error
 		BeforeEach(func() {
 			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 						Annotations: map[string]string{
 							"kube-router.io/service.skiplbips": "true",
 						},
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        "LoadBalancer",
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
+						Ports: []corev1.ServicePort{
 							{Name: "port-1", Protocol: "TCP", Port: 8080},
 						},
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{IP: "10.255.0.1"},
 								{IP: "10.255.0.2"},
 							},
 						},
 					},
 				},
-				&v1core.Endpoints{},
+				&corev1.Endpoints{},
 				false,
 			}
 		})
@@ -374,27 +374,27 @@ var _ = Describe("NetworkServicesController", func() {
 		var syncErr error
 		BeforeEach(func() {
 			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "svc-1",
 					},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        "LoadBalancer",
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
+						Ports: []corev1.ServicePort{
 							{Name: "port-1", Protocol: "TCP", Port: 8080},
 						},
 					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
+					Status: corev1.ServiceStatus{
+						LoadBalancer: corev1.LoadBalancerStatus{
+							Ingress: []corev1.LoadBalancerIngress{
 								{Hostname: "foo-bar.zone.elb.example.com"},
 							},
 						},
 					},
 				},
-				&v1core.Endpoints{},
+				&corev1.Endpoints{},
 				false,
 			}
 		})
@@ -435,29 +435,29 @@ var _ = Describe("NetworkServicesController", func() {
 		var syncErr error
 		BeforeEach(func() {
 			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
+				&corev1.Service{
 					ObjectMeta: metav1.ObjectMeta{Name: "svc-1", Namespace: "default"},
-					Spec: v1core.ServiceSpec{
+					Spec: corev1.ServiceSpec{
 						Type:        "ClusterIP",
 						ClusterIP:   "10.0.0.1",
 						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
+						Ports: []corev1.ServicePort{
 							{Name: "port-1", Protocol: "TCP", Port: 8080},
 						},
 					},
 				},
-				&v1core.Endpoints{
+				&corev1.Endpoints{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
 					},
-					Subsets: []v1core.EndpointSubset{
+					Subsets: []corev1.EndpointSubset{
 						{
-							Addresses: []v1core.EndpointAddress{
+							Addresses: []corev1.EndpointAddress{
 								{IP: "172.20.1.1", NodeName: ptrToString("node-1")},
 								{IP: "172.20.1.2", NodeName: ptrToString("node-2")},
 							},
-							Ports: []v1core.EndpointPort{
+							Ports: []corev1.EndpointPort{
 								{Name: "port-1", Port: 80, Protocol: "TCP"},
 							},
 						},

@@ -14,7 +14,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	gobgpapi "github.com/osrg/gobgp/api"
 	gobgp "github.com/osrg/gobgp/pkg/server"
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -45,7 +45,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, obj := range nodes {
-		node := obj.(*v1core.Node)
+		node := obj.(*corev1.Node)
 		nodeIP, err := utils.GetNodeIP(node)
 		if err != nil {
 			klog.Errorf("Failed to find a node IP and therefore cannot sync internal BGP Peer: %v", err)
@@ -307,7 +307,7 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			node := obj.(*v1core.Node)
+			node := obj.(*corev1.Node)
 			nodeIP, err := utils.GetNodeIP(node)
 			if err != nil {
 				klog.Errorf(
@@ -322,14 +322,14 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			// we are only interested in node add/delete, so skip update
 		},
 		DeleteFunc: func(obj interface{}) {
-			node, ok := obj.(*v1core.Node)
+			node, ok := obj.(*corev1.Node)
 			if !ok {
 				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 				if !ok {
 					klog.Errorf("unexpected object type: %v", obj)
 					return
 				}
-				if node, ok = tombstone.Obj.(*v1core.Node); !ok {
+				if node, ok = tombstone.Obj.(*corev1.Node); !ok {
 					klog.Errorf("unexpected object type: %v", obj)
 					return
 				}

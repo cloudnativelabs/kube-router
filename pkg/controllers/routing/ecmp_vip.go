@@ -14,7 +14,7 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	gobgpapi "github.com/osrg/gobgp/api"
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -114,14 +114,14 @@ func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEven
 	}
 }
 
-func getServiceObject(obj interface{}) (svc *v1core.Service) {
-	if svc, _ = obj.(*v1core.Service); svc == nil {
+func getServiceObject(obj interface{}) (svc *corev1.Service) {
+	if svc, _ = obj.(*corev1.Service); svc == nil {
 		klog.Errorf("cache indexer returned obj that is not type *v1.Service")
 	}
 	return
 }
 
-func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
+func (nrc *NetworkRoutingController) handleServiceUpdate(svc *corev1.Service) {
 	if !nrc.bgpServerStarted {
 		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
 			svc.Namespace, svc.Name)
@@ -144,7 +144,7 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svc *v1core.Service) {
 	nrc.withdrawVIPs(toWithdraw)
 }
 
-func (nrc *NetworkRoutingController) handleServiceDelete(svc *v1core.Service) {
+func (nrc *NetworkRoutingController) handleServiceDelete(svc *corev1.Service) {
 
 	if !nrc.bgpServerStarted {
 		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
@@ -196,14 +196,14 @@ func (nrc *NetworkRoutingController) tryHandleServiceUpdate(obj interface{}, log
 }
 
 func (nrc *NetworkRoutingController) tryHandleServiceDelete(obj interface{}, logMsgFormat string) {
-	svc, ok := obj.(*v1core.Service)
+	svc, ok := obj.(*corev1.Service)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
-		if svc, ok = tombstone.Obj.(*v1core.Service); !ok {
+		if svc, ok = tombstone.Obj.(*corev1.Service); !ok {
 			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
@@ -241,7 +241,7 @@ func (nrc *NetworkRoutingController) OnServiceUpdate(objNew interface{}, objOld 
 	nrc.withdrawVIPs(nrc.getExternalIPsToWithdraw(getServiceObject(objOld), getServiceObject(objNew)))
 }
 
-func (nrc *NetworkRoutingController) getExternalIPsToWithdraw(svcOld, svcNew *v1core.Service) (out []string) {
+func (nrc *NetworkRoutingController) getExternalIPsToWithdraw(svcOld, svcNew *corev1.Service) (out []string) {
 	withdrawnServiceVips := make([]string, 0)
 	if svcOld != nil && svcNew != nil {
 		withdrawnServiceVips = getMissingPrevGen(nrc.getExternalIPs(svcOld), nrc.getExternalIPs(svcNew))
@@ -311,7 +311,7 @@ func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
 
 // OnEndpointsUpdate handles the endpoint updates from the kubernetes API server
 func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
-	ep, ok := obj.(*v1core.Endpoints)
+	ep, ok := obj.(*corev1.Endpoints)
 	if !ok {
 		klog.Errorf("cache indexer returned obj that is not type *v1.Endpoints")
 		return
@@ -342,7 +342,7 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 	nrc.tryHandleServiceUpdate(svc, "Updating service %s/%s triggered by endpoint update event")
 }
 
-func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) string {
+func (nrc *NetworkRoutingController) getClusterIP(svc *corev1.Service) string {
 	clusterIP := ""
 	if svc.Spec.Type == ClusterIPST || svc.Spec.Type == NodePortST || svc.Spec.Type == LoadBalancerST {
 
@@ -354,7 +354,7 @@ func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) string {
 	return clusterIP
 }
 
-func (nrc *NetworkRoutingController) getExternalIPs(svc *v1core.Service) []string {
+func (nrc *NetworkRoutingController) getExternalIPs(svc *corev1.Service) []string {
 	externalIPList := make([]string, 0)
 	if svc.Spec.Type == ClusterIPST || svc.Spec.Type == NodePortST || svc.Spec.Type == LoadBalancerST {
 
@@ -366,7 +366,7 @@ func (nrc *NetworkRoutingController) getExternalIPs(svc *v1core.Service) []strin
 	return externalIPList
 }
 
-func (nrc *NetworkRoutingController) getLoadBalancerIPs(svc *v1core.Service) []string {
+func (nrc *NetworkRoutingController) getLoadBalancerIPs(svc *corev1.Service) []string {
 	loadBalancerIPList := make([]string, 0)
 	if svc.Spec.Type == LoadBalancerST {
 		// skip headless services
@@ -394,7 +394,7 @@ func (nrc *NetworkRoutingController) getVIPs(onlyActiveEndpoints bool) ([]string
 	toWithdrawList := make([]string, 0)
 
 	for _, obj := range nrc.svcLister.List() {
-		svc := obj.(*v1core.Service)
+		svc := obj.(*corev1.Service)
 
 		toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, onlyActiveEndpoints)
 		if err != nil {
@@ -429,7 +429,7 @@ OUTER:
 	return toAdvertiseList, finalToWithdrawList, nil
 }
 
-func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service, annotation string,
+func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *corev1.Service, annotation string,
 	defaultValue bool) bool {
 	returnValue := defaultValue
 	stringValue, exists := svc.Annotations[annotation]
@@ -440,13 +440,13 @@ func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service,
 	return returnValue
 }
 
-func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service,
+func (nrc *NetworkRoutingController) getVIPsForService(svc *corev1.Service,
 	onlyActiveEndpoints bool) ([]string, []string, error) {
 
 	advertise := true
 
 	_, hasLocalAnnotation := svc.Annotations[svcLocalAnnotation]
-	hasLocalTrafficPolicy := svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal
+	hasLocalTrafficPolicy := svc.Spec.ExternalTrafficPolicy == corev1.ServiceExternalTrafficPolicyTypeLocal
 	isLocal := hasLocalAnnotation || hasLocalTrafficPolicy
 
 	if onlyActiveEndpoints && isLocal {
@@ -466,7 +466,7 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service,
 	return ipList, nil, nil
 }
 
-func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) []string {
+func (nrc *NetworkRoutingController) getAllVIPsForService(svc *corev1.Service) []string {
 
 	ipList := make([]string, 0)
 
@@ -493,14 +493,14 @@ func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) [
 
 }
 
-func isEndpointsForLeaderElection(ep *v1core.Endpoints) bool {
+func isEndpointsForLeaderElection(ep *corev1.Endpoints) bool {
 	_, isLeaderElection := ep.Annotations[LeaderElectionRecordAnnotationKey]
 	return isLeaderElection
 }
 
 // nodeHasEndpointsForService will get the corresponding Endpoints resource for a given Service
 // return true if any endpoint addresses has NodeName matching the node name of the route controller
-func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Service) (bool, error) {
+func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *corev1.Service) (bool, error) {
 	// listers for endpoints and services should use the same keys since
 	// endpoint and service resources share the same object name and namespace
 	key, err := cache.MetaNamespaceKeyFunc(svc)
@@ -516,7 +516,7 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 		return false, fmt.Errorf("endpoint resource doesn't exist for service: %q", svc.Name)
 	}
 
-	ep, ok := item.(*v1core.Endpoints)
+	ep, ok := item.(*corev1.Endpoints)
 	if !ok {
 		return false, errors.New("failed to convert cache item to Endpoints type")
 	}
