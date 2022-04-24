@@ -1,7 +1,7 @@
 module github.com/cloudnativelabs/kube-router
 
 require (
-	github.com/aws/aws-sdk-go v1.43.33
+	github.com/aws/aws-sdk-go v1.43.45
 	github.com/containernetworking/cni v1.0.1
 	github.com/containernetworking/plugins v1.1.1
 	github.com/coreos/go-iptables v0.6.0
@@ -17,7 +17,7 @@ require (
 	github.com/vishvananda/netlink v1.1.1-0.20210330154013-f5de75959ad5
 	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
-	google.golang.org/grpc v1.45.0
+	google.golang.org/grpc v1.46.0
 	k8s.io/api v0.22.7
 	k8s.io/apimachinery v0.22.7
 	k8s.io/client-go v0.22.7
@@ -41,7 +41,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/go-logr/logr v1.2.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/go-cmp v0.5.5 // indirect
+	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gnostic v0.5.5 // indirect
