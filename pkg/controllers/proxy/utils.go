@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -240,30 +242,6 @@ func (nsc *NetworkServicesController) lookupServiceByFWMark(fwMark uint32) (stri
 	return serviceKeySplit[0], serviceKeySplit[1], int(port), nil
 }
 
-// unsortedListsEquivalent compares two lists of endpointsInfo and considers them the same if they contains the same
-// contents regardless of order. Returns true if both lists contain the same contents.
-func unsortedListsEquivalent(a, b []endpointsInfo) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	values := make(map[interface{}]int)
-	for _, val := range a {
-		values[val] = 1
-	}
-	for _, val := range b {
-		values[val]++
-	}
-
-	for _, val := range values {
-		if val == 1 {
-			return false
-		}
-	}
-
-	return true
-}
-
 // endpointsMapsEquivalent compares two maps of endpointsInfoMap to see if they have the same keys and values. Returns
 // true if both maps contain the same keys and values.
 func endpointsMapsEquivalent(a, b endpointsInfoMap) bool {
@@ -273,11 +251,18 @@ func endpointsMapsEquivalent(a, b endpointsInfoMap) bool {
 
 	for key, valA := range a {
 		valB, ok := b[key]
-		if !ok {
+		if !ok || len(valA) != len(valB) {
 			return false
 		}
 
-		if !unsortedListsEquivalent(valA, valB) {
+		sort.SliceStable(valA, func(i, j int) bool {
+			return valA[i].port < valA[j].port
+		})
+		sort.SliceStable(valB, func(i, j int) bool {
+			return valB[i].port < valB[j].port
+		})
+
+		if !reflect.DeepEqual(valA, valB) {
 			return false
 		}
 	}
