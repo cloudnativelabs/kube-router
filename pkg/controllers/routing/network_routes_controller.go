@@ -60,7 +60,6 @@ const (
 	svcAdvertiseClusterAnnotation      = "kube-router.io/service.advertise.clusterip"
 	svcAdvertiseExternalAnnotation     = "kube-router.io/service.advertise.externalip"
 	svcAdvertiseLoadBalancerAnnotation = "kube-router.io/service.advertise.loadbalancerip"
-	LeaderElectionRecordAnnotationKey  = "control-plane.alpha.kubernetes.io/leader"
 
 	// Deprecated: use kube-router.io/service.advertise.loadbalancer instead
 	svcSkipLbIpsAnnotation = "kube-router.io/service.skiplbips"

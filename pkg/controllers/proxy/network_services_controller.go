@@ -32,6 +32,7 @@ import (
 	api "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
 )
 
@@ -78,13 +79,12 @@ const (
 	svcSkipLbIpsAnnotation          = "kube-router.io/service.skiplbips"
 	svcSchedFlagsAnnotation         = "kube-router.io/service.schedflags"
 
-	LeaderElectionRecordAnnotationKey = "control-plane.alpha.kubernetes.io/leader"
-	localIPsIPSetName                 = "kube-router-local-ips"
-	ipvsServicesIPSetName             = "kube-router-ipvs-services"
-	serviceIPsIPSetName               = "kube-router-service-ips"
-	ipvsFirewallChainName             = "KUBE-ROUTER-SERVICES"
-	ipvsHairpinChainName              = "KUBE-ROUTER-HAIRPIN"
-	synctypeAll                       = iota
+	localIPsIPSetName     = "kube-router-local-ips"
+	ipvsServicesIPSetName = "kube-router-ipvs-services"
+	serviceIPsIPSetName   = "kube-router-service-ips"
+	ipvsFirewallChainName = "KUBE-ROUTER-SERVICES"
+	ipvsHairpinChainName  = "KUBE-ROUTER-HAIRPIN"
+	synctypeAll           = iota
 	synctypeIpvs
 
 	tcpProtocol         = "tcp"
@@ -2035,7 +2035,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 }
 
 func isEndpointsForLeaderElection(ep *api.Endpoints) bool {
-	_, isLeaderElection := ep.Annotations[LeaderElectionRecordAnnotationKey]
+	_, isLeaderElection := ep.Annotations[resourcelock.LeaderElectionRecordAnnotationKey]
 	return isLeaderElection
 }
 
