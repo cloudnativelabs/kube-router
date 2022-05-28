@@ -150,6 +150,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string) error {
 	}
 	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
 	if err == nil {
+		// #nosec G204
 		out, err := exec.Command("ip", "route", "delete", "local", ip, "dev", KubeDummyIf,
 			"table", "local", "proto", "kernel", "scope", "host", "src",
 			NodeIP.String(), "table", "local").CombinedOutput()
@@ -186,6 +187,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, addRoute boo
 
 	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
 	// route is not replaced. For now do it with command.
+	// #nosec G204
 	out, err := exec.Command("ip", "route", "replace", "local", ip, "dev", KubeDummyIf,
 		"table", "local", "proto", "kernel", "scope", "host", "src",
 		NodeIP.String(), "table", "local").CombinedOutput()
