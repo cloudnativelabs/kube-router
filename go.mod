@@ -21,7 +21,7 @@ require (
 	k8s.io/api v0.23.7
 	k8s.io/apimachinery v0.23.7
 	k8s.io/client-go v0.23.7
-	k8s.io/cri-api v0.23.7
+	k8s.io/cri-api v0.24.1
 	k8s.io/klog/v2 v2.60.1
 )
 
@@ -78,7 +78,7 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20210831024726-fe130286e0e2 // indirect
+	google.golang.org/genproto v0.0.0-20220107163113-42d7afdf6368 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.51.0 // indirect
