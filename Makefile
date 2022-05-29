@@ -19,7 +19,7 @@ UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
 DOCKER_BUILD_IMAGE?=golang:1.17.10-alpine3.15
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.46.2
-GOBGP_VERSION=v0.0.0-20211201041502-6248c576b118 # v2.34.0
+GOBGP_VERSION=v3.2.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v1.9.2
 MOQ_VERSION=v0.2.1
@@ -185,9 +185,9 @@ gobgp:
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 	    sh -c \
-	    'CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .'
+	    'CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v3/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .'
 else
-	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .
+	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v3/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .
 endif
 	@echo Finished building gobgp.
 
