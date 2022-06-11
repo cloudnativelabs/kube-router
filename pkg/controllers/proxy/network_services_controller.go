@@ -2347,7 +2347,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 	nsc.nodeIP = NodeIP
-	automtu, err := utils.GetMTUFromNodeIP(nsc.nodeIP, config.EnableOverlay)
+	automtu, err := utils.GetMTUFromNodeIP(nsc.nodeIP)
 	if err != nil {
 		return nil, err
 	}
