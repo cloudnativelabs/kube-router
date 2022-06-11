@@ -63,7 +63,7 @@ func GetNodeIP(node *apiv1.Node) (net.IP, error) {
 }
 
 // GetMTUFromNodeIP returns the MTU by detecting it from the IP on the node and figuring in tunneling configurations
-func GetMTUFromNodeIP(nodeIP net.IP, overlayEnabled bool) (int, error) {
+func GetMTUFromNodeIP(nodeIP net.IP) (int, error) {
 	links, err := netlink.LinkList()
 	if err != nil {
 		return 0, errors.New("failed to get list of links")
@@ -76,9 +76,6 @@ func GetMTUFromNodeIP(nodeIP net.IP, overlayEnabled bool) (int, error) {
 		for _, addr := range addresses {
 			if addr.IPNet.IP.Equal(nodeIP) {
 				linkMTU := link.Attrs().MTU
-				if overlayEnabled {
-					return linkMTU - IPInIPHeaderLength, nil // -20 to accommodate IPIP header
-				}
 				return linkMTU, nil
 			}
 		}
