@@ -5,7 +5,7 @@ require (
 	github.com/containernetworking/cni v1.1.1
 	github.com/containernetworking/plugins v1.1.1
 	github.com/coreos/go-iptables v0.6.0
-	github.com/docker/docker v20.10.16+incompatible
+	github.com/docker/docker v20.10.17+incompatible
 	github.com/moby/ipvs v1.0.2
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
@@ -17,9 +17,9 @@ require (
 	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74
 	golang.org/x/net v0.0.0-20220526153639-5463443f8c37
 	google.golang.org/grpc v1.47.0
-	google.golang.org/protobuf v1.27.1
-	k8s.io/api v0.24.1
-	k8s.io/apimachinery v0.24.1
+	google.golang.org/protobuf v1.28.0
+	k8s.io/api v0.24.2
+	k8s.io/apimachinery v0.24.2
 	k8s.io/client-go v0.24.1
 	k8s.io/cri-api v0.24.1
 	k8s.io/klog/v2 v2.60.1
