@@ -137,7 +137,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.EnableiBGP, "enable-ibgp", true,
 		"Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers")
 	fs.BoolVar(&s.EnableIPv4, "enable-ipv4", true, "Enables IPv4 support")
-	fs.BoolVar(&s.EnableIPv6, "enable-ipv6", true, "Enables IPv6 support")
+	fs.BoolVar(&s.EnableIPv6, "enable-ipv6", false, "Enables IPv6 support")
 	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,
 		"When enable-overlay is set to true, IP-in-IP tunneling is used for pod-to-pod networking across "+
 			"nodes in different subnets. When set to false no tunneling is used and routing infrastructure is "+
