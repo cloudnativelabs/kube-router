@@ -561,8 +561,8 @@ github.com/opencontainers/runtime-spec v1.0.2/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/
 github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
 github.com/opencontainers/runtime-spec v1.0.3-0.20210326190908-1c3f411f0417/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
 github.com/opencontainers/selinux v1.8.2/go.mod h1:MUIHuUEvKB1wtJjQdOyYRgOnLD2xAPP8dBsCoU0KuF8=
-github.com/osrg/gobgp/v3 v3.2.0 h1:ex95svz3R7eKrBPL7m1PUT5oTgpIYl98/w3JryQW1n0=
-github.com/osrg/gobgp/v3 v3.2.0/go.mod h1:6ZG4AJiCRrldjyR90YUgIRM+FBDwcbPOtDaeZ5HMtB0=
+github.com/osrg/gobgp/v3 v3.3.0 h1:nYEbIGq9YNCl4kcIel7RhN59GVMGskxjboeFaFT0sWU=
+github.com/osrg/gobgp/v3 v3.3.0/go.mod h1:6ZG4AJiCRrldjyR90YUgIRM+FBDwcbPOtDaeZ5HMtB0=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pascaldekloe/goe v0.1.0/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/pelletier/go-toml v1.2.0/go.mod h1:5z9KED0ma1S8pY6P1sdut58dfprrGBbd/94hg7ilaic=
