@@ -136,6 +136,11 @@ func Append(buffer *bytes.Buffer, chain string, rule []string) {
 	buffer.WriteString(ruleStr)
 }
 
+type IPTablesSaveRestorer interface {
+	SaveInto(table string, buffer *bytes.Buffer) error
+	Restore(table string, data []byte) error
+}
+
 type IPTablesSaveRestore struct {
 	saveCmd    string
 	restoreCmd string
