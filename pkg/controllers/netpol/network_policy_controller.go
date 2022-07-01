@@ -15,6 +15,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/pkg/options"
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
+	"github.com/coreos/go-iptables/iptables"
 	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/klog/v2"
 
@@ -663,6 +664,39 @@ func (npc *NetworkPolicyController) Cleanup() {
 	}
 
 	klog.Infof("Successfully cleaned the NetworkPolicyController configurations done by kube-router")
+}
+
+func NewIpTablesHandler(config *options.KubeRouterConfig) (map[v1core.IPFamily]utils.IPTablesHandler, map[v1core.IPFamily]utils.IPSetHandler, error) {
+	iptablesCmdHandlers := make(map[v1core.IPFamily]utils.IPTablesHandler, 2)
+	ipSetHandlers := make(map[v1core.IPFamily]utils.IPSetHandler, 2)
+
+	if config.EnableIPv4 {
+		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create iptables handler: %w", err)
+		}
+		iptablesCmdHandlers[v1core.IPv4Protocol] = iptHandler
+
+		ipset, err := utils.NewIPSet(false)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create ipset handler: %w", err)
+		}
+		ipSetHandlers[v1core.IPv4Protocol] = ipset
+	}
+	if config.EnableIPv6 {
+		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create iptables handler: %w", err)
+		}
+		iptablesCmdHandlers[v1core.IPv6Protocol] = iptHandler
+
+		ipset, err := utils.NewIPSet(true)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create ipset handler: %w", err)
+		}
+		ipSetHandlers[v1core.IPv6Protocol] = ipset
+	}
+	return iptablesCmdHandlers, ipSetHandlers, nil
 }
 
 // NewNetworkPolicyController returns new NetworkPolicyController object
