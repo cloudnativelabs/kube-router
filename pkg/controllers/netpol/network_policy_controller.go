@@ -77,7 +77,7 @@ type NetworkPolicyController struct {
 	ipsetMutex                     *sync.Mutex
 
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler
-	iptablesSaveRestore map[v1core.IPFamily]*utils.IPTablesSaveRestore
+	iptablesSaveRestore map[v1core.IPFamily]utils.IPTablesSaveRestorer
 	filterTableRules    map[v1core.IPFamily]*bytes.Buffer
 	ipSetHandlers       map[v1core.IPFamily]utils.IPSetHandler
 	nodeIPs             map[v1core.IPFamily]net.IP
@@ -778,7 +778,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 
 	npc.iptablesCmdHandlers = iptablesCmdHandlers
-	npc.iptablesSaveRestore = make(map[v1core.IPFamily]*utils.IPTablesSaveRestore, 2)
+	npc.iptablesSaveRestore = make(map[v1core.IPFamily]utils.IPTablesSaveRestorer, 2)
 	npc.filterTableRules = make(map[v1core.IPFamily]*bytes.Buffer, 2)
 	npc.ipSetHandlers = ipSetHandlers
 	npc.nodeIPs = make(map[v1core.IPFamily]net.IP, 2)
