@@ -14,7 +14,7 @@ import (
 
 var hasWait bool
 
-// Interface based on the IPTables struct from github.com/coreos/go-iptables
+// IPTablesHandler interface based on the IPTables struct from github.com/coreos/go-iptables
 // which allows to mock it.
 type IPTablesHandler interface {
 	Proto() iptables.Protocol
@@ -136,16 +136,20 @@ func Append(buffer *bytes.Buffer, chain string, rule []string) {
 	buffer.WriteString(ruleStr)
 }
 
+//IPTablesSaveRestorer interface that defines functions to save and restore tables
 type IPTablesSaveRestorer interface {
 	SaveInto(table string, buffer *bytes.Buffer) error
 	Restore(table string, data []byte) error
 }
 
+//IPTablesSaveRestore struct stores shell commands to save and restore iptables state
 type IPTablesSaveRestore struct {
 	saveCmd    string
 	restoreCmd string
 }
 
+//NewIPTablesSaveRestore returns an IPTablesSaveRestore
+//with apparopriate commands based on ipFamily (IPv4 or IPv6)
 func NewIPTablesSaveRestore(ipFamily v1core.IPFamily) *IPTablesSaveRestore {
 	switch ipFamily {
 	case v1core.IPv6Protocol:
@@ -187,10 +191,12 @@ func (i *IPTablesSaveRestore) exec(cmdName string, args []string, data []byte, s
 	return nil
 }
 
+//SaveInto saves the content of iptables table into buffer
 func (i *IPTablesSaveRestore) SaveInto(table string, buffer *bytes.Buffer) error {
 	return i.exec(i.saveCmd, []string{"-t", table}, nil, buffer)
 }
 
+//Restore updates table with the content of data
 func (i *IPTablesSaveRestore) Restore(table string, data []byte) error {
 	var args []string
 	if hasWait {
