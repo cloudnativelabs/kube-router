@@ -90,8 +90,8 @@ func GetNodeIPDualStack(node *apiv1.Node, enableIPv4, enableIPv6 bool) (net.IP, 
 	for _, address := range addresses {
 		addressesPerType.add(address)
 	}
-	if addresses, ok := addressesPerType[apiv1.NodeInternalIP]; ok {
-		for _, address := range addresses {
+	if internalAddresses, ok := addressesPerType[apiv1.NodeInternalIP]; ok {
+		for _, address := range internalAddresses {
 			if ipAddrv4 == nil && enableIPv4 && netutils.IsIPv4String(address.Address) {
 				ipAddrv4 = net.ParseIP(address.Address)
 			}
@@ -100,8 +100,8 @@ func GetNodeIPDualStack(node *apiv1.Node, enableIPv4, enableIPv6 bool) (net.IP, 
 			}
 		}
 	}
-	if addresses, ok := addressesPerType[apiv1.NodeExternalIP]; ok {
-		for _, address := range addresses {
+	if externalAddresses, ok := addressesPerType[apiv1.NodeExternalIP]; ok {
+		for _, address := range externalAddresses {
 			if ipAddrv4 == nil && enableIPv4 && netutils.IsIPv4String(address.Address) {
 				ipAddrv4 = net.ParseIP(address.Address)
 			}
