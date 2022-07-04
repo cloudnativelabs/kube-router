@@ -86,7 +86,6 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		CacheSyncTimeout:               1 * time.Minute,
 		ClusterIPCIDR:                  "10.96.0.0/12",
 		EnableOverlay:                  true,
-		EnableIPv4:                     true,
 		IPTablesSyncPeriod:             5 * time.Minute,
 		IpvsGracefulPeriod:             30 * time.Second,
 		IpvsSyncPeriod:                 5 * time.Minute,
