@@ -79,7 +79,7 @@ func (m addressMap) add(address apiv1.NodeAddress) {
 	}
 }
 
-// GetNodeIP returns the most valid external facing IP address for a node (IPv4 and IPv6).
+// GetNodeIPDualStack returns the most valid external facing IP address for a node (IPv4 and IPv6).
 // Order of preference:
 // 1. NodeInternalIP
 // 2. NodeExternalIP (Only set on cloud providers usually)
