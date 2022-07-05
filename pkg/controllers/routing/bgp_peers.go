@@ -114,31 +114,36 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				LocalRestarting: true,
 			}
 
-			n.AfiSafis = []*gobgpapi.AfiSafi{
-				{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
-					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
+			if nrc.isIpv6 {
+				n.AfiSafis = []*gobgpapi.AfiSafi{
+					{
+						Config: &gobgpapi.AfiSafiConfig{
+							Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
 							Enabled: true,
 						},
-						State: &gobgpapi.MpGracefulRestartState{},
+						MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+							Config: &gobgpapi.MpGracefulRestartConfig{
+								Enabled: true,
+							},
+							State: &gobgpapi.MpGracefulRestartState{},
+						},
 					},
-				},
-				{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
-					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
+				}
+			} else {
+				n.AfiSafis = []*gobgpapi.AfiSafi{
+					{
+						Config: &gobgpapi.AfiSafiConfig{
+							Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
 							Enabled: true,
 						},
-						State: &gobgpapi.MpGracefulRestartState{},
+						MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+							Config: &gobgpapi.MpGracefulRestartConfig{
+								Enabled: true,
+							},
+							State: &gobgpapi.MpGracefulRestartState{},
+						},
 					},
-				},
+				}
 			}
 		}
 
@@ -188,8 +193,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 }
 
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
-func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer, bgpGracefulRestart bool,
-	bgpGracefulRestartDeferralTime time.Duration, bgpGracefulRestartTime time.Duration, peerMultihopTTL uint8) error {
+func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer,
+	bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration, bgpGracefulRestartTime time.Duration,
+	peerMultihopTTL uint8) error {
 	for _, n := range peerNeighbors {
 
 		if bgpGracefulRestart {
@@ -200,29 +206,34 @@ func connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpap
 				LocalRestarting: true,
 			}
 
-			n.AfiSafis = []*gobgpapi.AfiSafi{
-				{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
-					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
+			if nrc.isIpv6 {
+				n.AfiSafis = []*gobgpapi.AfiSafi{
+					{
+						Config: &gobgpapi.AfiSafiConfig{
+							Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
 							Enabled: true,
 						},
-					},
-				},
-				{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
-					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
-							Enabled: true,
+						MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+							Config: &gobgpapi.MpGracefulRestartConfig{
+								Enabled: true,
+							},
 						},
 					},
-				},
+				}
+			} else {
+				n.AfiSafis = []*gobgpapi.AfiSafi{
+					{
+						Config: &gobgpapi.AfiSafiConfig{
+							Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+							Enabled: true,
+						},
+						MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+							Config: &gobgpapi.MpGracefulRestartConfig{
+								Enabled: true,
+							},
+						},
+					},
+				}
 			}
 		}
 		if peerMultihopTTL > 1 {
