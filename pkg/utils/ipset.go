@@ -452,7 +452,7 @@ func parseIPSetSave(ipset *IPSet, result string) map[string]*Set {
 			sets[content[1]] = &Set{
 				Parent:  ipset,
 				Name:    content[1],
-				Options: content[2:],
+				Options: scrubInitValFromOptions(content[2:]),
 			}
 		} else if content[0] == "add" {
 			set := sets[content[1]]
@@ -464,6 +464,19 @@ func parseIPSetSave(ipset *IPSet, result string) map[string]*Set {
 	}
 
 	return sets
+}
+
+// scrubInitValFromOptions Remove initval options from save set to help reduce the number of unique options and make
+// ipset restore work faster. The initval is supposed to help restore the exact same set. However, kube-router modifies
+// the sets before it restores it breaking this functionality and causing the restore times to increase significantly.
+// So we remove it when we parse the ipset after a save() call.
+func scrubInitValFromOptions(options []string) []string {
+	for idx, val := range options {
+		if val == "initval" {
+			return append(options[:idx], options[idx+2:]...)
+		}
+	}
+	return options
 }
 
 // Build ipset restore input
