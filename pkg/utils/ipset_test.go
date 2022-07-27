@@ -1,6 +1,11 @@
 package utils
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func Test_buildIPSetRestore(t *testing.T) {
 	type args struct {
@@ -71,4 +76,28 @@ func Test_buildIPSetRestore(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_scrubInitValFromOptions(t *testing.T) {
+	t.Run("Initval should always be scrubbed no matter where it exists", func(t *testing.T) {
+		desired := strings.Split("hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12", " ")
+		typicalLine := strings.Split(
+			"hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x1441ebfe", " ")
+		initValInMiddle := strings.Split(
+			"hash:ip family inet hashsize 1024 maxelem 65536 initval 0x1441ebfe timeout 0 bucketsize 12", " ")
+		initValInFront := strings.Split(
+			"initval 0x1441ebfe hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12", " ")
+		assert.Equal(t, desired, scrubInitValFromOptions(typicalLine),
+			"scrubInitValFromOutput should be able to handle a typical ipset restore line")
+		assert.Equal(t, desired, scrubInitValFromOptions(initValInMiddle),
+			"scrubInitValFromOutput should be able to remove initval from anywhere in the line")
+		assert.Equal(t, desired, scrubInitValFromOptions(initValInFront),
+			"scrubInitValFromOutput should be able to remove initval from anywhere in the line")
+	})
+
+	t.Run("If initval doesn't exist, options should be returned unchanged", func(t *testing.T) {
+		desired := strings.Split("hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12", " ")
+		noInitVal := strings.Split("hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12", " ")
+		assert.Equal(t, desired, scrubInitValFromOptions(noInitVal))
+	})
 }
