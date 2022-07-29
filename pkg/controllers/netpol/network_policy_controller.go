@@ -715,7 +715,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	// Validate and parse ClusterIP service range
 	if config.ClusterIPCIDR == "" {
-		return nil, fmt.Errorf("parameter --service-cluster-ip is empty")
+		return nil, fmt.Errorf("parameter --service-cluster-ip-range is empty")
 	}
 	clusterIPCIDRList := strings.Split(config.ClusterIPCIDR, ",")
 
@@ -723,18 +723,41 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter, the list is empty")
 	}
 
-	_, primaryIpnet, err := net.ParseCIDR(clusterIPCIDRList[0])
+	_, primaryIpnet, err := net.ParseCIDR(strings.TrimSpace(clusterIPCIDRList[0]))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %w", err)
 	}
 	npc.primaryServiceClusterIPRange = primaryIpnet
 
-	if len(clusterIPCIDRList) > 1 {
-		_, secondaryIpnet, err := net.ParseCIDR(clusterIPCIDRList[1])
-		if err != nil {
-			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %v", err)
+	//Validate that ClusterIP service range type matches the configuration
+	if config.EnableIPv4 && !config.EnableIPv6 {
+		if !netutils.IsIPv4CIDR(npc.primaryServiceClusterIPRange) {
+			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: IPv4 is enabled but only IPv6 address is provided")
 		}
-		npc.secondaryServiceClusterIPRange = secondaryIpnet
+	}
+	if !config.EnableIPv4 && config.EnableIPv6 {
+		if !netutils.IsIPv6CIDR(npc.primaryServiceClusterIPRange) {
+			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: IPv6 is enabled but only IPv4 address is provided")
+		}
+	}
+
+	if len(clusterIPCIDRList) > 1 {
+		if config.EnableIPv4 && config.EnableIPv6 {
+			_, secondaryIpnet, err := net.ParseCIDR(strings.TrimSpace(clusterIPCIDRList[1]))
+			if err != nil {
+				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %v", err)
+			}
+			npc.secondaryServiceClusterIPRange = secondaryIpnet
+
+			ipv4Provided := netutils.IsIPv4CIDR(npc.primaryServiceClusterIPRange) || netutils.IsIPv4CIDR(npc.secondaryServiceClusterIPRange)
+			ipv6Provided := netutils.IsIPv6CIDR(npc.primaryServiceClusterIPRange) || netutils.IsIPv6CIDR(npc.secondaryServiceClusterIPRange)
+			if !(ipv4Provided && ipv6Provided) {
+				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: dual-stack is enabled, both IPv4 and IPv6 addresses should be provided")
+			}
+		} else {
+			return nil, fmt.Errorf("too many CIDRs provided in --service-cluster-ip-range parameter: " +
+				"dual-stack must be enabled to provide two addresses")
+		}
 	}
 	if len(clusterIPCIDRList) > 2 {
 		return nil, fmt.Errorf("too many CIDRs provided in --service-cluster-ip-range parameter, only two " +
