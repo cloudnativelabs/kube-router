@@ -176,7 +176,12 @@ func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInfo
 }
 
 // newFakeNode is a helper function for creating Nodes for testing.
-func newFakeNode(name string, addr string) *v1.Node {
+func newFakeNode(name string, addrs []string) *v1.Node {
+	addresses := make([]v1.NodeAddress, len(addrs))
+	for i, addr := range addrs {
+		addresses[i] = v1.NodeAddress{Type: v1.NodeExternalIP, Address: addr}
+	}
+
 	return &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Status: v1.NodeStatus{
@@ -184,7 +189,7 @@ func newFakeNode(name string, addr string) *v1.Node {
 				v1.ResourceCPU:    resource.MustParse("1"),
 				v1.ResourceMemory: resource.MustParse("1G"),
 			},
-			Addresses: []v1.NodeAddress{{Type: v1.NodeExternalIP, Address: addr}},
+			Addresses: addresses,
 		},
 	}
 }
@@ -268,7 +273,7 @@ func testForMissingOrUnwanted(t *testing.T, targetMsg string, got []podInfo, wan
 	}
 }
 
-func newMinimalKubeRouterConfig(clusterIPCIDR string, nodePortRange string, hostNameOverride string, externalIPs []string) *options.KubeRouterConfig {
+func newMinimalKubeRouterConfig(clusterIPCIDR string, nodePortRange string, hostNameOverride string, externalIPs []string, enableIPv6 bool) *options.KubeRouterConfig {
 	kubeConfig := options.NewKubeRouterConfig()
 	if clusterIPCIDR != "" {
 		kubeConfig.ClusterIPCIDR = clusterIPCIDR
@@ -282,6 +287,8 @@ func newMinimalKubeRouterConfig(clusterIPCIDR string, nodePortRange string, host
 	if externalIPs != nil {
 		kubeConfig.ExternalIPCIDRs = externalIPs
 	}
+	kubeConfig.EnableIPv4 = true
+	kubeConfig.EnableIPv6 = enableIPv6
 	return kubeConfig
 }
 
@@ -386,7 +393,7 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", "10.10.10.10")}})
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -542,7 +549,7 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", "10.10.10.10")}})
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -741,150 +748,150 @@ func TestNetworkPolicyController(t *testing.T) {
 	testCases := []tNetPolConfigTestCase{
 		{
 			"Default options are successful",
-			newMinimalKubeRouterConfig("", "", "node", nil),
+			newMinimalKubeRouterConfig("", "", "node", nil, false),
 			false,
 			"",
 		},
 		{
 			"Missing nodename fails appropriately",
-			newMinimalKubeRouterConfig("", "", "", nil),
+			newMinimalKubeRouterConfig("", "", "", nil, false),
 			true,
 			"failed to identify the node by NODE_NAME, hostname or --hostname-override",
 		},
 		{
 			"Test bad cluster CIDR (not properly formatting ip address)",
-			newMinimalKubeRouterConfig("10.10.10", "", "node", nil),
+			newMinimalKubeRouterConfig("10.10.10", "", "node", nil, false),
 			true,
 			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10",
 		},
 		{
 			"Test bad cluster CIDR (not using an ip address)",
-			newMinimalKubeRouterConfig("foo", "", "node", nil),
+			newMinimalKubeRouterConfig("foo", "", "node", nil, false),
 			true,
 			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: foo",
 		},
 		{
 			"Test bad cluster CIDR (using an ip address that is not a CIDR)",
-			newMinimalKubeRouterConfig("10.10.10.10", "", "node", nil),
+			newMinimalKubeRouterConfig("10.10.10.10", "", "node", nil, false),
 			true,
 			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10.10",
 		},
 		{
 			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv4)",
-			newMinimalKubeRouterConfig("10.96.0.0/12,10.244.0.0/16,2001:db8:42:1::/112", "", "node", nil),
+			newMinimalKubeRouterConfig("10.96.0.0/12,10.244.0.0/16,2001:db8:42:1::/112", "", "node", nil, false),
 			true,
-			"too many CIDRs provided in --service-cluster-ip-range parameter, only two addresses are allowed at once for dual-stack",
+			"too many CIDRs provided in --service-cluster-ip-range parameter: dual-stack must be enabled to provide two addresses",
 		},
 		{
 			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv6)",
-			newMinimalKubeRouterConfig("10.96.0.0/12,2001:db8:42:0::/56,2001:db8:42:1::/112", "", "node", nil),
+			newMinimalKubeRouterConfig("10.96.0.0/12,2001:db8:42:0::/56,2001:db8:42:1::/112", "", "node", nil, false),
 			true,
-			"too many CIDRs provided in --service-cluster-ip-range parameter, only two addresses are allowed at once for dual-stack",
+			"too many CIDRs provided in --service-cluster-ip-range parameter: dual-stack must be enabled to provide two addresses",
 		},
 		{
 			"Test good cluster CIDR (using single IP with a /32)",
-			newMinimalKubeRouterConfig("10.10.10.10/32", "", "node", nil),
+			newMinimalKubeRouterConfig("10.10.10.10/32", "", "node", nil, false),
 			false,
 			"",
 		},
 		{
 			"Test good cluster CIDR (using normal range with /24)",
-			newMinimalKubeRouterConfig("10.10.10.0/24", "", "node", nil),
+			newMinimalKubeRouterConfig("10.10.10.0/24", "", "node", nil, false),
 			false,
 			"",
 		},
 		{
 			"Test good cluster CIDR (using ipv6)",
-			newMinimalKubeRouterConfig("2001:db8:42:1::/112", "", "node", nil),
+			newMinimalKubeRouterConfig("2001:db8:42:1::/112", "", "node", []string{"2001:db8:42:1::/112"}, true),
 			false,
 			"",
 		},
 		{
 			"Test good cluster CIDRs (with dual-stack)",
-			newMinimalKubeRouterConfig("10.96.0.0/12,2001:db8:42:1::/112", "", "node", nil),
+			newMinimalKubeRouterConfig("10.96.0.0/12,2001:db8:42:1::/112", "", "node", []string{"10.96.0.0/12", "2001:db8:42:1::/112"}, true),
 			false,
 			"",
 		},
 		{
 			"Test bad node port specification (using commas)",
-			newMinimalKubeRouterConfig("", "8080,8081", "node", nil),
+			newMinimalKubeRouterConfig("", "8080,8081", "node", nil, false),
 			true,
 			"failed to parse node port range given: '8080,8081' please see specification in help text",
 		},
 		{
 			"Test bad node port specification (not using numbers)",
-			newMinimalKubeRouterConfig("", "foo:bar", "node", nil),
+			newMinimalKubeRouterConfig("", "foo:bar", "node", nil, false),
 			true,
 			"failed to parse node port range given: 'foo:bar' please see specification in help text",
 		},
 		{
 			"Test bad node port specification (using anything in addition to range)",
-			newMinimalKubeRouterConfig("", "8080,8081-8090", "node", nil),
+			newMinimalKubeRouterConfig("", "8080,8081-8090", "node", nil, false),
 			true,
 			"failed to parse node port range given: '8080,8081-8090' please see specification in help text",
 		},
 		{
 			"Test bad node port specification (using reversed range)",
-			newMinimalKubeRouterConfig("", "8090-8080", "node", nil),
+			newMinimalKubeRouterConfig("", "8090-8080", "node", nil, false),
 			true,
 			"port 1 is greater than or equal to port 2 in range given: '8090-8080'",
 		},
 		{
 			"Test bad node port specification (port out of available range)",
-			newMinimalKubeRouterConfig("", "132000-132001", "node", nil),
+			newMinimalKubeRouterConfig("", "132000-132001", "node", nil, false),
 			true,
 			"could not parse first port number from range given: '132000-132001'",
 		},
 		{
 			"Test good node port specification (using colon separator)",
-			newMinimalKubeRouterConfig("", "8080:8090", "node", nil),
+			newMinimalKubeRouterConfig("", "8080:8090", "node", nil, false),
 			false,
 			"",
 		},
 		{
 			"Test good node port specification (using hyphen separator)",
-			newMinimalKubeRouterConfig("", "8080-8090", "node", nil),
+			newMinimalKubeRouterConfig("", "8080-8090", "node", nil, false),
 			false,
 			"",
 		},
 		{
 			"Test bad external IP CIDR (not properly formatting ip address)",
-			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10"}),
+			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10"}, false),
 			true,
 			"failed to get parse --service-external-ip-range parameter: '199.10.10'. Error: invalid CIDR address: 199.10.10",
 		},
 		{
 			"Test bad external IP CIDR (not using an ip address)",
-			newMinimalKubeRouterConfig("", "", "node", []string{"foo"}),
+			newMinimalKubeRouterConfig("", "", "node", []string{"foo"}, false),
 			true,
 			"failed to get parse --service-external-ip-range parameter: 'foo'. Error: invalid CIDR address: foo",
 		},
 		{
 			"Test bad external IP CIDR (using an ip address that is not a CIDR)",
-			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10.10"}),
+			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10.10"}, false),
 			true,
 			"failed to get parse --service-external-ip-range parameter: '199.10.10.10'. Error: invalid CIDR address: 199.10.10.10",
 		},
 		{
 			"Test bad external IP CIDR (making sure that it processes all items in the list)",
-			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10.10/32", "199.10.10.11"}),
+			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10.10/32", "199.10.10.11"}, false),
 			true,
 			"failed to get parse --service-external-ip-range parameter: '199.10.10.11'. Error: invalid CIDR address: 199.10.10.11",
 		},
 		{
 			"Test good external IP CIDR (using single IP with a /32)",
-			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10.10/32"}),
+			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10.10/32"}, false),
 			false,
 			"",
 		},
 		{
 			"Test good external IP CIDR (using normal range with /24)",
-			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10.10/24"}),
+			newMinimalKubeRouterConfig("", "", "node", []string{"199.10.10.10/24"}, false),
 			false,
 			"",
 		},
 	}
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", "10.10.10.10")}})
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10", "2001:0db8:0042:0001:0000:0000:0000:0000"})}})
 	_, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {

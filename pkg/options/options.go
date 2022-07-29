@@ -216,7 +216,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Path to CRI compatible container runtime socket (used for DSR mode). Currently known working with "+
 			"containerd.")
 	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
-		"CIDR value from which service cluster IPs are assigned. Default: 10.96.0.0/12")
+		"CIDR value from which service cluster IPs are assigned. "+
+			"If dual-stack is used, this can be a comma-separated list of CIDR value. Default: 10.96.0.0/12")
 	fs.StringSliceVar(&s.ExternalIPCIDRs, "service-external-ip-range", s.ExternalIPCIDRs,
 		"Specify external IP CIDRs that are used for inter-cluster communication "+
 			"(can be specified multiple times)")
