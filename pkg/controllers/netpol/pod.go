@@ -108,7 +108,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 	allLocalPods := make(map[string]podInfo)
 	for _, nodeIP := range npc.nodeIPs {
 		npc.getLocalPods(allLocalPods, nodeIP.String())
-		break
 	}
 	for _, pod := range allLocalPods {
 
@@ -161,8 +160,7 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 		}
 		// add entries in pod firewall to run through applicable network policies
 		for _, policy := range networkPoliciesInfo {
-			// TODO: Take the ipv4 address, pod.ips[0] is not good
-			if _, ok := policy.targetPods[pod.ips[0].IP]; !ok {
+			if _, ok := policy.targetPods[pod.ip]; !ok {
 				continue
 			}
 			comment := "\"run through nw policy " + policy.name + "\""
@@ -305,7 +303,9 @@ func (npc *NetworkPolicyController) getLocalPods(localPods map[string]podInfo, n
 		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || !isNetPolActionable(pod) {
 			continue
 		}
-		localPods[pod.Status.PodIP] = podInfo{ips: pod.Status.PodIPs,
+		localPods[pod.Status.PodIP] = podInfo{
+			ip:        pod.Status.PodIP,
+			ips:       pod.Status.PodIPs,
 			name:      pod.ObjectMeta.Name,
 			namespace: pod.ObjectMeta.Namespace,
 			labels:    pod.ObjectMeta.Labels}
