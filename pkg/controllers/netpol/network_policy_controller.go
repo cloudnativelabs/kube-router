@@ -111,6 +111,7 @@ type networkPolicyInfo struct {
 
 // internal structure to represent Pod
 type podInfo struct {
+	ip        string
 	ips       []v1core.PodIP
 	name      string
 	namespace string
