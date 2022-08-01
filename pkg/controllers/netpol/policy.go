@@ -19,7 +19,7 @@ import (
 	listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
-	utilsnet "k8s.io/utils/net"
+	netutils "k8s.io/utils/net"
 )
 
 func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.ResourceEventHandler {
@@ -96,10 +96,10 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 		currentPodIPs := make(map[api.IPFamily][]string)
 		for _, pod := range policy.targetPods {
 			for _, ip := range pod.ips {
-				if utilsnet.IsIPv4String(ip.IP) {
+				if netutils.IsIPv4String(ip.IP) {
 					currentPodIPs[api.IPv4Protocol] = append(currentPodIPs[api.IPv4Protocol], ip.IP)
 				}
-				if utilsnet.IsIPv6String(ip.IP) {
+				if netutils.IsIPv6String(ip.IP) {
 					currentPodIPs[api.IPv6Protocol] = append(currentPodIPs[api.IPv6Protocol], ip.IP)
 				}
 			}
@@ -748,7 +748,7 @@ func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolic
 	if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
 		cidr := peer.IPBlock.CIDR
 
-		if utilsnet.IsIPv4CIDRString(cidr) {
+		if netutils.IsIPv4CIDRString(cidr) {
 			if strings.HasSuffix(cidr, "/0") {
 				ipBlock[api.IPv4Protocol] = append(
 					ipBlock[api.IPv4Protocol],
@@ -778,7 +778,7 @@ func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolic
 			}
 		}
 
-		if utilsnet.IsIPv6CIDRString(cidr) {
+		if netutils.IsIPv6CIDRString(cidr) {
 			if strings.HasSuffix(cidr, "/0") {
 				ipBlock[api.IPv6Protocol] = append(
 					ipBlock[api.IPv6Protocol],
@@ -815,9 +815,9 @@ func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPort
 
 	ips := make(map[api.IPFamily][]string)
 	for _, ip := range pod.Status.PodIPs {
-		if utilsnet.IsIPv4String(ip.IP) {
+		if netutils.IsIPv4String(ip.IP) {
 			ips[api.IPv4Protocol] = append(ips[api.IPv4Protocol], ip.IP)
-		} else if utilsnet.IsIPv6String(ip.IP) {
+		} else if netutils.IsIPv6String(ip.IP) {
 			ips[api.IPv6Protocol] = append(ips[api.IPv6Protocol], ip.IP)
 		}
 	}
