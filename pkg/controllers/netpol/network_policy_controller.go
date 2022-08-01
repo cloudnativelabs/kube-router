@@ -64,17 +64,16 @@ var (
 
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	nodeHostName                   string
-	primaryServiceClusterIPRange   *net.IPNet
-	secondaryServiceClusterIPRange *net.IPNet
-	serviceExternalIPRanges        []net.IPNet
-	serviceNodePortRange           string
-	mu                             sync.Mutex
-	syncPeriod                     time.Duration
-	MetricsEnabled                 bool
-	healthChan                     chan<- *healthcheck.ControllerHeartbeat
-	fullSyncRequestChan            chan struct{}
-	ipsetMutex                     *sync.Mutex
+	nodeHostName            string
+	serviceClusterIPRanges  []net.IPNet
+	serviceExternalIPRanges []net.IPNet
+	serviceNodePortRange    string
+	mu                      sync.Mutex
+	syncPeriod              time.Duration
+	MetricsEnabled          bool
+	healthChan              chan<- *healthcheck.ControllerHeartbeat
+	fullSyncRequestChan     chan struct{}
+	ipsetMutex              *sync.Mutex
 
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler
 	iptablesSaveRestore map[v1core.IPFamily]utils.IPTablesSaveRestorer
@@ -305,6 +304,26 @@ func (npc *NetworkPolicyController) iptablesCmdHandlerForCIDR(cidr *net.IPNet) (
 	return nil, fmt.Errorf("invalid CIDR")
 }
 
+func (npc *NetworkPolicyController) allowTrafficToClusterIpRange(
+	serviceVIPPosition int,
+	serviceClusterIPRange *net.IPNet,
+	addUUIDForRuleSpec func(chain string, ruleSpec *[]string) (string, error),
+	ensureRuleAtPosition func(iptablesCmdHandler utils.IPTablesHandler, chain string, ruleSpec []string, uuid string, position int),
+	comment string) {
+	whitelistServiceVips := []string{"-m", "comment", "--comment", comment,
+		"-d", serviceClusterIPRange.String(), "-j", "RETURN"}
+	uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+	if err != nil {
+		klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	iptablesCmdHandler, err := npc.iptablesCmdHandlerForCIDR(serviceClusterIPRange)
+	if err != nil {
+		klog.Fatalf("Failed to get iptables handler: %s", err.Error())
+	}
+	ensureRuleAtPosition(iptablesCmdHandler,
+		kubeInputChainName, whitelistServiceVips, uuid, serviceVIPPosition)
+}
+
 // Creates custom chains KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT
 // and following rules in the filter table to jump from builtin chain to custom chain
 // -A INPUT   -m comment --comment "kube-router netpol" -j KUBE-ROUTER-INPUT
@@ -312,9 +331,7 @@ func (npc *NetworkPolicyController) iptablesCmdHandlerForCIDR(cidr *net.IPNet) (
 // -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
 func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	const serviceVIPPosition = 1
-	const whitelistTCPNodePortsPosition = 2
-	const whitelistUDPNodePortsPosition = 3
-	const externalIPPositionAdditive = 4
+	rulePosition := 1
 
 	addUUIDForRuleSpec := func(chain string, ruleSpec *[]string) (string, error) {
 		hash := sha256.Sum256([]byte(chain + strings.Join(*ruleSpec, "")))
@@ -398,36 +415,14 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		}
 	}
 
-	if npc.primaryServiceClusterIPRange != nil {
-		whitelistPrimaryServiceVips := []string{"-m", "comment", "--comment", "allow traffic to primary cluster IP range",
-			"-d", npc.primaryServiceClusterIPRange.String(), "-j", "RETURN"}
-		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistPrimaryServiceVips)
-		if err != nil {
-			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	if len(npc.serviceClusterIPRanges) > 0 {
+		for _, serviceClusterIPRange := range npc.serviceClusterIPRanges {
+			npc.allowTrafficToClusterIpRange(rulePosition, &serviceClusterIPRange,
+				addUUIDForRuleSpec, ensureRuleAtPosition, "allow traffic to primary/secondary cluster IP range")
+			rulePosition++
 		}
-		iptablesCmdHandler, err := npc.iptablesCmdHandlerForCIDR(npc.primaryServiceClusterIPRange)
-		if err != nil {
-			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
-		}
-		ensureRuleAtPosition(iptablesCmdHandler,
-			kubeInputChainName, whitelistPrimaryServiceVips, uuid, serviceVIPPosition)
 	} else {
 		klog.Fatalf("Primary service cluster IP range is not configured")
-	}
-
-	if npc.secondaryServiceClusterIPRange != nil {
-		whitelistSecondaryServiceVips := []string{"-m", "comment", "--comment", "allow traffic to primary cluster IP range",
-			"-d", npc.secondaryServiceClusterIPRange.String(), "-j", "RETURN"}
-		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistSecondaryServiceVips)
-		if err != nil {
-			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
-		}
-		iptablesCmdHandler, err := npc.iptablesCmdHandlerForCIDR(npc.secondaryServiceClusterIPRange)
-		if err != nil {
-			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
-		}
-		ensureRuleAtPosition(iptablesCmdHandler,
-			kubeInputChainName, whitelistSecondaryServiceVips, uuid, serviceVIPPosition)
 	}
 
 	for _, iptablesCmdHandler := range npc.iptablesCmdHandlers {
@@ -439,7 +434,8 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 		}
 		ensureRuleAtPosition(iptablesCmdHandler,
-			kubeInputChainName, whitelistTCPNodeports, uuid, whitelistTCPNodePortsPosition)
+			kubeInputChainName, whitelistTCPNodeports, uuid, rulePosition)
+		rulePosition++
 
 		whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment",
 			"allow LOCAL UDP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
@@ -449,7 +445,8 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 		}
 		ensureRuleAtPosition(iptablesCmdHandler,
-			kubeInputChainName, whitelistUDPNodeports, uuid, whitelistUDPNodePortsPosition)
+			kubeInputChainName, whitelistUDPNodeports, uuid, rulePosition)
+		rulePosition++
 	}
 
 	for externalIPIndex, externalIPRange := range npc.serviceExternalIPRanges {
@@ -466,7 +463,8 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
 		}
 		ensureRuleAtPosition(iptablesCmdHandler,
-			kubeInputChainName, whitelistServiceVips, uuid, externalIPIndex+externalIPPositionAdditive)
+			kubeInputChainName, whitelistServiceVips, uuid, rulePosition)
+		rulePosition++
 	}
 }
 
@@ -727,16 +725,16 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %w", err)
 	}
-	npc.primaryServiceClusterIPRange = primaryIpnet
+	npc.serviceClusterIPRanges = append(npc.serviceClusterIPRanges, *primaryIpnet)
 
 	//Validate that ClusterIP service range type matches the configuration
 	if config.EnableIPv4 && !config.EnableIPv6 {
-		if !netutils.IsIPv4CIDR(npc.primaryServiceClusterIPRange) {
+		if !netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[0]) {
 			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: IPv4 is enabled but only IPv6 address is provided")
 		}
 	}
 	if !config.EnableIPv4 && config.EnableIPv6 {
-		if !netutils.IsIPv6CIDR(npc.primaryServiceClusterIPRange) {
+		if !netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[0]) {
 			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: IPv6 is enabled but only IPv4 address is provided")
 		}
 	}
@@ -747,10 +745,10 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 			if err != nil {
 				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %v", err)
 			}
-			npc.secondaryServiceClusterIPRange = secondaryIpnet
+			npc.serviceClusterIPRanges = append(npc.serviceClusterIPRanges, *secondaryIpnet)
 
-			ipv4Provided := netutils.IsIPv4CIDR(npc.primaryServiceClusterIPRange) || netutils.IsIPv4CIDR(npc.secondaryServiceClusterIPRange)
-			ipv6Provided := netutils.IsIPv6CIDR(npc.primaryServiceClusterIPRange) || netutils.IsIPv6CIDR(npc.secondaryServiceClusterIPRange)
+			ipv4Provided := netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[0]) || netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[1])
+			ipv6Provided := netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[0]) || netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[1])
 			if !(ipv4Provided && ipv6Provided) {
 				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: dual-stack is enabled, both IPv4 and IPv6 addresses should be provided")
 			}
