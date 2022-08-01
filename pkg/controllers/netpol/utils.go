@@ -9,7 +9,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	api "k8s.io/api/core/v1"
 	klog "k8s.io/klog/v2"
-	utilsnet "k8s.io/utils/net"
+	netutils "k8s.io/utils/net"
 )
 
 const (
@@ -127,7 +127,7 @@ func (npc *NetworkPolicyController) createPodWithPortPolicyRule(ports []protocol
 
 func getPodIPv6Address(pod podInfo) (string, error) {
 	for _, ip := range pod.ips {
-		if utilsnet.IsIPv6String(ip.IP) {
+		if netutils.IsIPv6String(ip.IP) {
 			return ip.IP, nil
 		}
 	}
@@ -136,7 +136,7 @@ func getPodIPv6Address(pod podInfo) (string, error) {
 
 func getPodIPv4Address(pod podInfo) (string, error) {
 	for _, ip := range pod.ips {
-		if utilsnet.IsIPv4String(ip.IP) {
+		if netutils.IsIPv4String(ip.IP) {
 			return ip.IP, nil
 		}
 	}
