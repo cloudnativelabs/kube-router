@@ -89,7 +89,6 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 	activePolicyChains := make(map[string]bool)
 	activePolicyIPSets := make(map[string]bool)
 
-	// for ipFamily, ipset := range npc.ipSetHandlers {
 	// run through all network policies
 	for _, policy := range networkPoliciesInfo {
 
@@ -116,11 +115,8 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			if policy.policyType == kubeBothPolicyType || policy.policyType == kubeIngressPolicyType {
 				// create a ipset for all destination pod ip's matched by the policy spec PodSelector
 				targetDestPodIPSetName := policyDestinationPodIPSetName(policy.namespace, policy.name, ipFamily)
-				setEntries := make([][]string, 0)
-				for _, podIP := range currentPodIPs[ipFamily] {
-					setEntries = append(setEntries, []string{podIP, utils.OptionTimeout, "0"})
-				}
-				ipset.RefreshSet(targetDestPodIPSetName, setEntries, utils.TypeHashIP)
+				npc.createGenericHashIPSet(targetDestPodIPSetName, utils.TypeHashIP, currentPodIPs[ipFamily], ipFamily)
+
 				if err := npc.processIngressRules(policy,
 					targetDestPodIPSetName, activePolicyIPSets, version, ipFamily); err != nil {
 					return nil, nil, err
@@ -130,11 +126,8 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			if policy.policyType == kubeBothPolicyType || policy.policyType == kubeEgressPolicyType {
 				// create a ipset for all source pod ip's matched by the policy spec PodSelector
 				targetSourcePodIPSetName := policySourcePodIPSetName(policy.namespace, policy.name, ipFamily)
-				setEntries := make([][]string, 0)
-				for _, podIP := range currentPodIPs[ipFamily] {
-					setEntries = append(setEntries, []string{podIP, utils.OptionTimeout, "0"})
-				}
-				ipset.RefreshSet(targetSourcePodIPSetName, setEntries, utils.TypeHashIP)
+				npc.createGenericHashIPSet(targetSourcePodIPSetName, utils.TypeHashIP, currentPodIPs[ipFamily], ipFamily)
+
 				if err := npc.processEgressRules(policy,
 					targetSourcePodIPSetName, activePolicyIPSets, version, ipFamily); err != nil {
 					return nil, nil, err
