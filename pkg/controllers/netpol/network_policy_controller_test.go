@@ -898,7 +898,11 @@ func TestNetworkPolicyController(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			// TODO: Handle IPv6
-			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer, &sync.Mutex{})
+			iptablesHandlers := make(map[v1.IPFamily]utils.IPTablesHandler, 1)
+			iptablesHandlers[v1.IPv4Protocol] = newFakeIPTables(iptables.ProtocolIPv4)
+			ipSetHandlers := make(map[v1.IPFamily]utils.IPSetHandler, 1)
+			ipSetHandlers[v1.IPv4Protocol] = &fakeIPSet{}
+			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer, &sync.Mutex{}, iptablesHandlers, ipSetHandlers)
 			if err == nil && test.expectError {
 				t.Error("This config should have failed, but it was successful instead")
 			} else if err != nil {
