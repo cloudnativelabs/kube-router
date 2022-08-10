@@ -145,7 +145,8 @@ func GetPodCidrFromNodeSpec(clientset kubernetes.Interface, hostnameOverride str
 	return node.Spec.PodCIDR, nil
 }
 
-//GetPodCidrsFromNodeSpecDualStack reads the IPv4 and IPv6 pod CIDR allocated to the node from API node object and returns them
+// GetPodCidrsFromNodeSpecDualStack reads the IPv4 and IPv6 pod CIDR allocated
+// to the node from API node object and returns them
 func GetPodCidrsFromNodeSpecDualStack(node *v1core.Node) (string, string, error) {
 	var podCidrv4, podCidrv6 string
 

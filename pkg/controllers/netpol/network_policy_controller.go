@@ -305,11 +305,12 @@ func (npc *NetworkPolicyController) iptablesCmdHandlerForCIDR(cidr *net.IPNet) (
 	return nil, fmt.Errorf("invalid CIDR")
 }
 
-func (npc *NetworkPolicyController) allowTrafficToClusterIpRange(
+func (npc *NetworkPolicyController) allowTrafficToClusterIPRange(
 	serviceVIPPosition int,
 	serviceClusterIPRange *net.IPNet,
 	addUUIDForRuleSpec func(chain string, ruleSpec *[]string) (string, error),
-	ensureRuleAtPosition func(iptablesCmdHandler utils.IPTablesHandler, chain string, ruleSpec []string, uuid string, position int),
+	ensureRuleAtPosition func(iptablesCmdHandler utils.IPTablesHandler,
+		chain string, ruleSpec []string, uuid string, position int),
 	comment string) {
 	whitelistServiceVips := []string{"-m", "comment", "--comment", comment,
 		"-d", serviceClusterIPRange.String(), "-j", "RETURN"}
@@ -417,8 +418,8 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	}
 
 	if len(npc.serviceClusterIPRanges) > 0 {
-		for _, serviceClusterIPRange := range npc.serviceClusterIPRanges {
-			npc.allowTrafficToClusterIpRange(rulePosition, &serviceClusterIPRange,
+		for i := range npc.serviceClusterIPRanges {
+			npc.allowTrafficToClusterIPRange(rulePosition, &npc.serviceClusterIPRanges[i],
 				addUUIDForRuleSpec, ensureRuleAtPosition, "allow traffic to primary/secondary cluster IP range")
 			rulePosition++
 		}
@@ -665,7 +666,8 @@ func (npc *NetworkPolicyController) Cleanup() {
 	klog.Infof("Successfully cleaned the NetworkPolicyController configurations done by kube-router")
 }
 
-func NewIpTablesHandler(config *options.KubeRouterConfig) (map[v1core.IPFamily]utils.IPTablesHandler, map[v1core.IPFamily]utils.IPSetHandler, error) {
+func NewIPTablesHandler(config *options.KubeRouterConfig) (
+	map[v1core.IPFamily]utils.IPTablesHandler, map[v1core.IPFamily]utils.IPSetHandler, error) {
 	iptablesCmdHandlers := make(map[v1core.IPFamily]utils.IPTablesHandler, 2)
 	ipSetHandlers := make(map[v1core.IPFamily]utils.IPSetHandler, 2)
 
@@ -728,15 +730,17 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 	npc.serviceClusterIPRanges = append(npc.serviceClusterIPRanges, *primaryIpnet)
 
-	//Validate that ClusterIP service range type matches the configuration
+	// Validate that ClusterIP service range type matches the configuration
 	if config.EnableIPv4 && !config.EnableIPv6 {
 		if !netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[0]) {
-			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: IPv4 is enabled but only IPv6 address is provided")
+			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
+				"IPv4 is enabled but only IPv6 address is provided")
 		}
 	}
 	if !config.EnableIPv4 && config.EnableIPv6 {
 		if !netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[0]) {
-			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: IPv6 is enabled but only IPv4 address is provided")
+			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
+				"IPv6 is enabled but only IPv4 address is provided")
 		}
 	}
 
@@ -748,10 +752,13 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 			}
 			npc.serviceClusterIPRanges = append(npc.serviceClusterIPRanges, *secondaryIpnet)
 
-			ipv4Provided := netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[0]) || netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[1])
-			ipv6Provided := netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[0]) || netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[1])
+			ipv4Provided := netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[0]) ||
+				netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[1])
+			ipv6Provided := netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[0]) ||
+				netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[1])
 			if !(ipv4Provided && ipv6Provided) {
-				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: dual-stack is enabled, both IPv4 and IPv6 addresses should be provided")
+				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
+					"dual-stack is enabled, both IPv4 and IPv6 addresses should be provided")
 			}
 		} else {
 			return nil, fmt.Errorf("too many CIDRs provided in --service-cluster-ip-range parameter: " +
