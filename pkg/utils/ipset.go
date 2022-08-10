@@ -618,7 +618,7 @@ func (ipset *IPSet) Get(setName string) *Set {
 	return set
 }
 
-//Sets returns all sets from ipset
+// Sets returns all sets from ipset
 func (ipset *IPSet) Sets() map[string]*Set {
 	return ipset.sets
 }
