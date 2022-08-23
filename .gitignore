@@ -5,3 +5,4 @@
 _output
 _cache
 vendor
+.*.sw?

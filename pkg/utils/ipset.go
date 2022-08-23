@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -184,6 +186,7 @@ func getIPSetPath() (*string, error) {
 func (ipset *IPSet) run(args ...string) (string, error) {
 	var stderr bytes.Buffer
 	var stdout bytes.Buffer
+	klog.V(9).Infof("running ipset command: path=`%s` args=%+v", *ipset.ipSetPath, args)
 	cmd := exec.Cmd{
 		Path:   *ipset.ipSetPath,
 		Args:   append([]string{*ipset.ipSetPath}, args...),
@@ -202,6 +205,8 @@ func (ipset *IPSet) run(args ...string) (string, error) {
 func (ipset *IPSet) runWithStdin(stdin *bytes.Buffer, args ...string) error {
 	var stderr bytes.Buffer
 	var stdout bytes.Buffer
+	klog.V(9).Infof("running ipset command: path=`%s` args=%+v stdin ```%s```",
+		*ipset.ipSetPath, args, stdin.String())
 	cmd := exec.Cmd{
 		Path:   *ipset.ipSetPath,
 		Args:   append([]string{*ipset.ipSetPath}, args...),

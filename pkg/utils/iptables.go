@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"k8s.io/klog/v2"
 )
 
 var hasWait bool
@@ -35,6 +37,7 @@ func SaveInto(table string, buffer *bytes.Buffer) error {
 	}
 	stderrBuffer := bytes.NewBuffer(nil)
 	args := []string{"iptables-save", "-t", table}
+	klog.V(9).Infof("running iptables command: path=`%s` args=%+v", path, args)
 	cmd := exec.Cmd{
 		Path:   path,
 		Args:   args,
@@ -59,6 +62,7 @@ func Restore(table string, data []byte) error {
 	} else {
 		args = []string{"iptables-restore", "-T", table}
 	}
+	klog.V(9).Infof("running iptables command: path=`%s` args=%+v", path, args)
 	cmd := exec.Cmd{
 		Path:  path,
 		Args:  args,
