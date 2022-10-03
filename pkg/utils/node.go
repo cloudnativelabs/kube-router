@@ -112,10 +112,10 @@ func GetNodeIPDualStack(node *apiv1.Node, enableIPv4, enableIPv6 bool) (net.IP, 
 	}
 
 	if enableIPv4 && ipAddrv4 == nil {
-		return nil, nil, errors.New("host IPv4 unknown")
+		return nil, nil, errors.New("host IPv4 unknown, check node's status.addresses in API server")
 	}
 	if enableIPv6 && ipAddrv6 == nil {
-		return nil, nil, errors.New("host IPv6 unknown")
+		return nil, nil, errors.New("host IPv6 unknown, check node's status.address in API server")
 	}
 	return ipAddrv4, ipAddrv6, nil
 }
