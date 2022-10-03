@@ -164,7 +164,9 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	npc.healthChan = healthChan
 
 	// setup kube-router specific top level custom chains (KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT)
-	npc.ensureTopLevelChains()
+	for _, iptablesCmdHandler := range npc.iptablesCmdHandlers {
+		npc.ensureTopLevelChains(iptablesCmdHandler)
+	}
 
 	// setup default network policy chain that is applied to traffic from/to the pods that does not match any network
 	// policy
@@ -240,7 +242,9 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	klog.V(1).Infof("Starting sync of iptables with version: %s", syncVersion)
 
 	// ensure kube-router specific top level chains and corresponding rules exist
-	npc.ensureTopLevelChains()
+	for _, iptablesCmdHandler := range npc.iptablesCmdHandlers {
+		npc.ensureTopLevelChains(iptablesCmdHandler)
+	}
 
 	// ensure default network policy chain that is applied to traffic from/to the pods that does not match any network
 	// policy
@@ -331,7 +335,7 @@ func (npc *NetworkPolicyController) allowTrafficToClusterIPRange(
 // -A INPUT   -m comment --comment "kube-router netpol" -j KUBE-ROUTER-INPUT
 // -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
 // -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
-func (npc *NetworkPolicyController) ensureTopLevelChains() {
+func (npc *NetworkPolicyController) ensureTopLevelChains(iptablesCmdHandler utils.IPTablesHandler) {
 	const serviceVIPPosition = 1
 	rulePosition := 1
 
@@ -393,28 +397,26 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		}
 	}
 
-	for _, iptablesCmdHandler := range npc.iptablesCmdHandlers {
-		for builtinChain, customChain := range defaultChains {
-			exists, err := iptablesCmdHandler.ChainExists("filter", customChain)
+	for builtinChain, customChain := range defaultChains {
+		exists, err := iptablesCmdHandler.ChainExists("filter", customChain)
+		if err != nil {
+			klog.Fatalf("failed to run iptables command to create %s chain due to %s", customChain,
+				err.Error())
+		}
+		if !exists {
+			err = iptablesCmdHandler.NewChain("filter", customChain)
 			if err != nil {
 				klog.Fatalf("failed to run iptables command to create %s chain due to %s", customChain,
 					err.Error())
 			}
-			if !exists {
-				err = iptablesCmdHandler.NewChain("filter", customChain)
-				if err != nil {
-					klog.Fatalf("failed to run iptables command to create %s chain due to %s", customChain,
-						err.Error())
-				}
-			}
-			args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
-			uuid, err := addUUIDForRuleSpec(builtinChain, &args)
-			if err != nil {
-				klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
-			}
-			ensureRuleAtPosition(iptablesCmdHandler,
-				builtinChain, args, uuid, serviceVIPPosition)
 		}
+		args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
+		uuid, err := addUUIDForRuleSpec(builtinChain, &args)
+		if err != nil {
+			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		ensureRuleAtPosition(iptablesCmdHandler,
+			builtinChain, args, uuid, serviceVIPPosition)
 	}
 
 	if len(npc.serviceClusterIPRanges) > 0 {
@@ -427,29 +429,27 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		klog.Fatalf("Primary service cluster IP range is not configured")
 	}
 
-	for _, iptablesCmdHandler := range npc.iptablesCmdHandlers {
-		whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment",
-			"allow LOCAL TCP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
-			"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
-		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistTCPNodeports)
-		if err != nil {
-			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
-		}
-		ensureRuleAtPosition(iptablesCmdHandler,
-			kubeInputChainName, whitelistTCPNodeports, uuid, rulePosition)
-		rulePosition++
-
-		whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment",
-			"allow LOCAL UDP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
-			"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
-		uuid, err = addUUIDForRuleSpec(kubeInputChainName, &whitelistUDPNodeports)
-		if err != nil {
-			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
-		}
-		ensureRuleAtPosition(iptablesCmdHandler,
-			kubeInputChainName, whitelistUDPNodeports, uuid, rulePosition)
-		rulePosition++
+	whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment",
+		"allow LOCAL TCP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
+	uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistTCPNodeports)
+	if err != nil {
+		klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 	}
+	ensureRuleAtPosition(iptablesCmdHandler,
+		kubeInputChainName, whitelistTCPNodeports, uuid, rulePosition)
+	rulePosition++
+
+	whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment",
+		"allow LOCAL UDP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+		"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
+	uuid, err = addUUIDForRuleSpec(kubeInputChainName, &whitelistUDPNodeports)
+	if err != nil {
+		klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	ensureRuleAtPosition(iptablesCmdHandler,
+		kubeInputChainName, whitelistUDPNodeports, uuid, rulePosition)
+	rulePosition++
 
 	for externalIPIndex, externalIPRange := range npc.serviceExternalIPRanges {
 		whitelistServiceVips := []string{"-m", "comment", "--comment",
@@ -460,11 +460,11 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
 		}
 		// Access externalIPRange via index to avoid implicit memory aliasing
-		iptablesCmdHandler, err := npc.iptablesCmdHandlerForCIDR(&npc.serviceExternalIPRanges[externalIPIndex])
+		cidrHandler, err := npc.iptablesCmdHandlerForCIDR(&npc.serviceExternalIPRanges[externalIPIndex])
 		if err != nil {
 			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
 		}
-		ensureRuleAtPosition(iptablesCmdHandler,
+		ensureRuleAtPosition(cidrHandler,
 			kubeInputChainName, whitelistServiceVips, uuid, rulePosition)
 		rulePosition++
 	}
