@@ -2323,9 +2323,13 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	}
 
 	if config.RunRouter {
-		cidr, err := utils.GetPodCidrFromNodeSpec(nsc.client, config.HostnameOverride)
+		node, err := utils.GetNodeObject(nsc.client, config.HostnameOverride)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %s", err.Error())
+			return nil, fmt.Errorf("failed to get node object due to: %v", err.Error())
+		}
+		cidr, err := utils.GetPodCidrFromNodeSpec(node)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %v", err)
 		}
 		nsc.podCidr = cidr
 	}
@@ -2334,7 +2338,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	for i, excludedCidr := range config.ExcludedCidrs {
 		_, ipnet, err := net.ParseCIDR(excludedCidr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get excluded CIDR details: %s", err.Error())
+			return nil, fmt.Errorf("failed to get excluded CIDR details: %v", err)
 		}
 		nsc.excludedCidrs[i] = *ipnet
 	}
