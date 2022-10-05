@@ -2,13 +2,11 @@ package routing
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,13 +21,12 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	gobgp "github.com/osrg/gobgp/v3/pkg/server"
-	"k8s.io/klog/v2"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -130,6 +127,8 @@ type NetworkRoutingController struct {
 	localAddressList               []string
 	overrideNextHop                bool
 	podCidr                        string
+	podIPv4CIDRs                   []string
+	podIPv6CIDRs                   []string
 	CNIFirewallSetup               *sync.Cond
 	ipsetMutex                     *sync.Mutex
 	routeSyncer                    *routeSyncer
@@ -251,8 +250,14 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 				currentMTU := kubeBridgeIf.Attrs().MTU
 				if currentMTU > 0 && currentMTU != mtu {
 					klog.Warningf("Updating config file with current MTU for kube-bridge: %d", currentMTU)
-					if err := nrc.configureMTU(currentMTU); err != nil {
-						klog.Errorf("Failed to update config file due to: %s", err.Error())
+					cniNetConf, err := utils.NewCNINetworkConfig(nrc.cniConfFile)
+					if err == nil {
+						cniNetConf.SetMTU(currentMTU)
+						if err = cniNetConf.WriteCNIConfig(); err != nil {
+							klog.Errorf("Failed to update CNI config file due to: %v", err)
+						}
+					} else {
+						klog.Errorf("Failed to load CNI config file to reset MTU due to: %v", err)
 					}
 				}
 			}
@@ -382,75 +387,42 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 }
 
 func (nrc *NetworkRoutingController) updateCNIConfig() {
-	cidr, err := utils.GetPodCidrFromCniSpec(nrc.cniConfFile)
+	// Parse the existing IPAM CIDRs from the CNI conf file
+	cniNetConf, err := utils.NewCNINetworkConfig(nrc.cniConfFile)
 	if err != nil {
-		klog.Errorf("Failed to get pod CIDR from CNI conf file: %s", err)
+		klog.Errorf("failed to parse CNI Config: %v", err)
 	}
 
-	if reflect.DeepEqual(cidr, net.IPNet{}) {
-		klog.Infof("`subnet` in CNI conf file is empty so populating `subnet` in CNI conf file with pod " +
-			"CIDR assigned to the node obtained from node spec.")
-	}
-	cidrlen, _ := cidr.Mask.Size()
-	oldCidr := cidr.IP.String() + "/" + strconv.Itoa(cidrlen)
-
-	currentCidr := nrc.podCidr
-
-	if len(cidr.IP) == 0 || strings.Compare(oldCidr, currentCidr) != 0 {
-		err = utils.InsertPodCidrInCniSpec(nrc.cniConfFile, currentCidr)
+	// Insert any IPv4 CIDRs that are missing from the IPAM configuration in the CNI
+	for _, ipv4CIDR := range nrc.podIPv4CIDRs {
+		err = cniNetConf.InsertPodCIDRIntoIPAM(ipv4CIDR)
 		if err != nil {
-			klog.Fatalf("Failed to insert `subnet`(pod CIDR) into CNI conf file: %s", err.Error())
+			klog.Fatalf("failed to insert IPv4 `subnet`(pod CIDR) '%s' into CNI conf file: %v", ipv4CIDR, err)
+		}
+	}
+
+	// Insert any IPv4 CIDRs that are missing from the IPAM configuration in the CNI
+	for _, ipv6CIDR := range nrc.podIPv6CIDRs {
+		err = cniNetConf.InsertPodCIDRIntoIPAM(ipv6CIDR)
+		if err != nil {
+			klog.Fatalf("failed to insert IPv6 `subnet`(pod CIDR) '%s' into CNI conf file: %v", ipv6CIDR, err)
 		}
 	}
 
 	if nrc.autoMTU {
-		err = nrc.autoConfigureMTU()
+		// Get the MTU by looking at the node's interface that is associated with the primary IP of the cluster
+		mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP)
 		if err != nil {
-			klog.Errorf("Failed to auto-configure MTU due to: %s", err.Error())
+			klog.Fatalf("failed to generate MTU: %v", err)
 		}
-	}
-}
 
-func (nrc *NetworkRoutingController) configureMTU(mtu int) error {
-	file, err := os.ReadFile(nrc.cniConfFile)
-	if err != nil {
-		return fmt.Errorf("failed to load CNI conf file: %s", err.Error())
+		cniNetConf.SetMTU(mtu)
 	}
-	var config interface{}
-	err = json.Unmarshal(file, &config)
-	if err != nil {
-		return fmt.Errorf("failed to parse JSON from CNI conf file: %s", err.Error())
-	}
-	if strings.HasSuffix(nrc.cniConfFile, ".conflist") {
-		configMap := config.(map[string]interface{})
-		for key := range configMap {
-			if key != "plugins" {
-				continue
-			}
-			pluginConfigs := configMap["plugins"].([]interface{})
-			for _, pluginConfig := range pluginConfigs {
-				pluginConfigMap := pluginConfig.(map[string]interface{})
-				pluginConfigMap["mtu"] = mtu
-			}
-		}
-	} else {
-		pluginConfig := config.(map[string]interface{})
-		pluginConfig["mtu"] = mtu
-	}
-	configJSON, _ := json.Marshal(config)
-	err = os.WriteFile(nrc.cniConfFile, configJSON, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to insert `mtu` into CNI conf file: %s", err.Error())
-	}
-	return nil
-}
 
-func (nrc *NetworkRoutingController) autoConfigureMTU() error {
-	mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP)
+	err = cniNetConf.WriteCNIConfig()
 	if err != nil {
-		return fmt.Errorf("failed to generate MTU: %s", err.Error())
+		klog.Fatalf("failed to write CNI file: %v", err)
 	}
-	return nrc.configureMTU(mtu)
 }
 
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
@@ -1276,13 +1248,20 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	}
 
-	cidr, err := utils.GetPodCidrFromNodeSpec(clientset, nrc.hostnameOverride)
+	cidr, err := utils.GetPodCidrFromNodeSpec(node)
 	if err != nil {
 		klog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to "+
 			"allocate pod CIDR for the node or an annotation `kube-router.io/pod-cidr`. Error: %v", err)
-		return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %s", err.Error())
+		return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %v", err)
 	}
 	nrc.podCidr = cidr
+
+	nrc.podIPv4CIDRs, nrc.podIPv6CIDRs, err = utils.GetPodCIDRsFromNodeSpecDualStack(node)
+	if err != nil {
+		klog.Fatalf("Failed to get pod CIDRs from node spec. kube-router relies on kube-controller-manager to"+
+			"allocate pod CIDRs for the node or an annotation `kube-router.io/pod-cidrs`. Error: %v", err)
+		return nil, fmt.Errorf("failed to get pod CIDRs detail from Node.spec: %v", err)
+	}
 
 	nrc.ipSetHandler, err = utils.NewIPSet(nrc.isIpv6)
 	if err != nil {
