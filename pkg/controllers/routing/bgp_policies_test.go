@@ -83,7 +83,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "podcidrdefinedset",
+				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "172.20.0.0/24",
@@ -94,7 +94,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "servicevipsdefinedset",
+				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "1.1.1.1/32",
@@ -111,12 +111,12 @@ func Test_AddPolicies(t *testing.T) {
 			&gobgpapi.DefinedSet{},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "allpeerset",
+				Name:        allPeerSet,
 				List:        []string{},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "customimportrejectdefinedset",
+				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
 			[]*gobgpapi.Statement{
@@ -125,11 +125,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "podcidrdefinedset",
+							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "iBGPpeerset",
+							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -144,11 +144,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -161,11 +161,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "defaultroutedefinedset",
+							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -227,7 +227,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "podcidrdefinedset",
+				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "172.20.0.0/24",
@@ -238,7 +238,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "servicevipsdefinedset",
+				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "1.1.1.1/32",
@@ -255,12 +255,12 @@ func Test_AddPolicies(t *testing.T) {
 			&gobgpapi.DefinedSet{},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "allpeerset",
+				Name:        allPeerSet,
 				List:        []string{},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "customimportrejectdefinedset",
+				Name:        customImportRejectSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "10.0.0.0/16",
@@ -290,11 +290,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "podcidrdefinedset",
+							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "iBGPpeerset",
+							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -309,11 +309,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -326,11 +326,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "defaultroutedefinedset",
+							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -343,11 +343,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "customimportrejectdefinedset",
+							Name: customImportRejectSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -420,7 +420,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "podcidrdefinedset",
+				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "172.20.0.0/24",
@@ -431,7 +431,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "servicevipsdefinedset",
+				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "1.1.1.1/32",
@@ -447,17 +447,17 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "externalpeerset",
+				Name:        externalPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "allpeerset",
+				Name:        allPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "customimportrejectdefinedset",
+				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
 			[]*gobgpapi.Statement{
@@ -466,11 +466,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "podcidrdefinedset",
+							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "iBGPpeerset",
+							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -483,11 +483,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "externalpeerset",
+							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -502,11 +502,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -519,11 +519,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "defaultroutedefinedset",
+							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -596,7 +596,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "podcidrdefinedset",
+				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "172.20.0.0/24",
@@ -607,7 +607,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "servicevipsdefinedset",
+				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "1.1.1.1/32",
@@ -623,17 +623,17 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "externalpeerset",
+				Name:        externalPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "allpeerset",
+				Name:        allPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "customimportrejectdefinedset",
+				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
 			[]*gobgpapi.Statement{
@@ -642,11 +642,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "externalpeerset",
+							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -661,11 +661,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -678,11 +678,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "defaultroutedefinedset",
+							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -757,7 +757,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "podcidrdefinedset",
+				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "172.20.0.0/24",
@@ -768,7 +768,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "servicevipsdefinedset",
+				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "1.1.1.1/32",
@@ -784,17 +784,17 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "externalpeerset",
+				Name:        externalPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "allpeerset",
+				Name:        allPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "customimportrejectdefinedset",
+				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
 			[]*gobgpapi.Statement{
@@ -803,11 +803,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "podcidrdefinedset",
+							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "iBGPpeerset",
+							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -820,11 +820,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "externalpeerset",
+							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -843,11 +843,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -860,11 +860,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "defaultroutedefinedset",
+							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -938,7 +938,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "podcidrdefinedset",
+				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "172.20.0.0/24",
@@ -949,7 +949,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "servicevipsdefinedset",
+				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "1.1.1.1/32",
@@ -965,17 +965,17 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "externalpeerset",
+				Name:        externalPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "allpeerset",
+				Name:        allPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "customimportrejectdefinedset",
+				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
 			[]*gobgpapi.Statement{
@@ -984,11 +984,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "podcidrdefinedset",
+							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "iBGPpeerset",
+							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -1001,11 +1001,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "externalpeerset",
+							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -1024,11 +1024,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -1041,11 +1041,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "defaultroutedefinedset",
+							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -1120,7 +1120,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "podcidrdefinedset",
+				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "172.20.0.0/24",
@@ -1131,7 +1131,7 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "servicevipsdefinedset",
+				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
 						IpPrefix:      "1.1.1.1/32",
@@ -1147,17 +1147,17 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "externalpeerset",
+				Name:        externalPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "allpeerset",
+				Name:        allPeerSet,
 				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "customimportrejectdefinedset",
+				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
 			[]*gobgpapi.Statement{
@@ -1166,11 +1166,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "externalpeerset",
+							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -1187,11 +1187,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "podcidrdefinedset",
+							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "externalpeerset",
+							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -1210,11 +1210,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "servicevipsdefinedset",
+							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -1227,11 +1227,11 @@ func Test_AddPolicies(t *testing.T) {
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "defaultroutedefinedset",
+							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
-							Name: "allpeerset",
+							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -1295,7 +1295,7 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(),
-				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "podcidrdefinedset"},
+				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: podCIDRSet},
 				func(podDefinedSet *gobgpapi.DefinedSet) {
 					if !reflect.DeepEqual(podDefinedSet, testcase.podDefinedSet) {
 						t.Logf("expected pod defined set: %+v", testcase.podDefinedSet)
@@ -1308,7 +1308,7 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(),
-				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "customimportrejectdefinedset"},
+				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: customImportRejectSet},
 				func(customImportRejectDefinedSet *gobgpapi.DefinedSet) {
 					if !reflect.DeepEqual(customImportRejectDefinedSet, testcase.customImportRejectDefinedSet) {
 						t.Logf("expected customimportreject defined set: %+v", testcase.customImportRejectDefinedSet)
@@ -1322,7 +1322,7 @@ func Test_AddPolicies(t *testing.T) {
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(), &gobgpapi.ListDefinedSetRequest{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
-				Name:        "servicevipsdefinedset"}, func(clusterIPDefinedSet *gobgpapi.DefinedSet) {
+				Name:        serviceVIPsSet}, func(clusterIPDefinedSet *gobgpapi.DefinedSet) {
 				if !reflect.DeepEqual(clusterIPDefinedSet, testcase.clusterIPDefinedSet) {
 					t.Logf("expected pod defined set: %+v", testcase.clusterIPDefinedSet)
 					t.Logf("actual pod defined set: %+v", clusterIPDefinedSet)
@@ -1335,7 +1335,7 @@ func Test_AddPolicies(t *testing.T) {
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(), &gobgpapi.ListDefinedSetRequest{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "externalpeerset"}, func(externalPeerDefinedSet *gobgpapi.DefinedSet) {
+				Name:        externalPeerSet}, func(externalPeerDefinedSet *gobgpapi.DefinedSet) {
 				if !reflect.DeepEqual(externalPeerDefinedSet, testcase.externalPeerDefinedSet) {
 					t.Logf("expected external peer defined set: %+v", testcase.externalPeerDefinedSet.List)
 					t.Logf("actual external peer defined set: %+v", externalPeerDefinedSet.List)
@@ -1348,7 +1348,7 @@ func Test_AddPolicies(t *testing.T) {
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(), &gobgpapi.ListDefinedSetRequest{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-				Name:        "allpeerset"}, func(allPeerDefinedSet *gobgpapi.DefinedSet) {
+				Name:        allPeerSet}, func(allPeerDefinedSet *gobgpapi.DefinedSet) {
 				if !reflect.DeepEqual(allPeerDefinedSet, testcase.allPeerDefinedSet) {
 					t.Logf("expected all peer defined set: %+v", testcase.allPeerDefinedSet.List)
 					t.Logf("actual all peer defined set: %+v", allPeerDefinedSet.List)
