@@ -16,6 +16,22 @@ import (
 	"github.com/cloudnativelabs/kube-router/pkg/utils"
 )
 
+const (
+	podCIDRSet = "podcidrdefinedset"
+
+	serviceVIPsSet = "servicevipsdefinedset"
+
+	allPeerSet      = "allpeerset"
+	externalPeerSet = "externalpeerset"
+	iBGPPeerSet     = "iBGPpeerset"
+
+	customImportRejectSet = "customimportrejectdefinedset"
+	defaultRouteSet       = "defaultroutedefinedset"
+
+	kubeRouterExportPolicy = "kube_router_export"
+	kubeRouterImportPolicy = "kube_router_import"
+)
+
 // AddPolicies adds BGP import and export policies
 func (nrc *NetworkRoutingController) AddPolicies() error {
 	// we are rr server do not add export policies
@@ -75,7 +91,7 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
 	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "podcidrdefinedset"},
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: podCIDRSet},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
@@ -89,7 +105,7 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 		}
 		podCidrDefinedSet := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_PREFIX,
-			Name:        "podcidrdefinedset",
+			Name:        podCIDRSet,
 			Prefixes: []*gobgpapi.Prefix{
 				{
 					IpPrefix:      nrc.podCidr,
@@ -108,7 +124,7 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
 	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "servicevipsdefinedset"},
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: serviceVIPsSet},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
@@ -124,7 +140,7 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 	if currentDefinedSet == nil {
 		clusterIPPrefixSet := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_PREFIX,
-			Name:        "servicevipsdefinedset",
+			Name:        serviceVIPsSet,
 			Prefixes:    advIPPrefixList,
 		}
 		return nrc.bgpServer.AddDefinedSet(context.Background(),
@@ -167,7 +183,7 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 	}
 	clusterIPPrefixSet := &gobgpapi.DefinedSet{
 		DefinedType: gobgpapi.DefinedType_PREFIX,
-		Name:        "servicevipsdefinedset",
+		Name:        serviceVIPsSet,
 		Prefixes:    toAdd,
 	}
 	err = nrc.bgpServer.AddDefinedSet(context.Background(),
@@ -177,7 +193,7 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 	}
 	clusterIPPrefixSet = &gobgpapi.DefinedSet{
 		DefinedType: gobgpapi.DefinedType_PREFIX,
-		Name:        "servicevipsdefinedset",
+		Name:        serviceVIPsSet,
 		Prefixes:    toDelete,
 	}
 	err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
@@ -193,7 +209,7 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
 	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "defaultroutedefinedset"},
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: defaultRouteSet},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
@@ -204,7 +220,7 @@ func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
 		cidrLen := 0
 		defaultRouteDefinedSet := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_PREFIX,
-			Name:        "defaultroutedefinedset",
+			Name:        defaultRouteSet,
 			Prefixes: []*gobgpapi.Prefix{
 				{
 					IpPrefix:      "0.0.0.0/0",
@@ -223,7 +239,7 @@ func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
 func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
 	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: "customimportrejectdefinedset"},
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: customImportRejectSet},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
@@ -242,7 +258,7 @@ func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
 		}
 		customImportRejectDefinedSet := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_PREFIX,
-			Name:        "customimportrejectdefinedset",
+			Name:        customImportRejectSet,
 			Prefixes:    prefixes,
 		}
 		return nrc.bgpServer.AddDefinedSet(context.Background(),
@@ -271,7 +287,7 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 
 	var currentDefinedSet *gobgpapi.DefinedSet
 	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: "iBGPpeerset"},
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: iBGPPeerSet},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
@@ -281,7 +297,7 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 	if currentDefinedSet == nil {
 		iBGPPeerNS := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-			Name:        "iBGPpeerset",
+			Name:        iBGPPeerSet,
 			List:        iBGPPeerCIDRs,
 		}
 		err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
@@ -320,7 +336,7 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 	}
 	iBGPPeerNS := &gobgpapi.DefinedSet{
 		DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-		Name:        "iBGPpeerset",
+		Name:        iBGPPeerSet,
 		List:        toAdd,
 	}
 	err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
@@ -329,7 +345,7 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 	}
 	iBGPPeerNS = &gobgpapi.DefinedSet{
 		DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-		Name:        "iBGPpeerset",
+		Name:        iBGPPeerSet,
 		List:        toDelete,
 	}
 	err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
@@ -346,7 +362,7 @@ func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() ([]string, 
 	externalBgpPeers := make([]string, 0)
 	externalBGPPeerCIDRs := make([]string, 0)
 	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: "externalpeerset"},
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: externalPeerSet},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
@@ -370,7 +386,7 @@ func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() ([]string, 
 	if currentDefinedSet == nil {
 		eBGPPeerNS := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-			Name:        "externalpeerset",
+			Name:        externalPeerSet,
 			List:        externalBGPPeerCIDRs,
 		}
 		err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: eBGPPeerNS})
@@ -384,7 +400,7 @@ func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() ([]string, 
 func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, externalBGPPeerCIDRs []string) error {
 	var currentDefinedSet *gobgpapi.DefinedSet
 	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: "allpeerset"},
+		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: allPeerSet},
 		func(ds *gobgpapi.DefinedSet) {
 			currentDefinedSet = ds
 		})
@@ -397,7 +413,7 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, ext
 	if currentDefinedSet == nil {
 		allPeerNS := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-			Name:        "allpeerset",
+			Name:        allPeerSet,
 			List:        allBgpPeers,
 		}
 		return nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: allPeerNS})
@@ -429,7 +445,7 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, ext
 	}
 	allPeerNS := &gobgpapi.DefinedSet{
 		DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-		Name:        "allpeerset",
+		Name:        allPeerSet,
 		List:        toAdd,
 	}
 	err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: allPeerNS})
@@ -438,7 +454,7 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, ext
 	}
 	allPeerNS = &gobgpapi.DefinedSet{
 		DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-		Name:        "allpeerset",
+		Name:        allPeerSet,
 		List:        toDelete,
 	}
 	err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
@@ -494,11 +510,11 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 				Conditions: &gobgpapi.Conditions{
 					PrefixSet: &gobgpapi.MatchSet{
 						Type: gobgpapi.MatchSet_ANY,
-						Name: "podcidrdefinedset",
+						Name: podCIDRSet,
 					},
 					NeighborSet: &gobgpapi.MatchSet{
 						Type: gobgpapi.MatchSet_ANY,
-						Name: "iBGPpeerset",
+						Name: iBGPPeerSet,
 					},
 				},
 				Actions: &actions,
@@ -526,11 +542,11 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			Conditions: &gobgpapi.Conditions{
 				PrefixSet: &gobgpapi.MatchSet{
 					Type: gobgpapi.MatchSet_ANY,
-					Name: "servicevipsdefinedset",
+					Name: serviceVIPsSet,
 				},
 				NeighborSet: &gobgpapi.MatchSet{
 					Type: gobgpapi.MatchSet_ANY,
-					Name: "externalpeerset",
+					Name: externalPeerSet,
 				},
 			},
 			Actions: &bgpActions,
@@ -554,11 +570,11 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 				Conditions: &gobgpapi.Conditions{
 					PrefixSet: &gobgpapi.MatchSet{
 						Type: gobgpapi.MatchSet_ANY,
-						Name: "podcidrdefinedset",
+						Name: podCIDRSet,
 					},
 					NeighborSet: &gobgpapi.MatchSet{
 						Type: gobgpapi.MatchSet_ANY,
-						Name: "externalpeerset",
+						Name: externalPeerSet,
 					},
 				},
 				Actions: &actions,
@@ -567,13 +583,13 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	}
 
 	definition := gobgpapi.Policy{
-		Name:       "kube_router_export",
+		Name:       kubeRouterExportPolicy,
 		Statements: statements,
 	}
 
 	policyAlreadyExists := false
 	checkExistingPolicy := func(existingPolicy *gobgpapi.Policy) {
-		if existingPolicy.Name == "kube_router_export" {
+		if existingPolicy.Name == kubeRouterExportPolicy {
 			policyAlreadyExists = true
 		}
 	}
@@ -592,7 +608,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	policyAssignmentExists := false
 	checkExistingPolicyAssignment := func(existingPolicyAssignment *gobgpapi.PolicyAssignment) {
 		for _, policy := range existingPolicyAssignment.Policies {
-			if policy.Name == "kube_router_export" {
+			if policy.Name == kubeRouterExportPolicy {
 				policyAssignmentExists = true
 			}
 		}
@@ -634,11 +650,11 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 		Conditions: &gobgpapi.Conditions{
 			PrefixSet: &gobgpapi.MatchSet{
 				Type: gobgpapi.MatchSet_ANY,
-				Name: "servicevipsdefinedset",
+				Name: serviceVIPsSet,
 			},
 			NeighborSet: &gobgpapi.MatchSet{
 				Type: gobgpapi.MatchSet_ANY,
-				Name: "allpeerset",
+				Name: allPeerSet,
 			},
 		},
 		Actions: &actions,
@@ -648,11 +664,11 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 		Conditions: &gobgpapi.Conditions{
 			PrefixSet: &gobgpapi.MatchSet{
 				Type: gobgpapi.MatchSet_ANY,
-				Name: "defaultroutedefinedset",
+				Name: defaultRouteSet,
 			},
 			NeighborSet: &gobgpapi.MatchSet{
 				Type: gobgpapi.MatchSet_ANY,
-				Name: "allpeerset",
+				Name: allPeerSet,
 			},
 		},
 		Actions: &actions,
@@ -662,12 +678,12 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 		statements = append(statements, &gobgpapi.Statement{
 			Conditions: &gobgpapi.Conditions{
 				PrefixSet: &gobgpapi.MatchSet{
-					Name: "customimportrejectdefinedset",
+					Name: customImportRejectSet,
 					Type: gobgpapi.MatchSet_ANY,
 				},
 				NeighborSet: &gobgpapi.MatchSet{
 					Type: gobgpapi.MatchSet_ANY,
-					Name: "allpeerset",
+					Name: allPeerSet,
 				},
 			},
 			Actions: &actions,
@@ -675,13 +691,13 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 	}
 
 	definition := gobgpapi.Policy{
-		Name:       "kube_router_import",
+		Name:       kubeRouterImportPolicy,
 		Statements: statements,
 	}
 
 	policyAlreadyExists := false
 	checkExistingPolicy := func(existingPolicy *gobgpapi.Policy) {
-		if existingPolicy.Name == "kube_router_import" {
+		if existingPolicy.Name == kubeRouterImportPolicy {
 			policyAlreadyExists = true
 		}
 	}
@@ -700,7 +716,7 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 	policyAssignmentExists := false
 	checkExistingPolicyAssignment := func(existingPolicyAssignment *gobgpapi.PolicyAssignment) {
 		for _, policy := range existingPolicyAssignment.Policies {
-			if policy.Name == "kube_router_import" {
+			if policy.Name == kubeRouterImportPolicy {
 				policyAssignmentExists = true
 			}
 		}
