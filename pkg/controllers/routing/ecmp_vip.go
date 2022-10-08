@@ -24,13 +24,13 @@ import (
 func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 
 	klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers",
-		vip, strconv.Itoa(32), nrc.nodeIP.String())
+		vip, strconv.Itoa(32), nrc.primaryIP.String())
 
 	a1, _ := anypb.New(&gobgpapi.OriginAttribute{
 		Origin: 0,
 	})
 	a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.nodeIP.String(),
+		NextHop: nrc.primaryIP.String(),
 	})
 	attrs := []*anypb.Any{a1, a2}
 	nlri1, _ := anypb.New(&gobgpapi.IPAddressPrefix{
@@ -55,13 +55,13 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 // bgpWithdrawVIP  unadvertises the service vip
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 	klog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers",
-		vip, strconv.Itoa(32), nrc.nodeIP.String())
+		vip, strconv.Itoa(32), nrc.primaryIP.String())
 
 	a1, _ := anypb.New(&gobgpapi.OriginAttribute{
 		Origin: 0,
 	})
 	a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.nodeIP.String(),
+		NextHop: nrc.primaryIP.String(),
 	})
 	attrs := []*anypb.Any{a1, a2}
 	nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
@@ -548,7 +548,7 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 					return true, nil
 				}
 			} else {
-				if address.IP == nrc.nodeIP.String() {
+				if address.IP == nrc.primaryIP.String() {
 					return true, nil
 				}
 			}

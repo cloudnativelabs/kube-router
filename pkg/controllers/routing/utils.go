@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 	"github.com/vishvananda/netlink/nl"
+	v1core "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 
 	"github.com/vishvananda/netlink"
@@ -130,19 +132,20 @@ func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 }
 
 // generateTunnelName will generate a name for a tunnel interface given a node IP
-// for example, if the node IP is 10.0.0.1 the tunnel interface will be named tun-10001
-// Since linux restricts interface names to 15 characters, if length of a node IP
-// is greater than 12 (after removing "."), then the interface name is tunXYZ
-// as opposed to tun-XYZ
+// Since linux restricts interface names to 15 characters, we take the sha-256 of the node IP after removing
+// non-entropic characters like '.' and ':', and then use the first 12 bytes of it. This allows us to cater to both
+// long IPv4 addresses and much longer IPv6 addresses.
 func generateTunnelName(nodeIP string) string {
-	hash := strings.ReplaceAll(nodeIP, ".", "")
+	// remove dots from an IPv4 address
+	strippedIP := strings.ReplaceAll(nodeIP, ".", "")
+	// remove colons from an IPv6 address
+	strippedIP = strings.ReplaceAll(strippedIP, ":", "")
 
-	//nolint:gomnd // this number becomes less obvious when made a constant
-	if len(hash) < 12 {
-		return "tun-" + hash
-	}
+	h := sha256.New()
+	h.Write([]byte(strippedIP))
+	sum := h.Sum(nil)
 
-	return "tun" + hash
+	return "tun-" + fmt.Sprintf("%x", sum)[0:11]
 }
 
 // validateCommunity takes in a string and attempts to parse a BGP community out of it in a way that is similar to
@@ -179,16 +182,25 @@ func parseBGPNextHop(path *gobgpapi.Path) (net.IP, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal path attribute: %s", err)
 		}
-		//nolint:gocritic // this is the correct way to use a switch statement regardless of how many case statements
 		switch t := unmarshalNew.(type) {
 		case *gobgpapi.NextHopAttribute:
-			nextHop := net.ParseIP(t.NextHop).To4()
-			if nextHop == nil {
-				if nextHop = net.ParseIP(t.NextHop).To16(); nextHop == nil {
-					return nil, fmt.Errorf("invalid nextHop address: %s", t.NextHop)
-				}
+			// This is the primary way that we receive NextHops and happens when both the client and the server exchange
+			// next hops on the same IP family that they negotiated BGP on
+			nextHopIP := net.ParseIP(t.NextHop)
+			if nextHopIP != nil && (nextHopIP.To4() != nil || nextHopIP.To16() != nil) {
+				return nextHopIP, nil
 			}
-			return nextHop, nil
+			return nil, fmt.Errorf("invalid nextHop address: %s", t.NextHop)
+		case *gobgpapi.MpReachNLRIAttribute:
+			// in the case where the server and the client are exchanging next-hops that don't relate to their primary
+			// IP family, we get MpReachNLRIAttribute instead of NextHopAttributes
+			// TODO: here we only take the first next hop, at some point in the future it would probably be best to
+			// consider multiple next hops
+			nextHopIP := net.ParseIP(t.NextHops[0])
+			if nextHopIP != nil && (nextHopIP.To4() != nil || nextHopIP.To16() != nil) {
+				return nextHopIP, nil
+			}
+			return nil, fmt.Errorf("invalid nextHop address: %s", t.NextHops[0])
 		}
 	}
 	return nil, fmt.Errorf("could not parse next hop received from GoBGP for path: %s", path)
@@ -231,4 +243,45 @@ func deleteRoutesByDestination(destinationSubnet *net.IPNet) error {
 		}
 	}
 	return nil
+}
+
+// getPodCIDRsFromAllNodeSources gets the pod CIDRs for all available sources on a given node in a specific order. The
+// order of preference is:
+//  1. From the kube-router.io/pod-cidr annotation (preserves backwards compatibility)
+//  2. From the kube-router.io/pod-cidrs annotation (allows the user to specify multiple CIDRs for a given node which
+//     seems to be closer aligned to how upstream is moving)
+//  3. From the node's spec definition in node.Spec.PodCIDRs
+func getPodCIDRsFromAllNodeSources(node *v1core.Node) (podCIDRs []string) {
+	// Prefer kube-router.io/pod-cidr as a matter of keeping backwards compatibility with previous functionality
+	podCIDR := node.GetAnnotations()["kube-router.io/pod-cidr"]
+	if podCIDR != "" {
+		_, _, err := net.ParseCIDR(podCIDR)
+		if err != nil {
+			klog.Warningf("couldn't parse CIDR %s from kube-router.io/pod-cidr annotation, skipping...", podCIDR)
+		} else {
+			podCIDRs = append(podCIDRs, podCIDR)
+			return
+		}
+	}
+
+	// Then attempt to find the annotation kube-router.io/pod-cidrs and prefer those second
+	cidrsAnnotation := node.GetAnnotations()["kube-router.io/pod-cidrs"]
+	if cidrsAnnotation != "" {
+		// this should contain comma separated CIDRs, any CIDRs which fail to parse we will emit a warning log for
+		// and skip it
+		cidrsAnnotArray := strings.Split(cidrsAnnotation, ",")
+		for _, cidr := range cidrsAnnotArray {
+			_, _, err := net.ParseCIDR(cidr)
+			if err != nil {
+				klog.Warningf("couldn't parse CIDR %s from kube-router.io/pod-cidrs annotation, skipping...",
+					cidr)
+				continue
+			}
+			podCIDRs = append(podCIDRs, cidr)
+		}
+		return
+	}
+
+	// Finally, if all else fails, use the PodCIDRs on the node spec
+	return node.Spec.PodCIDRs
 }
