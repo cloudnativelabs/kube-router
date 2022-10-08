@@ -10,6 +10,8 @@ import (
 )
 
 const (
+	// deprecated - we now use multiple CIDRs, so it is better for users to use kube-router.io/pod-cidrs which allows
+	// you to express all of the cidrs you want to advertise from a given node
 	podCIDRAnnotation  = "kube-router.io/pod-cidr"
 	podCIDRsAnnotation = "kube-router.io/pod-cidrs"
 )

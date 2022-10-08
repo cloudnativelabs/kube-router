@@ -47,6 +47,8 @@ func Test_AddPolicies(t *testing.T) {
 				activeNodes:       make(map[string]bool),
 				nodeAsnNumber:     100,
 				podCidr:           "172.20.0.0/24",
+				isIPv4Capable:     true,
+				podIPv4CIDRs:      []string{"172.20.0.0/24"},
 			},
 			[]*v1core.Node{
 				{
@@ -138,42 +140,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 				},
 			},
-			[]*gobgpapi.Statement{
-				{
-					Name: "kube_router_import_stmt0",
-					Conditions: &gobgpapi.Conditions{
-						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
-							Name: serviceVIPsSet,
-						},
-						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
-							Name: allPeerSet,
-						},
-						RpkiResult: -1,
-					},
-					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
-					},
-				},
-				{
-					Name: "kube_router_import_stmt1",
-					Conditions: &gobgpapi.Conditions{
-						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
-							Name: defaultRouteSet,
-						},
-						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
-							Name: allPeerSet,
-						},
-						RpkiResult: -1,
-					},
-					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
-					},
-				},
-			},
+			[]*gobgpapi.Statement{},
 			nil,
 			nil,
 		},
@@ -190,6 +157,26 @@ func Test_AddPolicies(t *testing.T) {
 				activeNodes:       make(map[string]bool),
 				nodeAsnNumber:     100,
 				podCidr:           "172.20.0.0/24",
+				isIPv4Capable:     true,
+				podIPv4CIDRs:      []string{"172.20.0.0/24"},
+				globalPeerRouters: []*gobgpapi.Peer{
+					{
+						Conf: &gobgpapi.PeerConf{
+							NeighborAddress: "10.10.0.1",
+						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
+						},
+					},
+					{
+						Conf: &gobgpapi.PeerConf{
+							NeighborAddress: "10.10.0.2",
+						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
+						},
+					},
+				},
 			},
 			[]*v1core.Node{
 				{
@@ -252,11 +239,15 @@ func Test_AddPolicies(t *testing.T) {
 					},
 				},
 			},
-			&gobgpapi.DefinedSet{},
+			&gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				Name:        externalPeerSet,
+				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        allPeerSet,
-				List:        []string{},
+				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
@@ -295,6 +286,23 @@ func Test_AddPolicies(t *testing.T) {
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_ANY,
 							Name: iBGPPeerSet,
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						RouteAction: gobgpapi.RouteAction_ACCEPT,
+					},
+				},
+				{
+					Name: "kube_router_export_stmt1",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_ANY,
+							Name: serviceVIPsSet,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_ANY,
+							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
@@ -371,6 +379,8 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.20.0.0/24",
+				isIPv4Capable:     true,
+				podIPv4CIDRs:      []string{"172.20.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
@@ -547,6 +557,8 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.20.0.0/24",
+				isIPv4Capable:     true,
+				podIPv4CIDRs:      []string{"172.20.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
@@ -706,6 +718,8 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.20.0.0/24",
+				isIPv4Capable:     true,
+				podIPv4CIDRs:      []string{"172.20.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
@@ -888,6 +902,8 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.20.0.0/24",
+				isIPv4Capable:     true,
+				podIPv4CIDRs:      []string{"172.20.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
@@ -1070,6 +1086,8 @@ func Test_AddPolicies(t *testing.T) {
 				advertisePodCidr:  true,
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.20.0.0/24",
+				isIPv4Capable:     true,
+				podIPv4CIDRs:      []string{"172.20.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
