@@ -39,8 +39,8 @@ func (rs *routeSyncer) syncLocalRouteTable() {
 	rs.mutex.Lock()
 	defer rs.mutex.Unlock()
 	klog.V(2).Infof("Running local route table synchronization")
-	for dst, route := range rs.routeTableStateMap {
-		klog.V(3).Infof("Syncing route: %s", dst)
+	for _, route := range rs.routeTableStateMap {
+		klog.V(3).Infof("Syncing route: %s -> %s via %s", route.Src, route.Dst, route.Gw)
 		err := rs.routeReplacer(route)
 		if err != nil {
 			klog.Errorf("Route could not be replaced due to : " + err.Error())

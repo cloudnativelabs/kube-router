@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	v1core "k8s.io/api/core/v1"
@@ -17,19 +17,28 @@ import (
 )
 
 const (
-	podCIDRSet = "podcidrdefinedset"
+	podCIDRSet   = "podcidrdefinedset"
+	podCIDRSetV6 = "podcidrdefinedsetv6"
 
-	serviceVIPsSet = "servicevipsdefinedset"
+	serviceVIPsSet   = "servicevipsdefinedset"
+	serviceVIPsSetV6 = "servicevipsdefinedsetv6"
 
-	allPeerSet      = "allpeerset"
-	externalPeerSet = "externalpeerset"
-	iBGPPeerSet     = "iBGPpeerset"
+	allPeerSet        = "allpeerset"
+	allPeerSetV6      = "allpeersetv6"
+	externalPeerSet   = "externalpeerset"
+	externalPeerSetV6 = "externalpeersetv6"
+	iBGPPeerSet       = "iBGPpeerset"
+	iBGPPeerSetV6     = "iBGPpeersetv6"
 
 	customImportRejectSet = "customimportrejectdefinedset"
 	defaultRouteSet       = "defaultroutedefinedset"
+	defaultRouteSetV6     = "defaultroutedefinedsetv6"
 
 	kubeRouterExportPolicy = "kube_router_export"
 	kubeRouterImportPolicy = "kube_router_import"
+
+	maxIPv4MaskSize = uint32(32)
+	maxIPv6MaskSize = uint32(128)
 )
 
 // AddPolicies adds BGP import and export policies
@@ -90,116 +99,170 @@ func (nrc *NetworkRoutingController) AddPolicies() error {
 // create a defined set to represent just the pod CIDR associated with the node
 func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
-	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: podCIDRSet},
-		func(ds *gobgpapi.DefinedSet) {
-			currentDefinedSet = ds
-		})
-	if err != nil {
-		return err
-	}
-	if currentDefinedSet == nil {
-		cidrLen, err := strconv.Atoi(strings.Split(nrc.podCidr, "/")[1])
-		if err != nil || cidrLen < 0 || cidrLen > 32 {
-			return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
+
+	for setName, cidrs := range map[string][]string{
+		podCIDRSet:   nrc.podIPv4CIDRs,
+		podCIDRSetV6: nrc.podIPv6CIDRs,
+	} {
+		err := nrc.bgpServer.ListDefinedSet(context.Background(),
+			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: setName},
+			func(ds *gobgpapi.DefinedSet) {
+				currentDefinedSet = ds
+			})
+		if err != nil {
+			return err
 		}
-		podCidrDefinedSet := &gobgpapi.DefinedSet{
-			DefinedType: gobgpapi.DefinedType_PREFIX,
-			Name:        podCIDRSet,
-			Prefixes: []*gobgpapi.Prefix{
-				{
-					IpPrefix:      nrc.podCidr,
+		if currentDefinedSet == nil {
+			var prefixes []*gobgpapi.Prefix
+			for _, cidr := range cidrs {
+				_, ipNet, err := net.ParseCIDR(cidr)
+				if err != nil {
+					return fmt.Errorf("couldn't parse CIDR: %s - %v", cidr, err)
+				}
+				cidrLen, _ := ipNet.Mask.Size()
+				var cidrMax int
+				if setName == podCIDRSet {
+					cidrMax = 32
+				} else {
+					cidrMax = 128
+				}
+				if cidrLen < 0 || cidrLen > cidrMax {
+					return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
+				}
+				prefixes = append(prefixes, &gobgpapi.Prefix{
+					IpPrefix:      cidr,
 					MaskLengthMin: uint32(cidrLen),
 					MaskLengthMax: uint32(cidrLen),
-				},
-			},
+				})
+			}
+			podCidrDefinedSet := &gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_PREFIX,
+				Name:        setName,
+				Prefixes:    prefixes,
+			}
+			err = nrc.bgpServer.AddDefinedSet(context.Background(),
+				&gobgpapi.AddDefinedSetRequest{DefinedSet: podCidrDefinedSet})
+			if err != nil {
+				return err
+			}
 		}
-		return nrc.bgpServer.AddDefinedSet(context.Background(),
-			&gobgpapi.AddDefinedSetRequest{DefinedSet: podCidrDefinedSet})
 	}
+
 	return nil
 }
 
 // create a defined set to represent all the advertisable IP associated with the services
 func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
-	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: serviceVIPsSet},
-		func(ds *gobgpapi.DefinedSet) {
-			currentDefinedSet = ds
+	for setName, cidrMask := range map[string]uint32{
+		serviceVIPsSet:   maxIPv4MaskSize,
+		serviceVIPsSetV6: maxIPv6MaskSize,
+	} {
+		err := nrc.bgpServer.ListDefinedSet(context.Background(),
+			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: setName},
+			func(ds *gobgpapi.DefinedSet) {
+				currentDefinedSet = ds
+			})
+		if err != nil {
+			return err
+		}
+		advIPPrefixList := make([]*gobgpapi.Prefix, 0)
+		advIps, _, _ := nrc.getAllVIPs()
+		for _, ipStr := range advIps {
+			ip := net.ParseIP(ipStr)
+			if ip == nil {
+				// nothing to do for invalid IPs
+				klog.Warningf("found an invalid IP address in list of service VIPs returned from k8s: %s skipping",
+					ipStr)
+				continue
+			}
+			switch {
+			// Only add IPv4 VIPs when we are populating the serviceVIPsSet set
+			case ip.To4() != nil && setName == serviceVIPsSet:
+				advIPPrefixList = append(advIPPrefixList,
+					&gobgpapi.Prefix{
+						IpPrefix:      fmt.Sprintf("%s/%d", ip, cidrMask),
+						MaskLengthMin: cidrMask,
+						MaskLengthMax: cidrMask,
+					})
+			// Only add IPv6 VIPs when we are populating the serviceVIPsSetV6 set
+			case ip.To4() == nil && ip.To16() != nil && setName == serviceVIPsSetV6:
+				advIPPrefixList = append(advIPPrefixList,
+					&gobgpapi.Prefix{
+						IpPrefix:      fmt.Sprintf("%s/%d", ip, cidrMask),
+						MaskLengthMin: cidrMask,
+						MaskLengthMax: cidrMask,
+					})
+			}
+		}
+		if currentDefinedSet == nil {
+			clusterIPPrefixSet := &gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_PREFIX,
+				Name:        setName,
+				Prefixes:    advIPPrefixList,
+			}
+			err = nrc.bgpServer.AddDefinedSet(context.Background(),
+				&gobgpapi.AddDefinedSetRequest{DefinedSet: clusterIPPrefixSet})
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		currentPrefixes := currentDefinedSet.Prefixes
+		sort.SliceStable(advIPPrefixList, func(i, j int) bool {
+			return advIPPrefixList[i].IpPrefix < advIPPrefixList[j].IpPrefix
 		})
-	if err != nil {
-		return err
-	}
-	advIPPrefixList := make([]*gobgpapi.Prefix, 0)
-	advIps, _, _ := nrc.getAllVIPs()
-	for _, ip := range advIps {
-		advIPPrefixList = append(advIPPrefixList,
-			&gobgpapi.Prefix{IpPrefix: ip + "/32", MaskLengthMin: 32, MaskLengthMax: 32})
-	}
-	if currentDefinedSet == nil {
+		sort.SliceStable(currentPrefixes, func(i, j int) bool {
+			return currentPrefixes[i].IpPrefix < currentPrefixes[j].IpPrefix
+		})
+		if reflect.DeepEqual(advIPPrefixList, currentPrefixes) {
+			return nil
+		}
+		toAdd := make([]*gobgpapi.Prefix, 0)
+		toDelete := make([]*gobgpapi.Prefix, 0)
+		for _, prefix := range advIPPrefixList {
+			add := true
+			for _, currentPrefix := range currentDefinedSet.Prefixes {
+				if currentPrefix.IpPrefix == prefix.IpPrefix {
+					add = false
+				}
+			}
+			if add {
+				toAdd = append(toAdd, prefix)
+			}
+		}
+		for _, currentPrefix := range currentDefinedSet.Prefixes {
+			shouldDelete := true
+			for _, prefix := range advIPPrefixList {
+				if currentPrefix.IpPrefix == prefix.IpPrefix {
+					shouldDelete = false
+				}
+			}
+			if shouldDelete {
+				toDelete = append(toDelete, currentPrefix)
+			}
+		}
 		clusterIPPrefixSet := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_PREFIX,
-			Name:        serviceVIPsSet,
-			Prefixes:    advIPPrefixList,
+			Name:        setName,
+			Prefixes:    toAdd,
 		}
-		return nrc.bgpServer.AddDefinedSet(context.Background(),
+		err = nrc.bgpServer.AddDefinedSet(context.Background(),
 			&gobgpapi.AddDefinedSetRequest{DefinedSet: clusterIPPrefixSet})
-	}
-
-	currentPrefixes := currentDefinedSet.Prefixes
-	sort.SliceStable(advIPPrefixList, func(i, j int) bool {
-		return advIPPrefixList[i].IpPrefix < advIPPrefixList[j].IpPrefix
-	})
-	sort.SliceStable(currentPrefixes, func(i, j int) bool {
-		return currentPrefixes[i].IpPrefix < currentPrefixes[j].IpPrefix
-	})
-	if reflect.DeepEqual(advIPPrefixList, currentPrefixes) {
-		return nil
-	}
-	toAdd := make([]*gobgpapi.Prefix, 0)
-	toDelete := make([]*gobgpapi.Prefix, 0)
-	for _, prefix := range advIPPrefixList {
-		add := true
-		for _, currentPrefix := range currentDefinedSet.Prefixes {
-			if currentPrefix.IpPrefix == prefix.IpPrefix {
-				add = false
-			}
+		if err != nil {
+			return err
 		}
-		if add {
-			toAdd = append(toAdd, prefix)
+		clusterIPPrefixSet = &gobgpapi.DefinedSet{
+			DefinedType: gobgpapi.DefinedType_PREFIX,
+			Name:        setName,
+			Prefixes:    toDelete,
 		}
-	}
-	for _, currentPrefix := range currentDefinedSet.Prefixes {
-		shouldDelete := true
-		for _, prefix := range advIPPrefixList {
-			if currentPrefix.IpPrefix == prefix.IpPrefix {
-				shouldDelete = false
-			}
+		err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
+			&gobgpapi.DeleteDefinedSetRequest{DefinedSet: clusterIPPrefixSet, All: false})
+		if err != nil {
+			return err
 		}
-		if shouldDelete {
-			toDelete = append(toDelete, currentPrefix)
-		}
-	}
-	clusterIPPrefixSet := &gobgpapi.DefinedSet{
-		DefinedType: gobgpapi.DefinedType_PREFIX,
-		Name:        serviceVIPsSet,
-		Prefixes:    toAdd,
-	}
-	err = nrc.bgpServer.AddDefinedSet(context.Background(),
-		&gobgpapi.AddDefinedSetRequest{DefinedSet: clusterIPPrefixSet})
-	if err != nil {
-		return err
-	}
-	clusterIPPrefixSet = &gobgpapi.DefinedSet{
-		DefinedType: gobgpapi.DefinedType_PREFIX,
-		Name:        serviceVIPsSet,
-		Prefixes:    toDelete,
-	}
-	err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
-		&gobgpapi.DeleteDefinedSetRequest{DefinedSet: clusterIPPrefixSet, All: false})
-	if err != nil {
-		return err
 	}
 
 	return nil
@@ -208,29 +271,38 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 // create a defined set to represent just the host default route
 func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
-	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: defaultRouteSet},
-		func(ds *gobgpapi.DefinedSet) {
-			currentDefinedSet = ds
-		})
-	if err != nil {
-		return err
-	}
-	if currentDefinedSet == nil {
-		cidrLen := 0
-		defaultRouteDefinedSet := &gobgpapi.DefinedSet{
-			DefinedType: gobgpapi.DefinedType_PREFIX,
-			Name:        defaultRouteSet,
-			Prefixes: []*gobgpapi.Prefix{
-				{
-					IpPrefix:      "0.0.0.0/0",
-					MaskLengthMin: uint32(cidrLen),
-					MaskLengthMax: uint32(cidrLen),
-				},
-			},
+
+	for setName, defaultRoute := range map[string]string{
+		defaultRouteSet:   "0.0.0.0/0",
+		defaultRouteSetV6: "::/0",
+	} {
+		err := nrc.bgpServer.ListDefinedSet(context.Background(),
+			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: setName},
+			func(ds *gobgpapi.DefinedSet) {
+				currentDefinedSet = ds
+			})
+		if err != nil {
+			return err
 		}
-		return nrc.bgpServer.AddDefinedSet(context.Background(),
-			&gobgpapi.AddDefinedSetRequest{DefinedSet: defaultRouteDefinedSet})
+		if currentDefinedSet == nil {
+			cidrLen := 0
+			defaultRouteDefinedSet := &gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_PREFIX,
+				Name:        setName,
+				Prefixes: []*gobgpapi.Prefix{
+					{
+						IpPrefix:      defaultRoute,
+						MaskLengthMin: uint32(cidrLen),
+						MaskLengthMax: uint32(cidrLen),
+					},
+				},
+			}
+			err = nrc.bgpServer.AddDefinedSet(context.Background(),
+				&gobgpapi.AddDefinedSetRequest{DefinedSet: defaultRouteDefinedSet})
+			if err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -267,8 +339,8 @@ func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
 	return nil
 }
 
-func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) {
-	iBGPPeerCIDRs := make([]string, 0)
+func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() (map[v1core.IPFamily][]string, error) {
+	iBGPPeerCIDRs := make(map[v1core.IPFamily][]string)
 	if !nrc.bgpEnableInternal {
 		return iBGPPeerCIDRs, nil
 	}
@@ -277,190 +349,239 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() ([]string, error) 
 	nodes := nrc.nodeLister.List()
 	for _, node := range nodes {
 		nodeObj := node.(*v1core.Node)
-		nodeIP, err := utils.GetNodeIP(nodeObj)
+		nodeIP, err := utils.GetPrimaryNodeIP(nodeObj)
 		if err != nil {
 			klog.Errorf("Failed to find a node IP and therefore cannot add internal BGP Peer: %v", err)
 			continue
 		}
-		iBGPPeerCIDRs = append(iBGPPeerCIDRs, nodeIP.String()+"/32")
+		if nodeIP.To4() != nil {
+			iBGPPeerCIDRs[v1core.IPv4Protocol] = append(iBGPPeerCIDRs[v1core.IPv4Protocol], nodeIP.String()+"/32")
+		} else {
+			iBGPPeerCIDRs[v1core.IPv6Protocol] = append(iBGPPeerCIDRs[v1core.IPv6Protocol], nodeIP.String()+"/128")
+		}
 	}
 
-	var currentDefinedSet *gobgpapi.DefinedSet
-	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: iBGPPeerSet},
-		func(ds *gobgpapi.DefinedSet) {
-			currentDefinedSet = ds
-		})
-	if err != nil {
-		return iBGPPeerCIDRs, err
-	}
-	if currentDefinedSet == nil {
+	for family, setName := range map[v1core.IPFamily]string{
+		v1core.IPv4Protocol: iBGPPeerSet,
+		v1core.IPv6Protocol: iBGPPeerSetV6,
+	} {
+		var currentDefinedSet *gobgpapi.DefinedSet
+		err := nrc.bgpServer.ListDefinedSet(context.Background(),
+			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: setName},
+			func(ds *gobgpapi.DefinedSet) {
+				currentDefinedSet = ds
+			})
+		if err != nil {
+			return iBGPPeerCIDRs, err
+		}
+		if currentDefinedSet == nil {
+			iBGPPeerNS := &gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				Name:        setName,
+				List:        iBGPPeerCIDRs[family],
+			}
+			err = nrc.bgpServer.AddDefinedSet(context.Background(),
+				&gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
+			if err != nil {
+				return iBGPPeerCIDRs, err
+			}
+			continue
+		}
+
+		currentCIDRs := currentDefinedSet.List
+		sort.Strings(iBGPPeerCIDRs[family])
+		sort.Strings(currentCIDRs)
+		if reflect.DeepEqual(iBGPPeerCIDRs, currentCIDRs) {
+			return iBGPPeerCIDRs, nil
+		}
+		toAdd := make([]string, 0)
+		toDelete := make([]string, 0)
+		for _, prefix := range iBGPPeerCIDRs[family] {
+			add := true
+			for _, currentPrefix := range currentDefinedSet.List {
+				if prefix == currentPrefix {
+					add = false
+				}
+			}
+			if add {
+				toAdd = append(toAdd, prefix)
+			}
+		}
+		for _, currentPrefix := range currentDefinedSet.List {
+			shouldDelete := true
+			for _, prefix := range iBGPPeerCIDRs[family] {
+				if currentPrefix == prefix {
+					shouldDelete = false
+				}
+			}
+			if shouldDelete {
+				toDelete = append(toDelete, currentPrefix)
+			}
+		}
 		iBGPPeerNS := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-			Name:        iBGPPeerSet,
-			List:        iBGPPeerCIDRs,
+			Name:        setName,
+			List:        toAdd,
 		}
 		err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
-		return iBGPPeerCIDRs, err
-	}
-
-	currentCIDRs := currentDefinedSet.List
-	sort.Strings(iBGPPeerCIDRs)
-	sort.Strings(currentCIDRs)
-	if reflect.DeepEqual(iBGPPeerCIDRs, currentCIDRs) {
-		return iBGPPeerCIDRs, nil
-	}
-	toAdd := make([]string, 0)
-	toDelete := make([]string, 0)
-	for _, prefix := range iBGPPeerCIDRs {
-		add := true
-		for _, currentPrefix := range currentDefinedSet.List {
-			if prefix == currentPrefix {
-				add = false
-			}
+		if err != nil {
+			return iBGPPeerCIDRs, err
 		}
-		if add {
-			toAdd = append(toAdd, prefix)
+		iBGPPeerNS = &gobgpapi.DefinedSet{
+			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+			Name:        setName,
+			List:        toDelete,
 		}
-	}
-	for _, currentPrefix := range currentDefinedSet.List {
-		shouldDelete := true
-		for _, prefix := range iBGPPeerCIDRs {
-			if currentPrefix == prefix {
-				shouldDelete = false
-			}
+		err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
+			&gobgpapi.DeleteDefinedSetRequest{DefinedSet: iBGPPeerNS, All: false})
+		if err != nil {
+			return iBGPPeerCIDRs, err
 		}
-		if shouldDelete {
-			toDelete = append(toDelete, currentPrefix)
-		}
-	}
-	iBGPPeerNS := &gobgpapi.DefinedSet{
-		DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-		Name:        iBGPPeerSet,
-		List:        toAdd,
-	}
-	err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: iBGPPeerNS})
-	if err != nil {
-		return iBGPPeerCIDRs, err
-	}
-	iBGPPeerNS = &gobgpapi.DefinedSet{
-		DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-		Name:        iBGPPeerSet,
-		List:        toDelete,
-	}
-	err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
-		&gobgpapi.DeleteDefinedSetRequest{DefinedSet: iBGPPeerNS, All: false})
-	if err != nil {
-		return iBGPPeerCIDRs, err
 	}
 	return iBGPPeerCIDRs, nil
 }
 
-func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() ([]string, error) {
+func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() (map[v1core.IPFamily][]string, error) {
 
 	var currentDefinedSet *gobgpapi.DefinedSet
 	externalBgpPeers := make([]string, 0)
-	externalBGPPeerCIDRs := make([]string, 0)
-	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: externalPeerSet},
-		func(ds *gobgpapi.DefinedSet) {
-			currentDefinedSet = ds
-		})
-	if err != nil {
-		return externalBGPPeerCIDRs, err
-	}
-	if len(nrc.globalPeerRouters) > 0 {
-		for _, peer := range nrc.globalPeerRouters {
-			externalBgpPeers = append(externalBgpPeers, peer.Conf.NeighborAddress)
+	externalBGPPeerCIDRs := make(map[v1core.IPFamily][]string)
+
+	for family, extPeerSetName := range map[v1core.IPFamily]string{
+		v1core.IPv4Protocol: externalPeerSet,
+		v1core.IPv6Protocol: externalPeerSetV6} {
+		err := nrc.bgpServer.ListDefinedSet(context.Background(),
+			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: extPeerSetName},
+			func(ds *gobgpapi.DefinedSet) {
+				currentDefinedSet = ds
+			})
+		if err != nil {
+			return externalBGPPeerCIDRs, err
 		}
-	}
-	if len(nrc.nodePeerRouters) > 0 {
-		externalBgpPeers = append(externalBgpPeers, nrc.nodePeerRouters...)
-	}
-	if len(externalBgpPeers) == 0 {
-		return externalBGPPeerCIDRs, nil
-	}
-	for _, peer := range externalBgpPeers {
-		externalBGPPeerCIDRs = append(externalBGPPeerCIDRs, peer+"/32")
-	}
-	if currentDefinedSet == nil {
-		eBGPPeerNS := &gobgpapi.DefinedSet{
-			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-			Name:        externalPeerSet,
-			List:        externalBGPPeerCIDRs,
+		if len(nrc.globalPeerRouters) > 0 {
+			for _, peer := range nrc.globalPeerRouters {
+				externalBgpPeers = append(externalBgpPeers, peer.Conf.NeighborAddress)
+			}
 		}
-		err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: eBGPPeerNS})
-		return externalBGPPeerCIDRs, err
+		if len(nrc.nodePeerRouters) > 0 {
+			externalBgpPeers = append(externalBgpPeers, nrc.nodePeerRouters...)
+		}
+		if len(externalBgpPeers) == 0 {
+			return externalBGPPeerCIDRs, nil
+		}
+		for _, peer := range externalBgpPeers {
+			ip := net.ParseIP(peer)
+			if ip == nil {
+				klog.Warningf("wasn't able to parse the IP of peer: %s - skipping!", peer)
+				continue
+			}
+			if ip.To4() != nil {
+				// if we're not currently loading the IPv4 family, move on
+				if family != v1core.IPv4Protocol {
+					continue
+				}
+				externalBGPPeerCIDRs[family] = append(externalBGPPeerCIDRs[family], peer+"/32")
+			} else if ip.To16() != nil {
+				// if we're not currently loading the IPv6 family, move on
+				if family != v1core.IPv6Protocol {
+					continue
+				}
+				externalBGPPeerCIDRs[family] = append(externalBGPPeerCIDRs[family], peer+"/128")
+			}
+		}
+		if currentDefinedSet == nil {
+			eBGPPeerNS := &gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				Name:        extPeerSetName,
+				List:        externalBGPPeerCIDRs[family],
+			}
+			err = nrc.bgpServer.AddDefinedSet(context.Background(),
+				&gobgpapi.AddDefinedSetRequest{DefinedSet: eBGPPeerNS})
+			if err != nil {
+				return externalBGPPeerCIDRs, err
+			}
+		}
 	}
 
 	return externalBGPPeerCIDRs, nil
 }
 
 // a slice of all peers is used as a match condition for reject statement of servicevipsdefinedset import policy
-func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, externalBGPPeerCIDRs []string) error {
-	var currentDefinedSet *gobgpapi.DefinedSet
-	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: allPeerSet},
-		func(ds *gobgpapi.DefinedSet) {
-			currentDefinedSet = ds
-		})
-	if err != nil {
-		return err
-	}
-	//nolint:gocritic // We intentionally append to a different array here so as to not change the passed
-	// in externalBGPPeerCIDRs
-	allBgpPeers := append(externalBGPPeerCIDRs, iBGPPeerCIDRs...)
-	if currentDefinedSet == nil {
+func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(
+	iBGPPeerCIDRs, externalBGPPeerCIDRs map[v1core.IPFamily][]string) error {
+
+	for family, allPeerSetName := range map[v1core.IPFamily]string{
+		v1core.IPv4Protocol: allPeerSet,
+		v1core.IPv6Protocol: allPeerSetV6} {
+		var currentDefinedSet *gobgpapi.DefinedSet
+		err := nrc.bgpServer.ListDefinedSet(context.Background(),
+			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: allPeerSetName},
+			func(ds *gobgpapi.DefinedSet) {
+				currentDefinedSet = ds
+			})
+		if err != nil {
+			return err
+		}
+		//nolint:gocritic // We intentionally append to a different array here so as to not change the passed
+		// in externalBGPPeerCIDRs
+		allBgpPeers := append(externalBGPPeerCIDRs[family], iBGPPeerCIDRs[family]...)
+		if currentDefinedSet == nil {
+			allPeerNS := &gobgpapi.DefinedSet{
+				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				Name:        allPeerSetName,
+				List:        allBgpPeers,
+			}
+			err = nrc.bgpServer.AddDefinedSet(context.Background(),
+				&gobgpapi.AddDefinedSetRequest{DefinedSet: allPeerNS})
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		toAdd := make([]string, 0)
+		toDelete := make([]string, 0)
+		for _, peer := range allBgpPeers {
+			add := true
+			for _, currentPeer := range currentDefinedSet.List {
+				if peer == currentPeer {
+					add = false
+				}
+			}
+			if add {
+				toAdd = append(toAdd, peer)
+			}
+		}
+		for _, currentPeer := range currentDefinedSet.List {
+			shouldDelete := true
+			for _, peer := range allBgpPeers {
+				if peer == currentPeer {
+					shouldDelete = false
+				}
+			}
+			if shouldDelete {
+				toDelete = append(toDelete, currentPeer)
+			}
+		}
 		allPeerNS := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-			Name:        allPeerSet,
-			List:        allBgpPeers,
+			Name:        allPeerSetName,
+			List:        toAdd,
 		}
-		return nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: allPeerNS})
-	}
-
-	toAdd := make([]string, 0)
-	toDelete := make([]string, 0)
-	for _, peer := range allBgpPeers {
-		add := true
-		for _, currentPeer := range currentDefinedSet.List {
-			if peer == currentPeer {
-				add = false
-			}
+		err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: allPeerNS})
+		if err != nil {
+			return err
 		}
-		if add {
-			toAdd = append(toAdd, peer)
+		allPeerNS = &gobgpapi.DefinedSet{
+			DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+			Name:        allPeerSetName,
+			List:        toDelete,
 		}
-	}
-	for _, currentPeer := range currentDefinedSet.List {
-		shouldDelete := true
-		for _, peer := range allBgpPeers {
-			if peer == currentPeer {
-				shouldDelete = false
-			}
+		err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
+			&gobgpapi.DeleteDefinedSetRequest{DefinedSet: allPeerNS, All: false})
+		if err != nil {
+			return err
 		}
-		if shouldDelete {
-			toDelete = append(toDelete, currentPeer)
-		}
-	}
-	allPeerNS := &gobgpapi.DefinedSet{
-		DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-		Name:        allPeerSet,
-		List:        toAdd,
-	}
-	err = nrc.bgpServer.AddDefinedSet(context.Background(), &gobgpapi.AddDefinedSetRequest{DefinedSet: allPeerNS})
-	if err != nil {
-		return err
-	}
-	allPeerNS = &gobgpapi.DefinedSet{
-		DefinedType: gobgpapi.DefinedType_NEIGHBOR,
-		Name:        allPeerSet,
-		List:        toDelete,
-	}
-	err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
-		&gobgpapi.DeleteDefinedSetRequest{DefinedSet: allPeerNS, All: false})
-	if err != nil {
-		return err
 	}
 	return nil
 }
@@ -504,21 +625,24 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		if nrc.overrideNextHop {
 			actions.Nexthop = &gobgpapi.NexthopAction{Self: true}
 		}
-		// statement to represent the export policy to permit advertising node's pod CIDR
-		statements = append(statements,
-			&gobgpapi.Statement{
-				Conditions: &gobgpapi.Conditions{
-					PrefixSet: &gobgpapi.MatchSet{
-						Type: gobgpapi.MatchSet_ANY,
-						Name: podCIDRSet,
+
+		// statement to represent the export policy to permit advertising node's IPv4 & IPv6 pod CIDRs
+		for _, podSet := range []string{podCIDRSet, podCIDRSetV6} {
+			statements = append(statements,
+				&gobgpapi.Statement{
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_ANY,
+							Name: podSet,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_ANY,
+							Name: iBGPPeerSet,
+						},
 					},
-					NeighborSet: &gobgpapi.MatchSet{
-						Type: gobgpapi.MatchSet_ANY,
-						Name: iBGPPeerSet,
-					},
-				},
-				Actions: &actions,
-			})
+					Actions: &actions,
+				})
+		}
 	}
 
 	if len(nrc.globalPeerRouters) > 0 || len(nrc.nodePeerRouters) > 0 {
@@ -536,49 +660,44 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			}
 		}
 
-		// statement to represent the export policy to permit advertising cluster IP's
-		// only to the global BGP peer or node specific BGP peer
-		statements = append(statements, &gobgpapi.Statement{
-			Conditions: &gobgpapi.Conditions{
-				PrefixSet: &gobgpapi.MatchSet{
-					Type: gobgpapi.MatchSet_ANY,
-					Name: serviceVIPsSet,
-				},
-				NeighborSet: &gobgpapi.MatchSet{
-					Type: gobgpapi.MatchSet_ANY,
-					Name: externalPeerSet,
-				},
-			},
-			Actions: &bgpActions,
-		})
-
-		if nrc.advertisePodCidr {
-			actions := gobgpapi.Actions{
-				RouteAction: gobgpapi.RouteAction_ACCEPT,
+		for _, peerSet := range []string{externalPeerSet, externalPeerSetV6} {
+			for _, serviceVIPSet := range []string{serviceVIPsSet, serviceVIPsSetV6} {
+				// statement to represent the export policy to permit advertising Service VIP's
+				// only to the global BGP peer or node specific BGP peer
+				statements = append(statements, &gobgpapi.Statement{
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_ANY,
+							Name: serviceVIPSet,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_ANY,
+							Name: peerSet,
+						},
+					},
+					Actions: &bgpActions,
+				})
 			}
-			// set BGP communities for the routes advertised to peers for the pod network
-			if len(nrc.nodeCommunities) > 0 {
-				actions.Community = &gobgpapi.CommunityAction{
-					Type:        gobgpapi.CommunityAction_ADD,
-					Communities: nrc.nodeCommunities,
+
+			if nrc.advertisePodCidr {
+				for _, podSet := range []string{podCIDRSet, podCIDRSetV6} {
+					// if we are configured to advertise POD CIDRs then add export policies for all of our IPv4 and IPv6
+					// peers for all IPv4 and IPv6 POD CIDRs
+					statements = append(statements, &gobgpapi.Statement{
+						Conditions: &gobgpapi.Conditions{
+							PrefixSet: &gobgpapi.MatchSet{
+								Type: gobgpapi.MatchSet_ANY,
+								Name: podSet,
+							},
+							NeighborSet: &gobgpapi.MatchSet{
+								Type: gobgpapi.MatchSet_ANY,
+								Name: peerSet,
+							},
+						},
+						Actions: &bgpActions,
+					})
 				}
 			}
-			if nrc.overrideNextHop {
-				actions.Nexthop = &gobgpapi.NexthopAction{Self: true}
-			}
-			statements = append(statements, &gobgpapi.Statement{
-				Conditions: &gobgpapi.Conditions{
-					PrefixSet: &gobgpapi.MatchSet{
-						Type: gobgpapi.MatchSet_ANY,
-						Name: podCIDRSet,
-					},
-					NeighborSet: &gobgpapi.MatchSet{
-						Type: gobgpapi.MatchSet_ANY,
-						Name: externalPeerSet,
-					},
-				},
-				Actions: &actions,
-			})
 		}
 	}
 
@@ -646,48 +765,52 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 	actions := gobgpapi.Actions{
 		RouteAction: gobgpapi.RouteAction_REJECT,
 	}
-	statements = append(statements, &gobgpapi.Statement{
-		Conditions: &gobgpapi.Conditions{
-			PrefixSet: &gobgpapi.MatchSet{
-				Type: gobgpapi.MatchSet_ANY,
-				Name: serviceVIPsSet,
-			},
-			NeighborSet: &gobgpapi.MatchSet{
-				Type: gobgpapi.MatchSet_ANY,
-				Name: allPeerSet,
-			},
-		},
-		Actions: &actions,
-	})
+	for _, peerSet := range []string{allPeerSet, allPeerSetV6} {
+		for _, vipSet := range []string{serviceVIPsSet, serviceVIPsSetV6} {
+			statements = append(statements, &gobgpapi.Statement{
+				Conditions: &gobgpapi.Conditions{
+					PrefixSet: &gobgpapi.MatchSet{
+						Type: gobgpapi.MatchSet_ANY,
+						Name: vipSet,
+					},
+					NeighborSet: &gobgpapi.MatchSet{
+						Type: gobgpapi.MatchSet_ANY,
+						Name: peerSet,
+					},
+				},
+				Actions: &actions,
+			})
+		}
 
-	statements = append(statements, &gobgpapi.Statement{
-		Conditions: &gobgpapi.Conditions{
-			PrefixSet: &gobgpapi.MatchSet{
-				Type: gobgpapi.MatchSet_ANY,
-				Name: defaultRouteSet,
-			},
-			NeighborSet: &gobgpapi.MatchSet{
-				Type: gobgpapi.MatchSet_ANY,
-				Name: allPeerSet,
-			},
-		},
-		Actions: &actions,
-	})
-
-	if len(nrc.nodeCustomImportRejectIPNets) > 0 {
 		statements = append(statements, &gobgpapi.Statement{
 			Conditions: &gobgpapi.Conditions{
 				PrefixSet: &gobgpapi.MatchSet{
-					Name: customImportRejectSet,
 					Type: gobgpapi.MatchSet_ANY,
+					Name: defaultRouteSet,
 				},
 				NeighborSet: &gobgpapi.MatchSet{
 					Type: gobgpapi.MatchSet_ANY,
-					Name: allPeerSet,
+					Name: peerSet,
 				},
 			},
 			Actions: &actions,
 		})
+
+		if len(nrc.nodeCustomImportRejectIPNets) > 0 {
+			statements = append(statements, &gobgpapi.Statement{
+				Conditions: &gobgpapi.Conditions{
+					PrefixSet: &gobgpapi.MatchSet{
+						Name: customImportRejectSet,
+						Type: gobgpapi.MatchSet_ANY,
+					},
+					NeighborSet: &gobgpapi.MatchSet{
+						Type: gobgpapi.MatchSet_ANY,
+						Name: peerSet,
+					},
+				},
+				Actions: &actions,
+			})
+		}
 	}
 
 	definition := gobgpapi.Policy{
