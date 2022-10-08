@@ -44,11 +44,11 @@ func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*ap
 	return nil, fmt.Errorf("failed to identify the node by NODE_NAME, hostname or --hostname-override")
 }
 
-// GetNodeIP returns the most valid external facing IP address for a node.
+// GetPrimaryNodeIP returns the most valid external facing IP address for a node.
 // Order of preference:
 // 1. NodeInternalIP
 // 2. NodeExternalIP (Only set on cloud providers usually)
-func GetNodeIP(node *apiv1.Node) (net.IP, error) {
+func GetPrimaryNodeIP(node *apiv1.Node) (net.IP, error) {
 	addresses := node.Status.Addresses
 	addressMap := make(map[apiv1.NodeAddressType][]apiv1.NodeAddress)
 	for i := range addresses {
@@ -79,12 +79,10 @@ func (m addressMap) add(address apiv1.NodeAddress) {
 	}
 }
 
-// GetNodeIPDualStack returns the most valid external facing IP address for a node (IPv4 and IPv6).
-// Order of preference:
-// 1. NodeInternalIP
-// 2. NodeExternalIP (Only set on cloud providers usually)
-func GetNodeIPDualStack(node *apiv1.Node, enableIPv4, enableIPv6 bool) (net.IP, net.IP, error) {
-	var ipAddrv4, ipAddrv6 net.IP
+// GetAllNodeIPs returns all internal and external IP addresses grouped as IPv4 and IPv6
+func GetAllNodeIPs(node *apiv1.Node) (map[apiv1.NodeAddressType][]net.IP, map[apiv1.NodeAddressType][]net.IP) {
+	ipAddrv4 := make(map[apiv1.NodeAddressType][]net.IP)
+	ipAddrv6 := make(map[apiv1.NodeAddressType][]net.IP)
 	addresses := node.Status.Addresses
 	addressesPerType := make(addressMap)
 	for _, address := range addresses {
@@ -92,32 +90,56 @@ func GetNodeIPDualStack(node *apiv1.Node, enableIPv4, enableIPv6 bool) (net.IP, 
 	}
 	if internalAddresses, ok := addressesPerType[apiv1.NodeInternalIP]; ok {
 		for _, address := range internalAddresses {
-			if ipAddrv4 == nil && enableIPv4 && netutils.IsIPv4String(address.Address) {
-				ipAddrv4 = net.ParseIP(address.Address)
+			if netutils.IsIPv4String(address.Address) {
+				ipAddrv4[apiv1.NodeInternalIP] = append(ipAddrv4[apiv1.NodeInternalIP], net.ParseIP(address.Address))
 			}
-			if ipAddrv6 == nil && enableIPv6 && netutils.IsIPv6String(address.Address) {
-				ipAddrv6 = net.ParseIP(address.Address)
+			if netutils.IsIPv6String(address.Address) {
+				ipAddrv6[apiv1.NodeInternalIP] = append(ipAddrv6[apiv1.NodeInternalIP], net.ParseIP(address.Address))
 			}
 		}
 	}
 	if externalAddresses, ok := addressesPerType[apiv1.NodeExternalIP]; ok {
 		for _, address := range externalAddresses {
-			if ipAddrv4 == nil && enableIPv4 && netutils.IsIPv4String(address.Address) {
-				ipAddrv4 = net.ParseIP(address.Address)
+			if netutils.IsIPv4String(address.Address) {
+				ipAddrv4[apiv1.NodeExternalIP] = append(ipAddrv4[apiv1.NodeExternalIP], net.ParseIP(address.Address))
 			}
-			if ipAddrv6 == nil && enableIPv6 && netutils.IsIPv6String(address.Address) {
-				ipAddrv6 = net.ParseIP(address.Address)
+			if netutils.IsIPv6String(address.Address) {
+				ipAddrv6[apiv1.NodeExternalIP] = append(ipAddrv6[apiv1.NodeExternalIP], net.ParseIP(address.Address))
 			}
 		}
 	}
 
-	if enableIPv4 && ipAddrv4 == nil {
-		return nil, nil, errors.New("host IPv4 unknown, check node's status.addresses in API server")
+	return ipAddrv4, ipAddrv6
+}
+
+func FindBestIPv6NodeAddress(priIP net.IP, intExtIPv6Addresses map[apiv1.NodeAddressType][]net.IP) net.IP {
+	if priIP.To4() == nil && priIP.To16() != nil {
+		// the NRC's primary IP is already an IPv6 address, so we'll use that
+		return priIP
 	}
-	if enableIPv6 && ipAddrv6 == nil {
-		return nil, nil, errors.New("host IPv6 unknown, check node's status.address in API server")
+	// the NRC's primary IP is not an IPv6, let's try to find the best available IPv6 address out of our
+	// available node addresses to use as the nextHop for our route
+	if len(intExtIPv6Addresses[apiv1.NodeInternalIP]) > 0 {
+		return intExtIPv6Addresses[apiv1.NodeInternalIP][0]
+	} else if len(intExtIPv6Addresses[apiv1.NodeExternalIP]) > 0 {
+		return intExtIPv6Addresses[apiv1.NodeExternalIP][0]
 	}
-	return ipAddrv4, ipAddrv6, nil
+	return nil
+}
+
+func FindBestIPv4NodeAddress(priIP net.IP, intExtIPv4Addresses map[apiv1.NodeAddressType][]net.IP) net.IP {
+	if priIP.To4() != nil {
+		// the NRC's primary IP is already an IPv6 address, so we'll use that
+		return priIP
+	}
+	// the NRC's primary IP is not an IPv6, let's try to find the best available IPv6 address out of our
+	// available node addresses to use as the nextHop for our route
+	if len(intExtIPv4Addresses[apiv1.NodeInternalIP]) > 0 {
+		return intExtIPv4Addresses[apiv1.NodeInternalIP][0]
+	} else if len(intExtIPv4Addresses[apiv1.NodeExternalIP]) > 0 {
+		return intExtIPv4Addresses[apiv1.NodeExternalIP][0]
+	}
+	return nil
 }
 
 // GetMTUFromNodeIP returns the MTU by detecting it from the IP on the node and figuring in tunneling configurations

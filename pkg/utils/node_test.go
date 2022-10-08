@@ -175,7 +175,7 @@ func Test_GetNodeIP(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			ip, err := GetNodeIP(testcase.node)
+			ip, err := GetPrimaryNodeIP(testcase.node)
 			if !reflect.DeepEqual(err, testcase.err) {
 				t.Logf("actual error: %v", err)
 				t.Logf("expected error: %v", testcase.err)
