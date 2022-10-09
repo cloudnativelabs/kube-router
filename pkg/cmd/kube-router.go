@@ -120,7 +120,9 @@ func (kr *KubeRouter) Run() error {
 		go mc.Run(healthChan, stopCh, &wg)
 
 	} else {
-		klog.Errorf("Metrics port must be over 0 and under 65535, given port: %d", kr.Config.MetricsPort)
+		klog.Infof("Metrics port must be over 0 and under 65535 in order to be enabled, given port: %d",
+			kr.Config.MetricsPort)
+		klog.Infof("Disabling metrics for kube-router, set --metrics-port properly in order to enable")
 		kr.Config.MetricsEnabled = false
 	}
 
