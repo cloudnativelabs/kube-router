@@ -391,7 +391,7 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, ext
 	if err != nil {
 		return err
 	}
-	// nolint:gocritic // We intentionally append to a different array here so as to not change the passed
+	//nolint:gocritic // We intentionally append to a different array here so as to not change the passed
 	// in externalBGPPeerCIDRs
 	allBgpPeers := append(externalBGPPeerCIDRs, iBGPPeerCIDRs...)
 	if currentDefinedSet == nil {
@@ -451,19 +451,19 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(iBGPPeerCIDRs, ext
 
 // BGP export policies are added so that following conditions are met:
 //
-// - by default export of all routes from the RIB to the neighbour's is denied, and explicitly statements are added
-//   to permit the desired routes to be exported
-// - each node is allowed to advertise its assigned pod CIDR's to all of its iBGP peer neighbours with same
-//   ASN if --enable-ibgp=true
-// - each node is allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
-//   only if --advertise-pod-cidr flag is set to true
-// - each node is NOT allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
-//   only if --advertise-pod-cidr flag is set to false
-// - each node is allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) ONLY to external
-//   BGP peers
-// - each node is NOT allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) to
-//   iBGP peers
-// - an option to allow overriding the next-hop-address with the outgoing ip for external bgp peers
+//   - by default export of all routes from the RIB to the neighbour's is denied, and explicitly statements are added
+//     to permit the desired routes to be exported
+//   - each node is allowed to advertise its assigned pod CIDR's to all of its iBGP peer neighbours with same
+//     ASN if --enable-ibgp=true
+//   - each node is allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
+//     only if --advertise-pod-cidr flag is set to true
+//   - each node is NOT allowed to advertise its assigned pod CIDR's to all of its external BGP peer neighbours
+//     only if --advertise-pod-cidr flag is set to false
+//   - each node is allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) ONLY to external
+//     BGP peers
+//   - each node is NOT allowed to advertise service VIP's (cluster ip, load balancer ip, external IP) to
+//     iBGP peers
+//   - an option to allow overriding the next-hop-address with the outgoing ip for external bgp peers
 func (nrc *NetworkRoutingController) addExportPolicies() error {
 	statements := make([]*gobgpapi.Statement, 0)
 
@@ -622,8 +622,8 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 }
 
 // BGP import policies are added so that the following conditions are met:
-// - do not import Service VIPs advertised from any peers, instead each kube-router originates and injects
-//   Service VIPs into local rib.
+//   - do not import Service VIPs advertised from any peers, instead each kube-router originates and injects
+//     Service VIPs into local rib.
 func (nrc *NetworkRoutingController) addImportPolicies() error {
 	statements := make([]*gobgpapi.Statement, 0)
 

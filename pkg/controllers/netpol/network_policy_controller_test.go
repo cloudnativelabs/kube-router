@@ -134,6 +134,7 @@ func tNewPodNamespaceMapFromTC(target map[string]string) tPodNamespaceMap {
 }
 
 // tCreateFakePods creates the Pods and Namespaces that will be affected by the network policies
+//
 //	returns a map like map[Namespace]map[PodName]bool
 func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) {
 	podNamespaceMap := make(tPodNamespaceMap)
@@ -202,8 +203,9 @@ func newUneventfulNetworkPolicyController(podInformer cache.SharedIndexInformer,
 }
 
 // tNetpolTestCase helper struct to define the inputs to the test case (netpols) and
-// 				  the expected selected targets (targetPods, inSourcePods for ingress targets, and outDestPods
-//				  for egress targets) as maps with key being the namespace and a csv of pod names
+//
+//	the expected selected targets (targetPods, inSourcePods for ingress targets, and outDestPods
+//	for egress targets) as maps with key being the namespace and a csv of pod names
 type tNetpolTestCase struct {
 	name         string
 	netpol       tNetpol

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
@@ -214,6 +213,6 @@ func createFile(content, filename string) (*os.File, error) {
 }
 
 func readFile(filename string) (string, error) {
-	content, err := ioutil.ReadFile(filename)
+	content, err := os.ReadFile(filename)
 	return string(content), err
 }

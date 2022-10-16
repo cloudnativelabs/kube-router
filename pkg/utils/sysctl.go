@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 )
@@ -65,7 +64,7 @@ func SetSysctl(path string, value int) *SysctlError {
 		}
 		return &SysctlError{"path existed, but could not be stat'd", err, path, value, true}
 	}
-	err := ioutil.WriteFile(sysctlPath, []byte(strconv.Itoa(value)), 0640)
+	err := os.WriteFile(sysctlPath, []byte(strconv.Itoa(value)), 0640)
 	if err != nil {
 		return &SysctlError{"path could not be set", err, path, value, true}
 	}

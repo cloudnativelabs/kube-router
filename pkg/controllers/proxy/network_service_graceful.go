@@ -155,7 +155,7 @@ func (nsc *NetworkServicesController) flushConntrackUDP(svc *ipvs.Service) error
 	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
 
 	// Shell out and flush conntrack records
-	// nolint:gosec // this exec should be safe from command injection given the parameter's context
+	//nolint:gosec // this exec should be safe from command injection given the parameter's context
 	out, err := exec.Command("conntrack", "-D", "--orig-dst", svc.Address.String(), "-p", udpProtocol,
 		"--dport", strconv.Itoa(int(svc.Port))).CombinedOutput()
 	if err != nil {

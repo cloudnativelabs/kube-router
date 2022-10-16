@@ -3,8 +3,8 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/containernetworking/cni/libcni"
@@ -70,7 +70,7 @@ func GetPodCidrFromCniSpec(cniConfFilePath string) (net.IPNet, error) {
 // InsertPodCidrInCniSpec inserts the pod CIDR allocated to the node by kubernetes controller manager
 // and stored it in the CNI specification
 func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
-	file, err := ioutil.ReadFile(cniConfFilePath)
+	file, err := os.ReadFile(cniConfFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to load CNI conf file: %s", err.Error())
 	}
@@ -113,7 +113,7 @@ func InsertPodCidrInCniSpec(cniConfFilePath string, cidr string) error {
 		pluginConfig["ipam"].(map[string]interface{})["subnet"] = cidr
 	}
 	configJSON, _ := json.Marshal(config)
-	err = ioutil.WriteFile(cniConfFilePath, configJSON, 0644)
+	err = os.WriteFile(cniConfFilePath, configJSON, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to insert subnet cidr into CNI conf file: %s", err.Error())
 	}
