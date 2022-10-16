@@ -522,7 +522,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		},
 	}
 
-	// nolint:dupl // There is no need to spend a lot of time de-duplicating test code
+	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -720,7 +720,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 		},
 	}
 
-	// nolint:dupl // There is no need to spend a lot of time de-duplicating test code
+	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -951,7 +951,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 		},
 	}
 
-	// nolint:dupl // There is no need to spend a lot of time de-duplicating test code
+	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -1993,7 +1993,7 @@ func startInformersForRoutes(nrc *NetworkRoutingController, clientset kubernetes
 	nrc.nodeLister = nodeInformer.GetIndexer()
 }
 
-// nolint:unparam // it doesn't hurt anything to leave timeout here, and increases future flexibility for testing
+//nolint:unparam // it doesn't hurt anything to leave timeout here, and increases future flexibility for testing
 func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *testing.T) {
 	tick := time.Tick(100 * time.Millisecond)
 	timeoutCh := time.After(timeout)

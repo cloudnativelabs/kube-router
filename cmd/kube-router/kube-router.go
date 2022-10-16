@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
-	// nolint:gosec // we want to unconditionally expose pprof here for advanced troubleshooting scenarios
+	//nolint:gosec // we want to unconditionally expose pprof here for advanced troubleshooting scenarios
 	_ "net/http/pprof"
 
 	"github.com/cloudnativelabs/kube-router/pkg/cmd"
@@ -72,7 +73,12 @@ func Main() error {
 
 	if config.EnablePprof {
 		go func() {
-			fmt.Fprintf(os.Stdout, "%s\n", http.ListenAndServe("0.0.0.0:6060", nil).Error())
+			server := http.Server{
+				Addr:              "0.0.0.0:6060",
+				ReadHeaderTimeout: 5 * time.Second,
+				Handler:           nil,
+			}
+			fmt.Fprintf(os.Stdout, "%s\n", server.ListenAndServe().Error())
 		}()
 	}
 

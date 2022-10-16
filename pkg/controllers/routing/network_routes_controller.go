@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
@@ -48,7 +47,7 @@ const (
 	pathPrependRepeatNAnnotation     = "kube-router.io/path-prepend.repeat-n"
 	peerASNAnnotation                = "kube-router.io/peer.asns"
 	peerIPAnnotation                 = "kube-router.io/peer.ips"
-	// nolint:gosec // this is not a hardcoded password
+	//nolint:gosec // this is not a hardcoded password
 	peerPasswordAnnotation             = "kube-router.io/peer.passwords"
 	peerPortAnnotation                 = "kube-router.io/peer.ports"
 	rrClientAnnotation                 = "kube-router.io/rr.client"
@@ -405,7 +404,7 @@ func (nrc *NetworkRoutingController) autoConfigureMTU() error {
 	if err != nil {
 		return fmt.Errorf("failed to generate MTU: %s", err.Error())
 	}
-	file, err := ioutil.ReadFile(nrc.cniConfFile)
+	file, err := os.ReadFile(nrc.cniConfFile)
 	if err != nil {
 		return fmt.Errorf("failed to load CNI conf file: %s", err.Error())
 	}
@@ -431,7 +430,7 @@ func (nrc *NetworkRoutingController) autoConfigureMTU() error {
 		pluginConfig["mtu"] = mtu
 	}
 	configJSON, _ := json.Marshal(config)
-	err = ioutil.WriteFile(nrc.cniConfFile, configJSON, 0644)
+	err = os.WriteFile(nrc.cniConfFile, configJSON, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to insert `mtu` into CNI conf file: %s", err.Error())
 	}
@@ -710,7 +709,7 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 	// this interface
 	out, err = exec.Command("ip", "route", "list", "table", customRouteTableID).CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "dev "+tunnelName+" scope") {
-		// nolint:gosec // this exec should be safe from command injection given the parameter's context
+		//nolint:gosec // this exec should be safe from command injection given the parameter's context
 		if out, err = exec.Command("ip", "route", "add", nextHop.String(), "dev", tunnelName, "table",
 			customRouteTableID).CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
@@ -1301,7 +1300,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	} else if len(kubeRouterConfig.PeerPasswordsFile) != 0 {
 		// Contents of the pw file should be in the same format as pw from CLI arg
-		pwFileBytes, err := ioutil.ReadFile(kubeRouterConfig.PeerPasswordsFile)
+		pwFileBytes, err := os.ReadFile(kubeRouterConfig.PeerPasswordsFile)
 		if err != nil {
 			return nil, fmt.Errorf("error loading Peer Passwords File : %s", err)
 		}
