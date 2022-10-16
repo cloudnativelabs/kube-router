@@ -433,7 +433,7 @@ func (npc *NetworkPolicyController) appendRuleToPolicyChain(policyChainName, com
 		}
 	}
 
-	// nolint:gocritic // we want to append to a separate array here so that we can re-use args below
+	//nolint:gocritic // we want to append to a separate array here so that we can re-use args below
 	markArgs := append(args, "-j", "MARK", "--set-xmark", "0x10000/0x10000", "\n")
 	npc.filterTableRules.WriteString(strings.Join(markArgs, " "))
 

@@ -19,7 +19,8 @@ import (
 
 // Used for processing Annotations that may contain multiple items
 // Pass this the string and the delimiter
-// nolint:unparam // while delimiter is always "," for now it provides flexibility to leave the function this way
+//
+//nolint:unparam // while delimiter is always "," for now it provides flexibility to leave the function this way
 func stringToSlice(s, d string) []string {
 	ss := make([]string, 0)
 	if strings.Contains(s, d) {
@@ -136,7 +137,7 @@ func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 func generateTunnelName(nodeIP string) string {
 	hash := strings.ReplaceAll(nodeIP, ".", "")
 
-	// nolint:gomnd // this number becomes less obvious when made a constant
+	//nolint:gomnd // this number becomes less obvious when made a constant
 	if len(hash) < 12 {
 		return "tun-" + hash
 	}
@@ -178,7 +179,7 @@ func parseBGPNextHop(path *gobgpapi.Path) (net.IP, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal path attribute: %s", err)
 		}
-		// nolint:gocritic // this is the correct way to use a switch statement regardless of how many case statements
+		//nolint:gocritic // this is the correct way to use a switch statement regardless of how many case statements
 		switch t := unmarshalNew.(type) {
 		case *gobgpapi.NextHopAttribute:
 			nextHop := net.ParseIP(t.NextHop).To4()

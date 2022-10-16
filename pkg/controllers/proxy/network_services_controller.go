@@ -3,7 +3,6 @@ package proxy
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"os"
@@ -129,6 +128,7 @@ type netlinkCalls interface {
 }
 
 // LinuxNetworking interface contains all linux networking subsystem calls
+//
 //go:generate moq -out network_services_controller_moq.go . LinuxNetworking
 type LinuxNetworking interface {
 	ipvsCalls
@@ -1207,7 +1207,7 @@ func parseSchedFlags(value string) schedFlags {
 
 func shuffle(endPoints []endpointsInfo) []endpointsInfo {
 	for index1 := range endPoints {
-		// nolint:gosec // we don't need cryptographic randomness here
+		//nolint:gosec // we don't need cryptographic randomness here
 		index2 := rand.Intn(index1 + 1)
 		endPoints[index1], endPoints[index2] = endPoints[index2], endPoints[index1]
 	}
@@ -1925,7 +1925,7 @@ func routeVIPTrafficToDirector(fwmark string) error {
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 // setupPolicyRoutingForDSR: setups policy routing so that FWMARKed packets are delivered locally
 func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
-	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
+	b, err := os.ReadFile("/etc/iproute2/rt_tables")
 	if err != nil {
 		return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 	}
@@ -1956,7 +1956,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
 // setupRoutesForExternalIPForDSR: setups routing so that kernel does not think return packets as martians
 
 func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap) error {
-	b, err := ioutil.ReadFile("/etc/iproute2/rt_tables")
+	b, err := os.ReadFile("/etc/iproute2/rt_tables")
 	if err != nil {
 		return errors.New("Failed to setup external ip routing table required for DSR due to " + err.Error())
 	}
