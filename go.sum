@@ -331,8 +331,8 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.0.2 h1:9yCKha/T5XdGtO0q9Q9a6T5NUCsTn/DrBg0D7ufOcFM=
 github.com/opencontainers/image-spec v1.0.2/go.mod h1:BtxoFyWECRxE4U/7sNtV5W15zMzWCbyJoFRP3s7yZA0=
-github.com/osrg/gobgp/v3 v3.5.0 h1:GH1mr/I1fGDhrgwQF+X9EzDLR+oSEbSI0ibTH9rwv/w=
-github.com/osrg/gobgp/v3 v3.5.0/go.mod h1:fKQPuk7+4qMiDT5viZTXT/aSEn8yYDkEs5p3NjmU2bw=
+github.com/osrg/gobgp/v3 v3.7.0 h1:h+Liq90TsxNKTB/443V8b1o/pwOm94yIsm+gP0RHwOo=
+github.com/osrg/gobgp/v3 v3.7.0/go.mod h1:fKQPuk7+4qMiDT5viZTXT/aSEn8yYDkEs5p3NjmU2bw=
 github.com/pelletier/go-toml v1.9.4 h1:tjENF6MfZAg8e4ZmZTeWaWiT2vXtsoO6+iuOjFhECwM=
 github.com/pelletier/go-toml v1.9.4/go.mod h1:u1nR/EPcESfeI/szUZKdtJ0xRNbUoANCkoOuaOx1Y+c=
 github.com/peterbourgon/diskv v2.0.1+incompatible/go.mod h1:uqqh8zWWbv1HBMNONnaR/tNboyR3/BZd58JJSHlUSCU=
