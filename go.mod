@@ -8,7 +8,7 @@ require (
 	github.com/docker/docker v20.10.19+incompatible
 	github.com/moby/ipvs v1.0.2
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.20.2
+	github.com/onsi/gomega v1.22.1
 	github.com/osrg/gobgp/v3 v3.7.0
 	github.com/prometheus/client_golang v1.13.0
 	github.com/spf13/pflag v1.0.5
