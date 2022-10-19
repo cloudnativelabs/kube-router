@@ -107,12 +107,13 @@ Usage of kube-router:
 - If you choose to use kube-router for pod-to-pod network connectivity then Kubernetes controller manager need to be configured to allocate pod CIDRs by passing `--allocate-node-cidrs=true` flag and providing a `cluster-cidr` (i.e. by passing --cluster-cidr=10.1.0.0/16 for e.g.)
 
 - If you choose to run kube-router as daemonset in Kubernetes version below v1.15, both kube-apiserver and kubelet must be run with `--allow-privileged=true` option. In later Kubernetes versions, only kube-apiserver must be run with `--allow-privileged=true` option and if PodSecurityPolicy admission controller is enabled, you should create PodSecurityPolicy, allowing privileged kube-router pods.
+  - Additionally, when run in daemonset mode, it is highly recommended that you keep netfilter related userspace host tooling like `iptables`, `ipset`, and `ipvsadm` in sync with the versions that are distributed by Alpine inside the kube-router container. This will help avoid conflicts that can potentially arise when both the host's userspace and kube-router's userspace tooling modifies netfilter kernel definitions. See: https://github.com/cloudnativelabs/kube-router/issues/1370 for more information.
 
 - If you choose to use kube-router for pod-to-pod network connecitvity then Kubernetes cluster must be configured to use CNI network plugins. On each node CNI conf file is expected to be present as /etc/cni/net.d/10-kuberouter.conf .`bridge` CNI plugin and `host-local` for IPAM should be used. A sample conf file that can be downloaded as `wget -O /etc/cni/net.d/10-kuberouter.conf https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/cni/10-kuberouter.conf`
 
 ## running as daemonset
 
-This is quickest way to deploy kube-router in Kubernetes v1.8+ (**dont forget to ensure the requirements**). Just run
+This is quickest way to deploy kube-router in Kubernetes v1.8+ (**dont forget to ensure the requirements above**). Just run:
 
 ```
 kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/daemonset/kube-router-all-service-daemonset.yaml
