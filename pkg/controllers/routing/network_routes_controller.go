@@ -242,7 +242,18 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
 			err = netlink.LinkSetMTU(kubeBridgeIf, mtu)
 			if err != nil {
-				klog.Errorf("Failed to set MTU for kube-bridge interface due to: %s", err.Error())
+				klog.Errorf(
+					"Failed to set MTU for kube-bridge interface due to: %s (kubeBridgeIf: %#v, mtu: %v)",
+					err.Error(), kubeBridgeIf, mtu,
+				)
+				// need to correct kuberouter.conf because autoConfigureMTU() may have set an invalid value!
+				currentMTU := kubeBridgeIf.Attrs().MTU
+				if currentMTU > 0 && currentMTU != mtu {
+					klog.Warningf("Updating config file with current MTU for kube-bridge: %d", currentMTU)
+					if err := nrc.configureMTU(currentMTU); err != nil {
+						klog.Errorf("Failed to update config file due to: %s", err.Error())
+					}
+				}
 			}
 		} else {
 			klog.Infof("Not setting MTU of kube-bridge interface")
@@ -399,11 +410,7 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 	}
 }
 
-func (nrc *NetworkRoutingController) autoConfigureMTU() error {
-	mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP)
-	if err != nil {
-		return fmt.Errorf("failed to generate MTU: %s", err.Error())
-	}
+func (nrc *NetworkRoutingController) configureMTU(mtu int) error {
 	file, err := os.ReadFile(nrc.cniConfFile)
 	if err != nil {
 		return fmt.Errorf("failed to load CNI conf file: %s", err.Error())
@@ -435,6 +442,14 @@ func (nrc *NetworkRoutingController) autoConfigureMTU() error {
 		return fmt.Errorf("failed to insert `mtu` into CNI conf file: %s", err.Error())
 	}
 	return nil
+}
+
+func (nrc *NetworkRoutingController) autoConfigureMTU() error {
+	mtu, err := utils.GetMTUFromNodeIP(nrc.nodeIP)
+	if err != nil {
+		return fmt.Errorf("failed to generate MTU: %s", err.Error())
+	}
+	return nrc.configureMTU(mtu)
 }
 
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
