@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 
-	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+	//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	"github.com/golang/protobuf/ptypes"
 	gobgpapi "github.com/osrg/gobgp/api"
 	gobgp "github.com/osrg/gobgp/pkg/server"
@@ -231,7 +231,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+				//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 				err := ptypes.UnmarshalAny(nlri, &prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
@@ -585,7 +585,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+				//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 				err := ptypes.UnmarshalAny(nlri, &prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
@@ -777,7 +777,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+				//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 				err := ptypes.UnmarshalAny(nlri, &prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
@@ -1002,7 +1002,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+				//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 				err := ptypes.UnmarshalAny(nlri, &prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")
@@ -1298,7 +1298,7 @@ func Test_advertisePodRoute(t *testing.T) {
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
-				// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+				//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 				err := ptypes.UnmarshalAny(nlri, &prefix)
 				if err != nil {
 					t.Fatalf("Invalid nlri in advertised path")

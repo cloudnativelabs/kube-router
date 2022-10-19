@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+	//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	"github.com/golang/protobuf/ptypes"
 	gobgpapi "github.com/osrg/gobgp/api"
 	"github.com/osrg/gobgp/pkg/packet/bgp"
@@ -177,9 +177,9 @@ func validateCommunity(arg string) error {
 // can't parse a next hop IP from the GoBGP Path, it returns an error.
 func parseBGPNextHop(path *gobgpapi.Path) (net.IP, error) {
 	for _, pAttr := range path.GetPattrs() {
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+		//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 		var value ptypes.DynamicAny
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+		//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 		if err := ptypes.UnmarshalAny(pAttr, &value); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal path attribute: %s", err)
 		}
@@ -209,7 +209,7 @@ func parseBGPPath(path *gobgpapi.Path) (*net.IPNet, net.IP, error) {
 
 	nlri := path.GetNlri()
 	var prefix gobgpapi.IPAddressPrefix
-	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+	//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	err = ptypes.UnmarshalAny(nlri, &prefix)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid nlri in advertised path")

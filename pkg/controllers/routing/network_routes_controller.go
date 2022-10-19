@@ -21,7 +21,7 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/golang/protobuf/ptypes/any"
 
-	// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+	//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 	"github.com/golang/protobuf/ptypes"
 	gobgpapi "github.com/osrg/gobgp/api"
 	gobgp "github.com/osrg/gobgp/pkg/server"
@@ -482,16 +482,16 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 			Afi:  gobgpapi.Family_AFI_IP6,
 			Safi: gobgpapi.Family_SAFI_UNICAST,
 		}
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+		//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 		nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
 			PrefixLen: uint32(cidrLen),
 			Prefix:    cidrStr[0],
 		})
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+		//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 		a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 			Origin: 0,
 		})
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+		//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 		v6Attrs, _ := ptypes.MarshalAny(&gobgpapi.MpReachNLRIAttribute{
 			Family:   v6Family,
 			NextHops: []string{nrc.nodeIP.String()},
@@ -510,17 +510,17 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	} else {
 
 		klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers", subnet, cidrLen, nrc.nodeIP.String())
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+		//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 		nlri, _ := ptypes.MarshalAny(&gobgpapi.IPAddressPrefix{
 			PrefixLen: uint32(cidrLen),
 			Prefix:    cidrStr[0],
 		})
 
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+		//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 		a1, _ := ptypes.MarshalAny(&gobgpapi.OriginAttribute{
 			Origin: 0,
 		})
-		// nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
+		//nolint:staticcheck // this has to stick around for now until gobgp updates protobuf
 		a2, _ := ptypes.MarshalAny(&gobgpapi.NextHopAttribute{
 			NextHop: nrc.nodeIP.String(),
 		})
