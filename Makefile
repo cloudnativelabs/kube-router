@@ -18,6 +18,10 @@ MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
 DOCKER_BUILD_IMAGE?=golang:1.19.2-alpine3.16
+## These variables are used by the Dockerfile as the bases for building and creating the runtime container
+## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
+BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
+RUNTIME_BASE?=alpine:3.16
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.49.0
 GOBGP_VERSION=v3.5.0
 QEMU_IMAGE?=multiarch/qemu-user-static
@@ -91,7 +95,8 @@ container: kube-router gobgp multiarch-binverify ## Builds a Docker container im
 	    echo "Using qemu to build non-native container"; \
 	    $(DOCKER) run --rm --privileged $(QEMU_IMAGE) --reset -p yes; \
 	fi
-	$(DOCKER) build -t "$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))" -f Dockerfile --build-arg ARCH="$(DOCKER_ARCH)" .
+	$(DOCKER) build -t "$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))" -f Dockerfile --build-arg ARCH="$(DOCKER_ARCH)" \
+		--build-arg BUILDTIME_BASE="$(BUILDTIME_BASE)" --build-arg RUNTIME_BASE="$(RUNTIME_BASE)" .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
 	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
 	fi
