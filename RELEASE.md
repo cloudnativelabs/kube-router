@@ -20,3 +20,7 @@ A docker buildx command will be executed via Github Actions and it will push new
 ## After the release
 * Mark the draft release as a proper release.
 * Announce the release in [#kube-router](https://app.slack.com/client/T09NY5SBT/C8DCQGTSB) on Kubernetes Slack.
+
+## Release Candidates
+
+* Follow above instructions and ensure that the tag contains `-rc`. Don't mark the pre-release as a proper release.
