@@ -666,7 +666,7 @@ func (npc *NetworkPolicyController) Cleanup() {
 	klog.Infof("Successfully cleaned the NetworkPolicyController configurations done by kube-router")
 }
 
-func NewIPTablesHandler(config *options.KubeRouterConfig) (
+func NewIPTablesHandlers(config *options.KubeRouterConfig) (
 	map[v1core.IPFamily]utils.IPTablesHandler, map[v1core.IPFamily]utils.IPSetHandler, error) {
 	iptablesCmdHandlers := make(map[v1core.IPFamily]utils.IPTablesHandler, 2)
 	ipSetHandlers := make(map[v1core.IPFamily]utils.IPSetHandler, 2)
