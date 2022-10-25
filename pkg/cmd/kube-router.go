@@ -186,7 +186,7 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if kr.Config.RunFirewall {
-		iptablesCmdHandlers, ipSetHandlers, err := netpol.NewIPTablesHandler(kr.Config)
+		iptablesCmdHandlers, ipSetHandlers, err := netpol.NewIPTablesHandlers(kr.Config)
 		if err != nil {
 			return errors.New("Failed to create iptables handlers: " + err.Error())
 		}
