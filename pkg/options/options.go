@@ -28,7 +28,7 @@ type KubeRouterConfig struct {
 	CacheSyncTimeout               time.Duration
 	CleanupConfig                  bool
 	ClusterAsn                     uint
-	ClusterIPCIDR                  string
+	ClusterIPCIDRs                 []string
 	DisableSrcDstCheck             bool
 	EnableCNI                      bool
 	EnableiBGP                     bool
@@ -84,7 +84,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		BGPGracefulRestartTime:         90 * time.Second,
 		BGPHoldTime:                    90 * time.Second,
 		CacheSyncTimeout:               1 * time.Minute,
-		ClusterIPCIDR:                  "10.96.0.0/12",
+		ClusterIPCIDRs:                 []string{"10.96.0.0/12"},
 		EnableOverlay:                  true,
 		IPTablesSyncPeriod:             5 * time.Minute,
 		IpvsGracefulPeriod:             30 * time.Second,
@@ -215,9 +215,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&s.RuntimeEndpoint, "runtime-endpoint", "",
 		"Path to CRI compatible container runtime socket (used for DSR mode). Currently known working with "+
 			"containerd.")
-	fs.StringVar(&s.ClusterIPCIDR, "service-cluster-ip-range", s.ClusterIPCIDR,
-		"CIDR value from which service cluster IPs are assigned. "+
-			"If dual-stack is used, this can be a comma-separated list of CIDR value. Default: 10.96.0.0/12")
+	fs.StringSliceVar(&s.ClusterIPCIDRs, "service-cluster-ip-range", s.ClusterIPCIDRs,
+		"CIDR values from which service cluster IPs are assigned (can be specified up to 2 times)")
 	fs.StringSliceVar(&s.ExternalIPCIDRs, "service-external-ip-range", s.ExternalIPCIDRs,
 		"Specify external IP CIDRs that are used for inter-cluster communication "+
 			"(can be specified multiple times)")
