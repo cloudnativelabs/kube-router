@@ -741,16 +741,11 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npc.fullSyncRequestChan = make(chan struct{}, 1)
 
 	// Validate and parse ClusterIP service range
-	if config.ClusterIPCIDR == "" {
-		return nil, fmt.Errorf("parameter --service-cluster-ip-range is empty")
-	}
-	clusterIPCIDRList := strings.Split(config.ClusterIPCIDR, ",")
-
-	if len(clusterIPCIDRList) == 0 {
+	if len(config.ClusterIPCIDRs) == 0 {
 		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter, the list is empty")
 	}
 
-	_, primaryIpnet, err := net.ParseCIDR(strings.TrimSpace(clusterIPCIDRList[0]))
+	_, primaryIpnet, err := net.ParseCIDR(strings.TrimSpace(config.ClusterIPCIDRs[0]))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %w", err)
 	}
@@ -770,9 +765,9 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		}
 	}
 
-	if len(clusterIPCIDRList) > 1 {
+	if len(config.ClusterIPCIDRs) > 1 {
 		if config.EnableIPv4 && config.EnableIPv6 {
-			_, secondaryIpnet, err := net.ParseCIDR(strings.TrimSpace(clusterIPCIDRList[1]))
+			_, secondaryIpnet, err := net.ParseCIDR(strings.TrimSpace(config.ClusterIPCIDRs[1]))
 			if err != nil {
 				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %v", err)
 			}
@@ -791,7 +786,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 				"dual-stack must be enabled to provide two addresses")
 		}
 	}
-	if len(clusterIPCIDRList) > 2 {
+	if len(config.ClusterIPCIDRs) > 2 {
 		return nil, fmt.Errorf("too many CIDRs provided in --service-cluster-ip-range parameter, only two " +
 			"addresses are allowed at once for dual-stack")
 	}
