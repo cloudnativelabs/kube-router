@@ -5,12 +5,14 @@ on:
     branches:
     - master
     - v[1-9].*
+    - prep-v[1-9].*
     tags:
     - v[1-9].*
   pull_request:
     branches:
     - master
     - v[1-9].*
+    - prep-v[1-9].*
 
 env:
   BUILDTIME_BASE: "golang:1.20.7-alpine3.18"
