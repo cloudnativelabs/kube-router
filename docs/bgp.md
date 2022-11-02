@@ -97,15 +97,35 @@ kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
 
 For traffic shaping purposes, you may want to prepend the AS path announced to peers.
 This can be accomplished on a per-node basis with annotations:
+
 - `kube-router.io/path-prepend.as`
 - `kube-router.io/path-prepend.repeat-n`
 
 If you wanted to prepend all routes from a particular node with the AS 65000 five times,
 you would run the following commands:
+
 ```
 kubectl annotate node <kube-node> "kube-router.io/path-prepend.as=65000"
 kubectl annotate node <kube-node> "kube-router.io/path-prepend.repeat-n=5"
 ```
+
+### BGP Peer Local IP configuration
+
+In some setups it might be desirable to set local IP address used for connectin external BGP
+peers. This can be accomplished on nodes with annotations:
+
+- `kube-router.io/peer.localips`
+
+If set, this must be a list with a local IP address for each peer, or left empty to use nodeIP.
+
+Example:
+
+```
+kubectl annotate node <kube-node> "kube-router.io/peer.localips=10.1.1.1,10.1.1.2"
+```
+
+This will instruct kube-router to use IP `10.1.1.1` for first BGP peer as a local address, and use `10.1.1.2`
+for the second.
 
 ### BGP Peer Password Authentication
 
