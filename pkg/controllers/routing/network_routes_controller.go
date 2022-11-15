@@ -1139,7 +1139,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		} else {
 			peerLocalIPs = stringToSlice(nodeBGPPeerLocalIPs, ",")
 			err = func() error {
-				for _, s := range ipStrings {
+				for _, s := range peerLocalIPs {
 					if s != "" {
 						ip := net.ParseIP(s)
 						if ip == nil {
