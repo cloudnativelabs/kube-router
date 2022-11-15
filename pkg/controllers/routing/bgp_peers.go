@@ -254,8 +254,8 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 }
 
 // Does validation and returns neighbor configs
-func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []string, holdtime float64,
-	localAddress string) ([]*gobgpapi.Peer, error) {
+func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []string, localips []string,
+	holdtime float64, localAddress string) ([]*gobgpapi.Peer, error) {
 	peers := make([]*gobgpapi.Peer, 0)
 
 	// Validations
@@ -275,6 +275,12 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 			"Example: \"port,,port\" OR [\"port\",\"\",\"port\"]", strconv.Itoa(options.DefaultBgpPort))
 	}
 
+	if len(ips) != len(localips) && len(localips) != 0 {
+		return nil, fmt.Errorf("invalid peer router config. The number of localIPs should either be zero, or "+
+			"one per peer router. If blank items are used, it will default to nodeIP, %s. "+
+			"Example: \"10.1.1.1,,10.1.1.2\" OR [\"10.1.1.1\",\"\",\"10.1.1.2\"]", localAddress)
+	}
+
 	for i := 0; i < len(ips); i++ {
 		if !((asns[i] >= 1 && asns[i] <= 23455) ||
 			(asns[i] >= 23457 && asns[i] <= 63999) ||
@@ -285,8 +291,7 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 				asns[i])
 		}
 
-		// explicitly set neighbors.transport.config.local-address with nodeIP which is configured
-		// as their neighbor address at the remote peers.
+		// explicitly set neighbors.transport.config.local-address
 		// this prevents the controller from initiating connection to its peers with a different IP address
 		// when multiple L3 interfaces are active.
 		peer := &gobgpapi.Peer{
@@ -307,6 +312,10 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 
 		if len(passwords) != 0 {
 			peer.Conf.AuthPassword = passwords[i]
+		}
+
+		if len(localips) != 0 && localips[i] != "" {
+			peer.Transport.LocalAddress = localips[i]
 		}
 
 		peers = append(peers, peer)

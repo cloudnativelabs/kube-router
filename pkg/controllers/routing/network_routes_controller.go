@@ -49,6 +49,7 @@ const (
 	pathPrependRepeatNAnnotation     = "kube-router.io/path-prepend.repeat-n"
 	peerASNAnnotation                = "kube-router.io/peer.asns"
 	peerIPAnnotation                 = "kube-router.io/peer.ips"
+	peerLocalIPAnnotation            = "kube-router.io/peer.localips"
 	//nolint:gosec // this is not a hardcoded password
 	peerPasswordAnnotation             = "kube-router.io/peer.passwords"
 	peerPortAnnotation                 = "kube-router.io/peer.ports"
@@ -1115,9 +1116,38 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 			}
 		}
 
+		// Get Global Peer Router LocalIP configs
+		var peerLocalIPs []string
+		nodeBGPPeerLocalIPs, ok := node.ObjectMeta.Annotations[peerLocalIPAnnotation]
+		if !ok {
+			klog.Infof("Could not find BGP peer local ip info in the node's annotations. Assuming node IP.")
+		} else {
+			peerLocalIPs = stringToSlice(nodeBGPPeerLocalIPs, ",")
+			err = func() error {
+				for _, s := range peerLocalIPs {
+					if s != "" {
+						ip := net.ParseIP(s)
+						if ip == nil {
+							return fmt.Errorf("could not parse \"%s\" as an IP", s)
+						}
+					}
+				}
+
+				return nil
+			}()
+			if err != nil {
+				err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
+				if err2 != nil {
+					klog.Errorf("Failed to stop bgpServer: %s", err2)
+				}
+
+				return fmt.Errorf("failed to parse node's Peer Local Addresses Annotation: %s", err)
+			}
+		}
+
 		// Create and set Global Peer Router complete configs
-		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerPorts, peerASNs, peerPasswords, nrc.bgpHoldtime,
-			nrc.nodeIP.String())
+		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerPorts, peerASNs, peerPasswords, peerLocalIPs,
+			nrc.bgpHoldtime, nrc.nodeIP.String())
 		if err != nil {
 			err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
 			if err2 != nil {
@@ -1312,7 +1342,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 
 	nrc.globalPeerRouters, err = newGlobalPeers(kubeRouterConfig.PeerRouters, peerPorts,
-		peerASNs, peerPasswords, nrc.bgpHoldtime, nrc.nodeIP.String())
+		peerASNs, peerPasswords, nil, nrc.bgpHoldtime, nrc.nodeIP.String())
 	if err != nil {
 		return nil, fmt.Errorf("error processing Global Peer Router configs: %s", err)
 	}
