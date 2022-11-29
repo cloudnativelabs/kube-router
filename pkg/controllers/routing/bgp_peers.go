@@ -255,7 +255,7 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 
 // Does validation and returns neighbor configs
 func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []string, localips []string,
-	holdtime float64, localAddress string) ([]*gobgpapi.Peer, error) {
+	holdtime float64) ([]*gobgpapi.Peer, error) {
 	peers := make([]*gobgpapi.Peer, 0)
 
 	// Validations
