@@ -276,9 +276,9 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 	}
 
 	if len(ips) != len(localips) && len(localips) != 0 {
-		return nil, fmt.Errorf("invalid peer router config. The number of localIPs should either be zero, or "+
-			"one per peer router. If blank items are used, it will default to nodeIP, %s. "+
-			"Example: \"10.1.1.1,,10.1.1.2\" OR [\"10.1.1.1\",\"\",\"10.1.1.2\"]", localAddress)
+		return nil, fmt.Errorf("invalid peer router config. The number of localIPs should either be zero, or " +
+			"one per peer router. If blank items are used, it will act as wildcard. " +
+			"Example: \"10.1.1.1,,10.1.1.2\" OR [\"10.1.1.1\",\"\",\"10.1.1.2\"]")
 	}
 
 	for i := 0; i < len(ips); i++ {
@@ -291,9 +291,6 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 				asns[i])
 		}
 
-		// explicitly set neighbors.transport.config.local-address
-		// this prevents the controller from initiating connection to its peers with a different IP address
-		// when multiple L3 interfaces are active.
 		peer := &gobgpapi.Peer{
 			Conf: &gobgpapi.PeerConf{
 				NeighborAddress: ips[i].String(),
@@ -301,8 +298,7 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 			},
 			Timers: &gobgpapi.Timers{Config: &gobgpapi.TimersConfig{HoldTime: uint64(holdtime)}},
 			Transport: &gobgpapi.Transport{
-				LocalAddress: localAddress,
-				RemotePort:   options.DefaultBgpPort,
+				RemotePort: options.DefaultBgpPort,
 			},
 		}
 
