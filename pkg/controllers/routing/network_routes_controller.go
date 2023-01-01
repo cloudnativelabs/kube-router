@@ -1099,13 +1099,40 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 	var localAddressList []string
 
-	if ipv4IsEnabled() {
-		localAddressList = append(localAddressList, nrc.localAddressList...)
+	if nrc.isIPv4Capable && !utils.ContainsIPv4Address(nrc.localAddressList) {
+		klog.Warningf("List of local addresses did not contain a valid IPv4 address, but IPv4 was " +
+			"enabled in kube-router's CLI options. BGP may not work as expected!")
 	}
 
-	if ipv6IsEnabled() {
-		ip := utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
-		localAddressList = append(localAddressList, ip.String())
+	if nrc.isIPv6Capable && !utils.ContainsIPv6Address(nrc.localAddressList) {
+		klog.Warningf("List of local addresses did not contain a valid IPv6 address, but IPv6 was " +
+			"enabled in kube-router's CLI options. BGP may not work as expected!")
+	}
+
+	for _, addr := range nrc.localAddressList {
+		ip := net.ParseIP(addr)
+		// This should have been caught in NewNetworkRoutingController, but we'll check once more just to be sure
+		if ip == nil {
+			klog.Warningf("was configured to listen on %s, but address was not valid, skipping (this should "+
+				"have been caught earlier in execution, please report upstream!)", addr)
+			continue
+		}
+
+		// Make sure that the address type matches what we're capable of before listening
+		if ip.To4() != nil {
+			if !nrc.isIPv4Capable {
+				klog.Warningf("was configured to listen on %s, but node is not enabled for IPv4 or does not "+
+					"have any IPv4 addresses configured for it, skipping", addr)
+				continue
+			}
+		} else {
+			if !nrc.isIPv6Capable {
+				klog.Warningf("was configured to listen on %s, but node is not enabled for IPv6 or does not "+
+					"have any IPv6 addresses configured for it, skipping", addr)
+				continue
+			}
+		}
+		localAddressList = append(localAddressList, addr)
 	}
 
 	global := &gobgpapi.Global{
@@ -1485,9 +1512,16 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 
 	bgpLocalAddressListAnnotation, ok := node.ObjectMeta.Annotations[bgpLocalAddressAnnotation]
 	if !ok {
+		if nrc.isIPv4Capable {
+			nrc.localAddressList = append(nrc.localAddressList,
+				utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs).String())
+		}
+		if nrc.isIPv6Capable {
+			nrc.localAddressList = append(nrc.localAddressList,
+				utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs).String())
+		}
 		klog.Infof("Could not find annotation `kube-router.io/bgp-local-addresses` on node object so BGP "+
-			"will listen on node IP: %s address.", nrc.primaryIP.String())
-		nrc.localAddressList = append(nrc.localAddressList, nrc.primaryIP.String())
+			"will listen on node IP: %s addresses.", nrc.localAddressList)
 	} else {
 		klog.Infof("Found annotation `kube-router.io/bgp-local-addresses` on node object so BGP will listen "+
 			"on local IP's: %s", bgpLocalAddressListAnnotation)
