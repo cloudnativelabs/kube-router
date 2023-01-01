@@ -39,7 +39,8 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.0",
+				routerID:          "10.0.0.1",
+				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: true,
@@ -62,7 +63,7 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.1",
+								Address: "10.0.0.2",
 							},
 						},
 					},
@@ -78,7 +79,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
+						ClusterIP:   "10.1.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
 				},
@@ -104,7 +105,7 @@ func Test_AddPolicies(t *testing.T) {
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.0.0.1/32",
+						IpPrefix:      "10.1.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -149,7 +150,8 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.0",
+				routerID:          "10.0.0.1",
+				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: true,
@@ -191,7 +193,7 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.1",
+								Address: "10.0.0.2",
 							},
 						},
 					},
@@ -207,7 +209,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
-						ClusterIP:   "10.0.0.1",
+						ClusterIP:   "10.1.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
 				},
@@ -233,7 +235,7 @@ func Test_AddPolicies(t *testing.T) {
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.0.0.1/32",
+						IpPrefix:      "10.1.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -372,7 +374,8 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.0",
+				routerID:          "10.0.0.1",
+				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: true,
@@ -386,10 +389,16 @@ func Test_AddPolicies(t *testing.T) {
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.1",
 						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
+						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.2",
+						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
 						},
 					},
 				},
@@ -407,7 +416,7 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.1",
+								Address: "10.0.0.2",
 							},
 						},
 					},
@@ -423,7 +432,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
+						ClusterIP:   "10.1.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
 				},
@@ -449,7 +458,7 @@ func Test_AddPolicies(t *testing.T) {
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.0.0.1/32",
+						IpPrefix:      "10.1.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -550,7 +559,8 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.0",
+				routerID:          "10.0.0.1",
+				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: false,
@@ -564,10 +574,16 @@ func Test_AddPolicies(t *testing.T) {
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.1",
 						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
+						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.2",
+						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
 						},
 					},
 				},
@@ -585,7 +601,7 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.1",
+								Address: "10.0.0.2",
 							},
 						},
 					},
@@ -601,7 +617,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
+						ClusterIP:   "10.1.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
 				},
@@ -627,7 +643,7 @@ func Test_AddPolicies(t *testing.T) {
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.0.0.1/32",
+						IpPrefix:      "10.1.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -711,7 +727,8 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.0",
+				routerID:          "10.0.0.1",
+				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpEnableInternal: true,
 				bgpFullMeshMode:   false,
@@ -725,10 +742,16 @@ func Test_AddPolicies(t *testing.T) {
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.1",
 						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
+						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.2",
+						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
 						},
 					},
 				},
@@ -748,7 +771,7 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.1",
+								Address: "10.0.0.2",
 							},
 						},
 					},
@@ -764,7 +787,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
+						ClusterIP:   "10.1.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
 				},
@@ -790,7 +813,7 @@ func Test_AddPolicies(t *testing.T) {
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.0.0.1/32",
+						IpPrefix:      "10.1.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -895,7 +918,8 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.0",
+				routerID:          "10.0.0.1",
+				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpEnableInternal: true,
 				bgpFullMeshMode:   false,
@@ -909,10 +933,16 @@ func Test_AddPolicies(t *testing.T) {
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.1",
 						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
+						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.2",
+						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
 						},
 					},
 				},
@@ -931,7 +961,7 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.1",
+								Address: "10.0.0.2",
 							},
 						},
 					},
@@ -947,7 +977,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
+						ClusterIP:   "10.1.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
 				},
@@ -973,7 +1003,7 @@ func Test_AddPolicies(t *testing.T) {
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.0.0.1/32",
+						IpPrefix:      "10.1.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -1078,7 +1108,8 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.0",
+				routerID:          "10.0.0.1",
+				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: false,
@@ -1093,10 +1124,16 @@ func Test_AddPolicies(t *testing.T) {
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.1",
 						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
+						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
 							NeighborAddress: "10.10.0.2",
+						},
+						Transport: &gobgpapi.Transport{
+							LocalAddress: "10.0.0.1",
 						},
 					},
 				},
@@ -1115,7 +1152,7 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.1",
+								Address: "10.0.0.2",
 							},
 						},
 					},
@@ -1131,7 +1168,7 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
+						ClusterIP:   "10.1.0.1",
 						ExternalIPs: []string{"1.1.1.1"},
 					},
 				},
@@ -1157,7 +1194,7 @@ func Test_AddPolicies(t *testing.T) {
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.0.0.1/32",
+						IpPrefix:      "10.1.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -1279,7 +1316,7 @@ func Test_AddPolicies(t *testing.T) {
 			if !reflect.DeepEqual(err, testcase.startBGPServerErr) {
 				t.Logf("expected err when invoking startBGPServer(): %v", testcase.startBGPServerErr)
 				t.Logf("actual err from startBGPServer() received: %v", err)
-				t.Error("unexpected error")
+				t.Fatal("unexpected error")
 			}
 			// If the server was not expected to start we should stop here as the rest of the tests are unimportant
 			if testcase.startBGPServerErr != nil {
