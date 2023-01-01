@@ -1538,6 +1538,13 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 			if ip == nil {
 				klog.Fatalf("Invalid IP address %s specified in `kube-router.io/bgp-local-addresses`.", addr)
 			}
+			// Ensure that the IP address is able to bind on this host
+			if l, err := net.Listen("tcp", "["+addr+"]:0"); err == nil {
+				_ = l.Close()
+			} else {
+				klog.Fatalf("IP address %s specified in `kube-router.io/bgp-local-addresses` is not able to "+
+					"be bound on this host", addr)
+			}
 		}
 		nrc.localAddressList = append(nrc.localAddressList, localAddresses...)
 	}
