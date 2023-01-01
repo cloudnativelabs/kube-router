@@ -113,31 +113,35 @@ func GetAllNodeIPs(node *apiv1.Node) (map[apiv1.NodeAddressType][]net.IP, map[ap
 }
 
 func FindBestIPv6NodeAddress(priIP net.IP, intExtIPv6Addresses map[apiv1.NodeAddressType][]net.IP) net.IP {
-	if priIP.To4() == nil && priIP.To16() != nil {
+	if priIP != nil && priIP.To4() == nil && priIP.To16() != nil {
 		// the NRC's primary IP is already an IPv6 address, so we'll use that
 		return priIP
 	}
 	// the NRC's primary IP is not an IPv6, let's try to find the best available IPv6 address out of our
 	// available node addresses to use as the nextHop for our route
-	if len(intExtIPv6Addresses[apiv1.NodeInternalIP]) > 0 {
-		return intExtIPv6Addresses[apiv1.NodeInternalIP][0]
-	} else if len(intExtIPv6Addresses[apiv1.NodeExternalIP]) > 0 {
-		return intExtIPv6Addresses[apiv1.NodeExternalIP][0]
+	if intExtIPv6Addresses != nil {
+		if len(intExtIPv6Addresses[apiv1.NodeInternalIP]) > 0 {
+			return intExtIPv6Addresses[apiv1.NodeInternalIP][0]
+		} else if len(intExtIPv6Addresses[apiv1.NodeExternalIP]) > 0 {
+			return intExtIPv6Addresses[apiv1.NodeExternalIP][0]
+		}
 	}
 	return nil
 }
 
 func FindBestIPv4NodeAddress(priIP net.IP, intExtIPv4Addresses map[apiv1.NodeAddressType][]net.IP) net.IP {
-	if priIP.To4() != nil {
+	if priIP != nil && priIP.To4() != nil {
 		// the NRC's primary IP is already an IPv6 address, so we'll use that
 		return priIP
 	}
 	// the NRC's primary IP is not an IPv6, let's try to find the best available IPv6 address out of our
 	// available node addresses to use as the nextHop for our route
-	if len(intExtIPv4Addresses[apiv1.NodeInternalIP]) > 0 {
-		return intExtIPv4Addresses[apiv1.NodeInternalIP][0]
-	} else if len(intExtIPv4Addresses[apiv1.NodeExternalIP]) > 0 {
-		return intExtIPv4Addresses[apiv1.NodeExternalIP][0]
+	if intExtIPv4Addresses != nil {
+		if len(intExtIPv4Addresses[apiv1.NodeInternalIP]) > 0 {
+			return intExtIPv4Addresses[apiv1.NodeInternalIP][0]
+		} else if len(intExtIPv4Addresses[apiv1.NodeExternalIP]) > 0 {
+			return intExtIPv4Addresses[apiv1.NodeExternalIP][0]
+		}
 	}
 	return nil
 }
