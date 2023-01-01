@@ -85,33 +85,6 @@ func stringSliceB64Decode(s []string) ([]string, error) {
 	return ss, nil
 }
 
-func ipv4IsEnabled() bool {
-	l, err := net.Listen("tcp4", "")
-	if err != nil {
-		return false
-	}
-	_ = l.Close()
-
-	return true
-}
-
-func ipv6IsEnabled() bool {
-	// If ipv6 is disabled with;
-	//
-	//  sysctl -w net.ipv6.conf.all.disable_ipv6=1
-	//
-	// It is still possible to listen on the any-address "::". So this
-	// function tries the loopback address "::1" which must be present
-	// if ipv6 is enabled.
-	l, err := net.Listen("tcp6", "[::1]:0")
-	if err != nil {
-		return false
-	}
-	_ = l.Close()
-
-	return true
-}
-
 func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 	links, err := netlink.LinkList()
 	if err != nil {
