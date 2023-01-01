@@ -216,12 +216,18 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 				neighborIPStr)
 			continue
 		}
+		peeringAddressForNeighbor := net.ParseIP(n.Transport.LocalAddress)
+		if peeringAddressForNeighbor == nil {
+			klog.Errorf("unable to parse our local address for peer (%s), not peering with this peer (%s)",
+				n.Transport.LocalAddress, neighborIPStr)
+		}
 
 		neighborIsIPv4 := neighborIP.To4() != nil
-		primaryIsIPv4 := nrc.primaryIP.To4() != nil
-		if neighborIsIPv4 != primaryIsIPv4 {
+		peeringAddressIsIPv4 := peeringAddressForNeighbor.To4() != nil
+		if neighborIsIPv4 != peeringAddressIsIPv4 {
 			klog.Warningf("Not peering with configured peer as it's primary IP (%s) uses a different "+
-				"protocol than our primary IP (%s)", neighborIP, nrc.primaryIP)
+				"protocol than our configured local-address (%s). Its possible that this can be resolved by setting "+
+				"the local address appropriately", neighborIP, peeringAddressForNeighbor)
 			continue
 		}
 
