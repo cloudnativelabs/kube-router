@@ -649,13 +649,17 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 
 	switch {
 	case link != nil:
-		// if we setup an overlay tunnel link, then use it for destination routing
+		// if we set up an overlay tunnel link, then use it for destination routing
 		var bestIPForFamily net.IP
 		if dst.IP.To4() != nil {
 			bestIPForFamily = utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
 		} else {
 			// Need to activate the ip command in IPv6 mode
 			bestIPForFamily = utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
+		}
+		if bestIPForFamily == nil {
+			return fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
+				"IP family: %s", dst.String())
 		}
 		route = &netlink.Route{
 			LinkIndex: link.Attrs().Index,
@@ -733,6 +737,10 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 		ipBase = append(ipBase, "-6")
 		bestIPForFamily = utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
 		ipipMode = "ip6ip6"
+	}
+	if nil == bestIPForFamily {
+		return nil, fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
+			"IP family: %s", nextHop.String())
 	}
 
 	// an error here indicates that the tunnel didn't exist, so we need to create it, if it already exists there's
