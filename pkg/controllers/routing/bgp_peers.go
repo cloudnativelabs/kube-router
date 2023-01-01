@@ -239,7 +239,7 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 				LocalRestarting: true,
 			}
 
-			if neighborIsIPv4 {
+			if nrc.isIPv4Capable {
 				n.AfiSafis = []*gobgpapi.AfiSafi{
 					{
 						Config: &gobgpapi.AfiSafiConfig{
@@ -253,20 +253,20 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 						},
 					},
 				}
-			} else {
-				n.AfiSafis = []*gobgpapi.AfiSafi{
-					{
-						Config: &gobgpapi.AfiSafiConfig{
-							Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
+			}
+			if nrc.isIPv6Capable {
+				afiSafi := gobgpapi.AfiSafi{
+					Config: &gobgpapi.AfiSafiConfig{
+						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
+						Enabled: true,
+					},
+					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+						Config: &gobgpapi.MpGracefulRestartConfig{
 							Enabled: true,
-						},
-						MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-							Config: &gobgpapi.MpGracefulRestartConfig{
-								Enabled: true,
-							},
 						},
 					},
 				}
+				n.AfiSafis = append(n.AfiSafis, &afiSafi)
 			}
 		}
 		if peerMultihopTTL > 1 {
@@ -335,6 +335,8 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 			},
 			Timers: &gobgpapi.Timers{Config: &gobgpapi.TimersConfig{HoldTime: uint64(holdtime)}},
 			Transport: &gobgpapi.Transport{
+				// localAddress defaults to the node's primary IP, but can be overridden below on a peer-by-peer basis
+				// below via the kube-router.io/peer.localips annotation
 				LocalAddress: localAddress,
 				RemotePort:   options.DefaultBgpPort,
 			},
