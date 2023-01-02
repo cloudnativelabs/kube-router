@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudnativelabs/kube-router/pkg/utils"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 	"github.com/vishvananda/netlink/nl"
@@ -257,4 +258,38 @@ func getPodCIDRsFromAllNodeSources(node *v1core.Node) (podCIDRs []string) {
 
 	// Finally, if all else fails, use the PodCIDRs on the node spec
 	return node.Spec.PodCIDRs
+}
+
+// getBGPRouteInfoForVIP attempt to automatically find the subnet, BGP AFI/SAFI Family, and nexthop for a given VIP
+// based upon whether it is an IPv4 address or an IPv6 address. Returns slash notation subnet as uint32 suitable for
+// sending to GoBGP and an error if it is unable to determine the subnet automatically
+func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet uint32, nh string,
+	afiFamily gobgpapi.Family_Afi, err error) {
+	ip := net.ParseIP(vip)
+	if ip == nil {
+		err = fmt.Errorf("could not parse VIP: %s", vip)
+		return
+	}
+	if ip.To4() != nil {
+		subnet = 32
+		afiFamily = gobgpapi.Family_AFI_IP
+		nhIP := utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
+		if nhIP == nil {
+			err = fmt.Errorf("could not find an IPv4 address on node to set as nexthop for vip: %s", vip)
+		}
+		nh = nhIP.String()
+		return
+	}
+	if ip.To16() != nil {
+		subnet = 128
+		afiFamily = gobgpapi.Family_AFI_IP6
+		nhIP := utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
+		if nhIP == nil {
+			err = fmt.Errorf("could not find an IPv6 address on node to set as nexthop for vip: %s", vip)
+		}
+		nh = nhIP.String()
+		return
+	}
+	err = fmt.Errorf("could not convert IP to IPv4 or IPv6, unable to find subnet for: %s", vip)
+	return
 }
