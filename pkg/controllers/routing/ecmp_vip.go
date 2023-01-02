@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"golang.org/x/exp/maps"
+
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/cloudnativelabs/kube-router/pkg/metrics"
@@ -22,24 +24,27 @@ import (
 
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
 func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
+	subnet, nh, afiFamily, err := nrc.getBGPRouteInfoForVIP(vip)
+	if err != nil {
+		return fmt.Errorf("unable to advertise VIP because of: %v", err)
+	}
 
-	klog.V(2).Infof("Advertising route: '%s/%s via %s' to peers",
-		vip, strconv.Itoa(32), nrc.primaryIP.String())
+	klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers", vip, subnet, nh)
 
 	a1, _ := anypb.New(&gobgpapi.OriginAttribute{
 		Origin: 0,
 	})
 	a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.primaryIP.String(),
+		NextHop: nh,
 	})
 	attrs := []*anypb.Any{a1, a2}
 	nlri1, _ := anypb.New(&gobgpapi.IPAddressPrefix{
 		Prefix:    vip,
-		PrefixLen: 32,
+		PrefixLen: subnet,
 	})
-	_, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
+	_, err = nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
 		Path: &gobgpapi.Path{
-			Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+			Family: &gobgpapi.Family{Afi: afiFamily, Safi: gobgpapi.Family_SAFI_UNICAST},
 			Nlri:   nlri1,
 			Pattrs: attrs,
 		},
@@ -52,28 +57,32 @@ func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
 	return err
 }
 
-// bgpWithdrawVIP  unadvertises the service vip
+// bgpWithdrawVIP  un-advertises the service vip
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
-	klog.V(2).Infof("Withdrawing route: '%s/%s via %s' to peers",
-		vip, strconv.Itoa(32), nrc.primaryIP.String())
+	subnet, nh, afiFamily, err := nrc.getBGPRouteInfoForVIP(vip)
+	if err != nil {
+		return fmt.Errorf("unable to advertise VIP because of: %v", err)
+	}
+
+	klog.V(2).Infof("Withdrawing route: '%s/%d via %s' to peers", vip, subnet, nh)
 
 	a1, _ := anypb.New(&gobgpapi.OriginAttribute{
 		Origin: 0,
 	})
 	a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
-		NextHop: nrc.primaryIP.String(),
+		NextHop: nh,
 	})
 	attrs := []*anypb.Any{a1, a2}
 	nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
 		Prefix:    vip,
-		PrefixLen: 32,
+		PrefixLen: subnet,
 	})
 	path := gobgpapi.Path{
-		Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+		Family: &gobgpapi.Family{Afi: afiFamily, Safi: gobgpapi.Family_SAFI_UNICAST},
 		Nlri:   nlri,
 		Pattrs: attrs,
 	}
-	err := nrc.bgpServer.DeletePath(context.Background(), &gobgpapi.DeletePathRequest{
+	err = nrc.bgpServer.DeletePath(context.Background(), &gobgpapi.DeletePathRequest{
 		TableType: gobgpapi.TableType_GLOBAL,
 		Path:      &path,
 	})
@@ -524,6 +533,19 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 		return false, errors.New("failed to convert cache item to Endpoints type")
 	}
 
+	// Find all the IPs that this node has on it so that we can use it to compare it against endpoint IPs
+	allNodeIPs := make([]string, 0)
+	for _, ips := range maps.Values(nrc.nodeIPv4Addrs) {
+		for _, ip := range ips {
+			allNodeIPs = append(allNodeIPs, ip.String())
+		}
+	}
+	for _, ips := range maps.Values(nrc.nodeIPv6Addrs) {
+		for _, ip := range ips {
+			allNodeIPs = append(allNodeIPs, ip.String())
+		}
+	}
+
 	for _, subset := range ep.Subsets {
 		for _, address := range subset.Addresses {
 			if address.NodeName != nil {
@@ -531,8 +553,10 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 					return true, nil
 				}
 			} else {
-				if address.IP == nrc.primaryIP.String() {
-					return true, nil
+				for _, nodeIP := range allNodeIPs {
+					if address.IP == nodeIP {
+						return true, nil
+					}
 				}
 			}
 		}
