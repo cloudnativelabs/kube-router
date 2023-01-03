@@ -153,19 +153,15 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 
 // create a defined set to represent all the advertisable IP associated with the services
 func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
-	var currentDefinedSet *gobgpapi.DefinedSet
 	for setName, cidrMask := range map[string]uint32{
 		serviceVIPsSet:   maxIPv4MaskSize,
 		serviceVIPsSetV6: maxIPv6MaskSize,
 	} {
-		err := nrc.bgpServer.ListDefinedSet(context.Background(),
-			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: setName},
-			func(ds *gobgpapi.DefinedSet) {
-				currentDefinedSet = ds
-			})
+		currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(setName, gobgpapi.DefinedType_PREFIX)
 		if err != nil {
 			return err
 		}
+
 		advIPPrefixList := make([]*gobgpapi.Prefix, 0)
 		advIps, _, _ := nrc.getAllVIPs()
 		for _, ipStr := range advIps {
@@ -270,20 +266,15 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 
 // create a defined set to represent just the host default route
 func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
-	var currentDefinedSet *gobgpapi.DefinedSet
-
 	for setName, defaultRoute := range map[string]string{
 		defaultRouteSet:   "0.0.0.0/0",
 		defaultRouteSetV6: "::/0",
 	} {
-		err := nrc.bgpServer.ListDefinedSet(context.Background(),
-			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: setName},
-			func(ds *gobgpapi.DefinedSet) {
-				currentDefinedSet = ds
-			})
+		currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(setName, gobgpapi.DefinedType_PREFIX)
 		if err != nil {
 			return err
 		}
+
 		if currentDefinedSet == nil {
 			cidrLen := 0
 			defaultRouteDefinedSet := &gobgpapi.DefinedSet{
@@ -310,14 +301,11 @@ func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
 // create a defined set to represent custom annotated routes to be rejected on import
 func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
 	var currentDefinedSet *gobgpapi.DefinedSet
-	err := nrc.bgpServer.ListDefinedSet(context.Background(),
-		&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: customImportRejectSet},
-		func(ds *gobgpapi.DefinedSet) {
-			currentDefinedSet = ds
-		})
+	currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(customImportRejectSet, gobgpapi.DefinedType_PREFIX)
 	if err != nil {
 		return err
 	}
+
 	if currentDefinedSet == nil {
 		prefixes := make([]*gobgpapi.Prefix, 0)
 		for _, ipNet := range nrc.nodeCustomImportRejectIPNets {
@@ -365,15 +353,11 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() (map[v1core.IPFami
 		v1core.IPv4Protocol: iBGPPeerSet,
 		v1core.IPv6Protocol: iBGPPeerSetV6,
 	} {
-		var currentDefinedSet *gobgpapi.DefinedSet
-		err := nrc.bgpServer.ListDefinedSet(context.Background(),
-			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: setName},
-			func(ds *gobgpapi.DefinedSet) {
-				currentDefinedSet = ds
-			})
+		currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(setName, gobgpapi.DefinedType_NEIGHBOR)
 		if err != nil {
 			return iBGPPeerCIDRs, err
 		}
+
 		if currentDefinedSet == nil {
 			iBGPPeerNS := &gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
@@ -443,21 +427,17 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() (map[v1core.IPFami
 
 func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() (map[v1core.IPFamily][]string, error) {
 
-	var currentDefinedSet *gobgpapi.DefinedSet
 	externalBgpPeers := make([]string, 0)
 	externalBGPPeerCIDRs := make(map[v1core.IPFamily][]string)
 
 	for family, extPeerSetName := range map[v1core.IPFamily]string{
 		v1core.IPv4Protocol: externalPeerSet,
 		v1core.IPv6Protocol: externalPeerSetV6} {
-		err := nrc.bgpServer.ListDefinedSet(context.Background(),
-			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: extPeerSetName},
-			func(ds *gobgpapi.DefinedSet) {
-				currentDefinedSet = ds
-			})
+		currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(extPeerSetName, gobgpapi.DefinedType_NEIGHBOR)
 		if err != nil {
 			return externalBGPPeerCIDRs, err
 		}
+
 		if len(nrc.globalPeerRouters) > 0 {
 			for _, peer := range nrc.globalPeerRouters {
 				externalBgpPeers = append(externalBgpPeers, peer.Conf.NeighborAddress)
@@ -514,15 +494,11 @@ func (nrc *NetworkRoutingController) addAllBGPPeersDefinedSet(
 		v1core.IPv4Protocol: allPeerSet,
 		v1core.IPv6Protocol: allPeerSetV6} {
 		var currentDefinedSet *gobgpapi.DefinedSet
-		err := nrc.bgpServer.ListDefinedSet(context.Background(),
-			&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: allPeerSetName},
-			func(ds *gobgpapi.DefinedSet) {
-				currentDefinedSet = ds
-			})
+		currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(allPeerSetName, gobgpapi.DefinedType_NEIGHBOR)
 		if err != nil {
 			return err
 		}
-		//nolint:gocritic // We intentionally append to a different array here so as to not change the passed
+		//nolint:gocritic // We intentionally append to a different array here to not change the passed
 		// in externalBGPPeerCIDRs
 		allBgpPeers := append(externalBGPPeerCIDRs[family], iBGPPeerCIDRs[family]...)
 		if currentDefinedSet == nil {
@@ -866,4 +842,17 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 	}
 
 	return nil
+}
+
+// getDefinedSetFromGoBGP abstracts the logic for getting a DefinedSet object back for a given set type and name
+func (nrc *NetworkRoutingController) getDefinedSetFromGoBGP(name string,
+	defType gobgpapi.DefinedType) (defSet *gobgpapi.DefinedSet, err error) {
+	err = nrc.bgpServer.ListDefinedSet(context.Background(),
+		&gobgpapi.ListDefinedSetRequest{
+			DefinedType: defType,
+			Name:        name,
+		}, func(ds *gobgpapi.DefinedSet) {
+			defSet = ds
+		})
+	return
 }
