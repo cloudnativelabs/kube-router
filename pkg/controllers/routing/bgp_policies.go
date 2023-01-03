@@ -239,23 +239,23 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 				toDelete = append(toDelete, currentPrefix)
 			}
 		}
-		clusterIPPrefixSet := &gobgpapi.DefinedSet{
+		serviceVIPIPPrefixSet := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_PREFIX,
 			Name:        setName,
 			Prefixes:    toAdd,
 		}
 		err = nrc.bgpServer.AddDefinedSet(context.Background(),
-			&gobgpapi.AddDefinedSetRequest{DefinedSet: clusterIPPrefixSet})
+			&gobgpapi.AddDefinedSetRequest{DefinedSet: serviceVIPIPPrefixSet})
 		if err != nil {
 			return err
 		}
-		clusterIPPrefixSet = &gobgpapi.DefinedSet{
+		serviceVIPIPPrefixSet = &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_PREFIX,
 			Name:        setName,
 			Prefixes:    toDelete,
 		}
 		err = nrc.bgpServer.DeleteDefinedSet(context.Background(),
-			&gobgpapi.DeleteDefinedSetRequest{DefinedSet: clusterIPPrefixSet, All: false})
+			&gobgpapi.DeleteDefinedSetRequest{DefinedSet: serviceVIPIPPrefixSet, All: false})
 		if err != nil {
 			return err
 		}
