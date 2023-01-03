@@ -604,6 +604,17 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 
 		// statement to represent the export policy to permit advertising node's IPv4 & IPv6 pod CIDRs
 		for _, podSet := range []string{podCIDRSet, podCIDRSetV6} {
+			podSetEmpty, err := nrc.emptyCheckDefinedSets([]gobgpapi.ListDefinedSetRequest{
+				{DefinedType: gobgpapi.DefinedType_PREFIX, Name: podSet},
+			})
+			if err != nil {
+				return err
+			}
+			// if the set is empty, then skip it, so we don't have unintentional matches
+			if podSetEmpty {
+				continue
+			}
+
 			statements = append(statements,
 				&gobgpapi.Statement{
 					Conditions: &gobgpapi.Conditions{
@@ -637,9 +648,31 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		}
 
 		for _, peerSet := range []string{externalPeerSet, externalPeerSetV6} {
+			peerSetEmpty, err := nrc.emptyCheckDefinedSets([]gobgpapi.ListDefinedSetRequest{
+				{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: peerSet},
+			})
+			if err != nil {
+				return err
+			}
+			// if the set is empty, then skip it, so we don't have unintentional matches
+			if peerSetEmpty {
+				continue
+			}
+
 			for _, serviceVIPSet := range []string{serviceVIPsSet, serviceVIPsSetV6} {
 				// statement to represent the export policy to permit advertising Service VIP's
 				// only to the global BGP peer or node specific BGP peer
+				vipSetEmpty, err := nrc.emptyCheckDefinedSets([]gobgpapi.ListDefinedSetRequest{
+					{DefinedType: gobgpapi.DefinedType_PREFIX, Name: serviceVIPSet},
+				})
+				if err != nil {
+					return err
+				}
+				// if the set is empty, then skip it, so we don't have unintentional matches
+				if vipSetEmpty {
+					continue
+				}
+
 				statements = append(statements, &gobgpapi.Statement{
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
@@ -659,6 +692,17 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 				for _, podSet := range []string{podCIDRSet, podCIDRSetV6} {
 					// if we are configured to advertise POD CIDRs then add export policies for all of our IPv4 and IPv6
 					// peers for all IPv4 and IPv6 POD CIDRs
+					podCIDREmpty, err := nrc.emptyCheckDefinedSets([]gobgpapi.ListDefinedSetRequest{
+						{DefinedType: gobgpapi.DefinedType_PREFIX, Name: podSet},
+					})
+					if err != nil {
+						return err
+					}
+					// if the set is empty, then skip it, so we don't have unintentional matches
+					if podCIDREmpty {
+						continue
+					}
+
 					statements = append(statements, &gobgpapi.Statement{
 						Conditions: &gobgpapi.Conditions{
 							PrefixSet: &gobgpapi.MatchSet{
@@ -742,7 +786,29 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 		RouteAction: gobgpapi.RouteAction_REJECT,
 	}
 	for _, peerSet := range []string{allPeerSet, allPeerSetV6} {
+		anyEmpty, err := nrc.emptyCheckDefinedSets([]gobgpapi.ListDefinedSetRequest{
+			{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: peerSet},
+		})
+		if err != nil {
+			return err
+		}
+		// If set is empty, skip it so that we don't accidentally match VIPs against a blank set
+		if anyEmpty {
+			continue
+		}
 		for _, vipSet := range []string{serviceVIPsSet, serviceVIPsSetV6} {
+			vipSetEmpty, err := nrc.emptyCheckDefinedSets([]gobgpapi.ListDefinedSetRequest{
+				{DefinedType: gobgpapi.DefinedType_NEIGHBOR, Name: peerSet},
+				{DefinedType: gobgpapi.DefinedType_PREFIX, Name: vipSet},
+			})
+			if err != nil {
+				return err
+			}
+			// If either set is empty, skip it so that we don't accidentally match VIPs against a blank set
+			if vipSetEmpty {
+				continue
+			}
+
 			statements = append(statements, &gobgpapi.Statement{
 				Conditions: &gobgpapi.Conditions{
 					PrefixSet: &gobgpapi.MatchSet{
@@ -855,4 +921,28 @@ func (nrc *NetworkRoutingController) getDefinedSetFromGoBGP(name string,
 			defSet = ds
 		})
 	return
+}
+
+// emptyCheckDefinedSets Query requested sets from GoBGP to ensure that any of them aren't empty. Referencing an empty
+// set in policy with MatchSet_ANY will cause it to match all items incorrectly and cause us to stop announcing
+// important BGP paths, so we take extra precaution that we don't do this.
+func (nrc *NetworkRoutingController) emptyCheckDefinedSets(defSets []gobgpapi.ListDefinedSetRequest) (bool, error) {
+	for idx := range defSets {
+		ds, err := nrc.getDefinedSetFromGoBGP(defSets[idx].Name, defSets[idx].DefinedType)
+		if err != nil {
+			return false, err
+		}
+		//nolint:exhaustive // We have a default here we don't need to exhaustively list all possible gobgpapi types
+		switch defSets[idx].DefinedType {
+		case gobgpapi.DefinedType_PREFIX:
+			if len(ds.Prefixes) < 1 {
+				return true, nil
+			}
+		default:
+			if len(ds.List) < 1 {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
