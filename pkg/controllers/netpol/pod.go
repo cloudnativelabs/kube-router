@@ -88,7 +88,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			// This used to be AppendUnique when we were using iptables directly, this checks to make sure we didn't drop
 			// unmarked for this chain already
 			if strings.Contains(filterTableRules.String(), strings.Join(args, " ")) {
-				return
+				continue
 			}
 			filterTableRules.WriteString(strings.Join(args, " "))
 
