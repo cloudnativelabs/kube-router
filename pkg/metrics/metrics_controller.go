@@ -131,11 +131,14 @@ var (
 		Help:      "BGP advertisements received",
 	})
 	// ControllerBGPadvertisementsSent Time it took to sync internal bgp peers
-	ControllerBGPadvertisementsSent = prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: namespace,
-		Name:      "controller_bgp_advertisements_sent",
-		Help:      "BGP advertisements sent",
-	})
+	ControllerBGPadvertisementsSent = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "controller_bgp_advertisements_sent",
+			Help:      "BGP advertisements sent",
+		},
+		[]string{"type"},
+	)
 	// ControllerIpvsMetricsExportTime Time it took to export metrics
 	ControllerIpvsMetricsExportTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
