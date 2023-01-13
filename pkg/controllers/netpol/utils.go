@@ -131,7 +131,8 @@ func getPodIPv6Address(pod podInfo) (string, error) {
 			return ip.IP, nil
 		}
 	}
-	return "", fmt.Errorf("pod %s has no IPv6Address", pod.name)
+	return "", fmt.Errorf("pod %s:%s has no IPv6Address, available addresses: %s",
+		pod.namespace, pod.name, pod.ips)
 }
 
 func getPodIPv4Address(pod podInfo) (string, error) {
@@ -140,5 +141,26 @@ func getPodIPv4Address(pod podInfo) (string, error) {
 			return ip.IP, nil
 		}
 	}
-	return "", fmt.Errorf("pod %s has no IPv4Address", pod.name)
+	return "", fmt.Errorf("pod %s:%s has no IPv4Address, available addresses: %s",
+		pod.namespace, pod.name, pod.ips)
+}
+
+func getPodIPForFamily(pod podInfo, ipFamily api.IPFamily) (string, error) {
+	switch ipFamily {
+	case api.IPv4Protocol:
+		if ip, err := getPodIPv4Address(pod); err != nil {
+			return "", err
+		} else {
+			return ip, nil
+		}
+	case api.IPv6Protocol:
+		if ip, err := getPodIPv6Address(pod); err != nil {
+			return "", err
+		} else {
+			return ip, nil
+		}
+	}
+
+	return "", fmt.Errorf("did not recognize IP Family for pod: %s:%s family: %s", pod.namespace, pod.name,
+		ipFamily)
 }
