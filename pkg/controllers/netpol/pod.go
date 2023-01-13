@@ -78,10 +78,17 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 
 	activePodFwChains := make(map[string]bool)
 
-	dropUnmarkedTrafficRules := func(podName, podNamespace, podFwChainName string) {
-		for _, filterTableRules := range npc.filterTableRules {
+	dropUnmarkedTrafficRules := func(pod podInfo, podFwChainName string) {
+		for ipFamily, filterTableRules := range npc.filterTableRules {
+			_, err := getPodIPForFamily(pod, ipFamily)
+			if err != nil {
+				klog.V(2).Infof("unable to get address for pod: %s -- skipping drop rules for pod "+
+					"(this is normal for pods that are not dual-stack)", err.Error())
+				continue
+			}
+
 			// add rule to log the packets that will be dropped due to network policy enforcement
-			comment := "\"rule to log dropped traffic POD name:" + podName + " namespace: " + podNamespace + "\""
+			comment := "\"rule to log dropped traffic POD name:" + pod.name + " namespace: " + pod.namespace + "\""
 			args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment,
 				"-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG",
 				"--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10", "\n"}
@@ -93,7 +100,8 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			filterTableRules.WriteString(strings.Join(args, " "))
 
 			// add rule to DROP if no applicable network policy permits the traffic
-			comment = "\"rule to REJECT traffic destined for POD name:" + podName + " namespace: " + podNamespace + "\""
+			comment = "\"rule to REJECT traffic destined for POD name:" + pod.name + " namespace: " +
+				pod.namespace + "\""
 			args = []string{"-A", podFwChainName, "-m", "comment", "--comment", comment,
 				"-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "REJECT", "\n"}
 			filterTableRules.WriteString(strings.Join(args, " "))
@@ -113,7 +121,17 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 
 		// ensure pod specific firewall chain exist for all the pods that need ingress firewall
 		podFwChainName := podFirewallChainName(pod.namespace, pod.name, version)
-		for _, filterTableRules := range npc.filterTableRules {
+		for ipFamily, filterTableRules := range npc.filterTableRules {
+			_, err := getPodIPForFamily(pod, ipFamily)
+			if err != nil {
+				// If the pod doesn't have an address in this family we skip it here and all the various places below
+				// because there won't be a valid source or destination address for iptables, and it will stop iptables
+				// restore actions from completing successfully
+				klog.Infof("unable to get address for pod: %s -- skipping pod chain for pod "+
+					"(this is normal for pods that are not dual-stack)", err.Error())
+				continue
+			}
+
 			filterTableRules.WriteString(":" + podFwChainName + "\n")
 		}
 
@@ -128,9 +146,16 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// setup rules to intercept inbound traffic to the pods
 		npc.interceptPodOutboundTraffic(pod, podFwChainName)
 
-		dropUnmarkedTrafficRules(pod.name, pod.namespace, podFwChainName)
+		dropUnmarkedTrafficRules(pod, podFwChainName)
 
-		for _, filterTableRules := range npc.filterTableRules {
+		for ipFamily, filterTableRules := range npc.filterTableRules {
+			_, err := getPodIPForFamily(pod, ipFamily)
+			if err != nil {
+				klog.V(2).Infof("unable to get address for pod: %s -- skipping accept rules for pod "+
+					"(this is normal for pods that are not dual-stack)", err.Error())
+				continue
+			}
+
 			// set mark to indicate traffic from/to the pod passed network policies.
 			// Mark will be checked to explicitly ACCEPT the traffic
 			comment := "\"set mark to ACCEPT traffic that comply to network policies\""
@@ -151,13 +176,13 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 	hasEgressPolicy := false
 
 	for ipFamily, filterTableRules := range npc.filterTableRules {
-		var ip string
-		switch ipFamily {
-		case api.IPv4Protocol:
-			ip, _ = getPodIPv4Address(pod)
-		case api.IPv6Protocol:
-			ip, _ = getPodIPv6Address(pod)
+		ip, err := getPodIPForFamily(pod, ipFamily)
+		if err != nil {
+			klog.V(2).Infof("unable to get address for pod: %s -- skipping iptables policy for pod "+
+				"(this is normal for pods that are not dual-stack)", err.Error())
+			continue
 		}
+
 		// add entries in pod firewall to run through applicable network policies
 		for _, policy := range networkPoliciesInfo {
 			if _, ok := policy.targetPods[pod.ip]; !ok {
@@ -187,7 +212,7 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 		// if pod does not have any network policy which applies rules for pod's ingress traffic
 		// then apply default network policy
 		if !hasIngressPolicy {
-			comment := "\"run through default ingress network policy  chain\""
+			comment := "\"run through default ingress network policy chain\""
 			args := []string{"-I", podFwChainName, "1", "-d", ip, "-m", "comment", "--comment", comment,
 				"-j", kubeDefaultNetpolChain, "\n"}
 			filterTableRules.WriteString(strings.Join(args, " "))
@@ -196,7 +221,7 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 		// if pod does not have any network policy which applies rules for pod's egress traffic
 		// then apply default network policy
 		if !hasEgressPolicy {
-			comment := "\"run through default egress network policy  chain\""
+			comment := "\"run through default egress network policy chain\""
 			args := []string{"-I", podFwChainName, "1", "-s", ip, "-m", "comment", "--comment", comment,
 				"-j", kubeDefaultNetpolChain, "\n"}
 			filterTableRules.WriteString(strings.Join(args, " "))
@@ -228,12 +253,11 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 
 func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod podInfo, podFwChainName string) {
 	for ipFamily, filterTableRules := range npc.filterTableRules {
-		var ip string
-		switch ipFamily {
-		case api.IPv4Protocol:
-			ip, _ = getPodIPv4Address(pod)
-		case api.IPv6Protocol:
-			ip, _ = getPodIPv6Address(pod)
+		ip, err := getPodIPForFamily(pod, ipFamily)
+		if err != nil {
+			klog.V(2).Infof("unable to get address for pod: %s -- skipping iptables inbound intercept "+
+				"policy for pod (this is normal for pods that are not dual-stack)", err.Error())
+			continue
 		}
 
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
@@ -266,12 +290,11 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod podInfo, podF
 // firewall chain corresponding to the pod so that egress network policies are enforced
 func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod podInfo, podFwChainName string) {
 	for ipFamily, filterTableRules := range npc.filterTableRules {
-		var ip string
-		switch ipFamily {
-		case api.IPv4Protocol:
-			ip, _ = getPodIPv4Address(pod)
-		case api.IPv6Protocol:
-			ip, _ = getPodIPv6Address(pod)
+		ip, err := getPodIPForFamily(pod, ipFamily)
+		if err != nil {
+			klog.V(2).Infof("unable to get address for pod: %s -- skipping iptables outbound intercept "+
+				"policy for pod (this is normal for pods that are not dual-stack)", err.Error())
+			continue
 		}
 
 		for _, chain := range defaultChains {
