@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/cloudnativelabs/kube-router/pkg/utils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	api "k8s.io/api/core/v1"
 	klog "k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"

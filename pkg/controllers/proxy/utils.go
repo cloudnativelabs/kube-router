@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/pkg/cri"
-	"github.com/cloudnativelabs/kube-router/pkg/utils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/cri"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"k8s.io/klog/v2"
