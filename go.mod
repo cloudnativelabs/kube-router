@@ -1,4 +1,4 @@
-module github.com/cloudnativelabs/kube-router
+module github.com/cloudnativelabs/kube-router/v2
 
 require (
 	github.com/aws/aws-sdk-go v1.45.1

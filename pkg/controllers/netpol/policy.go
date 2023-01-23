@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/pkg/metrics"
-	"github.com/cloudnativelabs/kube-router/pkg/utils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	api "k8s.io/api/core/v1"
 	networking "k8s.io/api/networking/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
