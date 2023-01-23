@@ -475,6 +475,8 @@ func (npc *NetworkPolicyController) appendRuleToPolicyChain(policyChainName, com
 func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
+	_, isIPv4Enabled := npc.ipSetHandlers[api.IPv4Protocol]
+	_, isIPv6Enabled := npc.ipSetHandlers[api.IPv6Protocol]
 
 	for _, policyObj := range npc.npLister.List() {
 
@@ -560,6 +562,18 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 						}
 					}
 					peerIPBlock := npc.evalIPBlockPeer(peer)
+
+					_, foundIPv4Addresses := peerIPBlock[api.IPv4Protocol]
+					_, foundIPv6Addresses := peerIPBlock[api.IPv6Protocol]
+					if foundIPv4Addresses && !isIPv4Enabled {
+						klog.Warningf("Ignoring IPv4 source IP blocks %s from policy %s because we are not IPv4 "+
+							"Enabled!", peerIPBlock[api.IPv4Protocol], policy.Name)
+					}
+					if foundIPv6Addresses && !isIPv6Enabled {
+						klog.Warningf("Ignoring IPv6 source IP blocks %s from policy %s because we are not IPv6 "+
+							"Enabled!", peerIPBlock[api.IPv6Protocol], policy.Name)
+					}
+
 					ingressRule.srcIPBlocks[api.IPv4Protocol] = append(
 						ingressRule.srcIPBlocks[api.IPv4Protocol],
 						peerIPBlock[api.IPv4Protocol]...,
@@ -624,6 +638,18 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 
 					}
 					peerIPBlock := npc.evalIPBlockPeer(peer)
+
+					_, foundIPv4Addresses := peerIPBlock[api.IPv4Protocol]
+					_, foundIPv6Addresses := peerIPBlock[api.IPv6Protocol]
+					if foundIPv4Addresses && !isIPv4Enabled {
+						klog.Warningf("Ignoring IPv4 dest IP blocks %s from policy %s because we are not IPv4 "+
+							"Enabled!", peerIPBlock[api.IPv4Protocol], policy.Name)
+					}
+					if foundIPv6Addresses && !isIPv6Enabled {
+						klog.Warningf("Ignoring IPv6 dest IP blocks %s from policy %s because we are not IPv6 "+
+							"Enabled!", peerIPBlock[api.IPv6Protocol], policy.Name)
+					}
+
 					egressRule.dstIPBlocks[api.IPv4Protocol] = append(
 						egressRule.dstIPBlocks[api.IPv4Protocol],
 						peerIPBlock[api.IPv4Protocol]...,
