@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudnativelabs/kube-router/pkg/utils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
 	"github.com/vishvananda/netlink/nl"
