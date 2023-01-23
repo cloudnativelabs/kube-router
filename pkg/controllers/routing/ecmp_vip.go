@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/cloudnativelabs/kube-router/pkg/utils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 
 	"strings"
 
