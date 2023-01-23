@@ -13,7 +13,7 @@ import (
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 
-	"github.com/cloudnativelabs/kube-router/pkg/utils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 )
 
 const (
