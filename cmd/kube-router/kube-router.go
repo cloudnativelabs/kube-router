@@ -10,9 +10,9 @@ import (
 	//nolint:gosec // we want to unconditionally expose pprof here for advanced troubleshooting scenarios
 	_ "net/http/pprof"
 
-	"github.com/cloudnativelabs/kube-router/pkg/cmd"
-	"github.com/cloudnativelabs/kube-router/pkg/options"
-	"github.com/cloudnativelabs/kube-router/pkg/version"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/cmd"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/version"
 	"github.com/spf13/pflag"
 	"k8s.io/klog/v2"
 )
