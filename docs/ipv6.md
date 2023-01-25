@@ -1,4 +1,4 @@
-# IPv6 / DualStack Support in kube-router
+# IPv6 / Dual-Stack Support in kube-router
 
 This document describes the current status, the plan ahead and general thoughts about IPv6 / Dual-Stack support in
 kube-router.
@@ -22,7 +22,8 @@ updated for dual-stack compatibility.
 
 We are currently running this work off of the
 [prep-v2.0 branch](https://github.com/cloudnativelabs/kube-router/tree/prep-v2.0) and, as of the time of this writing,
-have released a [release candidate]() with this some dual-stack functionality built into it.
+have released a [release candidate](https://github.com/cloudnativelabs/kube-router/releases/tag/v2.0.0-rc1) with some
+dual-stack functionality built into it.
 
 Functions that currently support dual-stack on the v2.0.0 release line:
 
@@ -89,10 +90,10 @@ Addresses:
 * Add additional `--service-cluster-ip-range` and `--service-external-ip-range` kube-router parameters for your IPv6
   addresses. Note, as mentioned before `Proxy` functionality still isn't working, but this is important for a future
   where `Proxy` functionality has been enabled.
-* If you use `--enable-cni`, `kube-controller-manager` has been started with both IPv4 and IPv6 cluster CIDRs (e.g.
-  `--cluster-cidr=10.242.0.0/16,2001:db8:42:1000::/56`)
-* `kube-controller-manager` & `kube-apiserver` have been started with both IPv4 and IPv6 service cluster IP ranges (e.g.
-  `--service-cluster-ip-range=10.96.0.0/16,2001:db8:42:1::/112`)
+* If you use `--enable-cni=true`, ensure `kube-controller-manager` has been started with both IPv4 and IPv6 cluster
+  CIDRs (e.g. `--cluster-cidr=10.242.0.0/16,2001:db8:42:1000::/56`)
+* Ensure `kube-controller-manager` & `kube-apiserver` have been started with both IPv4 and IPv6 service cluster IP
+  ranges (e.g. `--service-cluster-ip-range=10.96.0.0/16,2001:db8:42:1::/112`)
 
 ### Tunnel Name Changes (Potentially Breaking Change)
 
@@ -115,6 +116,18 @@ user's to add rules for rejecting specific routes sent to GoBGP, can only accept
 
 Attempting to add IPs of two different families will result in a GoBGP error when it attempts to import BGP policy from
 kube-router.
+
+### IPv6 & IPv4 Network Policy Ranges Will Only Work If That Family Has Been Enabled
+
+Network Policy in Kubernetes allows users to specify
+[IPBlock](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#ipblock-v1-networking-k8s-io) ranges for
+ingress and egress policies. These blocks are string-based network CIDRs and allow the user to specify any ranges that
+they wish in order to allow ingress or egress from network ranges that are not selectable using Kubernetes pod
+selectors.
+
+Currently, kube-router is only able to work with CIDRs for IP families that it has been enabled for using the
+`--enable-ipv4=true` & `--enable-ipv6=true` CLI flags. If a user adds a network policy for an IP family that kube-router
+is not enabled for, you will see a warning in your kube-router logs and no firewall rule will be added.
 
 ### kube-router.io/pod-cidr Deprecation
 
