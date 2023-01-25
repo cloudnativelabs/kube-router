@@ -36,6 +36,12 @@ The work to make dual-stack support workable in kube-router has involved a lot o
 to the code base. If you have access to a development or staging environment where you would be willing to run the
 latest v2.0.0 release candidate and give us feedback, it would be much appreciated!
 
+For any issues found with the new v2.0.0 release line, please open an issue against the kube-router project of the type:
+`Report a v2.0.0 Release Issue`
+
+If you have questions about the release, please ask in our
+[Kubernetes Slack Channel](https://kubernetes.slack.com/archives/C8DCQGTSB).
+
 While the most helpful feedback will come from users that are able to run kube-router in dual-stack mode, there have
 been enough changes, that even users that are only able to run kube-router in a single-stack mode will be able to give
 valuable feedback concerning any bugs or regressions.
@@ -121,7 +127,7 @@ in string form.
 
 It should be noted, that until `kube-router.io/pod-cidr` is fully removed, at some point in the future, it will still
 be preferred over the `kube-router.io/pod-cidrs` annotation in order to preserve as much backwards compatibility as
-possible. Until `kube-router.io/pod-cidr` has been fully retired, user's the use the old annotation will get a warning
+possible. Until `kube-router.io/pod-cidr` has been fully retired, users that use the old annotation will get a warning
 in their kube-router logs saying that they should change to the new annotation.
 
 The recommended action here, is that upon upgrade, you convert nodes from using the `kube-router.io/pod-cidr` to the new
@@ -134,7 +140,7 @@ default for most users of kube-router.
 
 ### CNI Now Accepts Multiple Pod Ranges
 
-Now that kube-router supports dual-stack, it now also supports multiple ranges in the CNI file. While kube-router will
+Now that kube-router supports dual-stack, it also supports multiple ranges in the CNI file. While kube-router will
 still add your pod CIDRs to your CNI configuration via node configuration like `kube-router.io/pod-cidr`,
 `kube-router.io/pod-cidrs`, or `.node.Spec.PodCIDRs`, you can also customize your own CNI to add additional ranges or
 plugins.
