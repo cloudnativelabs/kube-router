@@ -115,6 +115,8 @@ type NetworkRoutingController struct {
 	iptablesCmdHandlers            map[v1core.IPFamily]utils.IPTablesHandler
 	enableOverlays                 bool
 	overlayType                    string
+	overlayEncap                   string
+	overlayEncapPort               uint16
 	peerMultihopTTL                uint8
 	MetricsEnabled                 bool
 	bgpServerStarted               bool
@@ -178,14 +180,23 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 
 	// Handle ipip tunnel overlay
 	if nrc.enableOverlays {
-		klog.V(1).Info("IPIP Tunnel Overlay enabled in configuration.")
+		klog.V(1).Info("Tunnel Overlay enabled in configuration.")
 		klog.V(1).Info("Setting up overlay networking.")
 		err = nrc.enablePolicyBasedRouting()
 		if err != nil {
 			klog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 		}
+		if nrc.overlayEncap == "fou" {
+			// enable FoU module for the overlay tunnel
+			if _, err := exec.Command("modprobe", "fou").CombinedOutput(); err != nil {
+				klog.Errorf("Failed to enable FoU for tunnel overlay: %s", err.Error())
+			}
+			if _, err := exec.Command("modprobe", "fou6").CombinedOutput(); err != nil {
+				klog.Errorf("Failed to enable FoU6 for tunnel overlay: %s", err.Error())
+			}
+		}
 	} else {
-		klog.V(1).Info("IPIP Tunnel Overlay disabled in configuration.")
+		klog.V(1).Info("Tunnel Overlay disabled in configuration.")
 		klog.V(1).Info("Cleaning up old overlay networking if needed.")
 		err = nrc.disablePolicyBasedRouting()
 		if err != nil {
@@ -748,9 +759,28 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 	// an error here indicates that the tunnel didn't exist, so we need to create it, if it already exists there's
 	// nothing to do here
 	if err != nil {
-		//nolint:gocritic // we understand that we are appending to a new slice
-		cmdArgs := append(ipBase, "tunnel", "add", tunnelName, "mode", ipipMode, "local", bestIPForFamily.String(),
-			"remote", nextHop.String())
+		cmdArgs := ipBase
+		if nrc.overlayEncap == "" {
+			// Plain IPIP tunnel without any encapsulation
+			cmdArgs = append(cmdArgs, "tunnel", "add", tunnelName, "mode", ipipMode, "local", bestIPForFamily.String(),
+				"remote", nextHop.String())
+
+		} else if nrc.overlayEncap == "fou" {
+
+			cmdArgs = append(cmdArgs, "fou", "add", "port", strconv.FormatInt(int64(nrc.overlayEncapPort), 10), "ipproto", "4")
+			out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
+			if err != nil {
+				return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
+					"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
+			}
+			cmdArgs = ipBase
+			cmdArgs = append(cmdArgs,
+				"link", "add", "name", tunnelName, "type", "ipip",
+				"remote", nextHop.String(), "local", bestIPForFamily.String(),
+				"ttl", "225", "encap", "fou", "encap-sport", "auto", "encap-dport",
+				strconv.FormatInt(int64(nrc.overlayEncapPort), 10),
+				"mode", ipipMode)
+		}
 		// need to skip binding device if nrc.nodeInterface is loopback, otherwise packets never leave
 		// from egress interface to the tunnel peer.
 		if nrc.nodeInterface != "lo" {
@@ -1480,6 +1510,8 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.autoMTU = kubeRouterConfig.AutoMTU
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 	nrc.overlayType = kubeRouterConfig.OverlayType
+	nrc.overlayEncap = kubeRouterConfig.OverlayEncap
+	nrc.overlayEncapPort = kubeRouterConfig.OverlayEncapPort
 	nrc.CNIFirewallSetup = sync.NewCond(&sync.Mutex{})
 
 	nrc.bgpPort = kubeRouterConfig.BGPPort
