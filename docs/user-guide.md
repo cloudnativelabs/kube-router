@@ -79,6 +79,8 @@ Usage of kube-router:
       --metrics-port uint16                           Prometheus metrics port, (Default 0, Disabled)
       --nodeport-bindon-all-ip                        For service of NodePort type create IPVS service that listens on all IP's of the node.
       --nodes-full-mesh                               Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
+      --overlay-encap string                          Valid encapsulation types are "fou" - If set to "fou", the udp port can be specified via "overlay-encap-port"
+      --overlay-encap-port uint16                     Overlay tunnel encapsulation port (default 5555)
       --overlay-type string                           Possible values: subnet,full - When set to "subnet", the default, default "--enable-overlay=true" behavior is used. When set to "full", it changes "--enable-overlay=true" default behavior so that IP-in-IP tunneling is used for pod-to-pod networking across nodes regardless of the subnet the nodes are in. (default "subnet")
       --override-nexthop                              Override the next-hop in bgp routes sent to peers with the local ip.
       --peer-router-asns uints                        ASN numbers of the BGP peer to which cluster nodes will advertise cluster ip and node's pod cidr. (default [])
