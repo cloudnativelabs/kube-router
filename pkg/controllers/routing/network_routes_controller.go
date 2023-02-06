@@ -1099,7 +1099,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 	if grpcServer {
 		nrc.bgpServer = gobgp.NewBgpServer(
-			gobgp.GrpcListenAddress(nrc.primaryIP.String() + ":50051" + "," + "127.0.0.1:50051"))
+			gobgp.GrpcListenAddress(net.JoinHostPort(nrc.primaryIP.String(), "50051") + "," + "127.0.0.1:50051"))
 	} else {
 		nrc.bgpServer = gobgp.NewBgpServer()
 	}
