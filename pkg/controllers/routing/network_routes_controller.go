@@ -767,11 +767,16 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 
 		} else if nrc.overlayEncap == "fou" {
 
-			cmdArgs = append(cmdArgs, "fou", "add", "port", strconv.FormatInt(int64(nrc.overlayEncapPort), 10), "ipproto", "4")
+			cmdArgs = append(cmdArgs, "fou", "show")
 			out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
-			if err != nil {
-				return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
-					"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
+			if err != nil || !strings.Contains(string(out), strconv.FormatInt(int64(nrc.overlayEncapPort), 10)) {
+				cmdArgs = ipBase
+				cmdArgs = append(cmdArgs, "fou", "add", "port", strconv.FormatInt(int64(nrc.overlayEncapPort), 10), "ipproto", "4")
+				out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
+				if err != nil {
+					return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
+						"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
+				}
 			}
 			cmdArgs = ipBase
 			cmdArgs = append(cmdArgs,
