@@ -87,7 +87,7 @@ Usage of kube-router:
       --peer-router-passwords strings                 Password for authenticating against the BGP peer defined with "--peer-router-ips".
       --peer-router-passwords-file string             Path to file containing password for authenticating against the BGP peer defined with "--peer-router-ips". --peer-router-passwords will be preferred if both are set.
       --peer-router-ports uints                       The remote port of the external BGP to which all nodes will peer. If not set, default BGP port (179) will be used. (default [])
-      --router-id string                              BGP router-id. Must be specified in a ipv6 only cluster.
+      --router-id string                              BGP router-id. Must be specified in a ipv6 only cluster, "generate" can be specified to generate the router id.
       --routes-sync-period duration                   The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --run-firewall                                  Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-router                                    Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)

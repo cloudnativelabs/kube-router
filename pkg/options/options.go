@@ -203,7 +203,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The remote port of the external BGP to which all nodes will peer. If not set, default BGP "+
 			"port ("+strconv.Itoa(DefaultBgpPort)+") will be used.")
 	fs.StringVar(&s.RouterID, "router-id", "", "BGP router-id. Must be specified in a ipv6 only "+
-		"cluster.")
+		"cluster, \"generate\" can be specified to generate the router id.")
 	fs.DurationVar(&s.RoutesSyncPeriod, "routes-sync-period", s.RoutesSyncPeriod,
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.RunFirewall, "run-firewall", true,

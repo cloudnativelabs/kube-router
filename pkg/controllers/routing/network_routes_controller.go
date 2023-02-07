@@ -2,8 +2,10 @@ package routing
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"os"
 	"os/exec"
@@ -1366,9 +1368,17 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 	nrc.isIPv6Capable = len(nrc.nodeIPv6Addrs) > 0
 
-	if kubeRouterConfig.RouterID != "" {
+	switch {
+	case kubeRouterConfig.RouterID == "generate":
+		h := fnv.New32a()
+		h.Write(nrc.primaryIP)
+		hs := h.Sum32()
+		gip := make(net.IP, 4)
+		binary.BigEndian.PutUint32(gip, hs)
+		nrc.routerID = gip.String()
+	case kubeRouterConfig.RouterID != "":
 		nrc.routerID = kubeRouterConfig.RouterID
-	} else {
+	default:
 		if nrc.primaryIP.To4() == nil {
 			return nil, errors.New("router-id must be specified when primary node IP is an IPv6 address")
 		}
