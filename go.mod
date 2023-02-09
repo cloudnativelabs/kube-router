@@ -1,7 +1,7 @@
 module github.com/cloudnativelabs/kube-router
 
 require (
-	github.com/aws/aws-sdk-go v1.44.171
+	github.com/aws/aws-sdk-go v1.44.197
 	github.com/containernetworking/cni v1.1.2
 	github.com/containernetworking/plugins v1.2.0
 	github.com/coreos/go-iptables v0.6.0
@@ -9,19 +9,19 @@ require (
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.25.0
-	github.com/osrg/gobgp/v3 v3.10.0
+	github.com/osrg/gobgp/v3 v3.11.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.1
 	github.com/vishvananda/netlink v1.2.1-beta.2
-	github.com/vishvananda/netns v0.0.3
+	github.com/vishvananda/netns v0.0.4
 	golang.org/x/net v0.5.0
 	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.1
-	k8s.io/api v0.24.7
-	k8s.io/apimachinery v0.24.7
-	k8s.io/client-go v0.24.7
-	k8s.io/cri-api v0.24.7
+	k8s.io/api v0.25.6
+	k8s.io/apimachinery v0.25.6
+	k8s.io/client-go v0.25.6
+	k8s.io/cri-api v0.25.6
 	k8s.io/klog/v2 v2.80.1
 )
 
@@ -38,7 +38,7 @@ require (
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/eapache/channels v1.1.0 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/emicklei/go-restful v2.9.5+incompatible // indirect
+	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
@@ -96,11 +96,11 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.0.3 // indirect
-	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42 // indirect
-	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9 // indirect
-	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
+	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
+	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed // indirect
+	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-go 1.18
+go 1.19
