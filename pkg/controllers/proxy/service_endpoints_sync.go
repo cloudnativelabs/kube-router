@@ -626,7 +626,6 @@ func (nsc *NetworkServicesController) cleanupDSRService(fwMark uint32) error {
 
 	// All of the iptables-save output here prints FW marks in hexadecimal, if we are doing string searching, our search
 	// input needs to be in hex also
-	//nolint:gomnd // we're converting to hex here, we don't need to track this as a constant
 	fwMarkStr := strconv.FormatInt(int64(fwMark), 16)
 	for _, mangleTableRule := range mangleTableRules {
 		if strings.Contains(mangleTableRule, ipAddress) && strings.Contains(mangleTableRule, fwMarkStr) {
