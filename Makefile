@@ -17,15 +17,15 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
-DOCKER_BUILD_IMAGE?=golang:1.19.2-alpine3.16
+DOCKER_BUILD_IMAGE?=golang:1.19.5-alpine3.17
 ## These variables are used by the Dockerfile as the bases for building and creating the runtime container
 ## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
 BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
-RUNTIME_BASE?=alpine:3.16
-DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.49.0
-GOBGP_VERSION=v3.5.0
+RUNTIME_BASE?=alpine:3.17
+DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.50.1
+GOBGP_VERSION=v3.11.0
 QEMU_IMAGE?=multiarch/qemu-user-static
-GORELEASER_VERSION=v1.11.5
+GORELEASER_VERSION=v1.14.1
 MOQ_VERSION=v0.2.1
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
