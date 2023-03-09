@@ -430,6 +430,18 @@ func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() (map[v1core
 	externalBgpPeers := make([]string, 0)
 	externalBGPPeerCIDRs := make(map[v1core.IPFamily][]string)
 
+	if len(nrc.globalPeerRouters) > 0 {
+		for _, peer := range nrc.globalPeerRouters {
+			externalBgpPeers = append(externalBgpPeers, peer.Conf.NeighborAddress)
+		}
+	}
+	if len(nrc.nodePeerRouters) > 0 {
+		externalBgpPeers = append(externalBgpPeers, nrc.nodePeerRouters...)
+	}
+	if len(externalBgpPeers) == 0 {
+		return externalBGPPeerCIDRs, nil
+	}
+
 	for family, extPeerSetName := range map[v1core.IPFamily]string{
 		v1core.IPv4Protocol: externalPeerSet,
 		v1core.IPv6Protocol: externalPeerSetV6} {
@@ -438,17 +450,6 @@ func (nrc *NetworkRoutingController) addExternalBGPPeersDefinedSet() (map[v1core
 			return externalBGPPeerCIDRs, err
 		}
 
-		if len(nrc.globalPeerRouters) > 0 {
-			for _, peer := range nrc.globalPeerRouters {
-				externalBgpPeers = append(externalBgpPeers, peer.Conf.NeighborAddress)
-			}
-		}
-		if len(nrc.nodePeerRouters) > 0 {
-			externalBgpPeers = append(externalBgpPeers, nrc.nodePeerRouters...)
-		}
-		if len(externalBgpPeers) == 0 {
-			return externalBGPPeerCIDRs, nil
-		}
 		for _, peer := range externalBgpPeers {
 			ip := net.ParseIP(peer)
 			if ip == nil {
