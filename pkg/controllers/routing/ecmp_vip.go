@@ -356,16 +356,28 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 	nrc.tryHandleServiceUpdate(svc, "Updating service %s/%s triggered by endpoint update event")
 }
 
-func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) string {
-	clusterIP := ""
+func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) []string {
+	clusterIPList := make([]string, 0)
 	if svc.Spec.Type == ClusterIPST || svc.Spec.Type == NodePortST || svc.Spec.Type == LoadBalancerST {
 
 		// skip headless services
 		if !utils.ClusterIPIsNoneOrBlank(svc.Spec.ClusterIP) {
-			clusterIP = svc.Spec.ClusterIP
+			clusterIPList = append(clusterIPList, svc.Spec.ClusterIPs...)
+			// check to ensure ClusterIP is contained within ClusterIPs - This should always be the case, but we check
+			// just to make extra sure
+			clusterIPFound := false
+			for _, clusterIP := range clusterIPList {
+				if svc.Spec.ClusterIP == clusterIP {
+					clusterIPFound = true
+					break
+				}
+			}
+			if !clusterIPFound {
+				clusterIPList = append(clusterIPList, svc.Spec.ClusterIP)
+			}
 		}
 	}
-	return clusterIP
+	return clusterIPList
 }
 
 func (nrc *NetworkRoutingController) getExternalIPs(svc *v1core.Service) []string {
@@ -487,12 +499,12 @@ func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) (
 	advertisedIPList := make([]string, 0)
 	unAdvertisedIPList := make([]string, 0)
 
-	clusterIP := nrc.getClusterIP(svc)
-	if clusterIP != "" {
+	clusterIPs := nrc.getClusterIP(svc)
+	if len(clusterIPs) > 0 {
 		if nrc.shouldAdvertiseService(svc, svcAdvertiseClusterAnnotation, nrc.advertiseClusterIP) {
-			advertisedIPList = append(advertisedIPList, clusterIP)
+			advertisedIPList = append(advertisedIPList, clusterIPs...)
 		} else {
-			unAdvertisedIPList = append(unAdvertisedIPList, clusterIP)
+			unAdvertisedIPList = append(unAdvertisedIPList, clusterIPs...)
 		}
 	}
 
