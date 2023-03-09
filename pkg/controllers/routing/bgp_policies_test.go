@@ -150,7 +150,7 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.1",
+				routerID:          "10.1.0.1",
 				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
@@ -158,24 +158,24 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				nodeAsnNumber:     100,
-				podCidr:           "172.20.0.0/24",
+				podCidr:           "172.21.0.0/24",
 				isIPv4Capable:     true,
-				podIPv4CIDRs:      []string{"172.20.0.0/24"},
+				podIPv4CIDRs:      []string{"172.21.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.1",
+							NeighborAddress: "10.11.0.1",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.1.0.1",
 						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.2",
+							NeighborAddress: "10.11.0.2",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.1.0.1",
 						},
 					},
 				},
@@ -186,19 +186,19 @@ func Test_AddPolicies(t *testing.T) {
 						Name: "node-1",
 						Annotations: map[string]string{
 							"kube-router.io/node.asn":                    "100",
-							"kube-router.io/node.bgp.customimportreject": "192.168.1.0/24,192.168.3.0/24,192.168.2.0/25, 10.0.0.0/16",
+							"kube-router.io/node.bgp.customimportreject": "192.168.11.0/24,192.168.13.0/24,192.168.12.0/25, 10.1.0.0/16",
 						},
 					},
 					Status: v1core.NodeStatus{
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.2",
+								Address: "10.1.0.2",
 							},
 						},
 					},
 					Spec: v1core.NodeSpec{
-						PodCIDR: "172.20.0.0/24",
+						PodCIDR: "172.21.0.0/24",
 					},
 				},
 			},
@@ -209,8 +209,8 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        "ClusterIP",
-						ClusterIP:   "10.1.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						ClusterIP:   "10.11.0.1",
+						ExternalIPs: []string{"1.11.1.1"},
 					},
 				},
 			},
@@ -219,7 +219,7 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "172.20.0.0/24",
+						IpPrefix:      "172.21.0.0/24",
 						MaskLengthMin: 24,
 						MaskLengthMax: 24,
 					},
@@ -230,12 +230,12 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "1.1.1.1/32",
+						IpPrefix:      "1.11.1.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.1.0.1/32",
+						IpPrefix:      "10.11.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -244,34 +244,34 @@ func Test_AddPolicies(t *testing.T) {
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        externalPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.11.0.1/32", "10.11.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        allPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.11.0.1/32", "10.11.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
 				Name:        customImportRejectSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "10.0.0.0/16",
+						IpPrefix:      "10.1.0.0/16",
 						MaskLengthMin: 16,
 						MaskLengthMax: ipv4MaskMinBits,
 					},
 					{
-						IpPrefix:      "192.168.1.0/24",
+						IpPrefix:      "192.168.11.0/24",
 						MaskLengthMin: 24,
 						MaskLengthMax: ipv4MaskMinBits,
 					},
 					{
-						IpPrefix:      "192.168.2.0/25",
+						IpPrefix:      "192.168.12.0/25",
 						MaskLengthMin: 25,
 						MaskLengthMax: ipv4MaskMinBits,
 					},
 					{
-						IpPrefix:      "192.168.3.0/24",
+						IpPrefix:      "192.168.13.0/24",
 						MaskLengthMin: 24,
 						MaskLengthMax: ipv4MaskMinBits,
 					},
@@ -374,31 +374,31 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.1",
+				routerID:          "10.2.0.1",
 				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: true,
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
-				podCidr:           "172.20.0.0/24",
+				podCidr:           "172.22.0.0/24",
 				isIPv4Capable:     true,
-				podIPv4CIDRs:      []string{"172.20.0.0/24"},
+				podIPv4CIDRs:      []string{"172.22.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.1",
+							NeighborAddress: "10.12.0.1",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.2.0.1",
 						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.2",
+							NeighborAddress: "10.12.0.2",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.2.0.1",
 						},
 					},
 				},
@@ -416,12 +416,12 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.2",
+								Address: "10.2.0.2",
 							},
 						},
 					},
 					Spec: v1core.NodeSpec{
-						PodCIDR: "172.20.0.0/24",
+						PodCIDR: "172.22.0.0/24",
 					},
 				},
 			},
@@ -432,8 +432,8 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.1.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						ClusterIP:   "10.12.0.1",
+						ExternalIPs: []string{"1.12.1.1"},
 					},
 				},
 			},
@@ -442,7 +442,7 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "172.20.0.0/24",
+						IpPrefix:      "172.22.0.0/24",
 						MaskLengthMin: 24,
 						MaskLengthMax: 24,
 					},
@@ -453,12 +453,12 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "1.1.1.1/32",
+						IpPrefix:      "1.12.1.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.1.0.1/32",
+						IpPrefix:      "10.12.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -467,12 +467,12 @@ func Test_AddPolicies(t *testing.T) {
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        externalPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.12.0.1/32", "10.12.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        allPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.12.0.1/32", "10.12.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
@@ -559,31 +559,31 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.1",
+				routerID:          "10.3.0.1",
 				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
 				bgpEnableInternal: false,
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
-				podCidr:           "172.20.0.0/24",
+				podCidr:           "172.23.0.0/24",
 				isIPv4Capable:     true,
-				podIPv4CIDRs:      []string{"172.20.0.0/24"},
+				podIPv4CIDRs:      []string{"172.23.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.1",
+							NeighborAddress: "10.13.0.1",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.3.0.1",
 						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.2",
+							NeighborAddress: "10.13.0.2",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.3.0.1",
 						},
 					},
 				},
@@ -601,12 +601,12 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.2",
+								Address: "10.3.0.2",
 							},
 						},
 					},
 					Spec: v1core.NodeSpec{
-						PodCIDR: "172.20.0.0/24",
+						PodCIDR: "172.23.0.0/24",
 					},
 				},
 			},
@@ -617,8 +617,8 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.1.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						ClusterIP:   "10.13.0.1",
+						ExternalIPs: []string{"1.13.1.1"},
 					},
 				},
 			},
@@ -627,7 +627,7 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "172.20.0.0/24",
+						IpPrefix:      "172.23.0.0/24",
 						MaskLengthMin: 24,
 						MaskLengthMax: 24,
 					},
@@ -638,12 +638,12 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "1.1.1.1/32",
+						IpPrefix:      "1.13.1.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.1.0.1/32",
+						IpPrefix:      "10.13.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -652,12 +652,12 @@ func Test_AddPolicies(t *testing.T) {
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        externalPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.13.0.1/32", "10.13.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        allPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.13.0.1/32", "10.13.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
@@ -727,31 +727,31 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.1",
+				routerID:          "10.4.0.1",
 				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpEnableInternal: true,
 				bgpFullMeshMode:   false,
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
-				podCidr:           "172.20.0.0/24",
+				podCidr:           "172.24.0.0/24",
 				isIPv4Capable:     true,
-				podIPv4CIDRs:      []string{"172.20.0.0/24"},
+				podIPv4CIDRs:      []string{"172.24.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.1",
+							NeighborAddress: "10.14.0.1",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.4.0.1",
 						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.2",
+							NeighborAddress: "10.14.0.2",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.4.0.1",
 						},
 					},
 				},
@@ -771,12 +771,12 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.2",
+								Address: "10.4.0.2",
 							},
 						},
 					},
 					Spec: v1core.NodeSpec{
-						PodCIDR: "172.20.0.0/24",
+						PodCIDR: "172.24.0.0/24",
 					},
 				},
 			},
@@ -787,8 +787,8 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.1.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						ClusterIP:   "10.14.0.1",
+						ExternalIPs: []string{"1.14.1.1"},
 					},
 				},
 			},
@@ -797,7 +797,7 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "172.20.0.0/24",
+						IpPrefix:      "172.24.0.0/24",
 						MaskLengthMin: 24,
 						MaskLengthMax: 24,
 					},
@@ -808,12 +808,12 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "1.1.1.1/32",
+						IpPrefix:      "1.14.1.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.1.0.1/32",
+						IpPrefix:      "10.14.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -822,12 +822,12 @@ func Test_AddPolicies(t *testing.T) {
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        externalPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.14.0.1/32", "10.14.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        allPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.14.0.1/32", "10.14.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
@@ -918,31 +918,31 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.1",
+				routerID:          "10.5.0.1",
 				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpEnableInternal: true,
 				bgpFullMeshMode:   false,
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
-				podCidr:           "172.20.0.0/24",
+				podCidr:           "172.25.0.0/24",
 				isIPv4Capable:     true,
-				podIPv4CIDRs:      []string{"172.20.0.0/24"},
+				podIPv4CIDRs:      []string{"172.25.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.1",
+							NeighborAddress: "10.15.0.1",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.5.0.1",
 						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.2",
+							NeighborAddress: "10.15.0.2",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.5.0.1",
 						},
 					},
 				},
@@ -961,12 +961,12 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.2",
+								Address: "10.5.0.2",
 							},
 						},
 					},
 					Spec: v1core.NodeSpec{
-						PodCIDR: "172.20.0.0/24",
+						PodCIDR: "172.25.0.0/24",
 					},
 				},
 			},
@@ -977,8 +977,8 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.1.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						ClusterIP:   "10.15.0.1",
+						ExternalIPs: []string{"1.15.1.1"},
 					},
 				},
 			},
@@ -987,7 +987,7 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "172.20.0.0/24",
+						IpPrefix:      "172.25.0.0/24",
 						MaskLengthMin: 24,
 						MaskLengthMax: 24,
 					},
@@ -998,12 +998,12 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "1.1.1.1/32",
+						IpPrefix:      "1.15.1.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.1.0.1/32",
+						IpPrefix:      "10.15.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -1012,12 +1012,12 @@ func Test_AddPolicies(t *testing.T) {
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        externalPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.15.0.1/32", "10.15.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        allPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.15.0.1/32", "10.15.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
@@ -1108,7 +1108,7 @@ func Test_AddPolicies(t *testing.T) {
 			&NetworkRoutingController{
 				clientset:         fake.NewSimpleClientset(),
 				hostnameOverride:  "node-1",
-				routerID:          "10.0.0.1",
+				routerID:          "10.6.0.1",
 				localAddressList:  []string{"0.0.0.0"},
 				bgpPort:           10000,
 				bgpFullMeshMode:   false,
@@ -1116,24 +1116,24 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				advertisePodCidr:  true,
 				activeNodes:       make(map[string]bool),
-				podCidr:           "172.20.0.0/24",
+				podCidr:           "172.26.0.0/24",
 				isIPv4Capable:     true,
-				podIPv4CIDRs:      []string{"172.20.0.0/24"},
+				podIPv4CIDRs:      []string{"172.26.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.1",
+							NeighborAddress: "10.16.0.1",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.6.0.1",
 						},
 					},
 					{
 						Conf: &gobgpapi.PeerConf{
-							NeighborAddress: "10.10.0.2",
+							NeighborAddress: "10.16.0.2",
 						},
 						Transport: &gobgpapi.Transport{
-							LocalAddress: "10.0.0.1",
+							LocalAddress: "10.6.0.1",
 						},
 					},
 				},
@@ -1152,12 +1152,12 @@ func Test_AddPolicies(t *testing.T) {
 						Addresses: []v1core.NodeAddress{
 							{
 								Type:    v1core.NodeInternalIP,
-								Address: "10.0.0.2",
+								Address: "10.6.0.2",
 							},
 						},
 					},
 					Spec: v1core.NodeSpec{
-						PodCIDR: "172.20.0.0/24",
+						PodCIDR: "172.26.0.0/24",
 					},
 				},
 			},
@@ -1168,8 +1168,8 @@ func Test_AddPolicies(t *testing.T) {
 					},
 					Spec: v1core.ServiceSpec{
 						Type:        ClusterIPST,
-						ClusterIP:   "10.1.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						ClusterIP:   "10.16.0.1",
+						ExternalIPs: []string{"1.16.1.1"},
 					},
 				},
 			},
@@ -1178,7 +1178,7 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "172.20.0.0/24",
+						IpPrefix:      "172.26.0.0/24",
 						MaskLengthMin: 24,
 						MaskLengthMax: 24,
 					},
@@ -1189,12 +1189,12 @@ func Test_AddPolicies(t *testing.T) {
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
-						IpPrefix:      "1.1.1.1/32",
+						IpPrefix:      "1.16.1.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
 					{
-						IpPrefix:      "10.1.0.1/32",
+						IpPrefix:      "10.16.0.1/32",
 						MaskLengthMin: 32,
 						MaskLengthMax: 32,
 					},
@@ -1203,12 +1203,12 @@ func Test_AddPolicies(t *testing.T) {
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        externalPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.16.0.1/32", "10.16.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
 				Name:        allPeerSet,
-				List:        []string{"10.10.0.1/32", "10.10.0.2/32"},
+				List:        []string{"10.16.0.1/32", "10.16.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
 				DefinedType: gobgpapi.DefinedType_PREFIX,
