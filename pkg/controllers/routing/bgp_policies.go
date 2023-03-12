@@ -213,7 +213,7 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 			return currentPrefixes[i].IpPrefix < currentPrefixes[j].IpPrefix
 		})
 		if reflect.DeepEqual(advIPPrefixList, currentPrefixes) {
-			return nil
+			continue
 		}
 		toAdd := make([]*gobgpapi.Prefix, 0)
 		toDelete := make([]*gobgpapi.Prefix, 0)
@@ -376,7 +376,7 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() (map[v1core.IPFami
 		sort.Strings(iBGPPeerCIDRs[family])
 		sort.Strings(currentCIDRs)
 		if reflect.DeepEqual(iBGPPeerCIDRs, currentCIDRs) {
-			return iBGPPeerCIDRs, nil
+			continue
 		}
 		toAdd := make([]string, 0)
 		toDelete := make([]string, 0)
