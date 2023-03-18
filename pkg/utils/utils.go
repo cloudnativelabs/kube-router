@@ -75,3 +75,14 @@ func ContainsIPv6Address(addrs []string) bool {
 	}
 	return false
 }
+
+// SliceContainsString checks to see if needle is contained within haystack, returns true if found, otherwise
+// returns false
+func SliceContainsString(needle string, haystack []string) bool {
+	for _, hay := range haystack {
+		if needle == hay {
+			return true
+		}
+	}
+	return false
+}
