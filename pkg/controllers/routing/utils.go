@@ -86,6 +86,37 @@ func stringSliceB64Decode(s []string) ([]string, error) {
 	return ss, nil
 }
 
+func statementsEqualByName(a, b []*gobgpapi.Statement) bool {
+	// First a is in the outer loop ensuring that all members of a are in b
+	for _, st1 := range a {
+		st1Found := false
+		for _, st2 := range b {
+			if st1.Name == st2.Name {
+				st1Found = true
+			}
+		}
+		if !st1Found {
+			return false
+		}
+	}
+
+	// Second b is in the outer loop ensuring that all members of b are in a
+	for _, st1 := range b {
+		st1Found := false
+		for _, st2 := range a {
+			if st1.Name == st2.Name {
+				st1Found = true
+			}
+		}
+		if !st1Found {
+			return false
+		}
+	}
+
+	// If we've made it through both loops then we know that the statements arrays are equal
+	return true
+}
+
 func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
 	links, err := netlink.LinkList()
 	if err != nil {
