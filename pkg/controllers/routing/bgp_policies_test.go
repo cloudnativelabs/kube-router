@@ -1431,7 +1431,7 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 	}
 
 	err := testcase.nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{}, func(policy *gobgpapi.Policy) {
-		if policy.Name == "kube_router_"+direction {
+		if policy.Name == "kube_router_"+direction+"1" {
 			policyExists = true
 		}
 	})
@@ -1446,7 +1446,7 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 	err = testcase.nrc.bgpServer.ListPolicyAssignment(context.Background(), &gobgpapi.ListPolicyAssignmentRequest{}, func(policyAssignment *gobgpapi.PolicyAssignment) {
 		if policyAssignment.Name == "global" && policyAssignment.Direction == gobgpDirection {
 			for _, policy := range policyAssignment.Policies {
-				if policy.Name == "kube_router_"+direction {
+				if policy.Name == "kube_router_"+direction+"1" {
 					policyAssignmentExists = true
 				}
 			}
