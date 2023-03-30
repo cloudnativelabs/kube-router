@@ -2183,7 +2183,7 @@ func (nsc *NetworkServicesController) handleEndpointsAdd(obj interface{}) {
 }
 
 func (nsc *NetworkServicesController) handleEndpointsUpdate(oldObj, newObj interface{}) {
-	_, ok := oldObj.(*api.Endpoints)
+	oldEndpoints, ok := oldObj.(*api.Endpoints)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", oldObj)
 		return
@@ -2193,6 +2193,13 @@ func (nsc *NetworkServicesController) handleEndpointsUpdate(oldObj, newObj inter
 		klog.Errorf("unexpected object type: %v", newObj)
 		return
 	}
+
+	// validate if the endpoints subset has changed (the only relevant part to generate the ipvs services)
+	if reflect.DeepEqual(oldEndpoints.Subsets, newEndpoints.Subsets) {
+		// Subet was not updated, ignore the update
+		return
+	}
+
 	nsc.OnEndpointsUpdate(newEndpoints)
 }
 
