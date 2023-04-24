@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	DefaultBgpPort                = 179
-	DefaultBgpHoldTime            = 90 * time.Second
-	defaultHealthCheckPort        = 20244
-	defaultOverlayTunnelEncapPort = 5555
+	DefaultBgpPort                       = 179
+	DefaultBgpHoldTime                   = 90 * time.Second
+	defaultHealthCheckPort               = 20244
+	defaultOverlayTunnelEncapPort uint16 = 5555
 )
 
 type KubeRouterConfig struct {
@@ -183,11 +183,11 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
-	fs.StringVar(&s.OverlayEncap, "overlay-encap", s.OverlayEncap,
-		"Valid encapsulation types are \"fou\" - "+
-			"If set to \"fou\", the udp port can be specified via \"overlay-encap-port\"")
-	fs.Uint16Var(&s.OverlayEncapPort, "overlay-encap-port", uint16(defaultOverlayTunnelEncapPort),
-		"Overlay tunnel encapsulation port")
+	fs.StringVar(&s.OverlayEncap, "overlay-encap", "ipip",
+		"Valid encapsulation types are \"ipip\" or \"fou\" "+
+			"(if set to \"fou\", the udp port can be specified via \"overlay-encap-port\")")
+	fs.Uint16Var(&s.OverlayEncapPort, "overlay-encap-port", defaultOverlayTunnelEncapPort,
+		"Overlay tunnel encapsulation port (only used for \"fou\" encapsulation)")
 	fs.StringVar(&s.OverlayType, "overlay-type", s.OverlayType,
 		"Possible values: subnet,full - "+
 			"When set to \"subnet\", the default, default \"--enable-overlay=true\" behavior is used. "+

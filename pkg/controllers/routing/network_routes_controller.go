@@ -73,6 +73,12 @@ const (
 	ipv4MaskMinBits         = 32
 	// Taken from: https://github.com/torvalds/linux/blob/master/include/uapi/linux/rtnetlink.h#L284
 	zebraRouteOriginator = 0x11
+
+	encapTypeFOU  = "fou"
+	encapTypeIPIP = "ipip"
+
+	maxPort = uint16(65535)
+	minPort = uint16(1024)
 )
 
 // NetworkRoutingController is struct to hold necessary information required by controller
@@ -741,15 +747,18 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 
 	var bestIPForFamily net.IP
 	var ipipMode string
+	var ipProto string
 	ipBase := make([]string, 0)
 	if nextHop.To4() != nil {
 		bestIPForFamily = utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
 		ipipMode = "ipip"
+		ipProto = "4"
 	} else {
 		// Need to activate the ip command in IPv6 mode
 		ipBase = append(ipBase, "-6")
 		bestIPForFamily = utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
 		ipipMode = "ip6ip6"
+		ipProto = "6"
 	}
 	if nil == bestIPForFamily {
 		return nil, fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
@@ -760,32 +769,37 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 	// nothing to do here
 	if err != nil {
 		cmdArgs := ipBase
-		if nrc.overlayEncap == "" {
+		switch nrc.overlayEncap {
+		case "ipip":
 			// Plain IPIP tunnel without any encapsulation
 			cmdArgs = append(cmdArgs, "tunnel", "add", tunnelName, "mode", ipipMode, "local", bestIPForFamily.String(),
 				"remote", nextHop.String())
+		case "fou":
+			strFormattedEncapPort := strconv.FormatInt(int64(nrc.overlayEncapPort), 10)
 
-		} else if nrc.overlayEncap == "fou" {
-
+			// Ensure that the FOU tunnel port is set correctly
 			cmdArgs = append(cmdArgs, "fou", "show")
 			out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
-			if err != nil || !strings.Contains(string(out), strconv.FormatInt(int64(nrc.overlayEncapPort), 10)) {
-				cmdArgs = ipBase
-				cmdArgs = append(cmdArgs, "fou", "add", "port", strconv.FormatInt(int64(nrc.overlayEncapPort), 10), "ipproto", "4")
+			if err != nil || !strings.Contains(string(out), strFormattedEncapPort) {
+				//nolint:gocritic // we understand that we are appending to a new slice
+				cmdArgs = append(ipBase, "fou", "add", "port", strFormattedEncapPort, "ipproto", ipProto)
 				out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
 				if err != nil {
 					return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
 						"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
 				}
 			}
-			cmdArgs = ipBase
-			cmdArgs = append(cmdArgs,
-				"link", "add", "name", tunnelName, "type", "ipip",
-				"remote", nextHop.String(), "local", bestIPForFamily.String(),
-				"ttl", "225", "encap", "fou", "encap-sport", "auto", "encap-dport",
-				strconv.FormatInt(int64(nrc.overlayEncapPort), 10),
-				"mode", ipipMode)
+
+			// Prep IPIP tunnel for FOU encapsulation
+			//nolint:gocritic // we understand that we are appending to a new slice
+			cmdArgs = append(ipBase, "link", "add", "name", tunnelName, "type", "ipip", "remote", nextHop.String(),
+				"local", bestIPForFamily.String(), "ttl", "225", "encap", "fou", "encap-sport", "auto", "encap-dport",
+				strFormattedEncapPort, "mode", ipipMode)
+		default:
+			return nil, fmt.Errorf("unknown tunnel encapsulation was passed: %s, unable to continue with overlay "+
+				"setup", nrc.overlayEncap)
 		}
+
 		// need to skip binding device if nrc.nodeInterface is loopback, otherwise packets never leave
 		// from egress interface to the tunnel peer.
 		if nrc.nodeInterface != "lo" {
@@ -1516,7 +1530,17 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 	nrc.overlayType = kubeRouterConfig.OverlayType
 	nrc.overlayEncap = kubeRouterConfig.OverlayEncap
+	switch nrc.overlayEncap {
+	case encapTypeIPIP:
+	case encapTypeFOU:
+	default:
+		return nil, fmt.Errorf("unknown --overlay-encap option '%s' selected, unable to continue", nrc.overlayEncap)
+	}
 	nrc.overlayEncapPort = kubeRouterConfig.OverlayEncapPort
+	if nrc.overlayEncapPort > maxPort || nrc.overlayEncapPort < minPort {
+		return nil, fmt.Errorf("specified encap port is out of range of valid ports: %d, valid range is from %d to %d",
+			nrc.overlayEncapPort, minPort, maxPort)
+	}
 	nrc.CNIFirewallSetup = sync.NewCond(&sync.Mutex{})
 
 	nrc.bgpPort = kubeRouterConfig.BGPPort
