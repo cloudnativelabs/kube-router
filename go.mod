@@ -9,7 +9,7 @@ require (
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.27.6
-	github.com/osrg/gobgp/v3 v3.13.0
+	github.com/osrg/gobgp/v3 v3.14.0
 	github.com/prometheus/client_golang v1.15.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.2
