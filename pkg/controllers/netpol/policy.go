@@ -859,7 +859,8 @@ func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPort
 					protocolAndPort: protocolAndPort{port: containerPort, protocol: protocol},
 				}
 			} else {
-				eps.ips = ips
+				eps.ips[api.IPv4Protocol] = append(eps.ips[api.IPv4Protocol], ips[api.IPv4Protocol]...)
+				eps.ips[api.IPv6Protocol] = append(eps.ips[api.IPv6Protocol], ips[api.IPv6Protocol]...)
 			}
 		}
 	}
