@@ -262,7 +262,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 			}
 		}
 
-		if len(ingressRule.srcIPBlocks) != 0 {
+		if len(ingressRule.srcIPBlocks[ipFamily]) != 0 {
 			srcIPBlockIPSetName := policyIndexedSourceIPBlockIPSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[srcIPBlockIPSetName] = true
 			npc.ipSetHandlers[ipFamily].RefreshSet(srcIPBlockIPSetName, ingressRule.srcIPBlocks[ipFamily], utils.TypeHashNet)
@@ -407,7 +407,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 			}
 		}
 
-		if len(egressRule.dstIPBlocks) != 0 {
+		if len(egressRule.dstIPBlocks[ipFamily]) != 0 {
 			dstIPBlockIPSetName := policyIndexedDestinationIPBlockIPSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[dstIPBlockIPSetName] = true
 			npc.ipSetHandlers[ipFamily].RefreshSet(dstIPBlockIPSetName, egressRule.dstIPBlocks[ipFamily], utils.TypeHashNet)
