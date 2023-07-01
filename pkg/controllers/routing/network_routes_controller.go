@@ -77,6 +77,9 @@ const (
 	encapTypeFOU  = "fou"
 	encapTypeIPIP = "ipip"
 
+	ipipModev4 = "ipip"
+	ipipModev6 = "ip6ip6"
+
 	maxPort = uint16(65535)
 	minPort = uint16(1024)
 )
@@ -656,7 +659,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	// if the user has disabled overlays, don't create tunnels. If we're not creating a tunnel, check to see if there is
 	// any cleanup that needs to happen.
 	if shouldCreateTunnel() {
-		link, err = nrc.setupOverlayTunnel(tunnelName, nextHop)
+		link, err = nrc.setupOverlayTunnel(tunnelName, nextHop, dst)
 		if err != nil {
 			return err
 		}
@@ -741,49 +744,93 @@ func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet,
 }
 
 // setupOverlayTunnel attempts to create a tunnel link and corresponding routes for IPIP based overlay networks
-func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextHop net.IP) (netlink.Link, error) {
+func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextHop net.IP,
+	nextHopSubnet *net.IPNet) (netlink.Link, error) {
 	var out []byte
 	link, err := netlink.LinkByName(tunnelName)
 
 	var bestIPForFamily net.IP
-	var ipipMode string
-	var ipProto string
+	var ipipMode, fouLinkType string
+	isIPv6 := false
 	ipBase := make([]string, 0)
+	strFormattedEncapPort := strconv.FormatInt(int64(nrc.overlayEncapPort), 10)
+
 	if nextHop.To4() != nil {
 		bestIPForFamily = utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
-		ipipMode = "ipip"
-		ipProto = "4"
+		ipipMode = encapTypeIPIP
+		fouLinkType = ipipModev4
 	} else {
 		// Need to activate the ip command in IPv6 mode
 		ipBase = append(ipBase, "-6")
 		bestIPForFamily = utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
-		ipipMode = "ip6ip6"
-		ipProto = "6"
+		ipipMode = ipipModev6
+		fouLinkType = "ip6tnl"
+		isIPv6 = true
 	}
 	if nil == bestIPForFamily {
 		return nil, fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
 			"IP family: %s", nextHop.String())
 	}
 
+	// This indicated that the tunnel already exists, so it's possible that there might be nothing more needed. However,
+	// it is also possible that the user changed the encap type, so we need to make sure that the encap type matches
+	// and if it doesn't, create it
+	recreate := false
+	if err == nil {
+		klog.V(1).Infof("Tunnel interface: %s with encap type %s for the node %s already exists.",
+			tunnelName, link.Attrs().EncapType, nextHop.String())
+
+		switch nrc.overlayEncap {
+		case encapTypeIPIP:
+			if linkFOUEnabled(tunnelName) {
+				klog.Infof("Was configured to use ipip tunnels, but found existing fou tunnels in place, cleaning up")
+				recreate = true
+
+				// Even though we are setup for IPIP tunels we have existing tunnels that are FoU tunnels, remove them
+				// so that we can recreate them as IPIP
+				nrc.cleanupTunnel(nextHopSubnet, tunnelName)
+
+				// If we are transitioning from FoU to IPIP we also need to clean up the old FoU port if it exists
+				if fouPortAndProtoExist(nrc.overlayEncapPort, isIPv6) {
+					fouArgs := ipBase
+					fouArgs = append(fouArgs, "fou", "del", "port", strFormattedEncapPort)
+					out, err := exec.Command("ip", fouArgs...).CombinedOutput()
+					if err != nil {
+						klog.Warningf("failed to clean up previous FoU tunnel port (this is only a warning because it "+
+							"won't stop kube-router from working for now, but still shouldn't have happened) - error: "+
+							"%v, output %s", err, out)
+					}
+				}
+			}
+		case encapTypeFOU:
+			if !linkFOUEnabled(tunnelName) {
+				klog.Infof("Was configured to use fou tunnels, but found existing ipip tunnels in place, cleaning up")
+				recreate = true
+				// Even though we are setup for FoU tunels we have existing tunnels that are IPIP tunnels, remove them
+				// so that we can recreate them as IPIP
+				nrc.cleanupTunnel(nextHopSubnet, tunnelName)
+			}
+		}
+	}
+
 	// an error here indicates that the tunnel didn't exist, so we need to create it, if it already exists there's
 	// nothing to do here
-	if err != nil {
+	if err != nil || recreate {
+		klog.Infof("Creating tunnel %s of type %s with encap %s for destination %s",
+			tunnelName, fouLinkType, nrc.overlayEncap, nextHop.String())
 		cmdArgs := ipBase
 		switch nrc.overlayEncap {
-		case "ipip":
+		case encapTypeIPIP:
 			// Plain IPIP tunnel without any encapsulation
 			cmdArgs = append(cmdArgs, "tunnel", "add", tunnelName, "mode", ipipMode, "local", bestIPForFamily.String(),
 				"remote", nextHop.String())
-		case "fou":
-			strFormattedEncapPort := strconv.FormatInt(int64(nrc.overlayEncapPort), 10)
 
+		case encapTypeFOU:
 			// Ensure that the FOU tunnel port is set correctly
-			cmdArgs = append(cmdArgs, "fou", "show")
-			out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
-			if err != nil || !strings.Contains(string(out), strFormattedEncapPort) {
-				//nolint:gocritic // we understand that we are appending to a new slice
-				cmdArgs = append(ipBase, "fou", "add", "port", strFormattedEncapPort, "ipproto", ipProto)
-				out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
+			if !fouPortAndProtoExist(nrc.overlayEncapPort, isIPv6) {
+				fouArgs := ipBase
+				fouArgs = append(fouArgs, "fou", "add", "port", strFormattedEncapPort, "gue")
+				out, err := exec.Command("ip", fouArgs...).CombinedOutput()
 				if err != nil {
 					return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
 						"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
@@ -791,10 +838,10 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 			}
 
 			// Prep IPIP tunnel for FOU encapsulation
-			//nolint:gocritic // we understand that we are appending to a new slice
-			cmdArgs = append(ipBase, "link", "add", "name", tunnelName, "type", "ipip", "remote", nextHop.String(),
-				"local", bestIPForFamily.String(), "ttl", "225", "encap", "fou", "encap-sport", "auto", "encap-dport",
+			cmdArgs = append(cmdArgs, "link", "add", "name", tunnelName, "type", fouLinkType, "remote", nextHop.String(),
+				"local", bestIPForFamily.String(), "ttl", "225", "encap", "gue", "encap-sport", "auto", "encap-dport",
 				strFormattedEncapPort, "mode", ipipMode)
+
 		default:
 			return nil, fmt.Errorf("unknown tunnel encapsulation was passed: %s, unable to continue with overlay "+
 				"setup", nrc.overlayEncap)
@@ -821,9 +868,6 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 		if err = netlink.LinkSetUp(link); err != nil {
 			return nil, errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
 		}
-	} else {
-		klog.V(1).Infof(
-			"Tunnel interface: " + tunnelName + " for the node " + nextHop.String() + " already exists.")
 	}
 
 	// Now that the tunnel link exists, we need to add a route to it, so the node knows where to send traffic bound for
