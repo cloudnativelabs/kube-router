@@ -1,11 +1,13 @@
 package routing
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -323,4 +325,82 @@ func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet u
 	}
 	err = fmt.Errorf("could not convert IP to IPv4 or IPv6, unable to find subnet for: %s", vip)
 	return
+}
+
+// fouPortAndProtoExist checks to see if the given FoU port is already configured on the system via iproute2
+// tooling for the given protocol
+//
+// fou show, shows both IPv4 and IPv6 ports in the same show command, they look like:
+// port 5556 gue
+// port 5556 gue -6
+// where the only thing that distinguishes them is the -6 or not on the end
+// WARNING we're parsing a CLI tool here not an API, this may break at some point in the future
+func fouPortAndProtoExist(port uint16, isIPv6 bool) bool {
+	const ipRoute2IPv6Prefix = "-6"
+	strPort := strconv.FormatInt(int64(port), 10)
+	fouArgs := make([]string, 0)
+	klog.V(2).Infof("Checking FOU Port and Proto... %s - %t", strPort, isIPv6)
+
+	if isIPv6 {
+		fouArgs = append(fouArgs, ipRoute2IPv6Prefix)
+	}
+	fouArgs = append(fouArgs, "fou", "show")
+
+	out, err := exec.Command("ip", fouArgs...).CombinedOutput()
+	// iproute2 returns an error if no fou configuration exists
+	if err != nil {
+		return false
+	}
+
+	strOut := string(out)
+	klog.V(2).Infof("Combined output of ip fou show: %s", strOut)
+	scanner := bufio.NewScanner(strings.NewReader(strOut))
+
+	// loop over all lines of output
+	for scanner.Scan() {
+		scannedLine := scanner.Text()
+		// if the output doesn't contain our port at all, then continue
+		if !strings.Contains(scannedLine, strPort) {
+			continue
+		}
+
+		// if this is IPv6 port and it has the correct IPv6 suffix (see example above) then return true
+		if isIPv6 && strings.HasSuffix(scannedLine, ipRoute2IPv6Prefix) {
+			return true
+		}
+
+		// if this is not IPv6 and it does not have an IPv6 suffix (see example above) then return true
+		if !isIPv6 && !strings.HasSuffix(scannedLine, ipRoute2IPv6Prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// linkFOUEnabled checks to see whether the given link has FoU (Foo over Ethernet) enabled on it, specifically since
+// kube-router only works with GUE (Generic UDP Encapsulation) we look for that and not just FoU in general. If the
+// linkName is enabled with FoU GUE then we return true, otherwise false
+//
+// Output for a FoU Enabled GUE tunnel looks like:
+// ipip ipip remote <ip> local <ip> dev <dev> ttl 225 pmtudisc encap gue encap-sport auto encap-dport 5555 ...
+// Output for a normal IPIP tunnel looks like:
+// ipip ipip remote <ip> local <ip> dev <dev> ttl inherit ...
+func linkFOUEnabled(linkName string) bool {
+	const fouEncapEnabled = "encap gue"
+	cmdArgs := []string{"-details", "link", "show", linkName}
+
+	out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
+
+	if err != nil {
+		klog.Warning("recevied an error while trying to look at the link details of %s, this shouldn't have happened",
+			linkName)
+		return false
+	}
+
+	if strings.Contains(string(out), fouEncapEnabled) {
+		return true
+	}
+
+	return false
 }

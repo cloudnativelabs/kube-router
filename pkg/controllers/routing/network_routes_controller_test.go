@@ -1996,11 +1996,7 @@ func Test_generateTunnelName(t *testing.T) {
 			tunnelName := generateTunnelName(testcase.nodeIP)
 			assert.Lessf(t, len(tunnelName), 16, "the maximum length of the tunnel name should never exceed"+
 				"15 characters as 16 characters is the maximum length of a Unix interface name")
-			if tunnelName != testcase.tunnelName {
-				t.Logf("actual tunnel interface name: %s", tunnelName)
-				t.Logf("expected tunnel interface name: %s", testcase.tunnelName)
-				t.Error("did not get expected tunnel interface name")
-			}
+			assert.Equal(t, testcase.tunnelName, tunnelName, "did not get expected tunnel interface name")
 		})
 	}
 }
