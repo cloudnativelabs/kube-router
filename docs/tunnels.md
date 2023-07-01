@@ -37,3 +37,16 @@ in order to support both IPv4 and IPv6 FoU tunnels. This option can be enabled v
 
 Unfortunately, Azure doesn't allow IPIP encapsulation on their network. So users that want to use an overlay network
 will need to enable `fou` support in order to deploy kube-router in an Azure environment.
+
+## Changing Between Tunnel Types in a Live Cluster
+
+While it is possible to change a running cluster between `ipip` and `fou` type tunnels, administrators should beware
+that during the rollout it will cause pod-to-pod traffic to be dropped between nodes. Since, in almost all rollout
+scenarios, kube-router would be rolled out gracefully one pod or host to the next, during this rollout there will be
+mismatches between the encapsulation support between the two nodes as invariably one node will have an upgraded
+kube-router and another node may have a previous deployment.
+
+When this happens, they will have conflicting encapsulation setup on their tunnels and traffic will not be able to be
+sent between the two nodes until they are using a consistent encapsulation protocal between them.
+
+Once all nodes have upgraded with the destination configuration, pod-to-pod traffic patterns should return to normal.
