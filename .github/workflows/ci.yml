@@ -16,6 +16,8 @@ env:
   BUILDTIME_BASE: "golang:1.19.5-alpine3.17"
   RUNTIME_BASE: "alpine:3.17"
   GO_VERSION: "~1.19.5"
+  GO_CACHE: "/home/runner/.cache/go-build"
+  GO_MOD_CACHE: "/home/runner/go/pkg/mod"
 
 jobs:
   # Runs Golangci-lint on the source code
