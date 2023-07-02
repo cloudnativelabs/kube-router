@@ -20,6 +20,8 @@ BUILD_IN_DOCKER?=true
 DOCKER_BUILD_IMAGE?=golang:1.19.5-alpine3.17
 ## These variables are used by the Dockerfile as the bases for building and creating the runtime container
 ## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
+GO_CACHE?=$(shell go env GOCACHE)
+GO_MOD_CACHE?=$(shell go env GOMODCACHE)
 BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 RUNTIME_BASE?=alpine:3.17
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.50.1
@@ -54,24 +56,29 @@ all: lint test kube-router container ## Default target. Lints code, runs tests, 
 kube-router:
 	@echo Starting kube-router binary build.
 ifeq "$(BUILD_IN_DOCKER)" "true"
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-	    sh -c \
-	    'GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
-	    -ldflags "-X github.com/cloudnativelabs/kube-router/pkg/version.Version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/version.BuildDate=$(BUILD_DATE)" \
-	    -o kube-router cmd/kube-router/kube-router.go'
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+		sh -c \
+		'GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
+		-ldflags "-X github.com/cloudnativelabs/kube-router/pkg/version.Version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/version.BuildDate=$(BUILD_DATE)" \
+		-o kube-router cmd/kube-router/kube-router.go'
 else
 	GOARCH=$(GOARCH) CGO_ENABLED=0 go build \
 	-ldflags "-X github.com/cloudnativelabs/kube-router/pkg/version.Version=$(GIT_COMMIT) -X github.com/cloudnativelabs/kube-router/pkg/version.BuildDate=$(BUILD_DATE)" \
 	-o kube-router cmd/kube-router/kube-router.go
-
 endif
 	@echo Finished kube-router binary build.
 
 test: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-	    sh -c \
-	    'CGO_ENABLED=0 go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+		sh -c \
+		'CGO_ENABLED=0 go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...'
 
 else
 	go test -v -timeout 30s github.com/cloudnativelabs/kube-router/cmd/kube-router/ github.com/cloudnativelabs/kube-router/pkg/...
@@ -79,9 +86,12 @@ endif
 
 lint: gofmt
 ifeq "$(BUILD_IN_DOCKER)" "true"
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_LINT_IMAGE) \
-	    sh -c \
-	    'golangci-lint run ./...'
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_LINT_IMAGE) \
+		sh -c \
+		'golangci-lint run ./...'
 else
 	golangci-lint run ./...
 endif
@@ -178,8 +188,11 @@ gomoqs: ./pkg/controllers/proxy/network_services_controller_moq.go
 # annotation, as it needs to know which interfaces to create mock stubs for
 %_moq.go: %.go
 ifeq "$(BUILD_IN_DOCKER)" "true"
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-			sh -c 'go install github.com/matryer/moq@$(MOQ_VERSION) && go generate -v $(*).go'
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+		sh -c 'go install github.com/matryer/moq@$(MOQ_VERSION) && go generate -v $(*).go'
 else
 	@test -x $(lastword $(subst :, ,$(GOPATH)))/bin/moq && exit 0; echo "ERROR: 'moq' tool is needed to update mock test files, install it with: \ngo get github.com/matryer/moq\n"; exit 1
 	go generate -v $(*).go
@@ -188,9 +201,12 @@ endif
 gobgp:
 	@echo Building gobgp
 ifeq "$(BUILD_IN_DOCKER)" "true"
-	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router -w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-	    sh -c \
-	    'CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v3/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .'
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+		sh -c \
+		'CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v3/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .'
 else
 	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v3/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .
 endif
