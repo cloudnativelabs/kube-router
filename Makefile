@@ -102,28 +102,28 @@ run: kube-router ## Runs "kube-router --help".
 container: kube-router gobgp multiarch-binverify ## Builds a Docker container image.
 	@echo Starting kube-router container image build for $(GOARCH) on $(shell go env GOHOSTARCH)
 	@if [ "$(GOARCH)" != "$(shell go env GOHOSTARCH)" ]; then \
-	    echo "Using qemu to build non-native container"; \
-	    $(DOCKER) run --rm --privileged $(QEMU_IMAGE) --reset -p yes; \
+		echo "Using qemu to build non-native container"; \
+		$(DOCKER) run --rm --privileged $(QEMU_IMAGE) --reset -p yes; \
 	fi
 	$(DOCKER) build -t "$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))" -f Dockerfile --build-arg ARCH="$(DOCKER_ARCH)" \
 		--build-arg BUILDTIME_BASE="$(BUILDTIME_BASE)" --build-arg RUNTIME_BASE="$(RUNTIME_BASE)" .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
-	    $(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
+		$(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
 	fi
 	@echo Finished kube-router container image build.
 
 docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSWORD} variables.
 	@echo Starting docker login target.
 	@if [ -n "$(DOCKER_USERNAME)" ] && [ -n "$(DOCKER_PASSWORD)" ]; then \
-	    echo Starting DockerHub registry login.; \
-	    $(DOCKER) login -u="$(value DOCKER_USERNAME)" -p="$(value DOCKER_PASSWORD)"; \
-	    echo Finished DockerHub registry login.; \
+		echo Starting DockerHub registry login.; \
+		$(DOCKER) login -u="$(value DOCKER_USERNAME)" -p="$(value DOCKER_PASSWORD)"; \
+		echo Finished DockerHub registry login.; \
 	fi
 
 	@if [ -n "$(QUAY_USERNAME)" ] && [ -n "$(QUAY_PASSWORD)" ]; then \
-	    echo Starting quay.io registry login.; \
-	    $(DOCKER) login -u="$(value QUAY_USERNAME)" -p="$(value QUAY_PASSWORD)" quay.io; \
-	    echo Finished quay.io registry login.; \
+		echo Starting quay.io registry login.; \
+		$(DOCKER) login -u="$(value QUAY_USERNAME)" -p="$(value QUAY_PASSWORD)" quay.io; \
+		echo Finished quay.io registry login.; \
 	fi
 	@echo Finished docker login target.
 
@@ -161,8 +161,8 @@ push-manifest-release:
 github-release:
 	@echo Starting kube-router GitHub release creation.
 	@[ -n "$(value GITHUB_TOKEN)" ] && \
-	  GITHUB_TOKEN=$(value GITHUB_TOKEN); \
-	  curl -sL https://git.io/goreleaser | VERSION=$(GORELEASER_VERSION) bash
+		GITHUB_TOKEN=$(value GITHUB_TOKEN); \
+		curl -sL https://git.io/goreleaser | VERSION=$(GORELEASER_VERSION) bash
 	@echo Finished kube-router GitHub release creation.
 
 release: push-release github-release ## Pushes a release to DockerHub and GitHub
@@ -219,7 +219,7 @@ multiarch-binverify:
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-	  awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs
 .PHONY: test lint docker-login push-manifest push-manifest-release
