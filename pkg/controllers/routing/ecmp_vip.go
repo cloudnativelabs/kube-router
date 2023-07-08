@@ -169,9 +169,11 @@ func (nrc *NetworkRoutingController) handleServiceDelete(svc *v1core.Service) {
 	for _, activeVIP := range activeVIPs {
 		activeVIPsMap[activeVIP] = true
 	}
-	serviceVIPs := nrc.getAllVIPsForService(svc)
+	advertiseIPList, unadvertiseIPList := nrc.getAllVIPsForService(svc)
+	//nolint:gocritic // we understand that we're assigning to a new slice
+	allIPList := append(advertiseIPList, unadvertiseIPList...)
 	withdrawVIPs := make([]string, 0)
-	for _, serviceVIP := range serviceVIPs {
+	for _, serviceVIP := range allIPList {
 		// withdraw VIP only if deleted service is the last service using the VIP
 		if !activeVIPsMap[serviceVIP] {
 			withdrawVIPs = append(withdrawVIPs, serviceVIP)
@@ -460,39 +462,54 @@ func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service,
 		}
 	}
 
-	ipList := nrc.getAllVIPsForService(svc)
+	advertiseIPList, unAdvertisedIPList := nrc.getAllVIPsForService(svc)
 
 	if !advertise {
-		return nil, ipList, nil
+		//nolint:gocritic // we understand that we're assigning to a new slice
+		allIPList := append(advertiseIPList, unAdvertisedIPList...)
+		return nil, allIPList, nil
 	}
 
-	return ipList, nil, nil
+	return advertiseIPList, unAdvertisedIPList, nil
 }
 
-func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) []string {
+func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) ([]string, []string) {
 
-	ipList := make([]string, 0)
+	advertisedIPList := make([]string, 0)
+	unAdvertisedIPList := make([]string, 0)
 
-	if nrc.shouldAdvertiseService(svc, svcAdvertiseClusterAnnotation, nrc.advertiseClusterIP) {
-		clusterIP := nrc.getClusterIP(svc)
-		if clusterIP != "" {
-			ipList = append(ipList, clusterIP)
+	clusterIP := nrc.getClusterIP(svc)
+	if clusterIP != "" {
+		if nrc.shouldAdvertiseService(svc, svcAdvertiseClusterAnnotation, nrc.advertiseClusterIP) {
+			advertisedIPList = append(advertisedIPList, clusterIP)
+		} else {
+			unAdvertisedIPList = append(unAdvertisedIPList, clusterIP)
 		}
 	}
 
-	if nrc.shouldAdvertiseService(svc, svcAdvertiseExternalAnnotation, nrc.advertiseExternalIP) {
-		ipList = append(ipList, nrc.getExternalIPs(svc)...)
+	externalIPs := nrc.getExternalIPs(svc)
+	if len(externalIPs) > 0 {
+		if nrc.shouldAdvertiseService(svc, svcAdvertiseExternalAnnotation, nrc.advertiseExternalIP) {
+			advertisedIPList = append(advertisedIPList, externalIPs...)
+		} else {
+			unAdvertisedIPList = append(unAdvertisedIPList, externalIPs...)
+		}
 	}
 
 	// Deprecated: Use service.advertise.loadbalancer=false instead of service.skiplbips.
-	_, skiplbips := svc.Annotations[svcSkipLbIpsAnnotation]
-	advertiseLoadBalancer := nrc.shouldAdvertiseService(svc, svcAdvertiseLoadBalancerAnnotation,
-		nrc.advertiseLoadBalancerIP)
-	if advertiseLoadBalancer && !skiplbips {
-		ipList = append(ipList, nrc.getLoadBalancerIPs(svc)...)
+	lbIPs := nrc.getLoadBalancerIPs(svc)
+	if len(lbIPs) > 0 {
+		_, skiplbips := svc.Annotations[svcSkipLbIpsAnnotation]
+		advertiseLoadBalancer := nrc.shouldAdvertiseService(svc, svcAdvertiseLoadBalancerAnnotation,
+			nrc.advertiseLoadBalancerIP)
+		if advertiseLoadBalancer && !skiplbips {
+			advertisedIPList = append(advertisedIPList, lbIPs...)
+		} else {
+			unAdvertisedIPList = append(unAdvertisedIPList, lbIPs...)
+		}
 	}
 
-	return ipList
+	return advertisedIPList, unAdvertisedIPList
 
 }
 
