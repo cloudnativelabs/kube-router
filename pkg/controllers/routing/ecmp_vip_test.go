@@ -91,194 +91,194 @@ func Test_getVIPsForService(t *testing.T) {
 		serviceAdvertisedIPs []*ServiceAdvertisedIPs
 	}{
 		{
-			"advertise all IPs",
-			[3]bool{true, true, true},
-			[]*ServiceAdvertisedIPs{
+			name:              "advertise all IPs",
+			advertiseSettings: [3]bool{true, true, true},
+			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
 				{
-					services["cluster"],
-					[]string{"10.0.0.1"},
-					[]string{},
-					nil,
+					service:       services["cluster"],
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{},
+					annotations:   nil,
 				},
 				{
-					services["external"],
-					[]string{"10.0.0.1", "1.1.1.1"},
-					[]string{},
-					nil,
+					service:       services["external"],
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1"},
+					withdrawnIPs:  []string{},
+					annotations:   nil,
 				},
 				{
-					services["nodeport"],
-					[]string{"10.0.0.1", "1.1.1.1"},
-					[]string{},
-					nil,
+					service:       services["nodeport"],
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1"},
+					withdrawnIPs:  []string{},
+					annotations:   nil,
 				},
 				{
-					services["loadbalancer"],
-					[]string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
-					[]string{},
-					nil,
-				},
-			},
-		},
-		{
-			"do not advertise any IPs",
-			[3]bool{false, false, false},
-			[]*ServiceAdvertisedIPs{
-				{
-					services["cluster"],
-					[]string{},
-					[]string{},
-					nil,
-				},
-				{
-					services["external"],
-					[]string{},
-					[]string{},
-					nil,
-				},
-				{
-					services["nodeport"],
-					[]string{},
-					[]string{},
-					nil,
-				},
-				{
-					services["loadbalancer"],
-					[]string{},
-					[]string{},
-					nil,
+					service:       services["loadbalancer"],
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
+					withdrawnIPs:  []string{},
+					annotations:   nil,
 				},
 			},
 		},
 		{
-			"advertise cluster IPs",
-			[3]bool{true, false, false},
-			[]*ServiceAdvertisedIPs{
+			name:              "do not advertise any IPs",
+			advertiseSettings: [3]bool{false, false, false},
+			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
 				{
-					services["cluster"],
-					[]string{"10.0.0.1"},
-					[]string{},
-					nil,
+					service:       services["cluster"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1"},
+					annotations:   nil,
 				},
 				{
-					services["external"],
-					[]string{"10.0.0.1"},
-					[]string{},
-					nil,
+					service:       services["external"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					annotations:   nil,
 				},
 				{
-					services["nodeport"],
-					[]string{"10.0.0.1"},
-					[]string{},
-					nil,
+					service:       services["nodeport"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					annotations:   nil,
 				},
 				{
-					services["loadbalancer"],
-					[]string{"10.0.0.1"},
-					[]string{},
-					nil,
-				},
-			},
-		},
-		{
-			"advertise external IPs",
-			[3]bool{false, true, false},
-			[]*ServiceAdvertisedIPs{
-				{
-					services["cluster"],
-					[]string{},
-					[]string{},
-					nil,
-				},
-				{
-					services["external"],
-					[]string{"1.1.1.1"},
-					[]string{},
-					nil,
-				},
-				{
-					services["nodeport"],
-					[]string{"1.1.1.1"},
-					[]string{},
-					nil,
-				},
-				{
-					services["loadbalancer"],
-					[]string{"1.1.1.1"},
-					[]string{},
-					nil,
+					service:       services["loadbalancer"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
+					annotations:   nil,
 				},
 			},
 		},
 		{
-			"advertise loadbalancer IPs",
-			[3]bool{false, false, true},
-			[]*ServiceAdvertisedIPs{
+			name:              "advertise cluster IPs",
+			advertiseSettings: [3]bool{true, false, false},
+			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
 				{
-					services["cluster"],
-					[]string{},
-					[]string{},
-					nil,
+					service:       services["cluster"],
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{},
+					annotations:   nil,
 				},
 				{
-					services["external"],
-					[]string{},
-					[]string{},
-					nil,
+					service:       services["external"],
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1"},
+					annotations:   nil,
 				},
 				{
-					services["nodeport"],
-					[]string{},
-					[]string{},
-					nil,
+					service:       services["nodeport"],
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1"},
+					annotations:   nil,
 				},
 				{
-					services["loadbalancer"],
-					[]string{"10.0.255.1", "10.0.255.2"},
-					[]string{},
-					nil,
+					service:       services["loadbalancer"],
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1", "10.0.255.1", "10.0.255.2"},
+					annotations:   nil,
 				},
 			},
 		},
 		{
-			"opt in to advertise all IPs via annotations",
-			[3]bool{false, false, false},
-			[]*ServiceAdvertisedIPs{
+			name:              "advertise external IPs",
+			advertiseSettings: [3]bool{false, true, false},
+			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
 				{
-					services["cluster"],
-					[]string{"10.0.0.1"},
-					[]string{},
-					map[string]string{
+					service:       services["cluster"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1"},
+					annotations:   nil,
+				},
+				{
+					service:       services["external"],
+					advertisedIPs: []string{"1.1.1.1"},
+					withdrawnIPs:  []string{"10.0.0.1"},
+					annotations:   nil,
+				},
+				{
+					service:       services["nodeport"],
+					advertisedIPs: []string{"1.1.1.1"},
+					withdrawnIPs:  []string{"10.0.0.1"},
+					annotations:   nil,
+				},
+				{
+					service:       services["loadbalancer"],
+					advertisedIPs: []string{"1.1.1.1"},
+					withdrawnIPs:  []string{"10.0.0.1", "10.0.255.1", "10.0.255.2"},
+					annotations:   nil,
+				},
+			},
+		},
+		{
+			name:              "advertise loadbalancer IPs",
+			advertiseSettings: [3]bool{false, false, true},
+			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
+				{
+					service:       services["cluster"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1"},
+					annotations:   nil,
+				},
+				{
+					service:       services["external"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					annotations:   nil,
+				},
+				{
+					service:       services["nodeport"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					annotations:   nil,
+				},
+				{
+					service:       services["loadbalancer"],
+					advertisedIPs: []string{"10.0.255.1", "10.0.255.2"},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					annotations:   nil,
+				},
+			},
+		},
+		{
+			name:              "opt in to advertise all IPs via annotations",
+			advertiseSettings: [3]bool{false, false, false},
+			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
+				{
+					service:       services["cluster"],
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
 						svcAdvertiseLoadBalancerAnnotation: "true",
 					},
 				},
 				{
-					services["external"],
-					[]string{"10.0.0.1", "1.1.1.1"},
-					[]string{},
-					map[string]string{
+					service:       services["external"],
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1"},
+					withdrawnIPs:  []string{},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
 						svcAdvertiseLoadBalancerAnnotation: "true",
 					},
 				},
 				{
-					services["nodeport"],
-					[]string{"10.0.0.1", "1.1.1.1"},
-					[]string{},
-					map[string]string{
+					service:       services["nodeport"],
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1"},
+					withdrawnIPs:  []string{},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
 						svcAdvertiseLoadBalancerAnnotation: "true",
 					},
 				},
 				{
-					services["loadbalancer"],
-					[]string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
-					[]string{},
-					map[string]string{
+					service:       services["loadbalancer"],
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
+					withdrawnIPs:  []string{},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
 						svcAdvertiseLoadBalancerAnnotation: "true",
@@ -286,10 +286,10 @@ func Test_getVIPsForService(t *testing.T) {
 				},
 				{
 					// Special case to test svcAdvertiseLoadBalancerAnnotation vs legacy svcSkipLbIpsAnnotation
-					services["loadbalancer"],
-					[]string{"10.0.0.1", "1.1.1.1"},
-					[]string{},
-					map[string]string{
+					service:       services["loadbalancer"],
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1"},
+					withdrawnIPs:  []string{"10.0.255.1", "10.0.255.2"},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "true",
 						svcAdvertiseExternalAnnotation:     "true",
 						svcAdvertiseLoadBalancerAnnotation: "true",
@@ -299,44 +299,44 @@ func Test_getVIPsForService(t *testing.T) {
 			},
 		},
 		{
-			"opt out to advertise any IPs via annotations",
-			[3]bool{true, true, true},
-			[]*ServiceAdvertisedIPs{
+			name:              "opt out to advertise any IPs via annotations",
+			advertiseSettings: [3]bool{true, true, true},
+			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
 				{
-					services["cluster"],
-					[]string{},
-					[]string{},
-					map[string]string{
+					service:       services["cluster"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1"},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "false",
 						svcAdvertiseExternalAnnotation:     "false",
 						svcAdvertiseLoadBalancerAnnotation: "false",
 					},
 				},
 				{
-					services["external"],
-					[]string{},
-					[]string{},
-					map[string]string{
+					service:       services["external"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "false",
 						svcAdvertiseExternalAnnotation:     "false",
 						svcAdvertiseLoadBalancerAnnotation: "false",
 					},
 				},
 				{
-					services["nodeport"],
-					[]string{},
-					[]string{},
-					map[string]string{
+					service:       services["nodeport"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "false",
 						svcAdvertiseExternalAnnotation:     "false",
 						svcAdvertiseLoadBalancerAnnotation: "false",
 					},
 				},
 				{
-					services["loadbalancer"],
-					[]string{},
-					[]string{},
-					map[string]string{
+					service:       services["loadbalancer"],
+					advertisedIPs: []string{},
+					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
+					annotations: map[string]string{
 						svcAdvertiseClusterAnnotation:      "false",
 						svcAdvertiseExternalAnnotation:     "false",
 						svcAdvertiseLoadBalancerAnnotation: "false",
