@@ -64,16 +64,17 @@ var (
 
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	nodeHostName            string
-	serviceClusterIPRanges  []net.IPNet
-	serviceExternalIPRanges []net.IPNet
-	serviceNodePortRange    string
-	mu                      sync.Mutex
-	syncPeriod              time.Duration
-	MetricsEnabled          bool
-	healthChan              chan<- *healthcheck.ControllerHeartbeat
-	fullSyncRequestChan     chan struct{}
-	ipsetMutex              *sync.Mutex
+	nodeHostName                string
+	serviceClusterIPRanges      []net.IPNet
+	serviceExternalIPRanges     []net.IPNet
+	serviceLoadBalancerIPRanges []net.IPNet
+	serviceNodePortRange        string
+	mu                          sync.Mutex
+	syncPeriod                  time.Duration
+	MetricsEnabled              bool
+	healthChan                  chan<- *healthcheck.ControllerHeartbeat
+	fullSyncRequestChan         chan struct{}
+	ipsetMutex                  *sync.Mutex
 
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler
 	iptablesSaveRestore map[v1core.IPFamily]utils.IPTablesSaveRestorer
@@ -494,6 +495,32 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 			kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
 		rulePosition[family]++
 	}
+
+	for idx, loadBalancerIPRange := range npc.serviceLoadBalancerIPRanges {
+		var family v1core.IPFamily
+		if loadBalancerIPRange.IP.To4() != nil {
+			family = v1core.IPv4Protocol
+		} else {
+			family = v1core.IPv6Protocol
+		}
+		whitelistServiceVips := []string{"-m", "comment", "--comment",
+			"allow traffic to load balancer IP range: " + loadBalancerIPRange.String(), "-d", loadBalancerIPRange.String(),
+			"-j", "RETURN"}
+		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+		if err != nil {
+			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		// Access loadBalancerIPRange via index to avoid implicit memory aliasing
+		cidrHandler, err := npc.iptablesCmdHandlerForCIDR(&npc.serviceLoadBalancerIPRanges[idx])
+		if err != nil {
+			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
+		}
+		klog.V(2).Infof("Allow traffic to ingress towards Load Balancer IP Range: %s for family: %s",
+			loadBalancerIPRange.String(), family)
+		ensureRuleAtPosition(cidrHandler,
+			kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
+		rulePosition[family]++
+	}
 }
 
 func (npc *NetworkPolicyController) ensureExplicitAccept() {
@@ -804,6 +831,16 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 				externalIPRange, err.Error())
 		}
 		npc.serviceExternalIPRanges = append(npc.serviceExternalIPRanges, *ipnet)
+	}
+
+	// Validate and parse LoadBalancerIP service range
+	for _, loadBalancerIPRange := range config.LoadBalancerCIDRs {
+		_, ipnet, err := net.ParseCIDR(loadBalancerIPRange)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parse --loadbalancer-ip-range parameter: '%s'. Error: %s",
+				loadBalancerIPRange, err.Error())
+		}
+		npc.serviceLoadBalancerIPRanges = append(npc.serviceLoadBalancerIPRanges, *ipnet)
 	}
 
 	if config.MetricsEnabled {

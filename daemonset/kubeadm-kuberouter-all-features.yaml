@@ -61,6 +61,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: KUBE_ROUTER_CNI_CONF_FILE
           value: /etc/cni/net.d/10-kuberouter.conflist
         livenessProbe:
@@ -177,6 +181,20 @@ rules:
       - get
       - list
       - watch
+  - apiGroups:
+      - "coordination.k8s.io"
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - services/status
+    verbs:
+      - update
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

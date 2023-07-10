@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/lballoc"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/proxy"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/routing"
@@ -202,6 +203,19 @@ func (kr *KubeRouter) Run() error {
 
 		wg.Add(1)
 		go npc.Run(healthChan, stopCh, &wg)
+	}
+
+	if kr.Config.RunLoadBalancer {
+		klog.V(0).Info("running load balancer allocator controller")
+		lbc, err := lballoc.NewLoadBalancerController(kr.Client, kr.Config, svcInformer)
+		if err != nil {
+			return errors.New("Failed to create load balancer allocator: " + err.Error())
+		}
+
+		svcInformer.AddEventHandler(lbc)
+
+		wg.Add(1)
+		go lbc.Run(healthChan, stopCh, &wg)
 	}
 
 	// Handle SIGINT and SIGTERM

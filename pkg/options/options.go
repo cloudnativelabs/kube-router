@@ -52,6 +52,9 @@ type KubeRouterConfig struct {
 	IpvsPermitAll                  bool
 	IpvsSyncPeriod                 time.Duration
 	Kubeconfig                     string
+	LoadBalancerCIDRs              []string
+	LoadBalancerDefaultClass       bool
+	LoadBalancerSyncPeriod         time.Duration
 	MasqueradeAll                  bool
 	Master                         string
 	MetricsEnabled                 bool
@@ -74,6 +77,7 @@ type KubeRouterConfig struct {
 	RunFirewall                    bool
 	RunRouter                      bool
 	RunServiceProxy                bool
+	RunLoadBalancer                bool
 	RuntimeEndpoint                string
 	Version                        bool
 	VLevel                         string
@@ -92,6 +96,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		IPTablesSyncPeriod:             5 * time.Minute,
 		IpvsGracefulPeriod:             30 * time.Second,
 		IpvsSyncPeriod:                 5 * time.Minute,
+		LoadBalancerSyncPeriod:         time.Minute,
 		NodePortRange:                  "30000-32767",
 		OverlayType:                    "subnet",
 		RoutesSyncPeriod:               5 * time.Minute,
@@ -173,6 +178,12 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.StringVar(&s.Kubeconfig, "kubeconfig", s.Kubeconfig,
 		"Path to kubeconfig file with authorization information (the master location is set by the master flag).")
+	fs.BoolVar(&s.LoadBalancerDefaultClass, "loadbalancer-default-class", true,
+		"Handle loadbalancer services without a class")
+	fs.StringSliceVar(&s.LoadBalancerCIDRs, "loadbalancer-ip-range", s.LoadBalancerCIDRs,
+		"CIDR values from which loadbalancer services addresses are assigned (can be specified multiple times)")
+	fs.DurationVar(&s.LoadBalancerSyncPeriod, "loadbalancer-sync-period", s.LoadBalancerSyncPeriod,
+		"The delay between checking for missed services (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.BoolVar(&s.MasqueradeAll, "masquerade-all", false,
 		"SNAT all traffic to cluster IP/node port.")
 	fs.StringVar(&s.Master, "master", s.Master,
@@ -216,6 +227,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.RunFirewall, "run-firewall", true,
 		"Enables Network Policy -- sets up iptables to provide ingress firewall for pods.")
+	fs.BoolVar(&s.RunLoadBalancer, "run-loadbalancer", false,
+		"Enable loadbalancer address allocator")
 	fs.BoolVar(&s.RunRouter, "run-router", true,
 		"Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP.")
 	fs.BoolVar(&s.RunServiceProxy, "run-service-proxy", true,

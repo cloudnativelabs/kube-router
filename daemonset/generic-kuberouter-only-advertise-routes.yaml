@@ -43,6 +43,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         livenessProbe:
           httpGet:
             path: /healthz
@@ -114,6 +118,20 @@ rules:
       - get
       - list
       - watch
+  - apiGroups:
+      - "coordination.k8s.io"
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - services/status
+    verbs:
+      - update
 
 ---
 kind: ClusterRoleBinding
