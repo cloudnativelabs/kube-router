@@ -34,6 +34,8 @@ type HealthController struct {
 type HealthStats struct {
 	sync.Mutex
 	Healthy                           bool
+	LoadBalancerControllerAlive       time.Time
+	LoadBalancerControllerAliveTTL    time.Duration
 	MetricsControllerAlive            time.Time
 	NetworkPolicyControllerAlive      time.Time
 	NetworkPolicyControllerAliveTTL   time.Duration
@@ -90,6 +92,11 @@ func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 	switch {
 	// The first heartbeat will set the initial gracetime the controller has to report in, A static time is added as
 	// well when checking to allow for load variation in sync time
+	case beat.Component == "LBC":
+		if hc.Status.LoadBalancerControllerAliveTTL == 0 {
+			hc.Status.LoadBalancerControllerAliveTTL = time.Since(hc.Status.LoadBalancerControllerAlive)
+		}
+		hc.Status.LoadBalancerControllerAlive = beat.LastHeartBeat
 	case beat.Component == "NSC":
 		if hc.Status.NetworkServicesControllerAliveTTL == 0 {
 			hc.Status.NetworkServicesControllerAliveTTL = time.Since(hc.Status.NetworkServicesControllerAlive)
@@ -122,6 +129,14 @@ func (hc *HealthController) CheckHealth() bool {
 		if time.Since(hc.Status.NetworkPolicyControllerAlive) >
 			hc.Config.IPTablesSyncPeriod+hc.Status.NetworkPolicyControllerAliveTTL+graceTime {
 			klog.Error("Network Policy Controller heartbeat missed")
+			health = false
+		}
+	}
+
+	if hc.Config.RunLoadBalancer {
+		if time.Since(hc.Status.LoadBalancerControllerAlive) >
+			hc.Config.LoadBalancerSyncPeriod+hc.Status.LoadBalancerControllerAliveTTL+graceTime {
+			klog.Error("Load Balancer Allocator Controller heartbeat missed")
 			health = false
 		}
 	}
@@ -205,6 +220,7 @@ func (hc *HealthController) SetAlive() {
 
 	now := time.Now()
 
+	hc.Status.LoadBalancerControllerAlive = now
 	hc.Status.MetricsControllerAlive = now
 	hc.Status.NetworkPolicyControllerAlive = now
 	hc.Status.NetworkRoutingControllerAlive = now
