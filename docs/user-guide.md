@@ -94,6 +94,9 @@ Usage of kube-router:
       --ipvs-permit-all                               Enables rule to accept all incoming traffic to service VIP's on the node. (default true)
       --ipvs-sync-period duration                     The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --kubeconfig string                             Path to kubeconfig file with authorization information (the master location is set by the master flag).
+      --loadbalancer-default-class                    Handle loadbalancer services without a class (default true)
+      --loadbalancer-ip-range strings                 CIDR values from which loadbalancer services addresses are assigned (can be specified multiple times)
+      --loadbalancer-sync-period duration             The delay between checking for missed services (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
       --masquerade-all                                SNAT all traffic to cluster IP/node port.
       --master string                                 The address of the Kubernetes API server (overrides any value in kubeconfig).
       --metrics-path string                           Prometheus metrics path (default "/metrics")
@@ -113,6 +116,7 @@ Usage of kube-router:
       --router-id string                              BGP router-id. Must be specified in a ipv6 only cluster, "generate" can be specified to generate the router id.
       --routes-sync-period duration                   The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --run-firewall                                  Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
+      --run-loadbalancer                              Enable loadbalancer address allocator
       --run-router                                    Enables Pod Networking -- Advertises and learns the routes to Pods via iBGP. (default true)
       --run-service-proxy                             Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
       --runtime-endpoint string                       Path to CRI compatible container runtime socket (used for DSR mode). Currently known working with containerd.

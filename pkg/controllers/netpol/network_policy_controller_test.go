@@ -275,7 +275,7 @@ func testForMissingOrUnwanted(t *testing.T, targetMsg string, got []podInfo, wan
 	}
 }
 
-func newMinimalKubeRouterConfig(clusterIPCIDRs []string, nodePortRange string, hostNameOverride string, externalIPs []string, enableIPv6 bool) *options.KubeRouterConfig {
+func newMinimalKubeRouterConfig(clusterIPCIDRs []string, nodePortRange string, hostNameOverride string, externalIPs []string, loadBalancerIPs []string, enableIPv6 bool) *options.KubeRouterConfig {
 	kubeConfig := options.NewKubeRouterConfig()
 	if len(clusterIPCIDRs) > 0 && clusterIPCIDRs[0] != "" {
 		kubeConfig.ClusterIPCIDRs = clusterIPCIDRs
@@ -288,6 +288,9 @@ func newMinimalKubeRouterConfig(clusterIPCIDRs []string, nodePortRange string, h
 	}
 	if externalIPs != nil {
 		kubeConfig.ExternalIPCIDRs = externalIPs
+	}
+	if loadBalancerIPs != nil {
+		kubeConfig.LoadBalancerCIDRs = loadBalancerIPs
 	}
 	kubeConfig.EnableIPv4 = true
 	kubeConfig.EnableIPv6 = enableIPv6
@@ -750,145 +753,181 @@ func TestNetworkPolicyController(t *testing.T) {
 	testCases := []tNetPolConfigTestCase{
 		{
 			"Default options are successful",
-			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, nil, false),
 			false,
 			"",
 		},
 		{
 			"Missing nodename fails appropriately",
-			newMinimalKubeRouterConfig([]string{""}, "", "", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "", "", nil, nil, false),
 			true,
 			"failed to identify the node by NODE_NAME, hostname or --hostname-override",
 		},
 		{
 			"Test bad cluster CIDR (not properly formatting ip address)",
-			newMinimalKubeRouterConfig([]string{"10.10.10"}, "", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{"10.10.10"}, "", "node", nil, nil, false),
 			true,
 			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10",
 		},
 		{
 			"Test bad cluster CIDR (not using an ip address)",
-			newMinimalKubeRouterConfig([]string{"foo"}, "", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{"foo"}, "", "node", nil, nil, false),
 			true,
 			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: foo",
 		},
 		{
 			"Test bad cluster CIDR (using an ip address that is not a CIDR)",
-			newMinimalKubeRouterConfig([]string{"10.10.10.10"}, "", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{"10.10.10.10"}, "", "node", nil, nil, false),
 			true,
 			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10.10",
 		},
 		{
 			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv4)",
-			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "10.244.0.0/16", "2001:db8:42:1::/112"}, "", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "10.244.0.0/16", "2001:db8:42:1::/112"}, "", "node", nil, nil, false),
 			true,
 			"too many CIDRs provided in --service-cluster-ip-range parameter: dual-stack must be enabled to provide two addresses",
 		},
 		{
 			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv6)",
-			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "2001:db8:42:0::/56", "2001:db8:42:1::/112"}, "", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "2001:db8:42:0::/56", "2001:db8:42:1::/112"}, "", "node", nil, nil, false),
 			true,
 			"too many CIDRs provided in --service-cluster-ip-range parameter: dual-stack must be enabled to provide two addresses",
 		},
 		{
 			"Test good cluster CIDR (using single IP with a /32)",
-			newMinimalKubeRouterConfig([]string{"10.10.10.10/32"}, "", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{"10.10.10.10/32"}, "", "node", nil, nil, false),
 			false,
 			"",
 		},
 		{
 			"Test good cluster CIDR (using normal range with /24)",
-			newMinimalKubeRouterConfig([]string{"10.10.10.0/24"}, "", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{"10.10.10.0/24"}, "", "node", nil, nil, false),
 			false,
 			"",
 		},
 		{
 			"Test good cluster CIDR (using ipv6)",
-			newMinimalKubeRouterConfig([]string{"2001:db8:42:1::/112"}, "", "node", []string{"2001:db8:42:1::/112"}, true),
+			newMinimalKubeRouterConfig([]string{"2001:db8:42:1::/112"}, "", "node", []string{"2001:db8:42:1::/112"}, []string{"2001:db8:43:1::/112"}, true),
 			false,
 			"",
 		},
 		{
 			"Test good cluster CIDRs (with dual-stack)",
-			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "2001:db8:42:1::/112"}, "", "node", []string{"10.96.0.0/12", "2001:db8:42:1::/112"}, true),
+			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "2001:db8:42:1::/112"}, "", "node", []string{"10.96.0.0/12", "2001:db8:42:1::/112"}, []string{"10.97.0.0/12", "2001:db8:43:1::/112"}, true),
 			false,
 			"",
 		},
 		{
 			"Test bad node port specification (using commas)",
-			newMinimalKubeRouterConfig([]string{""}, "8080,8081", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "8080,8081", "node", nil, nil, false),
 			true,
 			"failed to parse node port range given: '8080,8081' please see specification in help text",
 		},
 		{
 			"Test bad node port specification (not using numbers)",
-			newMinimalKubeRouterConfig([]string{""}, "foo:bar", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "foo:bar", "node", nil, nil, false),
 			true,
 			"failed to parse node port range given: 'foo:bar' please see specification in help text",
 		},
 		{
 			"Test bad node port specification (using anything in addition to range)",
-			newMinimalKubeRouterConfig([]string{""}, "8080,8081-8090", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "8080,8081-8090", "node", nil, nil, false),
 			true,
 			"failed to parse node port range given: '8080,8081-8090' please see specification in help text",
 		},
 		{
 			"Test bad node port specification (using reversed range)",
-			newMinimalKubeRouterConfig([]string{""}, "8090-8080", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "8090-8080", "node", nil, nil, false),
 			true,
 			"port 1 is greater than or equal to port 2 in range given: '8090-8080'",
 		},
 		{
 			"Test bad node port specification (port out of available range)",
-			newMinimalKubeRouterConfig([]string{""}, "132000-132001", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "132000-132001", "node", nil, nil, false),
 			true,
 			"could not parse first port number from range given: '132000-132001'",
 		},
 		{
 			"Test good node port specification (using colon separator)",
-			newMinimalKubeRouterConfig([]string{""}, "8080:8090", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "8080:8090", "node", nil, nil, false),
 			false,
 			"",
 		},
 		{
 			"Test good node port specification (using hyphen separator)",
-			newMinimalKubeRouterConfig([]string{""}, "8080-8090", "node", nil, false),
+			newMinimalKubeRouterConfig([]string{""}, "8080-8090", "node", nil, nil, false),
 			false,
 			"",
 		},
 		{
 			"Test bad external IP CIDR (not properly formatting ip address)",
-			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10"}, false),
+			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10"}, nil, false),
 			true,
 			"failed to get parse --service-external-ip-range parameter: '199.10.10'. Error: invalid CIDR address: 199.10.10",
 		},
 		{
 			"Test bad external IP CIDR (not using an ip address)",
-			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"foo"}, false),
+			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"foo"}, nil, false),
 			true,
 			"failed to get parse --service-external-ip-range parameter: 'foo'. Error: invalid CIDR address: foo",
 		},
 		{
 			"Test bad external IP CIDR (using an ip address that is not a CIDR)",
-			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10"}, false),
+			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10"}, nil, false),
 			true,
 			"failed to get parse --service-external-ip-range parameter: '199.10.10.10'. Error: invalid CIDR address: 199.10.10.10",
 		},
 		{
 			"Test bad external IP CIDR (making sure that it processes all items in the list)",
-			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10/32", "199.10.10.11"}, false),
+			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10/32", "199.10.10.11"}, nil, false),
 			true,
 			"failed to get parse --service-external-ip-range parameter: '199.10.10.11'. Error: invalid CIDR address: 199.10.10.11",
 		},
 		{
 			"Test good external IP CIDR (using single IP with a /32)",
-			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10/32"}, false),
+			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10/32"}, nil, false),
 			false,
 			"",
 		},
 		{
 			"Test good external IP CIDR (using normal range with /24)",
-			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10/24"}, false),
+			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10/24"}, nil, false),
+			false,
+			"",
+		},
+		{
+			"Test bad load balancer CIDR (not properly formatting ip address)",
+			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10"}, false),
+			true,
+			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10'. Error: invalid CIDR address: 199.10.10",
+		},
+		{
+			"Test bad load balancer CIDR (not using an ip address)",
+			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"foo"}, false),
+			true,
+			"failed to get parse --loadbalancer-ip-range parameter: 'foo'. Error: invalid CIDR address: foo",
+		},
+		{
+			"Test bad load balancer CIDR (using an ip address that is not a CIDR)",
+			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10.10"}, false),
+			true,
+			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10.10'. Error: invalid CIDR address: 199.10.10.10",
+		},
+		{
+			"Test bad load balancer CIDR (making sure that it processes all items in the list)",
+			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10.10/32", "199.10.10.11"}, false),
+			true,
+			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10.11'. Error: invalid CIDR address: 199.10.10.11",
+		},
+		{
+			"Test good load balancer CIDR (using single IP with a /32)",
+			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10.10/32"}, false),
+			false,
+			"",
+		},
+		{
+			"Test good load balancer CIDR (using normal range with /24)",
+			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10.10/24"}, false),
 			false,
 			"",
 		},
