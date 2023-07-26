@@ -8,7 +8,7 @@ require (
 	github.com/docker/docker v24.0.5+incompatible
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.27.7
+	github.com/onsi/gomega v1.27.10
 	github.com/osrg/gobgp/v3 v3.16.0
 	github.com/prometheus/client_golang v1.16.0
 	github.com/spf13/pflag v1.0.5
@@ -88,7 +88,7 @@ require (
 	golang.org/x/term v0.10.0 // indirect
 	golang.org/x/text v0.11.0 // indirect
 	golang.org/x/time v0.1.0 // indirect
-	golang.org/x/tools v0.9.1 // indirect
+	golang.org/x/tools v0.9.3 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230525234030-28d5490b6b19 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
