@@ -4,7 +4,7 @@ require (
 	github.com/aws/aws-sdk-go v1.44.313
 	github.com/containernetworking/cni v1.1.2
 	github.com/containernetworking/plugins v1.3.0
-	github.com/coreos/go-iptables v0.6.0
+	github.com/coreos/go-iptables v0.7.0
 	github.com/docker/docker v24.0.5+incompatible
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
