@@ -692,6 +692,14 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	case sameSubnet:
 		// if the nextHop is within the same subnet, add a route for the destination so that traffic can bet routed
 		// at layer 2 and minimize the need to traverse a router
+		// First check that destination and nexthop are in the same IP family
+		dstIsIPv4 := dst.IP.To4() != nil
+		gwIsIPv4 := nextHop.To4() != nil
+		if dstIsIPv4 != gwIsIPv4 {
+			return fmt.Errorf("not able to add route as destination %s and gateway %s are not in the same IP family - "+
+				"this shouldn't ever happen from IPs that kube-router advertises, but if it does report it as a bug",
+				dst.IP, nextHop)
+		}
 		route = &netlink.Route{
 			Dst:      dst,
 			Gw:       nextHop,
