@@ -605,9 +605,6 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 		actions := gobgpapi.Actions{
 			RouteAction: gobgpapi.RouteAction_ACCEPT,
 		}
-		if nrc.overrideNextHop {
-			actions.Nexthop = &gobgpapi.NexthopAction{Self: true}
-		}
 
 		// statement to represent the export policy to permit advertising node's IPv4 & IPv6 pod CIDRs
 		for _, podSet := range []string{podCIDRSet, podCIDRSetV6} {
