@@ -109,6 +109,25 @@ If you are upgrading kube-router from a pre v2.0.0 release to a v2.0.0 release, 
 your upgrade of kube-router with a rolling reboot of your Kubernetes fleet to clean up any tunnels that were left from
 previous versions of kube-router.
 
+### Differences in --override-nexthop
+
+While v2.X and above versions of kube-router are IPv6 compatible and advertise both IPv4 and IPv6 addresses, it still
+does this over a single BGP peering. This peering is made from what kube-router considers the node's primary IP address.
+Which is typically the first internal IP address listed in the node's Kubernetes metadata (e.g. `kubectl get node`)
+unless it is overriden by a [local-address annotation](bgp.md#bgp-peer-local-ip-configuration) configuration.
+
+This address with be either an IPv4 or IPv6 address and kube-router will use this to make the peering. Without
+`--override-nexthop` kube-router does the work to ensure that an IP or subnet is advertised by the matching IP family
+for the IP or subnet. However, with `--override-nexthop` enabled kube-router doesn't have control over what the next-hop
+for the advertised route will be. Instead the next-hop will be overridden by the IP that is being used to peer with
+kube-router.
+
+This can cause trouble for many configurations and so it is not recommended to use `--override-nexthop` in dual-stack
+kube-router configurations. Where this really shows though is when kube-router is syncing pod IP subnets across BGP
+between other kube-router peers that are not in the same subnet or in full mesh scenarios. Because of this, starting
+with v2.0 versions of kube-router, even when `--override-nexthop` is specified we do not enable it for kube-router peers
+for the pod IP subnets. See [1523](https://github.com/cloudnativelabs/kube-router/pull/1523) for more information.
+
 ### kube-router.io/node.bgp.customimportreject Can Only Contain IPs of a Single Family
 
 Due to implementation restrictions with GoBGP, the annotation `kube-router.io/node.bgp.customimportreject`, which allows
