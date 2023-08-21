@@ -45,6 +45,10 @@ else ifeq ($(GOARCH), ppc64le)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=64-bit PowerPC
 DOCKER_ARCH=ppc64le/
+else ifeq ($(GOARCH), riscv64)
+ARCH_TAG_PREFIX=$(GOARCH)
+FILE_ARCH=UCB RISC-V, RVC, double-float ABI
+DOCKER_ARCH=riscv64/
 else
 ARCH_TAG_PREFIX=amd64
 FILE_ARCH=x86-64
@@ -135,7 +139,7 @@ push: container docker-login ## Pushes a Docker container image to a registry.
 push-manifest:
 	@echo Starting kube-router manifest push.
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le,linux/riscv64 \
 		--template "$(REGISTRY_DEV):ARCH-$(MANIFEST_TAG)" \
 		--target "$(REGISTRY_DEV):$(MANIFEST_TAG)"
 
@@ -149,12 +153,12 @@ push-release: push
 push-manifest-release:
 	@echo Starting kube-router manifest push.
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le,linux/riscv64 \
 		--template "$(REGISTRY):ARCH-${RELEASE_TAG}" \
 		--target "$(REGISTRY):$(RELEASE_TAG)"
 
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le,linux/riscv64 \
 		--template "$(REGISTRY):ARCH-${RELEASE_TAG}" \
 		--target "$(REGISTRY):latest"
 
