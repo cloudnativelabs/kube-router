@@ -147,9 +147,18 @@ func (kr *KubeRouter) Run() error {
 			return errors.New("Failed to create network routing controller: " + err.Error())
 		}
 
-		nodeInformer.AddEventHandler(nrc.NodeEventHandler)
-		svcInformer.AddEventHandler(nrc.ServiceEventHandler)
-		epInformer.AddEventHandler(nrc.EndpointsEventHandler)
+		_, err = nodeInformer.AddEventHandler(nrc.NodeEventHandler)
+		if err != nil {
+			return errors.New("Failed to add NodeEventHandler: " + err.Error())
+		}
+		_, err = svcInformer.AddEventHandler(nrc.ServiceEventHandler)
+		if err != nil {
+			return errors.New("Failed to add ServiceEventHandler: " + err.Error())
+		}
+		_, err = epInformer.AddEventHandler(nrc.EndpointsEventHandler)
+		if err != nil {
+			return errors.New("Failed to add EndpointsEventHandler: " + err.Error())
+		}
 
 		wg.Add(1)
 		go nrc.Run(healthChan, stopCh, &wg)
@@ -169,8 +178,14 @@ func (kr *KubeRouter) Run() error {
 			return errors.New("Failed to create network services controller: " + err.Error())
 		}
 
-		svcInformer.AddEventHandler(nsc.ServiceEventHandler)
-		epInformer.AddEventHandler(nsc.EndpointsEventHandler)
+		_, err = svcInformer.AddEventHandler(nsc.ServiceEventHandler)
+		if err != nil {
+			return errors.New("Failed to add ServiceEventHandler: " + err.Error())
+		}
+		_, err = epInformer.AddEventHandler(nsc.EndpointsEventHandler)
+		if err != nil {
+			return errors.New("Failed to add EndpointsEventHandler: " + err.Error())
+		}
 
 		wg.Add(1)
 		go nsc.Run(healthChan, stopCh, &wg)
@@ -190,9 +205,18 @@ func (kr *KubeRouter) Run() error {
 			return errors.New("Failed to create network policy controller: " + err.Error())
 		}
 
-		podInformer.AddEventHandler(npc.PodEventHandler)
-		nsInformer.AddEventHandler(npc.NamespaceEventHandler)
-		npInformer.AddEventHandler(npc.NetworkPolicyEventHandler)
+		_, err = podInformer.AddEventHandler(npc.PodEventHandler)
+		if err != nil {
+			return errors.New("Failed to add PodEventHandler: " + err.Error())
+		}
+		_, err = nsInformer.AddEventHandler(npc.NamespaceEventHandler)
+		if err != nil {
+			return errors.New("Failed to add NamespaceEventHandler: " + err.Error())
+		}
+		_, err = npInformer.AddEventHandler(npc.NetworkPolicyEventHandler)
+		if err != nil {
+			return errors.New("Failed to add NetworkPolicyEventHandler: " + err.Error())
+		}
 
 		wg.Add(1)
 		go npc.Run(healthChan, stopCh, &wg)
