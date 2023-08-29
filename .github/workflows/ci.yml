@@ -119,7 +119,6 @@ jobs:
           linux/arm/v7
           linux/s390x
           linux/ppc64le
-          linux/riscv64
         push: true
         build-args: |
           BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
@@ -151,7 +150,6 @@ jobs:
           linux/arm/v7
           linux/s390x
           linux/ppc64le
-          linux/riscv64
         push: true
         build-args: |
           BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
@@ -171,7 +169,6 @@ jobs:
           linux/arm/v7
           linux/s390x
           linux/ppc64le
-          linux/riscv64
         push: true
         build-args: |
           BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
