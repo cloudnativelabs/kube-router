@@ -139,7 +139,7 @@ push: container docker-login ## Pushes a Docker container image to a registry.
 push-manifest:
 	@echo Starting kube-router manifest push.
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le,linux/riscv64 \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
 		--template "$(REGISTRY_DEV):ARCH-$(MANIFEST_TAG)" \
 		--target "$(REGISTRY_DEV):$(MANIFEST_TAG)"
 
@@ -153,12 +153,12 @@ push-release: push
 push-manifest-release:
 	@echo Starting kube-router manifest push.
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le,linux/riscv64 \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
 		--template "$(REGISTRY):ARCH-${RELEASE_TAG}" \
 		--target "$(REGISTRY):$(RELEASE_TAG)"
 
 	./manifest-tool push from-args \
-		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le,linux/riscv64 \
+		--platforms linux/amd64,linux/arm64,linux/arm,linux/s390x,linux/ppc64le \
 		--template "$(REGISTRY):ARCH-${RELEASE_TAG}" \
 		--target "$(REGISTRY):latest"
 
