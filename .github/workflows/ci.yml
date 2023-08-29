@@ -13,9 +13,9 @@ on:
     - v[1-9].*
 
 env:
-  BUILDTIME_BASE: "golang:1.19.5-alpine3.17"
-  RUNTIME_BASE: "alpine:3.17"
-  GO_VERSION: "~1.19.5"
+  BUILDTIME_BASE: "golang:1.20.7-alpine3.18"
+  RUNTIME_BASE: "alpine:3.18"
+  GO_VERSION: "~1.20.7"
   GO_CACHE: "/home/runner/.cache/go-build"
   GO_MOD_CACHE: "/home/runner/go/pkg/mod"
 
