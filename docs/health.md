@@ -7,7 +7,7 @@ The health path is `/healthz`
 
     --health-port=<port number>
 
-If port is set to 0 (zero) no HTTP endpoint will be made availible but the health controller will still run and print out any missed heartbeats to STDERR of kube-router
+If port is set to 0 (zero) no HTTP endpoint will be made available but the health controller will still run and print out any missed heartbeats to STDERR of kube-router
 
 If a controller does not send a heartbeat within controllersynctime + 5 seconds the component will be flagged as unhealthy.
 
