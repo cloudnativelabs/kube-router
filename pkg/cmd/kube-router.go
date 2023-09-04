@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -42,18 +43,18 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 	if len(config.Master) != 0 || len(config.Kubeconfig) != 0 {
 		clientconfig, err = clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
 		if err != nil {
-			return nil, errors.New("Failed to build configuration from CLI: " + err.Error())
+			return nil, fmt.Errorf("failed to build configuration from CLI: %v", err)
 		}
 	} else {
 		clientconfig, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, errors.New("unable to initialize inclusterconfig: " + err.Error())
+			return nil, fmt.Errorf("unable to initialize inclusterconfig: %v", err)
 		}
 	}
 
 	clientset, err := kubernetes.NewForConfig(clientconfig)
 	if err != nil {
-		return nil, errors.New("Failed to create Kubernetes client: " + err.Error())
+		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
 	}
 
 	return &KubeRouter{Client: clientset, Config: config}, nil
@@ -88,7 +89,7 @@ func (kr *KubeRouter) Run() error {
 
 	hc, err := healthcheck.NewHealthController(kr.Config)
 	if err != nil {
-		return errors.New("Failed to create health controller: " + err.Error())
+		return fmt.Errorf("failed to create health controller: %v", err)
 	}
 	wg.Add(1)
 	go hc.RunServer(stopCh, &wg)
@@ -104,7 +105,7 @@ func (kr *KubeRouter) Run() error {
 
 	err = kr.CacheSyncOrTimeout(informerFactory, stopCh)
 	if err != nil {
-		return errors.New("Failed to synchronize cache: " + err.Error())
+		return fmt.Errorf("failed to synchronize cache: %v", err)
 	}
 
 	hc.SetAlive()
@@ -115,7 +116,7 @@ func (kr *KubeRouter) Run() error {
 		kr.Config.MetricsEnabled = true
 		mc, err := metrics.NewMetricsController(kr.Config)
 		if err != nil {
-			return errors.New("Failed to create metrics controller: " + err.Error())
+			return fmt.Errorf("failed to create metrics controller: %v", err)
 		}
 		wg.Add(1)
 		go mc.Run(healthChan, stopCh, &wg)
@@ -147,20 +148,20 @@ func (kr *KubeRouter) Run() error {
 		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config,
 			nodeInformer, svcInformer, epInformer, &ipsetMutex)
 		if err != nil {
-			return errors.New("Failed to create network routing controller: " + err.Error())
+			return fmt.Errorf("failed to create network routing controller: %v", err)
 		}
 
 		_, err = nodeInformer.AddEventHandler(nrc.NodeEventHandler)
 		if err != nil {
-			return errors.New("Failed to add NodeEventHandler: " + err.Error())
+			return fmt.Errorf("failed to add NodeEventHandler: %v", err)
 		}
 		_, err = svcInformer.AddEventHandler(nrc.ServiceEventHandler)
 		if err != nil {
-			return errors.New("Failed to add ServiceEventHandler: " + err.Error())
+			return fmt.Errorf("failed to add ServiceEventHandler: %v", err)
 		}
 		_, err = epInformer.AddEventHandler(nrc.EndpointsEventHandler)
 		if err != nil {
-			return errors.New("Failed to add EndpointsEventHandler: " + err.Error())
+			return fmt.Errorf("failed to add EndpointsEventHandler: %v", err)
 		}
 
 		wg.Add(1)
@@ -178,16 +179,16 @@ func (kr *KubeRouter) Run() error {
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
 			svcInformer, epInformer, podInformer, &ipsetMutex)
 		if err != nil {
-			return errors.New("Failed to create network services controller: " + err.Error())
+			return fmt.Errorf("failed to create network services controller: %v", err)
 		}
 
 		_, err = svcInformer.AddEventHandler(nsc.ServiceEventHandler)
 		if err != nil {
-			return errors.New("Failed to add ServiceEventHandler: " + err.Error())
+			return fmt.Errorf("failed to add ServiceEventHandler: %v", err)
 		}
 		_, err = epInformer.AddEventHandler(nsc.EndpointsEventHandler)
 		if err != nil {
-			return errors.New("Failed to add EndpointsEventHandler: " + err.Error())
+			return fmt.Errorf("failed to add EndpointsEventHandler: %v", err)
 		}
 
 		wg.Add(1)
@@ -204,25 +205,25 @@ func (kr *KubeRouter) Run() error {
 	if kr.Config.RunFirewall {
 		iptablesCmdHandlers, ipSetHandlers, err := netpol.NewIPTablesHandlers(kr.Config)
 		if err != nil {
-			return errors.New("Failed to create iptables handlers: " + err.Error())
+			return fmt.Errorf("failed to create iptables handlers: %v", err)
 		}
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
 			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, iptablesCmdHandlers, ipSetHandlers)
 		if err != nil {
-			return errors.New("Failed to create network policy controller: " + err.Error())
+			return fmt.Errorf("failed to create network policy controller: %v", err)
 		}
 
 		_, err = podInformer.AddEventHandler(npc.PodEventHandler)
 		if err != nil {
-			return errors.New("Failed to add PodEventHandler: " + err.Error())
+			return fmt.Errorf("failed to add PodEventHandler: %v", err)
 		}
 		_, err = nsInformer.AddEventHandler(npc.NamespaceEventHandler)
 		if err != nil {
-			return errors.New("Failed to add NamespaceEventHandler: " + err.Error())
+			return fmt.Errorf("failed to add NamespaceEventHandler: %v", err)
 		}
 		_, err = npInformer.AddEventHandler(npc.NetworkPolicyEventHandler)
 		if err != nil {
-			return errors.New("Failed to add NetworkPolicyEventHandler: " + err.Error())
+			return fmt.Errorf("failed to add NetworkPolicyEventHandler: %v", err)
 		}
 
 		wg.Add(1)
@@ -233,10 +234,13 @@ func (kr *KubeRouter) Run() error {
 		klog.V(0).Info("running load balancer allocator controller")
 		lbc, err := lballoc.NewLoadBalancerController(kr.Client, kr.Config, svcInformer)
 		if err != nil {
-			return errors.New("Failed to create load balancer allocator: " + err.Error())
+			return fmt.Errorf("failed to create load balancer allocator: %v", err)
 		}
 
-		svcInformer.AddEventHandler(lbc)
+		_, err = svcInformer.AddEventHandler(lbc)
+		if err != nil {
+			return fmt.Errorf("failed to add ServiceEventHandler: %v", err)
+		}
 
 		wg.Add(1)
 		go lbc.Run(healthChan, stopCh, &wg)
@@ -265,7 +269,7 @@ func (kr *KubeRouter) CacheSyncOrTimeout(informerFactory informers.SharedInforme
 
 	select {
 	case <-time.After(kr.Config.CacheSyncTimeout):
-		return errors.New(kr.Config.CacheSyncTimeout.String() + " timeout")
+		return fmt.Errorf("%s timeout", kr.Config.CacheSyncTimeout.String())
 	case <-syncOverCh:
 		return nil
 	}
