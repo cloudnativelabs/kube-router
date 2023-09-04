@@ -625,18 +625,27 @@ func (mf *mockInformer) AddIndexers(_ cache.Indexers) error {
 	return nil
 }
 
-func (mf *mockInformer) AddEventHandler(_ cache.ResourceEventHandler) {
+func (mf *mockInformer) AddEventHandler(_ cache.ResourceEventHandler) (cache.ResourceEventHandlerRegistration, error) {
+	return nil, nil
 }
 
-func (mf *mockInformer) AddEventHandlerWithResyncPeriod(_ cache.ResourceEventHandler, _ time.Duration) {
+func (mf *mockInformer) AddEventHandlerWithResyncPeriod(_ cache.ResourceEventHandler, _ time.Duration) (cache.ResourceEventHandlerRegistration, error) {
+	return nil, nil
+}
+
+func (mf *mockInformer) RemoveEventHandler(_ cache.ResourceEventHandlerRegistration) error {
+	return nil
+}
+
+func (mf *mockInformer) GetStore() cache.Store {
+	return nil
 }
 
 func (mf *mockInformer) GetController() cache.Controller {
 	return nil
 }
 
-func (mf *mockInformer) GetStore() cache.Store {
-	return nil
+func (mf *mockInformer) Run(_ <-chan struct{}) {
 }
 
 func (mf *mockInformer) HasSynced() bool {
@@ -647,15 +656,16 @@ func (mf *mockInformer) LastSyncResourceVersion() string {
 	return ""
 }
 
-func (mf *mockInformer) Run(_ <-chan struct{}) {
+func (mf *mockInformer) SetWatchErrorHandler(_ cache.WatchErrorHandler) error {
+	return nil
 }
 
 func (mf *mockInformer) SetTransform(_ cache.TransformFunc) error {
 	return nil
 }
 
-func (mf *mockInformer) SetWatchErrorHandler(_ cache.WatchErrorHandler) error {
-	return nil
+func (mf *mockInformer) IsStopped() bool {
+	return false
 }
 
 func TestNewLoadBalancerController(t *testing.T) {

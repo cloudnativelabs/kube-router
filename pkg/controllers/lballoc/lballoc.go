@@ -169,7 +169,7 @@ func (lbc *LoadBalancerController) runLeaderElection(ctx context.Context, isLead
 	})
 }
 
-func (lbc *LoadBalancerController) OnAdd(obj interface{}) {
+func (lbc *LoadBalancerController) OnAdd(obj interface{}, isInitialList bool) {
 	if svc, ok := obj.(*v1core.Service); ok {
 		lbc.addChan <- *svc
 	}
