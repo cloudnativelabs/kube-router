@@ -12,7 +12,6 @@ import (
 func getMoqNSC() *NetworkServicesController {
 	lnm := NewLinuxNetworkMock()
 	mockedLinuxNetworking := &LinuxNetworkingMock{
-		cleanupMangleTableRuleFunc:         lnm.cleanupMangleTableRule,
 		getKubeDummyInterfaceFunc:          lnm.getKubeDummyInterface,
 		ipAddrAddFunc:                      lnm.ipAddrAdd,
 		ipvsAddServerFunc:                  lnm.ipvsAddServer,
@@ -24,7 +23,7 @@ func getMoqNSC() *NetworkServicesController {
 		setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSR,
 	}
 	return &NetworkServicesController{
-		nodeIP:       net.ParseIP("10.0.0.0"),
+		primaryIP:    net.ParseIP("10.0.0.0"),
 		nodeHostName: "node-1",
 		ln:           mockedLinuxNetworking,
 		fwMarkMap:    map[uint32]string{},
