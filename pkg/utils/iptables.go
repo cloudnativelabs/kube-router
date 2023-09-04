@@ -62,13 +62,13 @@ func init() {
 }
 
 // SaveInto calls `iptables-save` for given table and stores result in a given buffer.
-func SaveInto(table string, buffer *bytes.Buffer) error {
-	path, err := exec.LookPath("iptables-save")
+func SaveInto(iptablesBinary, table string, buffer *bytes.Buffer) error {
+	path, err := exec.LookPath(iptablesBinary)
 	if err != nil {
 		return err
 	}
 	stderrBuffer := bytes.NewBuffer(nil)
-	args := []string{"iptables-save", "-t", table}
+	args := []string{iptablesBinary, "-t", table}
 	klog.V(9).Infof("running iptables command: path=`%s` args=%+v", path, args)
 	cmd := exec.Cmd{
 		Path:   path,
@@ -79,32 +79,6 @@ func SaveInto(table string, buffer *bytes.Buffer) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("%v (%s)", err, stderrBuffer)
 	}
-	return nil
-}
-
-// Restore runs `iptables-restore` passing data through []byte.
-func Restore(table string, data []byte) error {
-	path, err := exec.LookPath("iptables-restore")
-	if err != nil {
-		return err
-	}
-	var args []string
-	if hasWait {
-		args = []string{"iptables-restore", "--wait", "-T", table}
-	} else {
-		args = []string{"iptables-restore", "-T", table}
-	}
-	klog.V(9).Infof("running iptables command: path=`%s` args=%+v", path, args)
-	cmd := exec.Cmd{
-		Path:  path,
-		Args:  args,
-		Stdin: bytes.NewBuffer(data),
-	}
-	b, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%v (%s)", err, b)
-	}
-
 	return nil
 }
 
