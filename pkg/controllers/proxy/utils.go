@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
+	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
@@ -13,7 +14,9 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
+	netutils "k8s.io/utils/net"
 )
 
 const (
@@ -35,135 +38,6 @@ func attemptNamespaceResetAfterError(hostNSHandle netns.NsHandle) {
 	klog.V(2).Infof("Current network namespace after revert namespace to host network namespace: %s",
 		activeNetworkNamespaceHandle.String())
 	_ = activeNetworkNamespaceHandle.Close()
-}
-
-func (ln *linuxNetworking) configureContainerForDSR(
-	vip, endpointIP, containerID string, pid int, hostNetworkNamespaceHandle netns.NsHandle) error {
-	endpointNamespaceHandle, err := netns.GetFromPid(pid)
-	if err != nil {
-		return fmt.Errorf("failed to get endpoint namespace (containerID=%s, pid=%d, error=%v)",
-			containerID, pid, err)
-	}
-	defer utils.CloseCloserDisregardError(&endpointNamespaceHandle)
-
-	// LINUX NAMESPACE SHIFT - It is important to note that from here until the end of the function (or until an error)
-	// all subsequent commands are executed from within the container's network namespace and NOT the host's namespace.
-	err = netns.Set(endpointNamespaceHandle)
-	if err != nil {
-		return fmt.Errorf("failed to enter endpoint namespace (containerID=%s, pid=%d, error=%v)",
-			containerID, pid, err)
-	}
-
-	activeNetworkNamespaceHandle, err := netns.Get()
-	if err != nil {
-		return fmt.Errorf("failed to get activeNetworkNamespace due to %v", err)
-	}
-	klog.V(2).Infof("Current network namespace after netns. Set to container network namespace: %s",
-		activeNetworkNamespaceHandle.String())
-	_ = activeNetworkNamespaceHandle.Close()
-
-	// TODO: fix boilerplate `netns.Set(hostNetworkNamespaceHandle)` code. Need a robust
-	// way to switch back to old namespace, pretty much all things will go wrong if we dont switch back
-
-	// create an ipip tunnel interface inside the endpoint container
-	tunIf, err := netlink.LinkByName(KubeTunnelIf)
-	if err != nil {
-		if err.Error() != IfaceNotFound {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return fmt.Errorf("failed to verify if ipip tunnel interface exists in endpoint %s namespace due "+
-				"to %v", endpointIP, err)
-		}
-
-		klog.V(2).Infof("Could not find tunnel interface %s in endpoint %s so creating one.",
-			KubeTunnelIf, endpointIP)
-		ipTunLink := netlink.Iptun{
-			LinkAttrs: netlink.LinkAttrs{Name: KubeTunnelIf},
-			Local:     net.ParseIP(endpointIP),
-		}
-		err = netlink.LinkAdd(&ipTunLink)
-		if err != nil {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return fmt.Errorf("failed to add ipip tunnel interface in endpoint namespace due to %v", err)
-		}
-
-		// this is ugly, but ran into issue multiple times where interface did not come up quickly.
-		for retry := 0; retry < 60; retry++ {
-			time.Sleep(interfaceWaitSleepTime)
-			tunIf, err = netlink.LinkByName(KubeTunnelIf)
-			if err == nil {
-				break
-			}
-			if err.Error() == IfaceNotFound {
-				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying",
-					KubeTunnelIf)
-				continue
-			} else {
-				break
-			}
-		}
-
-		if err != nil {
-			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return fmt.Errorf("failed to get %s tunnel interface handle due to %v", KubeTunnelIf, err)
-		}
-
-		klog.V(2).Infof("Successfully created tunnel interface %s in endpoint %s.",
-			KubeTunnelIf, endpointIP)
-	}
-
-	// bring the tunnel interface up
-	err = netlink.LinkSetUp(tunIf)
-	if err != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to bring up ipip tunnel interface in endpoint namespace due to %v", err)
-	}
-
-	// assign VIP to the KUBE_TUNNEL_IF interface
-	err = ln.ipAddrAdd(tunIf, vip, false)
-	if err != nil && err.Error() != IfaceHasAddr {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to assign vip %s to kube-tunnel-if interface", vip)
-	}
-	klog.Infof("Successfully assigned VIP: %s in endpoint %s.", vip, endpointIP)
-
-	// disable rp_filter on all interface
-	sysctlErr := utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "kube-tunnel-if", 0)
-	if sysctlErr != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to disable rp_filter on kube-tunnel-if in the endpoint container: %s",
-			sysctlErr.Error())
-	}
-
-	// TODO: it's bad to rely on eth0 here. While this is inside the container's namespace and is determined by the
-	// container runtime and so far we've been able to count on this being reliably set to eth0, it is possible that
-	// this may shift sometime in the future with a different runtime. It would be better to find a reliable way to
-	// determine the interface name from inside the container.
-	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "eth0", 0)
-	if sysctlErr != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to disable rp_filter on eth0 in the endpoint container: %s", sysctlErr.Error())
-	}
-
-	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "all", 0)
-	if sysctlErr != nil {
-		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to disable rp_filter on `all` in the endpoint container: %s", sysctlErr.Error())
-	}
-
-	klog.Infof("Successfully disabled rp_filter in endpoint %s.", endpointIP)
-
-	err = netns.Set(hostNetworkNamespaceHandle)
-	if err != nil {
-		return fmt.Errorf("failed to set hostNetworkNamespace handle due to %v", err)
-	}
-	activeNetworkNamespaceHandle, err = netns.Get()
-	if err != nil {
-		return fmt.Errorf("failed to get activeNetworkNamespace handle due to %v", err)
-	}
-	klog.Infof("Current network namespace after revert namespace to host network namespace: %s",
-		activeNetworkNamespaceHandle.String())
-	_ = activeNetworkNamespaceHandle.Close()
-	return nil
 }
 
 // generateUniqueFWMark generates a unique uint32 hash value using the IP address, port, and protocol. This can then
@@ -323,7 +197,7 @@ func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, 
 	}
 
 	// we are only concerned with endpoint pod running on current node
-	if strings.Compare(podObj.Status.HostIP, nsc.nodeIP.String()) != 0 {
+	if strings.Compare(podObj.Status.HostIP, nsc.primaryIP.String()) != 0 {
 		return nil
 	}
 
@@ -357,4 +231,274 @@ func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, 
 	}
 
 	return nil
+}
+
+// getPrimaryAndCIDRsByFamily returns the best primary nodeIP and a slice of all of the relevant podCIDRs based upon a
+// given IP family
+func (nsc *NetworkServicesController) getPrimaryAndCIDRsByFamily(ipFamily v1.IPFamily) (string, []string) {
+	var primaryIP string
+	cidrMap := make(map[string]bool)
+	switch ipFamily {
+	case v1.IPv4Protocol:
+		// If we're not detected to be IPv4 capable break early
+		if !nsc.isIPv4Capable {
+			return "", nil
+		}
+
+		primaryIP = utils.FindBestIPv4NodeAddress(nsc.primaryIP, nsc.nodeIPv4Addrs).String()
+		if len(nsc.podCidr) > 0 && netutils.IsIPv4CIDRString(nsc.podCidr) {
+			cidrMap[nsc.podCidr] = true
+		}
+		if len(nsc.podIPv4CIDRs) > 0 {
+			for _, cidr := range nsc.podIPv4CIDRs {
+				if _, ok := cidrMap[cidr]; !ok {
+					cidrMap[cidr] = true
+				}
+			}
+		}
+	case v1.IPv6Protocol:
+		// If we're not detected to be IPv6 capable break early
+		if !nsc.isIPv6Capable {
+			return "", nil
+		}
+
+		primaryIP = utils.FindBestIPv6NodeAddress(nsc.primaryIP, nsc.nodeIPv6Addrs).String()
+		if len(nsc.podCidr) > 0 && netutils.IsIPv6CIDRString(nsc.podCidr) {
+			cidrMap[nsc.podCidr] = true
+		}
+		if len(nsc.podIPv6CIDRs) > 0 {
+			for _, cidr := range nsc.podIPv6CIDRs {
+				if _, ok := cidrMap[cidr]; !ok {
+					cidrMap[cidr] = true
+				}
+			}
+		}
+	}
+
+	cidrs := make([]string, len(cidrMap))
+	idx := 0
+	for cidr := range cidrMap {
+		cidrs[idx] = cidr
+		idx++
+	}
+
+	return primaryIP, cidrs
+}
+
+// GetAllClusterIPs returns all of the cluster IPs on a service separated into IPv4 and IPv6 lists
+func getAllClusterIPs(svc *serviceInfo) map[v1.IPFamily][]net.IP {
+	// We use maps here so that we can de-duplicate repeat IP addresses
+	v4Map := make(map[string]bool)
+	v6Map := make(map[string]bool)
+
+	if svc.clusterIP != nil {
+		if svc.clusterIP.To4() != nil {
+			v4Map[svc.clusterIP.String()] = true
+		} else {
+			v6Map[svc.clusterIP.String()] = true
+		}
+	}
+
+	for _, clIP := range svc.clusterIPs {
+		ip := net.ParseIP(clIP)
+		if ip == nil {
+			continue
+		}
+
+		if ip.To4() != nil {
+			v4Map[ip.String()] = true
+		} else {
+			v6Map[ip.String()] = true
+		}
+	}
+
+	return convertIPMapsToFamilyMap(v4Map, v6Map)
+}
+
+// getAllClusterIPs returns all of the cluster IPs on a service separated into IPv4 and IPv6 lists
+func getAllExternalIPs(svc *serviceInfo, includeLBIPs bool) map[v1.IPFamily][]net.IP {
+	// We use maps here so that we can de-duplicate repeat IP addresses
+	v4Map := make(map[string]bool)
+	v6Map := make(map[string]bool)
+
+	for _, exIP := range svc.externalIPs {
+		ip := net.ParseIP(exIP)
+		if ip == nil {
+			continue
+		}
+
+		if ip.To4() != nil {
+			v4Map[ip.String()] = true
+		} else {
+			v6Map[ip.String()] = true
+		}
+	}
+
+	if !includeLBIPs {
+		return convertIPMapsToFamilyMap(v4Map, v6Map)
+	}
+
+	for _, lbIP := range svc.loadBalancerIPs {
+		ip := net.ParseIP(lbIP)
+		if ip == nil {
+			continue
+		}
+
+		if ip.To4() != nil {
+			v4Map[ip.String()] = true
+		} else {
+			v6Map[ip.String()] = true
+		}
+	}
+
+	return convertIPMapsToFamilyMap(v4Map, v6Map)
+}
+
+// convertIPMapsToFamilyMap converts family specific maps of string IPs to a single map that is keyed by IPFamily and
+// has parsed net.IPs
+func convertIPMapsToFamilyMap(v4Map map[string]bool, v6Map map[string]bool) map[v1.IPFamily][]net.IP {
+	allIPs := make(map[v1.IPFamily][]net.IP)
+
+	allIPs[v1.IPv4Protocol] = make([]net.IP, len(v4Map))
+	allIPs[v1.IPv6Protocol] = make([]net.IP, len(v6Map))
+
+	idx := 0
+	for ip := range v4Map {
+		allIPs[v1.IPv4Protocol][idx] = net.ParseIP(ip)
+		idx++
+	}
+
+	idx = 0
+	for ip := range v6Map {
+		allIPs[v1.IPv6Protocol][idx] = net.ParseIP(ip)
+		idx++
+	}
+
+	return allIPs
+}
+
+// hairpinRuleFrom create hairpin rules for a given set of parameters
+func hairpinRuleFrom(serviceIPs []net.IP, endpointIP string, endpointFamily v1.IPFamily, servicePort int,
+	ruleMap map[string][]string) {
+	var vipSubnet string
+
+	switch endpointFamily {
+	case v1.IPv4Protocol:
+		vipSubnet = "/32"
+	case v1.IPv6Protocol:
+		vipSubnet = "/128"
+	}
+
+	for _, svcIP := range serviceIPs {
+		ruleArgs := []string{"-s", endpointIP + "/32", "-d", endpointIP + vipSubnet,
+			"-m", "ipvs", "--vaddr", svcIP.String(), "--vport", strconv.Itoa(servicePort),
+			"-j", "SNAT", "--to-source", svcIP.String()}
+
+		// Trying to ensure this matches iptables.List()
+		ruleString := "-A " + ipvsHairpinChainName + " -s " + endpointIP + vipSubnet + " -d " +
+			endpointIP + vipSubnet + " -m ipvs" + " --vaddr " + svcIP.String() + " --vport " +
+			strconv.Itoa(servicePort) + " -j SNAT" + " --to-source " + svcIP.String()
+
+		ruleMap[ruleString] = ruleArgs
+	}
+}
+
+// ensureHairpinChain make sure that the hairpin chain in the nat table exists and that it has a jump rule from the
+// POSTROUTING chain
+func ensureHairpinChain(iptablesCmdHandler utils.IPTablesHandler) error {
+	hasHairpinChain := false
+	chains, err := iptablesCmdHandler.ListChains("nat")
+	if err != nil {
+		return fmt.Errorf("failed to list iptables chains: %v", err)
+	}
+	for _, chain := range chains {
+		if chain == ipvsHairpinChainName {
+			hasHairpinChain = true
+		}
+	}
+
+	// Create a chain for hairpin rules, if needed
+	if !hasHairpinChain {
+		err = iptablesCmdHandler.NewChain("nat", ipvsHairpinChainName)
+		if err != nil {
+			return fmt.Errorf("failed to create iptables chain \"%s\": %v", ipvsHairpinChainName, err)
+		}
+	}
+
+	// Create a jump that points to our hairpin chain
+	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", ipvsHairpinChainName}
+	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", jumpArgs...)
+	if err != nil {
+		return fmt.Errorf("failed to add hairpin iptables jump rule: %v", err)
+	}
+
+	return nil
+}
+
+// getAllLocalIPs returns all IP addresses found on any network address in the system, excluding dummy and docker
+// interfaces in a map that distinguishes between IPv4 and IPv6 addresses by v1.IPFamily
+func getAllLocalIPs() (map[v1.IPFamily][]net.IP, error) {
+	// We use maps here so that we can de-duplicate repeat IP addresses
+	v4Map := make(map[string]bool)
+	v6Map := make(map[string]bool)
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, fmt.Errorf("could not load list of net interfaces: %v", err)
+	}
+
+	for _, link := range links {
+		// do not include IPs for any interface that calls itself "dummy", "kube", or "docker"
+		if strings.Contains(link.Attrs().Name, "dummy") ||
+			strings.Contains(link.Attrs().Name, "kube") ||
+			strings.Contains(link.Attrs().Name, "docker") {
+
+			continue
+		}
+
+		linkAddrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get IPs for interface: %v", err)
+		}
+
+		for _, addr := range linkAddrs {
+			if addr.IP.To4() != nil {
+				v4Map[addr.IP.String()] = true
+			} else {
+				v6Map[addr.IP.String()] = true
+			}
+		}
+	}
+
+	return convertIPMapsToFamilyMap(v4Map, v6Map), nil
+}
+
+// getIPSetName formulates an IP Family specific ipset name based upon the prefix and IPFamily passed
+func getIPSetName(nameBase string, family v1.IPFamily) string {
+	var sb strings.Builder
+
+	if family == v1.IPv6Protocol {
+		sb.WriteString("inet6:")
+	}
+	sb.WriteString(nameBase)
+
+	return sb.String()
+}
+
+// getIPVSFirewallInputChainRule creates IPVS firwall input chain rule based upon the family that is passed. This is
+// used by the NSC to ensure that traffic destined for IPVS services on the INPUT table will be directed to the IPVS
+// firewall chain
+func getIPVSFirewallInputChainRule(family v1.IPFamily) []string {
+	// The iptables rule for use in {setup,cleanup}IpvsFirewall.
+	return []string{
+		"-m", "comment", "--comment", "handle traffic to IPVS service IPs in custom chain",
+		"-m", "set", "--match-set", getIPSetName(serviceIPsIPSetName, family), "dst",
+		"-j", ipvsFirewallChainName}
+}
+
+// runIPCommandsWithArgs extend the exec.Command interface to allow passing an additional array of arguments to ip
+func runIPCommandsWithArgs(ipArgs []string, additionalArgs ...string) *exec.Cmd {
+	var allArgs []string
+	allArgs = append(allArgs, ipArgs...)
+	allArgs = append(allArgs, additionalArgs...)
+	return exec.Command("ip", allArgs...)
 }

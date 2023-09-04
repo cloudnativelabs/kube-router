@@ -28,7 +28,7 @@ DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.50.1
 GOBGP_VERSION=v3.17.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v1.14.1
-MOQ_VERSION=v0.2.1
+MOQ_VERSION=v0.3.2
 UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
@@ -186,7 +186,7 @@ gofmt-fix: ## Fixes files that need to be gofmt'd.
 
 # List of all file_moq.go files which would need to be regenerated
 # from file.go if changed
-gomoqs: ./pkg/controllers/proxy/network_services_controller_moq.go
+gomoqs: ./pkg/controllers/proxy/linux_networking_moq.go
 
 # file_moq.go file is generated from file.go "//go:generate moq ..." in-file
 # annotation, as it needs to know which interfaces to create mock stubs for

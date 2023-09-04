@@ -50,6 +50,7 @@ func ClusterIPIsNone(clusterIP string) bool {
 	return strings.ToLower(clusterIP) == "none"
 }
 
+// ClusterIPIsNoneOrBlank checks to see whether the ClusterIP contains "None" or is blank
 func ClusterIPIsNoneOrBlank(clusterIP string) bool {
 	return ClusterIPIsNone(clusterIP) || clusterIP == ""
 }

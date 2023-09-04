@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	// From what I can see there are no IPv6 equivalents for the below options, so we only consider IPv6 here
 	// Network Services Configuration Paths
 	IPv4IPVSConntrack        = "net/ipv4/vs/conntrack"
 	IPv4IPVSExpireNodestConn = "net/ipv4/vs/expire_nodest_conn"

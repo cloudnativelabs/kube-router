@@ -34,10 +34,10 @@ func (lnm *LinuxNetworkingMockImpl) getKubeDummyInterface() (netlink.Link, error
 	iface, err := netlink.LinkByName("lo")
 	return iface, err
 }
-func (lnm *LinuxNetworkingMockImpl) setupPolicyRoutingForDSR() error {
+func (lnm *LinuxNetworkingMockImpl) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) setupRoutesForExternalIPForDSR(s serviceInfoMap) error {
+func (lnm *LinuxNetworkingMockImpl) setupRoutesForExternalIPForDSR(s serviceInfoMap, setupIPv4, setupIPv6 bool) error {
 	return nil
 }
 func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {
@@ -47,20 +47,22 @@ func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {
 	copy(svcsCopy, lnm.ipvsSvcs)
 	return svcsCopy, nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr string, addRouter bool) error {
+func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr, nodeIP string, addRouter bool) error {
 	return nil
 }
 func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 	return nil
 }
-func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16,
+	persistent bool, persistentTimeout int32, scheduler string,
+	flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
 	svc := &ipvs.Service{
 		Address:  vip,
 		Protocol: protocol,
 		Port:     port,
 	}
 	lnm.ipvsSvcs = append(lnm.ipvsSvcs, svc)
-	return svc, nil
+	return svcs, svc, nil
 }
 func (lnm *LinuxNetworkingMockImpl) ipvsDelService(ipvsSvc *ipvs.Service) error {
 	for idx, svc := range lnm.ipvsSvcs {
@@ -73,9 +75,6 @@ func (lnm *LinuxNetworkingMockImpl) ipvsDelService(ipvsSvc *ipvs.Service) error 
 }
 func (lnm *LinuxNetworkingMockImpl) ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
 	return []*ipvs.Destination{}, nil
-}
-func (lnm *LinuxNetworkingMockImpl) cleanupMangleTableRule(ip string, protocol string, port string, fwmark string, tcpMSS int) error {
-	return nil
 }
 
 func fatalf(format string, a ...interface{}) {
@@ -116,7 +115,6 @@ var _ = Describe("NetworkServicesController", func() {
 	BeforeEach(func() {
 		lnm = NewLinuxNetworkMock()
 		mockedLinuxNetworking = &LinuxNetworkingMock{
-			cleanupMangleTableRuleFunc:         lnm.cleanupMangleTableRule,
 			getKubeDummyInterfaceFunc:          lnm.getKubeDummyInterface,
 			ipAddrAddFunc:                      lnm.ipAddrAdd,
 			ipvsAddServerFunc:                  lnm.ipvsAddServer,
@@ -143,7 +141,7 @@ var _ = Describe("NetworkServicesController", func() {
 		}
 
 		nsc = &NetworkServicesController{
-			nodeIP:       net.ParseIP("10.0.0.0"),
+			primaryIP:    net.ParseIP("10.0.0.0"),
 			nodeHostName: "node-1",
 			ln:           mockedLinuxNetworking,
 		}
@@ -177,22 +175,14 @@ var _ = Describe("NetworkServicesController", func() {
 		})
 		JustBeforeEach(func() {
 			// pre-inject some foo ipvs Service to verify its deletion
-			fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, 0, "rr", schedFlags{})
-			fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, 0, "rr", schedFlags{true, true, false})
+			_, fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, 0, "rr",
+				schedFlags{})
+			_, fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, 0, "rr",
+				schedFlags{true, true, false})
 			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
-		})
-		It("Should have called cleanupMangleTableRule for ExternalIPs", func() {
-			fwmark1, _ := nsc.generateUniqueFWMark("1.1.1.1", tcpProtocol, "8080")
-			fwmark2, _ := nsc.generateUniqueFWMark("2.2.2.2", tcpProtocol, "8080")
-			Expect(
-				fmt.Sprintf("%v", mockedLinuxNetworking.cleanupMangleTableRuleCalls())).To(
-				Equal(
-					fmt.Sprintf("[{1.1.1.1 tcp 8080 %d} {2.2.2.2 tcp 8080 %d}]",
-						fwmark1,
-						fwmark2)))
 		})
 		It("Should have called setupPolicyRoutingForDSR", func() {
 			Expect(
