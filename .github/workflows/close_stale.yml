@@ -24,3 +24,4 @@ jobs:
           exempt-issue-labels: override-stale
           exempt-pr-labels: override-stale,dependencies
           enable-statistics: true
+          operations-per-run: 100
