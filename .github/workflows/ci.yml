@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Go 1.x
       uses: actions/setup-go@v4
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Go 1.x
       uses: actions/setup-go@v4
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Go 1.x
       uses: actions/setup-go@v4
@@ -87,7 +87,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v2
@@ -101,17 +101,19 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Extract branch from github ref - New Push
-      if: ${{ startsWith(github.ref, 'refs/tags/v') != true && github.event_name != 'pull_request' }}
-      shell: bash
-      run: echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
-      id: extract_branch
+    - name: Extract metadata (tags, labels) for Docker (RC, Tag)
+      id: meta
+      if: ${{ startsWith(github.ref, 'refs/tags/v') == true || github.event_name == 'pull_request' }}
+      uses: docker/metadata-action@v4
+      with:
+        images: cloudnativelabs/kube-router
 
-    - name: Extract tag from github ref - New Release
-      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-      shell: bash
-      run: echo "##[set-output name=tag;]$(echo ${GITHUB_REF#refs/tags/})"
-      id: extract_tag
+    - name: Extract metadata (tags, labels) for Docker (Push)
+      id: meta
+      uses: docker/metadata-action@v4
+      if: ${{ startsWith(github.ref, 'refs/tags/v') != true || github.event_name != 'pull_request' }}
+      with:
+        images: cloudnativelabs/kube-router-git
 
     - name: Build and push - New Push
       uses: docker/build-push-action@v4
@@ -128,7 +130,8 @@ jobs:
         build-args: |
           BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
           RUNTIME_BASE=${{ env.RUNTIME_BASE }}
-        tags: cloudnativelabs/kube-router-git:${{ steps.extract_branch.outputs.branch }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
 
     - name: Build and push - New PR
       uses: docker/build-push-action@v4
@@ -142,30 +145,12 @@ jobs:
           BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
           RUNTIME_BASE=${{ env.RUNTIME_BASE }}
         tags: cloudnativelabs/kube-router-git:PR-${{ github.event.pull_request.number }}
-
-    # Tagging a release candidate, don't update latest
-    - name: Build and push - New Tag (Release Candidate)
-      uses: docker/build-push-action@v4
-      if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-rc') }}
-      with:
-        context: .
-        platforms: |
-          linux/amd64
-          linux/arm64
-          linux/arm/v7
-          linux/s390x
-          linux/ppc64le
-        push: true
-        build-args: |
-          BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
-          RUNTIME_BASE=${{ env.RUNTIME_BASE }}
-        tags: |
-          cloudnativelabs/kube-router:${{ steps.extract_tag.outputs.tag }}
+        labels: ${{ steps.meta.outputs.labels }}
 
     # Tagging a proper release, update latest
     - name: Build and push - New Tag
       uses: docker/build-push-action@v4
-      if: ${{ startsWith(github.ref, 'refs/tags/v') && ! contains(github.ref, '-rc') }}
+      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
       with:
         context: .
         platforms: |
@@ -179,8 +164,8 @@ jobs:
           BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
           RUNTIME_BASE=${{ env.RUNTIME_BASE }}
         tags: |
-          cloudnativelabs/kube-router:${{ steps.extract_tag.outputs.tag }}
-          cloudnativelabs/kube-router:latest
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
 
   # Runs Go Releaser on Tag Event
   ci-goreleaser-tag:
@@ -188,7 +173,7 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Go 1.x
       uses: actions/setup-go@v4
