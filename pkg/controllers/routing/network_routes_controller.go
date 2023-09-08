@@ -854,11 +854,6 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 				"setup", nrc.overlayEncap)
 		}
 
-		// need to skip binding device if nrc.nodeInterface is loopback, otherwise packets never leave
-		// from egress interface to the tunnel peer.
-		if nrc.nodeInterface != "lo" {
-			cmdArgs = append(cmdArgs, []string{"dev", nrc.nodeInterface}...)
-		}
 		klog.V(2).Infof("Executing the following command to create tunnel: ip %s", cmdArgs)
 		out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
 		if err != nil {
