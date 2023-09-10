@@ -94,7 +94,7 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		-v $(GO_CACHE):/root/.cache/go-build \
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_LINT_IMAGE) \
-		sh -c \
+		bash -c \
 		'golangci-lint run ./...'
 else
 	golangci-lint run ./...
