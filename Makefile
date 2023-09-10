@@ -29,6 +29,7 @@ GOBGP_VERSION=v3.17.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v1.14.1
 MOQ_VERSION=v0.2.1
+UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
@@ -197,7 +198,7 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		-v $(GO_CACHE):/root/.cache/go-build \
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-		sh -c 'go install github.com/matryer/moq@$(MOQ_VERSION) && go generate -v $(*).go'
+		sh -c 'go install github.com/matryer/moq@$(MOQ_VERSION) && go generate -v $(*).go && chown $(UID) $(*)_moq.go'
 else
 	@test -x $(lastword $(subst :, ,$(GOPATH)))/bin/moq && exit 0; echo "ERROR: 'moq' tool is needed to update mock test files, install it with: \ngo get github.com/matryer/moq\n"; exit 1
 	go generate -v $(*).go
