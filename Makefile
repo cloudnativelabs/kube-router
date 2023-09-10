@@ -191,6 +191,7 @@ gomoqs: ./pkg/controllers/proxy/network_services_controller_moq.go
 # file_moq.go file is generated from file.go "//go:generate moq ..." in-file
 # annotation, as it needs to know which interfaces to create mock stubs for
 %_moq.go: %.go
+	rm -f $(*)_moq.go
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
 		-v $(GO_CACHE):/root/.cache/go-build \
