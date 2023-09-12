@@ -1421,11 +1421,9 @@ func ipvsDestinationString(d *ipvs.Destination) string {
 func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) {
 	if p {
 		svc.Flags |= ipvsPersistentFlagHex
-		svc.Netmask |= 0xFFFFFFFF
 		svc.Timeout = uint32(timeout)
 	} else {
 		svc.Flags &^= ipvsPersistentFlagHex
-		svc.Netmask &^= 0xFFFFFFFF
 		svc.Timeout = 0
 	}
 }
@@ -1447,13 +1445,6 @@ func ipvsSetSchedFlags(svc *ipvs.Service, s schedFlags) {
 		svc.Flags |= ipvsSched3FlagHex
 	} else {
 		svc.Flags &^= ipvsSched3FlagHex
-	}
-
-	/* Keep netmask which is set by ipvsSetPersistence() before */
-	if (svc.Netmask&0xFFFFFFFF != 0) || (s.flag1 || s.flag2 || s.flag3) {
-		svc.Netmask |= 0xFFFFFFFF
-	} else {
-		svc.Netmask &^= 0xFFFFFFFF
 	}
 }
 
