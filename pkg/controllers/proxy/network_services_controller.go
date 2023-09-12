@@ -226,63 +226,52 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	klog.V(1).Info("Performing cleanup of depreciated masquerade iptables rules (if needed).")
 	err := nsc.deleteBadMasqueradeIptablesRules()
 	if err != nil {
-		klog.Errorf("Error cleaning up old/bad masquerade rules: %s", err.Error())
+		klog.Fatalf("error cleaning up old/bad masquerade rules: %s", err.Error())
 	}
 
 	// enable masquerade rule
 	err = nsc.ensureMasqueradeIptablesRule()
 	if err != nil {
-		klog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
+		klog.Fatalf("failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
+	}
+
+	setSysCtlAndCheckError := func(path string, value int) {
+		sysctlErr := utils.SetSysctl(path, value)
+		if sysctlErr != nil {
+			// Check if the error is fatal, on older kernels this option does not exist and the same behaviour is default
+			// if option is not found just log it
+			if sysctlErr.IsFatal() {
+				klog.Fatal(sysctlErr.Error())
+			} else {
+				klog.Error(sysctlErr.Error())
+			}
+		}
 	}
 
 	// From what I can see there are no IPv6 equivalents for the below options, so we only consider IPv4 here
 	// https://www.kernel.org/doc/Documentation/networking/ipvs-sysctl.txt
 	// enable ipvs connection tracking
-	sysctlErr := utils.SetSysctl(utils.IPv4IPVSConntrack, ipvsConntrackEnable)
-	if sysctlErr != nil {
-		klog.Error(sysctlErr.Error())
-	}
+	setSysCtlAndCheckError(utils.IPv4IPVSConntrack, ipvsConntrackEnable)
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	sysctlErr = utils.SetSysctl(utils.IPv4IPVSExpireNodestConn, ipvsExpireNodestConnEnable)
-	if sysctlErr != nil {
-		klog.Error(sysctlErr.Error())
-	}
+	setSysCtlAndCheckError(utils.IPv4IPVSExpireNodestConn, ipvsExpireNodestConnEnable)
 
 	// LVS failover not working with UDP packets https://access.redhat.com/solutions/58653
-	sysctlErr = utils.SetSysctl(utils.IPv4IPVSExpireQuiescent, ipvsExpireQuiescentTemplateEnable)
-	if sysctlErr != nil {
-		klog.Error(sysctlErr.Error())
-	}
+	setSysCtlAndCheckError(utils.IPv4IPVSExpireQuiescent, ipvsExpireQuiescentTemplateEnable)
 
 	// https://github.com/kubernetes/kubernetes/pull/71114
-	sysctlErr = utils.SetSysctl(utils.IPv4IPVSConnReuseMode, ipvsConnReuseModeDisableSpecialHandling)
-	if sysctlErr != nil {
-		// Check if the error is fatal, on older kernels this option does not exist and the same behaviour is default
-		// if option is not found just log it
-		if sysctlErr.IsFatal() {
-			klog.Fatal(sysctlErr.Error())
-		} else {
-			klog.Info(sysctlErr.Error())
-		}
-	}
+	setSysCtlAndCheckError(utils.IPv4IPVSConnReuseMode, ipvsConnReuseModeDisableSpecialHandling)
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	sysctlErr = utils.SetSysctl(utils.IPv4ConfAllArpIgnore, arpIgnoreReplyOnlyIfTargetIPIsLocal)
-	if sysctlErr != nil {
-		klog.Error(sysctlErr.Error())
-	}
+	setSysCtlAndCheckError(utils.IPv4ConfAllArpIgnore, arpIgnoreReplyOnlyIfTargetIPIsLocal)
 
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
-	sysctlErr = utils.SetSysctl(utils.IPv4ConfAllArpAnnounce, arpAnnounceUseBestLocalAddress)
-	if sysctlErr != nil {
-		klog.Error(sysctlErr.Error())
-	}
+	setSysCtlAndCheckError(utils.IPv4ConfAllArpAnnounce, arpAnnounceUseBestLocalAddress)
 
 	// https://github.com/cloudnativelabs/kube-router/issues/282
 	err = nsc.setupIpvsFirewall()
 	if err != nil {
-		klog.Error("Error setting up ipvs firewall: " + err.Error())
+		klog.Fatalf("error setting up ipvs firewall: %s" + err.Error())
 	}
 	nsc.ProxyFirewallSetup.Broadcast()
 
@@ -296,7 +285,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	default:
 		err := nsc.doSync()
 		if err != nil {
-			klog.Fatalf("Failed to perform initial full sync %s", err.Error())
+			klog.Fatalf("failed to perform initial full sync %s", err.Error())
 		}
 		nsc.readyForUpdates = true
 	}
