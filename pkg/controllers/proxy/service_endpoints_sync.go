@@ -38,40 +38,53 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 	// cluster IP, nodeport and external IP services
 	activeServiceEndpointMap := make(map[string][]string)
 
+	klog.V(1).Info("Syncing ClusterIP Services")
 	err = nsc.setupClusterIPServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap)
 	if err != nil {
 		syncErrors = true
 		klog.Errorf("Error setting up IPVS services for service cluster IP's: %s", err.Error())
 	}
+
+	klog.V(1).Info("Syncing NodePort Services")
 	err = nsc.setupNodePortServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap)
 	if err != nil {
 		syncErrors = true
 		klog.Errorf("Error setting up IPVS services for service nodeport's: %s", err.Error())
 	}
+
+	klog.V(1).Info("Syncing ExternalIP Services")
 	err = nsc.setupExternalIPServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap)
 	if err != nil {
 		syncErrors = true
 		klog.Errorf("Error setting up IPVS services for service external IP's and load balancer IP's: %s",
 			err.Error())
 	}
+
+	klog.V(1).Info("Cleaning Up Stale VIPs from dummy interface")
 	err = nsc.cleanupStaleVIPs(activeServiceEndpointMap)
 	if err != nil {
 		syncErrors = true
 		klog.Errorf("Error cleaning up stale VIP's configured on the dummy interface: %s", err.Error())
 	}
+
+	klog.V(1).Info("Cleaning Up Stale VIPs from IPVS")
 	err = nsc.cleanupStaleIPVSConfig(activeServiceEndpointMap)
 	if err != nil {
 		syncErrors = true
 		klog.Errorf("Error cleaning up stale IPVS services and servers: %s", err.Error())
 	}
 
+	klog.V(1).Info("Cleaning Up Stale metrics")
 	nsc.cleanupStaleMetrics(activeServiceEndpointMap)
 
+	klog.V(1).Info("Syncing IPVS Firewall")
 	err = nsc.syncIpvsFirewall()
 	if err != nil {
 		syncErrors = true
 		klog.Errorf("Error syncing ipvs svc iptables rules to permit traffic to service VIP's: %s", err.Error())
 	}
+
+	klog.V(1).Info("Setting up DSR Services")
 	err = nsc.setupForDSR(serviceInfoMap)
 	if err != nil {
 		syncErrors = true
