@@ -25,7 +25,6 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/docker/docker/client"
 	"github.com/moby/ipvs"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	api "k8s.io/api/core/v1"
@@ -2285,18 +2284,18 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	if config.MetricsEnabled {
 		// Register the metrics for this controller
-		prometheus.MustRegister(metrics.ControllerIpvsServices)
-		prometheus.MustRegister(metrics.ControllerIpvsServicesSyncTime)
-		prometheus.MustRegister(metrics.ServiceBpsIn)
-		prometheus.MustRegister(metrics.ServiceBpsOut)
-		prometheus.MustRegister(metrics.ServiceBytesIn)
-		prometheus.MustRegister(metrics.ServiceBytesOut)
-		prometheus.MustRegister(metrics.ServiceCPS)
-		prometheus.MustRegister(metrics.ServicePacketsIn)
-		prometheus.MustRegister(metrics.ServicePacketsOut)
-		prometheus.MustRegister(metrics.ServicePpsIn)
-		prometheus.MustRegister(metrics.ServicePpsOut)
-		prometheus.MustRegister(metrics.ServiceTotalConn)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIpvsServices)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIpvsServicesSyncTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBpsIn)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBpsOut)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBytesIn)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBytesOut)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServiceCPS)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServicePacketsIn)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServicePacketsOut)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServicePpsIn)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServicePpsOut)
+		metrics.DefaultRegisterer.MustRegister(metrics.ServiceTotalConn)
 		nsc.MetricsEnabled = true
 	}
 

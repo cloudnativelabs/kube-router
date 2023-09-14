@@ -22,6 +22,16 @@ const (
 )
 
 var (
+	// DefaultRegisterer and DefaultGatherer are the implementations of the
+	// prometheus Registerer and Gatherer interfaces that all metrics operations
+	// will use. They are variables so that packages that embed this library can
+	// replace them at runtime, instead of having to pass around specific
+	// registries.
+	DefaultRegisterer = prometheus.DefaultRegisterer
+	DefaultGatherer   = prometheus.DefaultGatherer
+)
+
+var (
 	// BuildInfo Expose version and other build information
 	BuildInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -159,6 +169,11 @@ type Controller struct {
 	MetricsPort uint16
 }
 
+// Handler returns a http.Handler for the default registerer and gatherer
+func Handler() http.Handler {
+	return promhttp.InstrumentMetricHandler(DefaultRegisterer, promhttp.HandlerFor(DefaultGatherer, promhttp.HandlerOpts{}))
+}
+
 // Run prometheus metrics controller
 func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
 	wg *sync.WaitGroup) {
@@ -168,8 +183,8 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 
 	// register metrics for this controller
 	BuildInfo.WithLabelValues(runtime.Version(), version.Version).Set(1)
-	prometheus.MustRegister(BuildInfo)
-	prometheus.MustRegister(ControllerIpvsMetricsExportTime)
+	DefaultRegisterer.MustRegister(BuildInfo)
+	DefaultRegisterer.MustRegister(ControllerIpvsMetricsExportTime)
 
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(int(mc.MetricsPort)),
@@ -177,7 +192,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 		ReadHeaderTimeout: 5 * time.Second}
 
 	// add prometheus handler on metrics path
-	http.Handle(mc.MetricsPath, promhttp.Handler())
+	http.Handle(mc.MetricsPath, Handler())
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
