@@ -97,6 +97,7 @@ func (kr *KubeRouter) Run() error {
 	informerFactory := informers.NewSharedInformerFactory(kr.Client, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
 	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+	epSliceInformer := informerFactory.Discovery().V1().EndpointSlices().Informer()
 	podInformer := informerFactory.Core().V1().Pods().Informer()
 	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
@@ -177,7 +178,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunServiceProxy {
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
-			svcInformer, epInformer, podInformer, &ipsetMutex)
+			svcInformer, epSliceInformer, podInformer, &ipsetMutex)
 		if err != nil {
 			return fmt.Errorf("failed to create network services controller: %v", err)
 		}
@@ -186,7 +187,7 @@ func (kr *KubeRouter) Run() error {
 		if err != nil {
 			return fmt.Errorf("failed to add ServiceEventHandler: %v", err)
 		}
-		_, err = epInformer.AddEventHandler(nsc.EndpointsEventHandler)
+		_, err = epSliceInformer.AddEventHandler(nsc.EndpointSliceEventHandler)
 		if err != nil {
 			return fmt.Errorf("failed to add EndpointsEventHandler: %v", err)
 		}

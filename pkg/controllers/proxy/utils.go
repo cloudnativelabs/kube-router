@@ -116,7 +116,7 @@ func (nsc *NetworkServicesController) lookupServiceByFWMark(fwMark uint32) (stri
 
 // unsortedListsEquivalent compares two lists of endpointsInfo and considers them the same if they contains the same
 // contents regardless of order. Returns true if both lists contain the same contents.
-func unsortedListsEquivalent(a, b []endpointsInfo) bool {
+func unsortedListsEquivalent(a, b []endpointSliceInfo) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -140,7 +140,7 @@ func unsortedListsEquivalent(a, b []endpointsInfo) bool {
 
 // endpointsMapsEquivalent compares two maps of endpointsInfoMap to see if they have the same keys and values. Returns
 // true if both maps contain the same keys and values.
-func endpointsMapsEquivalent(a, b endpointsInfoMap) bool {
+func endpointsMapsEquivalent(a, b endpointSliceInfoMap) bool {
 	if len(a) != len(b) {
 		return false
 	}
