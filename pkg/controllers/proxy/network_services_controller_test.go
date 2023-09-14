@@ -148,10 +148,10 @@ var _ = Describe("NetworkServicesController", func() {
 
 		startInformersForServiceProxy(nsc, clientset)
 		waitForListerWithTimeoutG(nsc.svcLister, time.Second*10)
-		waitForListerWithTimeoutG(nsc.epLister, time.Second*10)
+		waitForListerWithTimeoutG(nsc.epSliceLister, time.Second*10)
 
 		nsc.serviceMap = nsc.buildServicesInfo()
-		nsc.endpointsMap = nsc.buildEndpointsInfo()
+		nsc.endpointsMap = nsc.buildEndpointSliceInfo()
 	})
 	Context("service no endpoints with externalIPs", func() {
 		var fooSvc1, fooSvc2 *ipvs.Service
@@ -503,7 +503,7 @@ func startInformersForServiceProxy(nsc *NetworkServicesController, clientset kub
 	informerFactory.WaitForCacheSync(nil)
 
 	nsc.svcLister = svcInformer.GetIndexer()
-	nsc.epLister = epInformer.GetIndexer()
+	nsc.epSliceLister = epInformer.GetIndexer()
 	nsc.podLister = podInformer.GetIndexer()
 }
 

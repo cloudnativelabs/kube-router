@@ -20,6 +20,7 @@ import (
 	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
 	v1 "k8s.io/api/core/v1"
+	discovery "k8s.io/api/discovery/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
@@ -103,7 +104,7 @@ type NetworkServicesController struct {
 	syncPeriod          time.Duration
 	mu                  sync.Mutex
 	serviceMap          serviceInfoMap
-	endpointsMap        endpointsInfoMap
+	endpointsMap        endpointSliceInfoMap
 	podCidr             string
 	excludedCidrs       []net.IPNet
 	masqueradeAll       bool
@@ -124,12 +125,12 @@ type NetworkServicesController struct {
 	serviceIPPortsIPSet map[v1.IPFamily]*utils.Set
 	serviceIPsIPSet     map[v1.IPFamily]*utils.Set
 
-	svcLister cache.Indexer
-	epLister  cache.Indexer
-	podLister cache.Indexer
+	svcLister     cache.Indexer
+	epSliceLister cache.Indexer
+	podLister     cache.Indexer
 
-	EndpointsEventHandler cache.ResourceEventHandler
-	ServiceEventHandler   cache.ResourceEventHandler
+	EndpointSliceEventHandler cache.ResourceEventHandler
+	ServiceEventHandler       cache.ResourceEventHandler
 
 	gracefulPeriod      time.Duration
 	gracefulQueue       gracefulQueue
@@ -204,14 +205,16 @@ type schedFlags struct {
 type serviceInfoMap map[string]*serviceInfo
 
 // internal representation of endpoints
-type endpointsInfo struct {
+type endpointSliceInfo struct {
 	ip      string
 	port    int
 	isLocal bool
+	isIPv4  bool
+	isIPv6  bool
 }
 
 // map of all endpoints, with unique service id(namespace name, service name, port) as key
-type endpointsInfoMap map[string][]endpointsInfo
+type endpointSliceInfoMap map[string][]endpointSliceInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat,
@@ -369,7 +372,7 @@ func (nsc *NetworkServicesController) doSync() error {
 	}
 
 	nsc.serviceMap = nsc.buildServicesInfo()
-	nsc.endpointsMap = nsc.buildEndpointsInfo()
+	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
 	err = nsc.syncHairpinIptablesRules()
 	if err != nil {
 		klog.Errorf("Error syncing hairpin iptables rules: %s", err.Error())
@@ -766,19 +769,15 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
-func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *v1.Endpoints) {
-
-	if isEndpointsForLeaderElection(ep) {
-		return
-	}
+func (nsc *NetworkServicesController) OnEndpointsUpdate(es *discovery.EndpointSlice) {
 
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
-	klog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
+	klog.V(1).Infof("Received update to EndpointSlice: %s/%s from watch API", es.Namespace, es.Name)
 	if !nsc.readyForUpdates {
-		klog.V(3).Infof(
-			"Skipping update to endpoint: %s/%s as controller is not ready to process service and endpoints updates",
-			ep.Namespace, ep.Name)
+		klog.V(1).Infof(
+			"Skipping update to EndpointSlice: %s/%s as controller is not ready to process service and endpoints "+
+				"updates", es.Namespace, es.Name)
 		return
 	}
 
@@ -786,33 +785,34 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(ep *v1.Endpoints) {
 	// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we don't
 	// need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now, it was a
 	// ClusterIP before.
-	svc, exists, err := utils.ServiceForEndpoints(&nsc.svcLister, ep)
+	svc, exists, err := utils.ServiceForEndpointSlice(&nsc.svcLister, es)
 	if err != nil {
-		klog.Errorf("failed to convert endpoints resource to service: %s", err)
+		klog.Errorf("failed to convert endpoints resource to service for %s/%s: %v", es.Namespace, es.Name, err)
 		return
 	}
 	// ignore updates to Endpoints object with no corresponding Service object
 	if !exists {
+		klog.Warningf("failed to lookup any service as an owner for %s/%s", es.Namespace, es.Name)
 		return
 	}
 	if utils.ServiceIsHeadless(svc) {
 		klog.V(1).Infof("The service associated with endpoint: %s/%s is headless, skipping...",
-			ep.Namespace, ep.Name)
+			es.Namespace, es.Name)
 		return
 	}
 
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
-	newEndpointsMap := nsc.buildEndpointsInfo()
+	newEndpointsMap := nsc.buildEndpointSliceInfo()
 
 	if !endpointsMapsEquivalent(newEndpointsMap, nsc.endpointsMap) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
-		klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
+		klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", es.Namespace, es.Name)
 		nsc.sync(synctypeIpvs)
 	} else {
 		klog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed",
-			ep.Namespace, ep.Name)
+			es.Namespace, es.Name)
 	}
 }
 
@@ -841,7 +841,7 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *v1.Service) {
 
 	// build new service and endpoints map to reflect the change
 	newServiceMap := nsc.buildServicesInfo()
-	newEndpointsMap := nsc.buildEndpointsInfo()
+	newEndpointsMap := nsc.buildEndpointSliceInfo()
 
 	if len(newServiceMap) != len(nsc.serviceMap) || !reflect.DeepEqual(newServiceMap, nsc.serviceMap) {
 		nsc.endpointsMap = newEndpointsMap
@@ -854,7 +854,7 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *v1.Service) {
 	}
 }
 
-func hasActiveEndpoints(endpoints []endpointsInfo) bool {
+func hasActiveEndpoints(endpoints []endpointSliceInfo) bool {
 	for _, endpoint := range endpoints {
 		if endpoint.isLocal {
 			return true
@@ -983,7 +983,7 @@ func parseSchedFlags(value string) schedFlags {
 	return schedFlags{flag1, flag2, flag3}
 }
 
-func shuffle(endPoints []endpointsInfo) []endpointsInfo {
+func shuffle(endPoints []endpointSliceInfo) []endpointSliceInfo {
 	for index1 := range endPoints {
 		randBitInt, err := rand.Int(rand.Reader, big.NewInt(int64(index1+1)))
 		index2 := randBitInt.Int64()
@@ -995,18 +995,84 @@ func shuffle(endPoints []endpointsInfo) []endpointsInfo {
 	return endPoints
 }
 
-func (nsc *NetworkServicesController) buildEndpointsInfo() endpointsInfoMap {
-	endpointsMap := make(endpointsInfoMap)
-	for _, obj := range nsc.epLister.List() {
-		ep := obj.(*v1.Endpoints)
+// buildEndpointSliceInfo creates a map of EndpointSlices taken at a moment in time
+func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfoMap {
+	endpointsMap := make(endpointSliceInfoMap)
+	for _, obj := range nsc.epSliceLister.List() {
+		var isIPv4, isIPv6 bool
+		es := obj.(*discovery.EndpointSlice)
+		switch es.AddressType {
+		case discovery.AddressTypeIPv4:
+			isIPv4 = true
+		case discovery.AddressTypeIPv6:
+			isIPv6 = true
+		case discovery.AddressTypeFQDN:
+			// At this point we don't handle FQDN type EndpointSlices, at some point in the future this might change
+			continue
+		default:
+			// If at some point k8s adds more AddressTypes, we'd prefer to handle them manually to ensure consistent
+			// functionality within kube-router
+			continue
+		}
 
-		for _, epSubset := range ep.Subsets {
-			for _, port := range epSubset.Ports {
-				svcID := generateServiceID(ep.Namespace, ep.Name, port.Name)
-				endpoints := make([]endpointsInfo, 0)
-				for _, addr := range epSubset.Addresses {
-					isLocal := addr.NodeName != nil && *addr.NodeName == nsc.nodeHostName
-					endpoints = append(endpoints, endpointsInfo{ip: addr.IP, port: int(port.Port), isLocal: isLocal})
+		// In order to properly link the endpoint with the service, we need the service's name
+		svcName, err := utils.ServiceNameforEndpointSlice(es)
+		if err != nil {
+			klog.Errorf("unable to lookup service from EndpointSlice, skipping: %v", err)
+			continue
+		}
+
+		// Keep in mind that ports aren't embedded in Endpoints, but we do need to make an endpointSliceInfo and a svcID
+		// for each pair, so we consume them as an inter and outer loop. Actual structure of EndpointSlice looks like:
+		//
+		// metadata:
+		//	name: ...
+		//	namespace: ...
+		// endpoints:
+		// - addresses:
+		//   - 10.0.0.1
+		//   conditions:
+		//     ready: (true|false)
+		//   nodeName: foo
+		//   targetRef:
+		//     kind: Pod
+		//     name: bar
+		//   zone: z1
+		// ports:
+		//   - name: baz
+		//     port: 8080
+		//     protocol: TCP
+		//
+		for _, ep := range es.Endpoints {
+			// Previously, when we used endpoints, we only looked at subsets.addresses and not subsets.notReadyAddresses
+			// so here we need to limit our endpoints to only the ones that are ready. In the future, we could consider
+			// changing this to .Serving which continues to include pods that are in Terminating state. For now we keep
+			// it the same.
+			if !*ep.Conditions.Ready {
+				continue
+			}
+
+			for _, port := range es.Ports {
+				var endpoints []endpointSliceInfo
+				var ok bool
+
+				svcID := generateServiceID(es.Namespace, svcName, *port.Name)
+
+				// we may have already started to populate endpoints for this service from another EndpointSlice, if so
+				// continue where we left off, otherwise create a new slice
+				if endpoints, ok = endpointsMap[svcID]; !ok {
+					endpoints = make([]endpointSliceInfo, 0)
+				}
+
+				for _, addr := range ep.Addresses {
+					isLocal := ep.NodeName != nil && *ep.NodeName == nsc.nodeHostName
+					endpoints = append(endpoints, endpointSliceInfo{
+						ip:      addr,
+						port:    int(*port.Port),
+						isLocal: isLocal,
+						isIPv4:  isIPv4,
+						isIPv6:  isIPv6,
+					})
 				}
 				endpointsMap[svcID] = shuffle(endpoints)
 			}
@@ -1589,6 +1655,12 @@ func routeVIPTrafficToDirector(fwmark string, family v1.IPFamily) error {
 	return nil
 }
 
+// isEndpointsForLeaderElection checks to see if this change has to do with leadership elections
+//
+// Deprecated: this is no longer used because we use EndpointSlices instead of Endpoints in the NSC now, this is
+// currently preserved for posterity, but will be removed in the future if it is no longer used
+//
+//nolint:unused // We understand that this function is unused, but we want to keep it for now
 func isEndpointsForLeaderElection(ep *v1.Endpoints) bool {
 	_, isLeaderElection := ep.Annotations[resourcelock.LeaderElectionRecordAnnotationKey]
 	return isLeaderElection
@@ -1664,23 +1736,23 @@ func (nsc *NetworkServicesController) Cleanup() {
 	klog.Infof("Successfully cleaned the NetworkServiceController configuration done by kube-router")
 }
 
-func (nsc *NetworkServicesController) newEndpointsEventHandler() cache.ResourceEventHandler {
+func (nsc *NetworkServicesController) newEndpointSliceEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			nsc.handleEndpointsAdd(obj)
+			nsc.handleEndpointSliceAdd(obj)
 
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			nsc.handleEndpointsUpdate(oldObj, newObj)
+			nsc.handleEndpointSliceUpdate(oldObj, newObj)
 		},
 		DeleteFunc: func(obj interface{}) {
-			nsc.handleEndpointsDelete(obj)
+			nsc.handleEndpointSliceDelete(obj)
 		},
 	}
 }
 
-func (nsc *NetworkServicesController) handleEndpointsAdd(obj interface{}) {
-	endpoints, ok := obj.(*v1.Endpoints)
+func (nsc *NetworkServicesController) handleEndpointSliceAdd(obj interface{}) {
+	endpoints, ok := obj.(*discovery.EndpointSlice)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", obj)
 		return
@@ -1688,13 +1760,13 @@ func (nsc *NetworkServicesController) handleEndpointsAdd(obj interface{}) {
 	nsc.OnEndpointsUpdate(endpoints)
 }
 
-func (nsc *NetworkServicesController) handleEndpointsUpdate(oldObj, newObj interface{}) {
-	_, ok := oldObj.(*v1.Endpoints)
+func (nsc *NetworkServicesController) handleEndpointSliceUpdate(oldObj, newObj interface{}) {
+	_, ok := oldObj.(*discovery.EndpointSlice)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", oldObj)
 		return
 	}
-	newEndpoints, ok := newObj.(*v1.Endpoints)
+	newEndpoints, ok := newObj.(*discovery.EndpointSlice)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", newObj)
 		return
@@ -1702,15 +1774,15 @@ func (nsc *NetworkServicesController) handleEndpointsUpdate(oldObj, newObj inter
 	nsc.OnEndpointsUpdate(newEndpoints)
 }
 
-func (nsc *NetworkServicesController) handleEndpointsDelete(obj interface{}) {
-	endpoints, ok := obj.(*v1.Endpoints)
+func (nsc *NetworkServicesController) handleEndpointSliceDelete(obj interface{}) {
+	endpoints, ok := obj.(*discovery.EndpointSlice)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
-		if endpoints, ok = tombstone.Obj.(*v1.Endpoints); !ok {
+		if endpoints, ok = tombstone.Obj.(*discovery.EndpointSlice); !ok {
 			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
@@ -1774,7 +1846,7 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 // NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
-	epInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer,
+	epSliceInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer,
 	ipsetMutex *sync.Mutex) (*NetworkServicesController, error) {
 
 	var err error
@@ -1810,7 +1882,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.globalHairpin = config.GlobalHairpinMode
 
 	nsc.serviceMap = make(serviceInfoMap)
-	nsc.endpointsMap = make(endpointsInfoMap)
+	nsc.endpointsMap = make(endpointSliceInfoMap)
 	nsc.client = clientset
 
 	nsc.ProxyFirewallSetup = sync.NewCond(&sync.Mutex{})
@@ -1929,8 +2001,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.ipvsPermitAll = config.IpvsPermitAll
 
-	nsc.epLister = epInformer.GetIndexer()
-	nsc.EndpointsEventHandler = nsc.newEndpointsEventHandler()
+	nsc.epSliceLister = epSliceInformer.GetIndexer()
+	nsc.EndpointSliceEventHandler = nsc.newEndpointSliceEventHandler()
 
 	return &nsc, nil
 }
