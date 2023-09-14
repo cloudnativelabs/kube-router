@@ -253,8 +253,24 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	}
 
 	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
+		ipFamily := ipFamily
 		npc.filterTableRules[ipFamily].Reset()
-		if err := iptablesSaveRestore.SaveInto("filter", npc.filterTableRules[ipFamily]); err != nil {
+		saveStart := time.Now()
+		err := iptablesSaveRestore.SaveInto("filter", npc.filterTableRules[ipFamily])
+		saveEndTime := time.Since(saveStart)
+		defer func() {
+			if npc.MetricsEnabled {
+				switch ipFamily {
+				case v1core.IPv4Protocol:
+					metrics.ControllerIptablesV4SaveTime.Observe(saveEndTime.Seconds())
+				case v1core.IPv6Protocol:
+					metrics.ControllerIptablesV6SaveTime.Observe(saveEndTime.Seconds())
+				}
+			}
+			klog.V(2).Infof("Saving %v iptables rules took %v", ipFamily, saveEndTime)
+		}()
+
+		if err != nil {
 			klog.Errorf("Aborting sync. Failed to run iptables-save: %v", err.Error())
 			return
 		}
@@ -279,8 +295,23 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	}
 
 	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
-		if err := iptablesSaveRestore.Restore("filter",
-			npc.filterTableRules[ipFamily].Bytes()); err != nil {
+		ipFamily := ipFamily
+		restoreStart := time.Now()
+		err := iptablesSaveRestore.Restore("filter", npc.filterTableRules[ipFamily].Bytes())
+		restoreEndTime := time.Since(restoreStart)
+		defer func() {
+			if npc.MetricsEnabled {
+				switch ipFamily {
+				case v1core.IPv4Protocol:
+					metrics.ControllerIptablesV4RestoreTime.Observe(restoreEndTime.Seconds())
+				case v1core.IPv6Protocol:
+					metrics.ControllerIptablesV6RestoreTime.Observe(restoreEndTime.Seconds())
+				}
+			}
+			klog.V(2).Infof("Restoring %v iptables rules took %v", ipFamily, restoreEndTime)
+		}()
+
+		if err != nil {
 			klog.Errorf("Aborting sync. Failed to run iptables-restore: %v\n%s",
 				err.Error(), npc.filterTableRules[ipFamily].String())
 			return
@@ -845,7 +876,15 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	if config.MetricsEnabled {
 		// Register the metrics for this controller
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIptablesSyncTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIptablesV4SaveTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIptablesV6SaveTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIptablesV4RestoreTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIptablesV6RestoreTime)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerPolicyChainsSyncTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerPolicyIpsetV4RestoreTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerPolicyIpsetV6RestoreTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerPolicyChains)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerPolicyIpsets)
 		npc.MetricsEnabled = true
 	}
 
