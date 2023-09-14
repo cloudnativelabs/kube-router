@@ -74,7 +74,9 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
-		metrics.ControllerPolicyChainsSyncTime.Observe(endTime.Seconds())
+		if npc.MetricsEnabled {
+			metrics.ControllerPolicyChainsSyncTime.Observe(endTime.Seconds())
+		}
 		klog.V(2).Infof("Syncing network policy chains took %v", endTime)
 	}()
 
@@ -89,9 +91,15 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 	activePolicyChains := make(map[string]bool)
 	activePolicyIPSets := make(map[string]bool)
 
+	defer func() {
+		if npc.MetricsEnabled {
+			metrics.ControllerPolicyChains.Set(float64(len(activePolicyChains)))
+			metrics.ControllerPolicyIpsets.Set(float64(len(activePolicyIPSets)))
+		}
+	}()
+
 	// run through all network policies
 	for _, policy := range networkPoliciesInfo {
-
 		currentPodIPs := make(map[api.IPFamily][]string)
 		for _, pod := range policy.targetPods {
 			for _, ip := range pod.ips {
@@ -105,6 +113,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 		}
 
 		for ipFamily, ipset := range npc.ipSetHandlers {
+			ipFamily := ipFamily
 			// ensure there is a unique chain per network policy in filter table
 			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
 
@@ -135,7 +144,22 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 				activePolicyIPSets[targetSourcePodIPSetName] = true
 			}
 
+			restoreStart := time.Now()
 			err := ipset.Restore()
+			restoreEndTime := time.Since(restoreStart)
+
+			defer func() {
+				if npc.MetricsEnabled {
+					switch ipFamily {
+					case api.IPv4Protocol:
+						metrics.ControllerPolicyIpsetV4RestoreTime.Observe(restoreEndTime.Seconds())
+					case api.IPv6Protocol:
+						metrics.ControllerPolicyIpsetV6RestoreTime.Observe(restoreEndTime.Seconds())
+					}
+				}
+				klog.V(2).Infof("Restoring %v ipset took %v", ipFamily, restoreEndTime)
+			}()
+
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to perform ipset restore: %w", err)
 			}

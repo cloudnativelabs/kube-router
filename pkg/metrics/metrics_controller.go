@@ -110,6 +110,30 @@ var (
 		Name:      "controller_iptables_sync_time",
 		Help:      "Time it took for controller to sync iptables",
 	})
+	// ControllerIptablesV4SaveTime Time it took controller to save IPv4 rules
+	ControllerIptablesV4SaveTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "controller_iptables_v4_save_time",
+		Help:      "Time it took controller to save IPv4 rules",
+	})
+	// ControllerIptablesV6SaveTime Time to took for controller to save IPv6 rules
+	ControllerIptablesV6SaveTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "controller_iptables_v6_save_time",
+		Help:      "Time to took for controller to save IPv6 rules",
+	})
+	// ControllerIptablesV4RestoreTime Time it took for controller to restore IPv4 rules
+	ControllerIptablesV4RestoreTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "controller_iptables_v4_restore_time",
+		Help:      "Time it took for controller to restore IPv4 rules",
+	})
+	// ControllerIptablesV6RestoreTime Time it took for controller to restore IPv6 rules
+	ControllerIptablesV6RestoreTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "controller_iptables_v6_restore_time",
+		Help:      "Time it took for controller to restore IPv6 rules",
+	})
 	// ControllerIpvsServicesSyncTime Time it took for controller to sync ipvs services
 	ControllerIpvsServicesSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
@@ -160,6 +184,30 @@ var (
 		Namespace: namespace,
 		Name:      "controller_policy_chains_sync_time",
 		Help:      "Time it took for controller to sync policy chains",
+	})
+	// ControllerPolicyIpsetV4RestoreTime Time it took for controller to restore IPv4 ipsets
+	ControllerPolicyIpsetV4RestoreTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "controller_policy_ipset_v4_restore_time",
+		Help:      "Time it took for controller to restore IPv4 ipsets",
+	})
+	// ControllerPolicyIpsetV6RestoreTime Time it took for controller to restore IPv6 ipsets
+	ControllerPolicyIpsetV6RestoreTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "controller_policy_ipset_v6_restore_time",
+		Help:      "Time it took for controller to restore IPv6 ipsets",
+	})
+	// ControllerPolicyChains Active policy chains
+	ControllerPolicyChains = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_policy_chains",
+		Help:      "Active policy chains",
+	})
+	// ControllerPolicyIpsets Active policy ipsets
+	ControllerPolicyIpsets = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_policy_ipsets",
+		Help:      "Active policy ipsets",
 	})
 )
 
