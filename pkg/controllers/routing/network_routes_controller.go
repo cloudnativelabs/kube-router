@@ -963,8 +963,8 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	nodes := nrc.nodeLister.List()
 
 	// Collect active PodCIDR(s) and NodeIPs from nodes
-	currentPodCidrs := make(map[v1core.IPFamily][]string)
-	currentNodeIPs := make(map[v1core.IPFamily][]string)
+	currentPodCidrs := make(map[v1core.IPFamily][][]string)
+	currentNodeIPs := make(map[v1core.IPFamily][][]string)
 	for _, obj := range nodes {
 		node := obj.(*v1core.Node)
 		podCIDRs := getPodCIDRsFromAllNodeSources(node)
@@ -978,13 +978,15 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 				klog.Warningf("Wasn't able to parse pod CIDR %s for node %s, skipping", cidr, node.Name)
 			}
 			if ip.To4() != nil {
-				currentPodCidrs[v1core.IPv4Protocol] = append(currentPodCidrs[v1core.IPv4Protocol], cidr)
+				currentPodCidrs[v1core.IPv4Protocol] = append(currentPodCidrs[v1core.IPv4Protocol],
+					[]string{cidr, utils.OptionTimeout, "0"})
 			} else {
-				currentPodCidrs[v1core.IPv6Protocol] = append(currentPodCidrs[v1core.IPv6Protocol], cidr)
+				currentPodCidrs[v1core.IPv6Protocol] = append(currentPodCidrs[v1core.IPv6Protocol],
+					[]string{cidr, utils.OptionTimeout, "0"})
 			}
 		}
 
-		var ipv4Addrs, ipv6Addrs []string
+		var ipv4Addrs, ipv6Addrs [][]string
 		intExtNodeIPsv4, intExtNodeIPsv6 := utils.GetAllNodeIPs(node)
 		if err != nil {
 			klog.Errorf("Failed to find a node IP, cannot add to node ipset which could affect routing: %v", err)
@@ -992,12 +994,12 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		}
 		for _, nodeIPv4s := range intExtNodeIPsv4 {
 			for _, nodeIPv4 := range nodeIPv4s {
-				ipv4Addrs = append(ipv4Addrs, nodeIPv4.String())
+				ipv4Addrs = append(ipv4Addrs, []string{nodeIPv4.String(), utils.OptionTimeout, "0"})
 			}
 		}
 		for _, nodeIPv6s := range intExtNodeIPsv6 {
 			for _, nodeIPv6 := range nodeIPv6s {
-				ipv6Addrs = append(ipv6Addrs, nodeIPv6.String())
+				ipv6Addrs = append(ipv6Addrs, []string{nodeIPv6.String(), utils.OptionTimeout, "0"})
 			}
 		}
 		currentNodeIPs[v1core.IPv4Protocol] = append(currentNodeIPs[v1core.IPv4Protocol], ipv4Addrs...)
@@ -1006,41 +1008,13 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 
 	// Syncing Pod subnet ipset entries
 	for family, ipSetHandler := range nrc.ipSetHandlers {
-		psSet := ipSetHandler.Get(podSubnetsIPSetName)
-		if psSet == nil {
-			klog.Infof("Creating missing ipset \"%s\"", podSubnetsIPSetName)
-			_, err = ipSetHandler.Create(podSubnetsIPSetName, utils.OptionTimeout, "0")
-			if err != nil {
-				return fmt.Errorf("ipset \"%s\" not found in controller instance",
-					podSubnetsIPSetName)
-			}
-			psSet = ipSetHandler.Get(podSubnetsIPSetName)
-			if nil == psSet {
-				return fmt.Errorf("failed to get ipsethandler for ipset \"%s\"", podSubnetsIPSetName)
-			}
-		}
-		err = psSet.Refresh(currentPodCidrs[family])
-		if err != nil {
-			return fmt.Errorf("failed to sync Pod Subnets ipset: %s", err)
-		}
+		ipSetHandler.RefreshSet(podSubnetsIPSetName, currentPodCidrs[family], utils.TypeHashNet)
 
-		// Syncing Node Addresses ipset entries
-		naSet := ipSetHandler.Get(nodeAddrsIPSetName)
-		if naSet == nil {
-			klog.Infof("Creating missing ipset \"%s\"", nodeAddrsIPSetName)
-			_, err = ipSetHandler.Create(nodeAddrsIPSetName, utils.OptionTimeout, "0")
-			if err != nil {
-				return fmt.Errorf("ipset \"%s\" not found in controller instance",
-					nodeAddrsIPSetName)
-			}
-			naSet = ipSetHandler.Get(nodeAddrsIPSetName)
-			if nil == naSet {
-				return fmt.Errorf("failed to get ipsethandler for ipset \"%s\"", nodeAddrsIPSetName)
-			}
-		}
-		err = naSet.Refresh(currentNodeIPs[family])
+		ipSetHandler.RefreshSet(nodeAddrsIPSetName, currentNodeIPs[family], utils.TypeHashIP)
+
+		err = ipSetHandler.Restore()
 		if err != nil {
-			return fmt.Errorf("failed to sync Node Addresses ipset: %s", err)
+			return fmt.Errorf("failed to sync pod subnets / node addresses ipsets: %v", err)
 		}
 	}
 	return nil
