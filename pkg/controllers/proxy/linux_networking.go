@@ -79,10 +79,15 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 
 	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: parsedIP, Mask: netMask}, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrDel(iface, naddr)
-	if err != nil && err.Error() != IfaceHasNoAddr {
-		klog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
-			ip, KubeDummyIf, err.Error())
-		return err
+	if err != nil {
+		if err.Error() != IfaceHasNoAddr {
+			klog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
+				ip, KubeDummyIf, err.Error())
+			return err
+		} else {
+			klog.Warningf("got an IfaceHasNoAddr error while trying to delete address from netlink: %v (this is not "+
+				"normally bad enough to stop processing)", err)
+		}
 	}
 
 	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
@@ -90,9 +95,14 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 	ipRouteCmdArgs = append(ipRouteCmdArgs, "route", "delete", "local", ip, "dev", KubeDummyIf,
 		"table", "local", "proto", "kernel", "scope", "host", "src", nodeIP, "table", "local")
 	out, err := exec.Command("ip", ipRouteCmdArgs...).CombinedOutput()
-	if err != nil && !strings.Contains(string(out), "No such process") {
-		klog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s",
-			ip, KubeDummyIf, err, out)
+	if err != nil {
+		if !strings.Contains(string(out), "No such process") {
+			klog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s",
+				ip, KubeDummyIf, err, out)
+		} else {
+			klog.Warningf("got a No such process error while trying to remove route: %v (this is not normally bad "+
+				"enough to stop processing)", err)
+		}
 	}
 
 	return err
