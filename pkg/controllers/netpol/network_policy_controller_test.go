@@ -749,6 +749,10 @@ func (ips *fakeIPSet) Sets() map[string]*utils.Set {
 	return nil
 }
 
+func (ips *fakeIPSet) Name(name string) string {
+	return name
+}
+
 func TestNetworkPolicyController(t *testing.T) {
 	testCases := []tNetPolConfigTestCase{
 		{
