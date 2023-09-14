@@ -16,7 +16,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
-	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/klog/v2"
 
 	v1core "k8s.io/api/core/v1"
@@ -845,8 +844,8 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	if config.MetricsEnabled {
 		// Register the metrics for this controller
-		prometheus.MustRegister(metrics.ControllerIptablesSyncTime)
-		prometheus.MustRegister(metrics.ControllerPolicyChainsSyncTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIptablesSyncTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerPolicyChainsSyncTime)
 		npc.MetricsEnabled = true
 	}
 
