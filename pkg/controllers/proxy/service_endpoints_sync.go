@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -637,6 +638,8 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 	// cleanup stale ipvs service and servers
 	klog.V(1).Info("Cleaning up if any, old ipvs service and servers which are no longer needed")
 
+	prettyMap, _ := json.MarshalIndent(activeServiceEndpointMap, "  ", "    ")
+	klog.V(3).Infof("Current active service map:\n%s", prettyMap)
 	var protocol string
 	for _, ipvsSvc := range ipvsSvcs {
 		// Note that this isn't all that safe of an assumption because FWMark services have a completely different
@@ -664,6 +667,7 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 		// Only delete the service if it's not there anymore to prevent flapping
 		// old: if !ok || len(endpointIDs) == 0 {
 		if !ok {
+			klog.V(3).Infof("didn't find key: %s in above map", key)
 			excluded := false
 			for _, excludedCidr := range nsc.excludedCidrs {
 				if excludedCidr.Contains(ipvsSvc.Address) {
