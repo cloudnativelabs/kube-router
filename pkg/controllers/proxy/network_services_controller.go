@@ -71,8 +71,9 @@ const (
 	svcSchedFlagsAnnotation         = "kube-router.io/service.schedflags"
 
 	// All IPSET names need to be less than 31 characters in order for the Kernel to accept them. Keep in mind that the
-	// actual formulation for this may be inet6:<setNameBase> depending on ip family so that means that these base names
-	// actually need to be less than 25 characters
+	// actual formulation for this may be inet6:<setNameBase> depending on ip family, plus when we change ipsets we use
+	// a swap operation that adds a hyphen to the end, so that means that these base names actually need to be less than
+	// 24 characters
 	localIPsIPSetName     = "kube-router-local-ips"
 	serviceIPPortsSetName = "kube-router-svip-prt"
 	serviceIPsIPSetName   = "kube-router-svip"
@@ -119,11 +120,6 @@ type NetworkServicesController struct {
 	ProxyFirewallSetup  *sync.Cond
 	ipsetMutex          *sync.Mutex
 	fwMarkMap           map[uint32]string
-
-	// Map of ipsets that we use.
-	localIPsIPSets      map[v1.IPFamily]*utils.Set
-	serviceIPPortsIPSet map[v1.IPFamily]*utils.Set
-	serviceIPsIPSet     map[v1.IPFamily]*utils.Set
 
 	svcLister     cache.Indexer
 	epSliceLister cache.Indexer
@@ -399,34 +395,27 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 	   - create ipsets
 	   - create firewall rules
 	*/
-
 	var err error
-	var ipset *utils.Set
 
-	// Remember ipsets for use in syncIpvsFirewall
-	nsc.localIPsIPSets = make(map[v1.IPFamily]*utils.Set)
-	nsc.serviceIPPortsIPSet = make(map[v1.IPFamily]*utils.Set)
-	nsc.serviceIPsIPSet = make(map[v1.IPFamily]*utils.Set)
-	for family, ipSetHandler := range nsc.ipSetHandlers {
+	// Initialize some blank ipsets with the correct names in order to use them in the iptables below. We don't need
+	// to retain references to them, because we'll use the handler to refresh them later in syncIpvsFirewall
+	for _, ipSetHandler := range nsc.ipSetHandlers {
 		// Create ipset for local addresses.
-		ipset, err = ipSetHandler.Create(localIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+		_, err = ipSetHandler.Create(localIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
 			return fmt.Errorf("failed to create ipset: %s - %v", localIPsIPSetName, err)
 		}
-		nsc.localIPsIPSets[family] = ipset
 
 		// Create 2 ipsets for services. One for 'ip' and one for 'ip,port'
-		ipset, err = ipSetHandler.Create(serviceIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
+		_, err = ipSetHandler.Create(serviceIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
 			return fmt.Errorf("failed to create ipset: %s - %v", serviceIPsIPSetName, err)
 		}
-		nsc.serviceIPsIPSet[family] = ipset
 
-		ipset, err = ipSetHandler.Create(serviceIPPortsSetName, utils.TypeHashIPPort, utils.OptionTimeout, "0")
+		_, err = ipSetHandler.Create(serviceIPPortsSetName, utils.TypeHashIPPort, utils.OptionTimeout, "0")
 		if err != nil {
 			return fmt.Errorf("failed to create ipset: %s - %v", serviceIPPortsSetName, err)
 		}
-		nsc.serviceIPPortsIPSet[family] = ipset
 	}
 
 	// Setup a custom iptables chain to explicitly allow input traffic to ipvs services only.
@@ -612,16 +601,13 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 
 	for family, addrs := range addrsMap {
 		// Convert addrs from a slice of net.IP to a slice of string
-		localIPsSets := make([]string, 0, len(addrs))
+		localIPsSets := make([][]string, 0, len(addrs))
 		for _, addr := range addrs {
-			localIPsSets = append(localIPsSets, addr.String())
+			localIPsSets = append(localIPsSets, []string{addr.String(), utils.OptionTimeout, "0"})
 		}
 
 		// Refresh the family specific IPSet with the slice of strings
-		err = nsc.localIPsIPSets[family].Refresh(localIPsSets)
-		if err != nil {
-			return fmt.Errorf("failed to sync ipset: %s", err.Error())
-		}
+		nsc.ipSetHandlers[family].RefreshSet(localIPsIPSetName, localIPsSets, utils.TypeHashIP)
 	}
 
 	// Populate service ipsets.
@@ -630,8 +616,8 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 		return errors.New("Failed to list IPVS services: " + err.Error())
 	}
 
-	serviceIPsSets := make(map[v1.IPFamily][]string)
-	serviceIPPortsIPSets := make(map[v1.IPFamily][]string)
+	serviceIPsSets := make(map[v1.IPFamily][][]string)
+	serviceIPPortsIPSets := make(map[v1.IPFamily][][]string)
 
 	for _, ipvsService := range ipvsServices {
 		var address net.IP
@@ -667,24 +653,22 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 			family = v1.IPv6Protocol
 		}
 
-		serviceIPsSets[family] = append(serviceIPsSets[family], address.String())
+		serviceIPsSets[family] = append(serviceIPsSets[family], []string{address.String(), utils.OptionTimeout, "0"})
 
 		ipvsAddressWithPort := fmt.Sprintf("%s,%s:%d", address, protocol, port)
-		serviceIPPortsIPSets[family] = append(serviceIPPortsIPSets[family], ipvsAddressWithPort)
+		serviceIPPortsIPSets[family] = append(serviceIPPortsIPSets[family],
+			[]string{ipvsAddressWithPort, utils.OptionTimeout, "0"})
 
 	}
 
-	for family := range nsc.ipSetHandlers {
-		serviceIPsIPSet := nsc.serviceIPsIPSet[family]
-		err = serviceIPsIPSet.Refresh(serviceIPsSets[family])
-		if err != nil {
-			return fmt.Errorf("failed to sync ipset: %v", err)
-		}
+	for family, setHandler := range nsc.ipSetHandlers {
+		setHandler.RefreshSet(serviceIPsIPSetName, serviceIPsSets[family], utils.TypeHashIP)
 
-		serviceIPPortsIPSet := nsc.serviceIPPortsIPSet[family]
-		err = serviceIPPortsIPSet.Refresh(serviceIPPortsIPSets[family])
+		setHandler.RefreshSet(serviceIPPortsSetName, serviceIPPortsIPSets[family], utils.TypeHashIPPort)
+
+		err := setHandler.Restore()
 		if err != nil {
-			return fmt.Errorf("failed to sync ipset: %v", err)
+			return fmt.Errorf("could not save ipset for service firewall: %v", err)
 		}
 	}
 
