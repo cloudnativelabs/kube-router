@@ -23,7 +23,6 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	gobgp "github.com/osrg/gobgp/v3/pkg/server"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -1407,11 +1406,11 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc := NetworkRoutingController{ipsetMutex: ipsetMutex}
 	if kubeRouterConfig.MetricsEnabled {
 		// Register the metrics for this controller
-		prometheus.MustRegister(metrics.ControllerBGPadvertisementsReceived)
-		prometheus.MustRegister(metrics.ControllerBGPadvertisementsSent)
-		prometheus.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
-		prometheus.MustRegister(metrics.ControllerBPGpeers)
-		prometheus.MustRegister(metrics.ControllerRoutesSyncTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPadvertisementsReceived)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPadvertisementsSent)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBPGpeers)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerRoutesSyncTime)
 		nrc.MetricsEnabled = true
 	}
 
