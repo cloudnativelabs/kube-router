@@ -21,7 +21,7 @@ import (
 // sync the ipvs service and server details configured to reflect the desired state of Kubernetes services
 // and endpoints as learned from services and endpoints information from the api server
 func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap,
-	endpointsInfoMap endpointsInfoMap) error {
+	endpointsInfoMap endpointSliceInfoMap) error {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
@@ -103,7 +103,7 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 }
 
 func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serviceInfoMap,
-	endpointsInfoMap endpointsInfoMap, activeServiceEndpointMap map[string][]string) error {
+	endpointsInfoMap endpointSliceInfoMap, activeServiceEndpointMap map[string][]string) error {
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
 		return errors.New("Failed get list of IPVS services due to: " + err.Error())
@@ -181,7 +181,7 @@ func (nsc *NetworkServicesController) addIPVSService(ipvsSvcs []*ipvs.Service, s
 	return ipvsSvcs, svcID, ipvsService
 }
 
-func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endpointsInfo,
+func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endpointSliceInfo,
 	svcEndpointMap map[string][]string, svc *serviceInfo, svcID string, ipvsSvc *ipvs.Service, vip net.IP) {
 	var family v1.IPFamily
 	if vip.To4() != nil {
@@ -203,14 +203,14 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 
 		switch family {
 		case v1.IPv4Protocol:
-			if eIP.To4() == nil {
+			if endpoint.isIPv6 {
 				klog.V(3).Infof("not adding endpoint %s to service %s with VIP %s because families don't "+
 					"match", endpoint.ip, svc.name, vip)
 				continue
 			}
 			syscallINET = syscall.AF_INET
 		case v1.IPv6Protocol:
-			if eIP.To4() != nil {
+			if endpoint.isIPv4 {
 				klog.V(3).Infof("not adding endpoint %s to service %s with VIP %s because families don't "+
 					"match", endpoint.ip, svc.name, vip)
 				continue
@@ -235,7 +235,7 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 }
 
 func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap serviceInfoMap,
-	endpointsInfoMap endpointsInfoMap, activeServiceEndpointMap map[string][]string) error {
+	endpointsInfoMap endpointSliceInfoMap, activeServiceEndpointMap map[string][]string) error {
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
 		return errors.New("Failed get list of IPVS services due to: " + err.Error())
@@ -312,7 +312,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 }
 
 func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap serviceInfoMap,
-	endpointsInfoMap endpointsInfoMap, activeServiceEndpointMap map[string][]string) error {
+	endpointsInfoMap endpointSliceInfoMap, activeServiceEndpointMap map[string][]string) error {
 	for k, svc := range serviceInfoMap {
 		endpoints := endpointsInfoMap[k]
 		// First we check to see if this is a local service and that it has any active endpoints, if it doesn't there
@@ -368,7 +368,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 // the IPVS service to the host if it is missing, and setting up the dummy interface to be able to receive traffic on
 // the node.
 func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo, externalIP net.IP,
-	endpoints []endpointsInfo, svcEndpointMap map[string][]string) error {
+	endpoints []endpointSliceInfo, svcEndpointMap map[string][]string) error {
 	// Get everything we need to get setup to process the external IP
 	protocol := convertSvcProtoToSysCallProto(svc.protocol)
 	var nodeIP net.IP
@@ -433,7 +433,7 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 // based on FWMARK to enable direct server return functionality. DSR requires a director without a VIP
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html to avoid martian packets
 func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceInfo, externalIP net.IP,
-	endpoints []endpointsInfo, svcEndpointMap map[string][]string) error {
+	endpoints []endpointSliceInfo, svcEndpointMap map[string][]string) error {
 	// Get everything we need to get setup to process the external IP
 	protocol := convertSvcProtoToSysCallProto(svc.protocol)
 	var nodeIP net.IP
