@@ -112,8 +112,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 			}
 		}
 
-		for ipFamily, ipset := range npc.ipSetHandlers {
-			ipFamily := ipFamily
+		for ipFamily := range npc.ipSetHandlers {
 			// ensure there is a unique chain per network policy in filter table
 			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
 
@@ -143,26 +142,29 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 				}
 				activePolicyIPSets[targetSourcePodIPSetName] = true
 			}
+		}
+	}
 
-			restoreStart := time.Now()
-			err := ipset.Restore()
-			restoreEndTime := time.Since(restoreStart)
+	for ipFamily, ipset := range npc.ipSetHandlers {
+		ipFamily := ipFamily
+		restoreStart := time.Now()
+		err := ipset.Restore()
+		restoreEndTime := time.Since(restoreStart)
 
-			defer func() {
-				if npc.MetricsEnabled {
-					switch ipFamily {
-					case api.IPv4Protocol:
-						metrics.ControllerPolicyIpsetV4RestoreTime.Observe(restoreEndTime.Seconds())
-					case api.IPv6Protocol:
-						metrics.ControllerPolicyIpsetV6RestoreTime.Observe(restoreEndTime.Seconds())
-					}
+		defer func() {
+			if npc.MetricsEnabled {
+				switch ipFamily {
+				case api.IPv4Protocol:
+					metrics.ControllerPolicyIpsetV4RestoreTime.Observe(restoreEndTime.Seconds())
+				case api.IPv6Protocol:
+					metrics.ControllerPolicyIpsetV6RestoreTime.Observe(restoreEndTime.Seconds())
 				}
-				klog.V(2).Infof("Restoring %v ipset took %v", ipFamily, restoreEndTime)
-			}()
-
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to perform ipset restore: %w", err)
 			}
+			klog.V(2).Infof("Restoring %v ipset took %v", ipFamily, restoreEndTime)
+		}()
+
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to perform ipset restore: %w", err)
 		}
 	}
 
