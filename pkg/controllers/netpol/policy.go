@@ -159,7 +159,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 				metrics.ControllerPolicyIpsetV6RestoreTime.Observe(restoreEndTime.Seconds())
 			}
 		}
-		klog.V(2).Infof("Restoring %v ipset took %v", ipFamily, restoreEndTime)
+		klog.V(1).Infof("Restoring %v ipset took %v", ipFamily, restoreEndTime)
 
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to perform ipset restore: %w", err)
