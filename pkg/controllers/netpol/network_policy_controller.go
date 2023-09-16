@@ -257,17 +257,15 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		saveStart := time.Now()
 		err := iptablesSaveRestore.SaveInto("filter", npc.filterTableRules[ipFamily])
 		saveEndTime := time.Since(saveStart)
-		defer func() {
-			if npc.MetricsEnabled {
-				switch ipFamily {
-				case v1core.IPv4Protocol:
-					metrics.ControllerIptablesV4SaveTime.Observe(saveEndTime.Seconds())
-				case v1core.IPv6Protocol:
-					metrics.ControllerIptablesV6SaveTime.Observe(saveEndTime.Seconds())
-				}
+		if npc.MetricsEnabled {
+			switch ipFamily {
+			case v1core.IPv4Protocol:
+				metrics.ControllerIptablesV4SaveTime.Observe(saveEndTime.Seconds())
+			case v1core.IPv6Protocol:
+				metrics.ControllerIptablesV6SaveTime.Observe(saveEndTime.Seconds())
 			}
-			klog.V(2).Infof("Saving %v iptables rules took %v", ipFamily, saveEndTime)
-		}()
+		}
+		klog.V(2).Infof("Saving %v iptables rules took %v", ipFamily, saveEndTime)
 
 		if err != nil {
 			klog.Errorf("Aborting sync. Failed to run iptables-save: %v", err.Error())
@@ -298,17 +296,15 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		restoreStart := time.Now()
 		err := iptablesSaveRestore.Restore("filter", npc.filterTableRules[ipFamily].Bytes())
 		restoreEndTime := time.Since(restoreStart)
-		defer func() {
-			if npc.MetricsEnabled {
-				switch ipFamily {
-				case v1core.IPv4Protocol:
-					metrics.ControllerIptablesV4RestoreTime.Observe(restoreEndTime.Seconds())
-				case v1core.IPv6Protocol:
-					metrics.ControllerIptablesV6RestoreTime.Observe(restoreEndTime.Seconds())
-				}
+		if npc.MetricsEnabled {
+			switch ipFamily {
+			case v1core.IPv4Protocol:
+				metrics.ControllerIptablesV4RestoreTime.Observe(restoreEndTime.Seconds())
+			case v1core.IPv6Protocol:
+				metrics.ControllerIptablesV6RestoreTime.Observe(restoreEndTime.Seconds())
 			}
-			klog.V(2).Infof("Restoring %v iptables rules took %v", ipFamily, restoreEndTime)
-		}()
+		}
+		klog.V(2).Infof("Restoring %v iptables rules took %v", ipFamily, restoreEndTime)
 
 		if err != nil {
 			klog.Errorf("Aborting sync. Failed to run iptables-restore: %v\n%s",
