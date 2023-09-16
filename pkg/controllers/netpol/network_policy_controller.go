@@ -265,7 +265,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 				metrics.ControllerIptablesV6SaveTime.Observe(saveEndTime.Seconds())
 			}
 		}
-		klog.V(2).Infof("Saving %v iptables rules took %v", ipFamily, saveEndTime)
+		klog.V(1).Infof("Saving %v iptables rules took %v", ipFamily, saveEndTime)
 
 		if err != nil {
 			klog.Errorf("Aborting sync. Failed to run iptables-save: %v", err.Error())
@@ -304,7 +304,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 				metrics.ControllerIptablesV6RestoreTime.Observe(restoreEndTime.Seconds())
 			}
 		}
-		klog.V(2).Infof("Restoring %v iptables rules took %v", ipFamily, restoreEndTime)
+		klog.V(1).Infof("Restoring %v iptables rules took %v", ipFamily, restoreEndTime)
 
 		if err != nil {
 			klog.Errorf("Aborting sync. Failed to run iptables-restore: %v\n%s",
