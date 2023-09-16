@@ -253,7 +253,6 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	}
 
 	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
-		ipFamily := ipFamily
 		npc.filterTableRules[ipFamily].Reset()
 		saveStart := time.Now()
 		err := iptablesSaveRestore.SaveInto("filter", npc.filterTableRules[ipFamily])
