@@ -219,7 +219,8 @@ type Controller struct {
 
 // Handler returns a http.Handler for the default registerer and gatherer
 func Handler() http.Handler {
-	return promhttp.InstrumentMetricHandler(DefaultRegisterer, promhttp.HandlerFor(DefaultGatherer, promhttp.HandlerOpts{}))
+	return promhttp.InstrumentMetricHandler(DefaultRegisterer, promhttp.HandlerFor(DefaultGatherer,
+		promhttp.HandlerOpts{}))
 }
 
 // Run prometheus metrics controller
