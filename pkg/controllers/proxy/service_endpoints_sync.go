@@ -769,10 +769,10 @@ func (nsc *NetworkServicesController) cleanupDSRService(fwMark uint32) error {
 	}
 
 	if nsc.isIPv4Capable {
-		cleanupTables("iptables")
+		cleanupTables("iptables-save")
 	}
 	if nsc.isIPv6Capable {
-		cleanupTables("ip6tables")
+		cleanupTables("ip6tables-save")
 	}
 
 	// cleanup the fwMarkMap to ensure that we don't accidentally build state
