@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
@@ -157,7 +158,7 @@ type ipvsCalls interface {
 	ipvsUpdateDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
 	ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error)
 	ipvsDelDestination(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error
-	ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uint32, protocol, port uint16, persistent bool,
+	ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uint32, family, protocol, port uint16, persistent bool,
 		persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error)
 }
 
@@ -1467,7 +1468,14 @@ func ipvsServiceString(s *ipvs.Service) string {
 }
 
 func ipvsDestinationString(d *ipvs.Destination) string {
-	return fmt.Sprintf("%s:%v (Weight: %v)", d.Address, d.Port, d.Weight)
+	var family string
+	switch d.AddressFamily {
+	case syscall.AF_INET:
+		family = "IPv4"
+	case syscall.AF_INET6:
+		family = "IPv6"
+	}
+	return fmt.Sprintf("%s:%v (Family: %s, Weight: %v)", d.Address, d.Port, family, d.Weight)
 }
 
 func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) {
