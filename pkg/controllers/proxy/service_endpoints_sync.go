@@ -439,12 +439,15 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 	protocol := convertSvcProtoToSysCallProto(svc.protocol)
 	var nodeIP net.IP
 	var family v1.IPFamily
+	var sysFamily uint16
 	if externalIP.To4() != nil {
 		nodeIP = utils.FindBestIPv4NodeAddress(nsc.primaryIP, nsc.nodeIPv4Addrs)
 		family = v1.IPv4Protocol
+		sysFamily = syscall.AF_INET
 	} else {
 		nodeIP = utils.FindBestIPv6NodeAddress(nsc.primaryIP, nsc.nodeIPv6Addrs)
 		family = v1.IPv6Protocol
+		sysFamily = syscall.AF_INET6
 	}
 
 	dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
@@ -462,11 +465,11 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 		return fmt.Errorf("failed to generate FW mark")
 	}
 
-	ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(ipvsSvcs, fwMark, protocol, uint16(svc.port),
+	ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(ipvsSvcs, fwMark, sysFamily, protocol, uint16(svc.port),
 		svc.sessionAffinity, svc.sessionAffinityTimeoutSeconds, svc.scheduler, svc.flags)
 	if err != nil {
-		return fmt.Errorf("failed to create IPVS service for External IP: %s due to: %s",
-			externalIP, err.Error())
+		return fmt.Errorf("failed to create IPVS service for FWMark service: %d (external IP: %s) due to: %s",
+			fwMark, externalIP, err.Error())
 	}
 
 	externalIPServiceID := fmt.Sprint(fwMark)

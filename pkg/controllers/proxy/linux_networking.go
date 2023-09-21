@@ -298,8 +298,15 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 }
 
 // ipvsAddFWMarkService: creates an IPVS service using FWMARK
-func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uint32, protocol, port uint16,
+func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uint32, family, protocol, port uint16,
 	persistent bool, persistentTimeout int32, scheduler string, flags schedFlags) (*ipvs.Service, error) {
+	var netmaskForFamily uint32
+	switch family {
+	case syscall.AF_INET:
+		netmaskForFamily = ipv4NetMaskBits
+	case syscall.AF_INET6:
+		netmaskForFamily = ipv6NetMaskBits
+	}
 	for _, svc := range svcs {
 		if fwMark == svc.FWMark {
 			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
@@ -340,16 +347,30 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uin
 				klog.V(2).Infof("Updated schedule for the service: %s", ipvsServiceString(svc))
 			}
 
+			if svc.AddressFamily != family {
+				svc.AddressFamily = family
+				svc.Netmask = netmaskForFamily
+				err := ln.ipvsUpdateService(svc)
+				if err != nil {
+					return nil, fmt.Errorf("failed to update the address family for service %s due to %v",
+						ipvsServiceString(svc), err)
+				}
+				klog.V(2).Infof("Updated address family for the service: %s", ipvsServiceString(svc))
+			}
+
 			klog.V(2).Infof("ipvs service %s already exists so returning", ipvsServiceString(svc))
 			return svc, nil
 		}
 	}
 
+	// Even though it may seem unintuitive to require a Netmask on an fwmark service, I found that it was necessary in
+	// order to get IPVS IPv6 services to work correctly. After reviewing the code, it the only difference between the
+	// netlink command that we build here and the one that ipvsadm was building was the netmask, after adding it, it
+	// began to work
 	svc := ipvs.Service{
 		FWMark:        fwMark,
-		AddressFamily: syscall.AF_INET,
-		Protocol:      protocol,
-		Port:          port,
+		AddressFamily: family,
+		Netmask:       netmaskForFamily,
 		SchedName:     ipvs.RoundRobin,
 	}
 
