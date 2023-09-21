@@ -102,6 +102,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		} else {
 			klog.Warningf("got a No such process error while trying to remove route: %v (this is not normally bad "+
 				"enough to stop processing)", err)
+			return nil
 		}
 	}
 
