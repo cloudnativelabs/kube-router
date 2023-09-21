@@ -312,7 +312,8 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uin
 
 				err := ln.ipvsUpdateService(svc)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("failed to update persistence flags for service %s due to %v",
+						ipvsServiceString(svc), err)
 				}
 				klog.V(2).Infof("Updated persistence/session-affinity for service: %s",
 					ipvsServiceString(svc))
@@ -323,7 +324,8 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uin
 
 				err := ln.ipvsUpdateService(svc)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("failed to update scheduler flags for service %s due to %v",
+						ipvsServiceString(svc), err)
 				}
 				klog.V(2).Infof("Updated scheduler flags for service: %s", ipvsServiceString(svc))
 			}
@@ -332,7 +334,8 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uin
 				svc.SchedName = scheduler
 				err := ln.ipvsUpdateService(svc)
 				if err != nil {
-					return nil, fmt.Errorf("failed to update the scheduler for the service due to %v", err)
+					return nil, fmt.Errorf("failed to update the scheduler for the service %s due to %v",
+						ipvsServiceString(svc), err)
 				}
 				klog.V(2).Infof("Updated schedule for the service: %s", ipvsServiceString(svc))
 			}
