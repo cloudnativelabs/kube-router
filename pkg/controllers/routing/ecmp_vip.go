@@ -366,7 +366,7 @@ func (nrc *NetworkRoutingController) getLoadBalancerIPs(svc *v1core.Service) []s
 
 func (nrc *NetworkRoutingController) getChangedVIPs(oldSvc, newSvc *v1core.Service,
 	onlyActiveEndpoints bool) ([]string, []string, error) {
-	advertiseService := false
+	advertiseService := true
 
 	_, hasLocalAnnotation := newSvc.Annotations[svcLocalAnnotation]
 	hasLocalTrafficPolicy := newSvc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal
