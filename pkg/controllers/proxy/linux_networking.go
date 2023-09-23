@@ -642,6 +642,22 @@ func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, contain
 
 func (ln *linuxNetworking) configureContainerForDSR(
 	vip, endpointIP, containerID string, pid int, hostNetworkNamespaceHandle netns.NsHandle) error {
+	var ipTunLink netlink.Link
+	parsedEIP := net.ParseIP(endpointIP)
+	if parsedEIP == nil {
+		return fmt.Errorf("failed to parse endpoint IP %s", endpointIP)
+	}
+	if parsedEIP.To4() != nil {
+		ipTunLink = &netlink.Iptun{
+			LinkAttrs: netlink.LinkAttrs{Name: KubeTunnelIfv4},
+			Local:     parsedEIP,
+		}
+	} else {
+		ipTunLink = &netlink.Ip6tnl{
+			LinkAttrs: netlink.LinkAttrs{Name: KubeTunnelIfv6},
+			Local:     parsedEIP,
+		}
+	}
 	endpointNamespaceHandle, err := netns.GetFromPid(pid)
 	if err != nil {
 		return fmt.Errorf("failed to get endpoint namespace (containerID=%s, pid=%d, error=%v)",
@@ -665,11 +681,8 @@ func (ln *linuxNetworking) configureContainerForDSR(
 		activeNetworkNamespaceHandle.String())
 	_ = activeNetworkNamespaceHandle.Close()
 
-	// TODO: fix boilerplate `netns.Set(hostNetworkNamespaceHandle)` code. Need a robust
-	// way to switch back to old namespace, pretty much all things will go wrong if we dont switch back
-
 	// create an ipip tunnel interface inside the endpoint container
-	tunIf, err := netlink.LinkByName(KubeTunnelIf)
+	tunIf, err := netlink.LinkByName(ipTunLink.Attrs().Name)
 	if err != nil {
 		if err.Error() != IfaceNotFound {
 			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
@@ -678,12 +691,8 @@ func (ln *linuxNetworking) configureContainerForDSR(
 		}
 
 		klog.V(2).Infof("Could not find tunnel interface %s in endpoint %s so creating one.",
-			KubeTunnelIf, endpointIP)
-		ipTunLink := netlink.Iptun{
-			LinkAttrs: netlink.LinkAttrs{Name: KubeTunnelIf},
-			Local:     net.ParseIP(endpointIP),
-		}
-		err = netlink.LinkAdd(&ipTunLink)
+			ipTunLink.Attrs().Name, endpointIP)
+		err = netlink.LinkAdd(ipTunLink)
 		if err != nil {
 			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 			return fmt.Errorf("failed to add ipip tunnel interface in endpoint namespace due to %v", err)
@@ -692,13 +701,13 @@ func (ln *linuxNetworking) configureContainerForDSR(
 		// this is ugly, but ran into issue multiple times where interface did not come up quickly.
 		for retry := 0; retry < 60; retry++ {
 			time.Sleep(interfaceWaitSleepTime)
-			tunIf, err = netlink.LinkByName(KubeTunnelIf)
+			tunIf, err = netlink.LinkByName(ipTunLink.Attrs().Name)
 			if err == nil {
 				break
 			}
 			if err.Error() == IfaceNotFound {
 				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying",
-					KubeTunnelIf)
+					ipTunLink.Attrs().Name)
 				continue
 			} else {
 				break
@@ -707,11 +716,11 @@ func (ln *linuxNetworking) configureContainerForDSR(
 
 		if err != nil {
 			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return fmt.Errorf("failed to get %s tunnel interface handle due to %v", KubeTunnelIf, err)
+			return fmt.Errorf("failed to get %s tunnel interface handle due to %v", ipTunLink.Attrs().Name, err)
 		}
 
 		klog.V(2).Infof("Successfully created tunnel interface %s in endpoint %s.",
-			KubeTunnelIf, endpointIP)
+			ipTunLink.Attrs().Name, endpointIP)
 	}
 
 	// bring the tunnel interface up
