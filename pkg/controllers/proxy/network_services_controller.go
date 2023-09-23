@@ -30,7 +30,8 @@ import (
 
 const (
 	KubeDummyIf       = "kube-dummy-if"
-	KubeTunnelIf      = "kube-tunnel-if"
+	KubeTunnelIfv4    = "kube-tunnel-if"
+	KubeTunnelIfv6    = "kube-tunnel-v6"
 	IfaceNotFound     = "Link not found"
 	IfaceHasAddr      = "file exists"
 	IfaceHasNoAddr    = "cannot assign requested address"
