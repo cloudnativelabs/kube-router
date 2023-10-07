@@ -1,7 +1,7 @@
 module github.com/cloudnativelabs/kube-router/v2
 
 require (
-	github.com/aws/aws-sdk-go v1.45.1
+	github.com/aws/aws-sdk-go v1.45.24
 	github.com/coreos/go-iptables v0.7.0
 	github.com/docker/docker v24.0.5+incompatible
 	github.com/moby/ipvs v1.1.0
