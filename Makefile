@@ -27,7 +27,7 @@ RUNTIME_BASE?=alpine:3.18
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.54.2
 GOBGP_VERSION=v3.17.0
 QEMU_IMAGE?=multiarch/qemu-user-static
-GORELEASER_VERSION=v1.14.1
+GORELEASER_VERSION=v1.21.2
 MOQ_VERSION=v0.3.2
 UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
