@@ -17,7 +17,10 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
-DOCKER_BUILD_IMAGE?=golang:1.20.7-alpine3.18
+# Upgrading to Go 1.21.{0,1,2} seems to in cause some sort of race condition that causes tests to fail sporadically.
+# Sometimes they fail in apparent race conditions, other times they end up with nil pointer and SIGSEGV errors. We'll
+# either need to try with a future bug fix release or do some in-depth debugging before we upgrade.
+DOCKER_BUILD_IMAGE?=golang:1.20.9-alpine3.18
 ## These variables are used by the Dockerfile as the bases for building and creating the runtime container
 ## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
 GO_CACHE?=$(shell go env GOCACHE)
