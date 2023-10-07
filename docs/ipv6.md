@@ -14,55 +14,12 @@ kube-router's current approach is to implement dual-stack functionality function
  * Network policies `--run-firewall`
 
 
-## Current status (January 22, 2023)
+## Current status (Oct 7, 2023)
 
-Support for dual-stack in kube-router is under active development and is currently the main focus of development for the
-kube-router maintainers. Currently, we are targeting a v2.0.0 release of kube-router which will see all controllers
+Support for dual-stack in kube-router is feature complete. Release v2.0.0 and above of kube-router has all controllers
 updated for dual-stack compatibility.
 
-We are currently running this work off of the
-[prep-v2.0 branch](https://github.com/cloudnativelabs/kube-router/tree/prep-v2.0) and, as of the time of this writing,
-have released a [release candidate](https://github.com/cloudnativelabs/kube-router/releases/tag/v2.0.0-rc1) with some
-dual-stack functionality built into it.
-
-Functions that currently support dual-stack on the v2.0.0 release line:
-
-* CNI
-* Router / BGP (`--run-router`)
-* Network Policies (`--run-firewall`)
-
-## How Can You Help?
-
-The work to make dual-stack support workable in kube-router has involved a lot of work and several large contributions
-to the code base. If you have access to a development or staging environment where you would be willing to run the
-latest v2.0.0 release candidate and give us feedback, it would be much appreciated!
-
-For any issues found with the new v2.0.0 release line, please open an issue against the kube-router project of the type:
-`Report a v2.0.0 Release Issue`
-
-If you have questions about the release, please ask in our
-[Kubernetes Slack Channel](https://kubernetes.slack.com/archives/C8DCQGTSB).
-
-While the most helpful feedback will come from users that are able to run kube-router in dual-stack mode, there have
-been enough changes, that even users that are only able to run kube-router in a single-stack mode will be able to give
-valuable feedback concerning any bugs or regressions.
-
-If any users that find bugs have Golang experience, please consider helping us squash some of our dual-stack related
-bugs by filing PRs against the project.
-
-All PRs related to the new v2.0.0-based functionality will be given priority in terms of review as we work to get this
-released and out into the wild so that we can work on other features and issues.
-
-## Roadmap
-
-The next big item to add to make kube-router fully dual-stack functional will be the **Proxy (`--run-service-proxy`)**
-functionality. At this point, kube-router is not able to proxy traffic for IPv6 service VIPs at all until we get this
-functionality added.
-
-After that, we'd like to give kube-router some time to run in the wild for a bit so that we can be sure that there
-aren't any large bugs or regressions before we tag an official v2.0.0 release.
-
-## Important Notes / Known Limitations / Etc.
+## Important Notes / Known Limitations / Etc
 
 This represents a major release for kube-router and as such, user's should approach deploying this into an established
 kube-router environment carefully. While there aren't any huge bugs that the maintainers are aware of at this time,
@@ -88,8 +45,7 @@ Addresses:
 ```
 
 * Add additional `--service-cluster-ip-range` and `--service-external-ip-range` kube-router parameters for your IPv6
-  addresses. Note, as mentioned before `Proxy` functionality still isn't working, but this is important for a future
-  where `Proxy` functionality has been enabled.
+  addresses.
 * If you use `--enable-cni=true`, ensure `kube-controller-manager` has been started with both IPv4 and IPv6 cluster
   CIDRs (e.g. `--cluster-cidr=10.242.0.0/16,2001:db8:42:1000::/56`)
 * Ensure `kube-controller-manager` & `kube-apiserver` have been started with both IPv4 and IPv6 service cluster IP
@@ -123,10 +79,13 @@ for the advertised route will be. Instead the next-hop will be overridden by the
 kube-router.
 
 This can cause trouble for many configurations and so it is not recommended to use `--override-nexthop` in dual-stack
-kube-router configurations. Where this really shows though is when kube-router is syncing pod IP subnets across BGP
-between other kube-router peers that are not in the same subnet or in full mesh scenarios. Because of this, starting
-with v2.0 versions of kube-router, even when `--override-nexthop` is specified we do not enable it for kube-router peers
-for the pod IP subnets. See [1523](https://github.com/cloudnativelabs/kube-router/pull/1523) for more information.
+kube-router configurations.
+
+One place where this was particularly problematic was when advertising the Pod IP subnets between different kube-router
+enabled Kubernetes worker nodes. Workers that use overlay networking in a kube-router cluster are made aware of their
+neighbors via BGP protocol advertisements and `--override-nexthop` would mean that one family of addresses would never
+work correctly. As such, we no longer apply the `--override-nexthop` setting to pod subnet advertisements between
+kube-router nodes. This is different functionality between version v1.X of kube-router and v2.x.
 
 ### kube-router.io/node.bgp.customimportreject Can Only Contain IPs of a Single Family
 
