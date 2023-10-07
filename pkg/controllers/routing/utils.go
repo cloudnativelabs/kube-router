@@ -267,7 +267,7 @@ func getPodCIDRsFromAllNodeSources(node *v1core.Node) (podCIDRs []string) {
 			klog.Warningf("couldn't parse CIDR %s from kube-router.io/pod-cidr annotation, skipping...", podCIDR)
 		} else {
 			podCIDRs = append(podCIDRs, podCIDR)
-			return
+			return podCIDRs
 		}
 	}
 
@@ -286,7 +286,7 @@ func getPodCIDRsFromAllNodeSources(node *v1core.Node) (podCIDRs []string) {
 			}
 			podCIDRs = append(podCIDRs, cidr)
 		}
-		return
+		return podCIDRs
 	}
 
 	// Finally, if all else fails, use the PodCIDRs on the node spec
