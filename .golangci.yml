@@ -3,7 +3,6 @@ run:
 linters:
   enable:
     - bodyclose
-    - depguard
     - dogsled
     - dupl
     - durationcheck
