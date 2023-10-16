@@ -602,6 +602,14 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	}
 
 	for family, addrs := range addrsMap {
+		// Don't run for families that we don't support
+		if family == v1.IPv4Protocol && !nsc.isIPv4Capable {
+			continue
+		}
+		if family == v1.IPv6Protocol && !nsc.isIPv6Capable {
+			continue
+		}
+
 		// Convert addrs from a slice of net.IP to a slice of string
 		localIPsSets := make([][]string, 0, len(addrs))
 		for _, addr := range addrs {
@@ -1267,14 +1275,14 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	}
 
 	// Cleanup (if needed) and return if there's no hairpin-mode Services
-	if len(ipv4RulesNeeded) == 0 {
+	if len(ipv4RulesNeeded) == 0 && nsc.isIPv4Capable {
 		klog.V(1).Info("No IPv4 hairpin-mode enabled services found -- no hairpin rules created")
 		err := nsc.deleteHairpinIptablesRules(v1.IPv4Protocol)
 		if err != nil {
 			return fmt.Errorf("error deleting hairpin rules: %v", err)
 		}
 	}
-	if len(ipv6RulesNeeded) == 0 {
+	if len(ipv6RulesNeeded) == 0 && nsc.isIPv6Capable {
 		klog.V(1).Info("No IPv6 hairpin-mode enabled services found -- no hairpin rules created")
 		err := nsc.deleteHairpinIptablesRules(v1.IPv6Protocol)
 		if err != nil {
