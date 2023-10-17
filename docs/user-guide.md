@@ -38,9 +38,11 @@ in your kube-router deployment
 
 Example:
 
-    env:
-    - name: HTTP_PROXY
-      value: "http://proxy.example.com:80"
+```yaml
+env:
+- name: HTTP_PROXY
+  value: "http://proxy.example.com:80"
+```
 
 ### Azure specific notes
 
@@ -152,7 +154,7 @@ kube-router --master=http://192.168.1.99:8080/` or `kube-router --kubeconfig=<pa
     tooling like `iptables`, `ipset`, and `ipvsadm` in sync with the versions that are distributed by Alpine inside the
     kube-router container. This will help avoid conflicts that can potentially arise when both the host's userspace and
     kube-router's userspace tooling modifies netfilter kernel definitions. See:
-    https://github.com/cloudnativelabs/kube-router/issues/1370 for more information.
+    [this kube-router issue](https://github.com/cloudnativelabs/kube-router/issues/1370) for more information.
 
 - If you choose to use kube-router for pod-to-pod network connecitvity then Kubernetes cluster must be configured to use
   CNI network plugins. On each node CNI conf file is expected to be present as /etc/cni/net.d/10-kuberouter.conf
@@ -297,8 +299,8 @@ traffic. This has a potential to cause issues when network policies are applied 
 will appear to be coming from a node in your cluster instead of the traffic originator.
 
 This is an issue that is common to all proxy's and all Kubernetes service proxies in general. You can read more
-information about this issue here:
-https://kubernetes.io/docs/tutorials/services/source-ip/#source-ip-for-services-with-type-nodeport
+information about this issue at:
+[Source IP for Services](https://kubernetes.io/docs/tutorials/services/source-ip/#source-ip-for-services-with-type-nodeport)
 
 In addition to the fix mentioned in the linked upstream documentation (using `service.spec.externalTrafficPolicy`),
 kube-router also provides [DSR](dsr.md), which by its nature preserves the source IP, to solve this problem. For more

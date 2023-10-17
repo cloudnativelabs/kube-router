@@ -2,19 +2,23 @@
 
 ## What does it do
 
-The load balancer allocator controller looks for services with the type LoadBalancer and tries to allocate addresses for it if needed.
-The controller doesn't enable any announcement of the addresses by default, so `--advertise-loadbalancer-ip` should be set to true and BGP peers configured.
+The load balancer allocator controller looks for services with the type LoadBalancer and tries to allocate addresses for
+it if needed. The controller doesn't enable any announcement of the addresses by default, so
+`--advertise-loadbalancer-ip` should be set to true and BGP peers configured.
 
 ## Load balancer classes
 
-By default the controller allocates addresses for all LoadBalancer services with the where `loadBalancerClass` is empty or set to one of "default" or "kube-router".
-If `--loadbalancer-default-class` is set to false, the controller will only handle services with the class set to "kube-router".
+By default the controller allocates addresses for all LoadBalancer services with the where `loadBalancerClass` is empty
+or set to one of "default" or "kube-router". If `--loadbalancer-default-class` is set to false, the controller will only
+handle services with the class set to "kube-router".
 
 ## RBAC permissions
 
-The controller needs some extra permissions to get, create and update leases for leader election and to update services with allocated addresses.
+The controller needs some extra permissions to get, create and update leases for leader election and to update services
+with allocated addresses.
 
 Example permissions:
+
 ```yaml
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
@@ -42,6 +46,7 @@ rules:
 
 The controller uses the environment variable `POD_NAME` as the identify for the lease used for leader election.
 Using the kubernetes downward api to set `POD_NAME` to the pod name the lease identify will match the current leader.
+
 ```yaml
 ---
 apiVersion: apps/v1

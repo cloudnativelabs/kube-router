@@ -24,7 +24,7 @@ annotation value as the ASN number for the node.
 
 Users can annotate node objects with the following command:
 
-```
+```sh
 kubectl annotate node <kube-node> "kube-router.io/node.asn=64512"
 ```
 
@@ -41,13 +41,13 @@ route reflector servers and with route reflector clients enabling reflection.
 
 Users can annotate node objects with the following command for Route Reflector server mode:
 
-```
+```sh
 kubectl annotate node <kube-node> "kube-router.io/rr.server=42"
 ```
 
 and for Route Reflector client mode:
 
-```
+```sh
 kubectl annotate node <kube-node> "kube-router.io/rr.client=42"
 ```
 
@@ -68,7 +68,7 @@ peer router by specifying a slice of BGP peers.
 
 For example:
 
-```
+```sh
 --peer-router-ips="192.168.1.99,192.168.1.100"
 --peer-router-asns=65000,65000
 ```
@@ -77,9 +77,9 @@ For example:
 
 Alternatively, each node can be configured with one or more node specific BGP peers. Information regarding node specific
 BGP peer is read from node API object annotations:
+
 - `kube-router.io/peer.ips`
 - `kube-router.io/peer.asns`
-
 
 For example, users can annotate node object with below commands:
 
@@ -144,7 +144,7 @@ U2VjdXJlUGFzc3dvcmQ=
 
 In this CLI flag example the first router (192.168.1.99) uses a password, while the second (192.168.1.100) does not.
 
-```
+```sh
 --peer-router-ips="192.168.1.99,192.168.1.100"
 --peer-router-asns="65000,65000"
 --peer-router-passwords="U2VjdXJlUGFzc3dvcmQK,"
@@ -171,7 +171,7 @@ Finally, to include peer passwords as a file you would run kube-router with the 
 The password file, closely follows the syntax of the command-line and node annotation options.
 Here, the first peer IP (192.168.1.99) would be configured with a password, while the second would not.
 
-```
+```sh
 U2VjdXJlUGFzc3dvcmQK,
 ```
 
@@ -247,9 +247,8 @@ network.
 
 This configuration would have the following effects:
 
-- Peering Outside the Cluster
-  (https://github.com/cloudnativelabs/kube-router/blob/master/docs/bgp.md#peering-outside-the-cluster) via one of the
-  many means that kube-router makes available
+- [Peering Outside the Cluster](https://github.com/cloudnativelabs/kube-router/blob/master/docs/bgp.md#peering-outside-the-cluster)
+  via one of themany means that kube-router makes available
 - Overriding Next Hop
 - Enabling overlays in either full mode or with nodes in different subnets
 
@@ -259,5 +258,5 @@ given. If this happens it may cause some network flows to become un-routable.
 
 Specifically, people need to take care when combining `--override-nexthop` and `--enable-overlay` and make sure that
 they understand their network, the flows they desire, how the kube-router logic works, and the possible side effects
-that are created from their configuration. Please refer to this PR for the risk and impact discussion
-https://github.com/cloudnativelabs/kube-router/pull/1025.
+that are created from their configuration. Please refer to [this PR](https://github.com/cloudnativelabs/kube-router/pull/1025)
+for the risk and impact discussion.
