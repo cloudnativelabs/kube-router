@@ -39,6 +39,7 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 	var clientconfig *rest.Config
 	var err error
 	version.PrintVersion(true)
+	version.PrintVersionMessages(true)
 	// Use out of cluster config if the URL or kubeconfig have been specified. Otherwise use incluster config.
 	if len(config.Master) != 0 || len(config.Kubeconfig) != 0 {
 		clientconfig, err = clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
