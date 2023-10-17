@@ -28,6 +28,7 @@ GO_MOD_CACHE?=$(shell go env GOMODCACHE)
 BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 RUNTIME_BASE?=alpine:3.18
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.54.2
+DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.37.0
 GOBGP_VERSION=v3.19.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v1.21.2
@@ -91,7 +92,7 @@ else
 	go test -v -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/pkg/...
 endif
 
-lint: gofmt
+lint: gofmt markdownlint
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
 		-v $(GO_CACHE):/root/.cache/go-build \
@@ -102,6 +103,9 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 else
 	golangci-lint run ./...
 endif
+
+markdownlint:
+	$(DOCKER) run -v $(PWD):/work $(DOCKER_MARKDOWNLINT_IMAGE) -- README.md docs
 
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
@@ -231,6 +235,6 @@ help:
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs
 .PHONY: test lint docker-login push-manifest push-manifest-release
-.PHONY: push-release github-release help multiarch-binverify
+.PHONY: push-release github-release help multiarch-binverify markdownlint
 
 .DEFAULT: all
