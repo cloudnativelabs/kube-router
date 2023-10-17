@@ -46,11 +46,12 @@ func TestMainHelp(t *testing.T) {
 	}
 	docF.Close()
 
-	exp := append([]byte("```\n"), stderrBuf.Bytes()...)
+	exp := append([]byte("```sh\n"), stderrBuf.Bytes()...)
 	exp = append(exp, []byte("```\n")...)
 
 	if !bytes.Contains(docBuf.Bytes(), exp) {
-		t.Errorf("docs/user-guide.md 'command line options' section does not match `kube-router --help`.\nExpected:\n%s", exp)
+		t.Errorf("docs/user-guide.md 'command line options' section does not match `kube-router --help`.\n"+
+			"Expected:\n%s", exp)
 		t.Errorf("\nGot:\n%s", docBuf.Bytes())
 	}
 

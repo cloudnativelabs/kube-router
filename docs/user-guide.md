@@ -51,15 +51,15 @@ need to use an overlay network in an Azure environment with kube-router, please 
 ## deployment
 
 Depending on what functionality of kube-router you want to use, multiple deployment options are possible. You can use
-the flags `--run-firewall`, `--run-router`, `--run-service-proxy` to selectively enable only required functionality of
-kube-router.
+the flags `--run-firewall`, `--run-router`, `--run-service-proxy`, `--run-loadbalancer` to selectively enable only
+required functionality of kube-router.
 
 Also you can choose to run kube-router as agent running on each cluster node. Alternativley you can run kube-router as
 pod on each node through daemonset.
 
 ## command line options
 
-```
+```sh
 Usage of kube-router:
       --advertise-cluster-ip                          Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.
       --advertise-external-ip                         Add External IP of service to the RIB so that it gets advertised to the BGP peers.
@@ -164,7 +164,7 @@ wget -O /etc/cni/net.d/10-kuberouter.conf https://raw.githubusercontent.com/clou
 
 ## running as daemonset
 
-This is quickest way to deploy kube-router in Kubernetes v1.8+ (**dont forget to ensure the requirements above**).
+This is quickest way to deploy kube-router in Kubernetes (**dont forget to ensure the requirements above**).
 Just run:
 
 ```sh
@@ -172,9 +172,9 @@ kubectl apply -f https://raw.githubusercontent.com/cloudnativelabs/kube-router/m
 ```
 
 Above will run kube-router as pod on each node automatically. You can change the arguments in the daemonset definition
-as required to suit your needs. Some samples can be found at
-https://github.com/cloudnativelabs/kube-router/tree/master/daemonset with different argument to select set of the
-services kube-router should run.
+as required to suit your needs. Some sample deployment configuration can be found
+[in our daemonset examples](https://github.com/cloudnativelabs/kube-router/tree/master/daemonset) with different
+arguments used to select a set of the services kube-router should run.
 
 ## running as agent
 
@@ -216,7 +216,6 @@ and if you want to move back to kube-proxy then clean up config done by kube-rou
 
 and run kube-proxy with the configuration you have.
 
-
 ## Advertising IPs
 
 kube-router can advertise Cluster, External and LoadBalancer IPs to BGP peers.
@@ -246,7 +245,6 @@ advertising IPs.
 Advertising LoadBalancer IPs works by inspecting the services `status.loadBalancer.ingress` IPs that are set by external
 LoadBalancers like for example MetalLb. This has been successfully tested together with
 [MetalLB](https://github.com/google/metallb) in ARP mode.
-
 
 ## Hairpin Mode
 
