@@ -8,11 +8,10 @@ Dual-Stack (e.g. IPv4 and IPv6) has been supported in Kubernetes since version `
 
 kube-router's current approach is to implement dual-stack functionality function-by-function:
 
- * CNI `--enable-cni`
- * Proxy `--run-service-proxy`
- * Router `--run-router`
- * Network policies `--run-firewall`
-
+* CNI `--enable-cni`
+* Proxy `--run-service-proxy`
+* Router `--run-router`
+* Network policies `--run-firewall`
 
 ## Current status (Oct 7, 2023)
 

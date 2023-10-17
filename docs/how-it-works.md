@@ -1,10 +1,10 @@
 
-## Theory of Operation
+# Theory of Operation
 
 Kube-router can be run as an agent or a Pod (via DaemonSet) on each node and
 leverages standard Linux technologies **iptables, ipvs/lvs, ipset, iproute2**
 
-### Service Proxy And Load Balancing
+## Service Proxy And Load Balancing
 
 Blog: [Kubernetes network services proxy with IPVS/LVS](https://cloudnativelabs.github.io/post/2017-05-10-kube-network-service-proxy/)
 
@@ -32,7 +32,7 @@ desired state of Services. Kube-router uses IPVS masquerading mode and uses
 round robin scheduling currently. Source pod IP is preserved so that appropriate
 network policies can be applied.
 
-### Pod Ingress Firewall
+## Pod Ingress Firewall
 
 Blog: [Enforcing Kubernetes network policies with iptables](https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/)
 
@@ -78,7 +78,7 @@ Kube-router at runtime watches Kubernetes API server for changes in the
 namespace, network policy and pods and dynamically updates iptables and ipset
 configuration to reflect desired state of ingress firewall for the the pods.
 
-### Pod Networking
+## Pod Networking
 
 Blog: [Kubernetes pod networking and beyond with BGP](https://cloudnativelabs.github.io/post/2017-05-22-kube-pod-networking)
 
@@ -89,4 +89,3 @@ CIDR assigned to the Node. Each Node peers with rest of the Nodes in the cluster
 forming full mesh. Learned routes about the Pod CIDR from the other Nodes (BGP
 peers) are injected into local Node routing table. On the data path, inter Node
 Pod-to-Pod communication is done by the routing stack on the Node.
-

@@ -8,7 +8,8 @@ performed.
 ## Logging In
 
 Here's a quick way to get going on a random node in your cluster:
-```
+
+```sh
 KR_POD=$(basename $(kubectl -n kube-system get pods -l k8s-app=kube-router --output name|head -n1))
 kubectl -n kube-system exec -it ${KR_POD} bash
 ```
@@ -22,6 +23,7 @@ particular node.
 Once logged in you will see some help on using the tools in the container.
 
 For example:
+
 ```console
 Welcome to kube-router on "node1.zbrbdl"!
 
