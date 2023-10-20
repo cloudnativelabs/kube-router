@@ -1,34 +1,43 @@
+---
 release:
   draft: true
+  prerelease: auto
+  header: |
+    ## Summary
+
+    ## Contributions
+
+    ## Changelog
+
 builds:
-- main: ./cmd/kube-router
-  goos:
-  - linux
-  goarch:
-  - amd64
-  - arm
-  - arm64
-  - ppc64le
-  - s390x
-  - riscv64
-  goarm:
-  - 6
-  - 7
-  env:
-  - CGO_ENABLED=0
-  ldflags:
-  - "-X github.com/cloudnativelabs/kube-router/pkg/version.Version={{.Version}}"
-  - "-X github.com/cloudnativelabs/kube-router/pkg/version.BuildDate={{.Date}}"
+  - main: ./cmd/kube-router
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm
+      - arm64
+      - ppc64le
+      - s390x
+      - riscv64
+    goarm:
+      - 6
+      - 7
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - "-X github.com/cloudnativelabs/kube-router/pkg/version.Version={{.Version}}"
+      - "-X github.com/cloudnativelabs/kube-router/pkg/version.BuildDate={{.Date}}"
 
 archives:
-  -
-    format: tar.gz
+  - format: tar.gz
     name_template: '{{ .Binary }}_{{.Version}}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{
       .Arm }}{{ end }}'
     files:
-    - LICENSE*
-    - README*
-    - CHANGELOG*
-    - Documentation*
+      - LICENSE*
+      - README*
+      - CHANGELOG*
+      - Documentation*
+
 snapshot:
   name_template: SNAPSHOT-{{ .Commit }}
