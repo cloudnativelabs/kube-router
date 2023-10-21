@@ -9,11 +9,6 @@ The best way to get started is to deploy Kubernetes with Kube-router is with a c
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/kops.md) to deploy Kubernetes
 cluster with Kube-router using [Kops](https://github.com/kubernetes/kops)
 
-### bootkube
-
-Please see the [steps](https://github.com/cloudnativelabs/kube-router/tree/master/contrib/bootkube) to deploy Kubernetes
-cluster with Kube-router using [bootkube](https://github.com/kubernetes-incubator/bootkube)
-
 ### kubeadm
 
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/kubeadm.md) to deploy Kubernetes
@@ -24,6 +19,12 @@ cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/indepe
 k0s by default uses kube-router as a CNI option.
 Please see the [steps](https://docs.k0sproject.io/latest/install/) to deploy Kubernetes cluster with Kube-router using
 [k0s](https://docs.k0sproject.io/)
+
+### k3sproject
+
+[k3s](https://k3s.io/) by default uses
+[kube-router's network policy controller implementation](https://docs.k3s.io/networking#network-policy-controller) for
+its NetworkPolicy enforcement.
 
 ### generic
 
