@@ -12,6 +12,8 @@ import (
 )
 
 const (
+	HPCStaticSyncInterval    = 60
+	HPCSyncPeriod            = time.Duration(HPCStaticSyncInterval) * time.Second
 	defaultGraceTimeDuration = time.Duration(1500) * time.Millisecond
 	healthControllerTickTime = 5000 * time.Millisecond
 )
@@ -43,6 +45,8 @@ type HealthStats struct {
 	NetworkRoutingControllerAliveTTL  time.Duration
 	NetworkServicesControllerAlive    time.Time
 	NetworkServicesControllerAliveTTL time.Duration
+	HairpinControllerAlive            time.Time
+	HairpinControllerAliveTTL         time.Duration
 }
 
 // SendHeartBeat sends a heartbeat on the passed channel
@@ -97,11 +101,18 @@ func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 			hc.Status.LoadBalancerControllerAliveTTL = time.Since(hc.Status.LoadBalancerControllerAlive)
 		}
 		hc.Status.LoadBalancerControllerAlive = beat.LastHeartBeat
+
 	case beat.Component == "NSC":
 		if hc.Status.NetworkServicesControllerAliveTTL == 0 {
 			hc.Status.NetworkServicesControllerAliveTTL = time.Since(hc.Status.NetworkServicesControllerAlive)
 		}
 		hc.Status.NetworkServicesControllerAlive = beat.LastHeartBeat
+
+	case beat.Component == "HPC":
+		if hc.Status.HairpinControllerAliveTTL == 0 {
+			hc.Status.HairpinControllerAliveTTL = time.Since(hc.Status.HairpinControllerAlive)
+		}
+		hc.Status.HairpinControllerAlive = beat.LastHeartBeat
 
 	case beat.Component == "NRC":
 		if hc.Status.NetworkRoutingControllerAliveTTL == 0 {
@@ -153,6 +164,11 @@ func (hc *HealthController) CheckHealth() bool {
 		if time.Since(hc.Status.NetworkServicesControllerAlive) >
 			hc.Config.IpvsSyncPeriod+hc.Status.NetworkServicesControllerAliveTTL+graceTime {
 			klog.Error("NetworkService Controller heartbeat missed")
+			health = false
+		}
+		if time.Since(hc.Status.HairpinControllerAlive) >
+			HPCSyncPeriod+hc.Status.HairpinControllerAliveTTL+graceTime {
+			klog.Error("Hairpin Controller heartbeat missed")
 			health = false
 		}
 	}
@@ -225,6 +241,7 @@ func (hc *HealthController) SetAlive() {
 	hc.Status.NetworkPolicyControllerAlive = now
 	hc.Status.NetworkRoutingControllerAlive = now
 	hc.Status.NetworkServicesControllerAlive = now
+	hc.Status.HairpinControllerAlive = now
 }
 
 // NewHealthController creates a new health controller and returns a reference to it

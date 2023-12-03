@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 	"net"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -21,6 +22,9 @@ import (
 
 const (
 	interfaceWaitSleepTime = 100 * time.Millisecond
+	sysFSVirtualNetPath    = "/sys/devices/virtual/net"
+	sysFSHairpinRelPath    = "brport/hairpin_mode"
+	hairpinEnable          = "1"
 )
 
 func attemptNamespaceResetAfterError(hostNSHandle netns.NsHandle) {
@@ -186,36 +190,61 @@ func convertSysCallProtoToSvcProto(sysProtocol uint16) string {
 	}
 }
 
-// addDSRIPInsidePodNetNamespace takes a given external IP and endpoint IP for a DSR service and then uses the container
-// runtime to add the external IP to a virtual interface inside the pod so that it can receive DSR traffic inside its
-// network namespace.
-func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, endpointIP string) error {
+// findContainerRuntimeReferences find the container runtime and container ID for a given endpoint IP do this by:
+//   - Resolving the endpoint IP to a pod
+//   - Ensure that the pod actually exists on the node in question
+//   - Get the container ID of the primary container (since this function primarily allows us to enter the pod's
+//     namespace, it doesn't really matter which container we choose here, if this function gets used for something
+//     else in the future, this might have to be re-evaluated)
+func (nsc *NetworkServicesController) findContainerRuntimeReferences(endpointIP string) (string, string, error) {
 	podObj, err := nsc.getPodObjectForEndpoint(endpointIP)
 	if err != nil {
-		return fmt.Errorf("failed to find endpoint with ip: %s. so skipping preparing endpoint for DSR",
+		return "", "", fmt.Errorf("failed to find endpoint with ip: %s. so skipping preparing endpoint for DSR",
 			endpointIP)
 	}
 
 	// we are only concerned with endpoint pod running on current node
 	if strings.Compare(podObj.Status.HostIP, nsc.primaryIP.String()) != 0 {
-		return nil
+		return "", "", nil
 	}
 
 	containerURL := podObj.Status.ContainerStatuses[0].ContainerID
 	runtime, containerID, err := cri.EndpointParser(containerURL)
 	if err != nil {
-		return fmt.Errorf("couldn't get containerID (container=%s, pod=%s). Skipping DSR endpoint set up",
+		return "", "", fmt.Errorf("couldn't get containerID (container=%s, pod=%s). Skipping DSR endpoint set up",
 			podObj.Spec.Containers[0].Name, podObj.Name)
 	}
 
 	if containerID == "" {
-		return fmt.Errorf("failed to find container id for the endpoint with ip: %s so skipping preparing "+
+		return "", "", fmt.Errorf("failed to find container id for the endpoint with ip: %s so skipping preparing "+
 			"endpoint for DSR", endpointIP)
 	}
 
-	if runtime == "docker" {
+	return runtime, containerID, nil
+}
+
+// addDSRIPInsidePodNetNamespace takes a given external IP and endpoint IP for a DSR service and then uses the container
+// runtime to add the external IP to a virtual interface inside the pod so that it can receive DSR traffic inside its
+// network namespace.
+func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, endpointIP string) error {
+	crRuntime, containerID, err := nsc.findContainerRuntimeReferences(endpointIP)
+	if err != nil {
+		return err
+	}
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	hostNetworkNamespaceHandle, err := netns.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get namespace due to %v", err)
+	}
+	defer utils.CloseCloserDisregardError(&hostNetworkNamespaceHandle)
+
+	var pid int
+	if crRuntime == "docker" {
 		// WARN: This method is deprecated and will be removed once docker-shim is removed from kubelet.
-		err = nsc.ln.prepareEndpointForDsrWithDocker(containerID, endpointIP, externalIP)
+		pid, err = nsc.ln.getContainerPidWithDocker(containerID)
 		if err != nil {
 			return fmt.Errorf("failed to prepare endpoint %s to do direct server return due to %v",
 				endpointIP, err)
@@ -223,14 +252,13 @@ func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, 
 	} else {
 		// We expect CRI compliant runtimes here
 		// ugly workaround, refactoring of pkg/Proxy is required
-		err = nsc.ln.(*linuxNetworking).prepareEndpointForDsrWithCRI(nsc.dsr.runtimeEndpoint,
-			containerID, endpointIP, externalIP)
+		pid, err = nsc.ln.getContainerPidWithCRI(nsc.dsr.runtimeEndpoint, containerID)
 		if err != nil {
 			return fmt.Errorf("failed to prepare endpoint %s to do DSR due to: %v", endpointIP, err)
 		}
 	}
 
-	return nil
+	return nsc.ln.configureContainerForDSR(externalIP, endpointIP, containerID, pid, hostNetworkNamespaceHandle)
 }
 
 // getPrimaryAndCIDRsByFamily returns the best primary nodeIP and a slice of all of the relevant podCIDRs based upon a
