@@ -6,7 +6,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"runtime"
+	"path"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -23,6 +24,18 @@ import (
 const (
 	ipv4NetMaskBits = 32
 	ipv6NetMaskBits = 128
+
+	// TODO: it's bad to rely on eth0 here. While this is inside the container's namespace and is determined by the
+	// container runtime and so far we've been able to count on this being reliably set to eth0, it is possible that
+	// this may shift sometime in the future with a different runtime. It would be better to find a reliable way to
+	// determine the interface name from inside the container.
+	assumedContainerIfaceName = "eth0"
+
+	procFSBasePath       = "/proc"
+	procFSCWDRelPath     = "cwd"
+	sysFSBasePath        = "/sys"
+	sysFSNetClassRelPath = "class/net"
+	sysFSIfLinkRelPath   = "iflink"
 )
 
 // LinuxNetworking interface contains all linux networking subsystem calls
@@ -40,13 +53,14 @@ type linuxNetworking struct {
 type netlinkCalls interface {
 	ipAddrAdd(iface netlink.Link, ip string, nodeIP string, addRoute bool) error
 	ipAddrDel(iface netlink.Link, ip string, nodeIP string) error
-	prepareEndpointForDsrWithDocker(containerID string, endpointIP string, vip string) error
+	getContainerPidWithDocker(containerID string) (int, error)
+	getContainerPidWithCRI(runtimeEndpoint string, containerID string) (int, error)
 	getKubeDummyInterface() (netlink.Link, error)
 	setupRoutesForExternalIPForDSR(serviceInfo serviceInfoMap, setupIPv4, setupIPv6 bool) error
-	prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) error
 	configureContainerForDSR(vip, endpointIP, containerID string, pid int,
 		hostNetworkNamespaceHandle netns.NsHandle) error
 	setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) error
+	findIfaceLinkForPid(pid int) (int, error)
 }
 
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP string) error {
@@ -553,91 +567,93 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 	return nil
 }
 
-// This function does the following
-// - get the pod corresponding to the endpoint ip
-// - get the container id from pod spec
-// - from the container id, use docker client to get the pid
-// - enter process network namespace and create ipip tunnel
-// - add VIP to the tunnel interface
-// - disable rp_filter
-// WARN: This method is deprecated and will be removed once docker-shim is removed from kubelet.
-func (ln *linuxNetworking) prepareEndpointForDsrWithDocker(containerID string, endpointIP string, vip string) error {
-
-	// Its possible switch namespaces may never work safely in GO without hacks.
-	//	 https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion
-	//	 https://www.weave.works/blog/linux-namespaces-and-go-don-t-mix
-	// Dont know if same issue, but seen namespace issue, so adding
-	// logs and boilerplate code and verbose logs for diagnosis
-
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	var activeNetworkNamespaceHandle netns.NsHandle
-
-	hostNetworkNamespaceHandle, err := netns.Get()
-	if err != nil {
-		return fmt.Errorf("failed to get namespace due to %v", err)
-	}
-	defer utils.CloseCloserDisregardError(&hostNetworkNamespaceHandle)
-
-	activeNetworkNamespaceHandle, err = netns.Get()
-	if err != nil {
-		return fmt.Errorf("failed to get namespace due to %v", err)
-	}
-	klog.V(1).Infof("Current network namespace before netns.Set: %s", activeNetworkNamespaceHandle.String())
-	defer utils.CloseCloserDisregardError(&activeNetworkNamespaceHandle)
-
+// getContainerPidWithDocker get the PID for a given docker container ID which allows, among other things, for us to
+// enter the network namespace of the pod
+func (ln *linuxNetworking) getContainerPidWithDocker(containerID string) (int, error) {
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		return fmt.Errorf("failed to get docker client due to %v", err)
+		return 0, fmt.Errorf("failed to get docker client due to %v", err)
 	}
 	defer utils.CloseCloserDisregardError(dockerClient)
 
 	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerID)
 	if err != nil {
-		return fmt.Errorf("failed to get docker container spec due to %v", err)
+		return 0, fmt.Errorf("failed to get docker container spec due to %v", err)
 	}
 
-	pid := containerSpec.State.Pid
-	return ln.configureContainerForDSR(vip, endpointIP, containerID, pid, hostNetworkNamespaceHandle)
+	return containerSpec.State.Pid, nil
 }
 
-// The same as prepareEndpointForDsr but using CRI instead of docker.
-func (ln *linuxNetworking) prepareEndpointForDsrWithCRI(runtimeEndpoint, containerID, endpointIP, vip string) error {
-
-	// It's possible switch namespaces may never work safely in GO without hacks.
-	//	 https://groups.google.com/forum/#!topic/golang-nuts/ss1gEOcehjk/discussion
-	//	 https://www.weave.works/blog/linux-namespaces-and-go-don-t-mix
-	// Dont know if same issue, but seen namespace issue, so adding
-	// logs and boilerplate code and verbose logs for diagnosis
-
+// getContainerPidWithCRI get the PID for a given compatible CRI (cri-o / containerd / etc.) container ID which allows,
+// among other things, for us to enter the network namespace of the pod
+func (ln *linuxNetworking) getContainerPidWithCRI(runtimeEndpoint string, containerID string) (int, error) {
 	if runtimeEndpoint == "" {
-		return fmt.Errorf("runtimeEndpoint is not specified")
+		return 0, fmt.Errorf("runtimeEndpoint is not specified")
 	}
-
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	hostNetworkNamespaceHandle, err := netns.Get()
-	if err != nil {
-		return fmt.Errorf("failed to get host namespace due to %v", err)
-	}
-	klog.V(1).Infof("current network namespace before netns.Set: %s", hostNetworkNamespaceHandle.String())
-	defer utils.CloseCloserDisregardError(&hostNetworkNamespaceHandle)
 
 	rs, err := cri.NewRemoteRuntimeService(runtimeEndpoint, cri.DefaultConnectionTimeout)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer utils.CloseCloserDisregardError(rs)
 
 	info, err := rs.ContainerInfo(containerID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	pid := info.Pid
-	return ln.configureContainerForDSR(vip, endpointIP, containerID, pid, hostNetworkNamespaceHandle)
+	return info.Pid, nil
+}
+
+// findIfaceLinkForPid finds the interface link number inside the network namespace of the passed pid.
+//
+// It is extremely unfortunate, that we have to go through /proc for this functionality. Ideally, we could use
+// unix.Setns to enter the mount namespace for the PID and then just look through the sysfs filesystem to find this
+// information. Unfortunately, there appear to be problems doing this in Golang and the only way it appears to work
+// correctly is if you know all of the various PIDs you might need to join before the application is launched.
+// See the following for more details:
+//   - https://github.com/golang/go/issues/8676
+//   - https://stackoverflow.com/questions/25704661/calling-setns-from-go-returns-einval-for-mnt-namespace
+//
+// Additionally, we can't us nsenter because we need access to the basic tools that kube-router has on the host and
+// we can't guarantee that even basic commands like ls or cat will be available inside the container's NS filesystem.
+func (ln *linuxNetworking) findIfaceLinkForPid(pid int) (int, error) {
+	var ifaceID int
+
+	listAvailableIfaces := func() {
+		ifacesPath := path.Join(procFSBasePath, strconv.Itoa(pid), procFSCWDRelPath, sysFSBasePath,
+			sysFSNetClassRelPath)
+		entries, err := os.ReadDir(ifacesPath)
+		if err != nil {
+			klog.Warningf("could not list: %s due to: %v", ifacesPath, entries)
+			return
+		}
+		var sb strings.Builder
+		for _, e := range entries {
+			sb.WriteString(e.Name() + " ")
+		}
+		klog.Warningf("Able to see the following interfaces: %s", sb.String())
+		klog.Warning("If one of the above is not eth0 it is likely, that the assumption that we've hardcoded in " +
+			"kube-router is wrong, please report this as a bug along with this output")
+	}
+
+	ifaceSysPath := path.Join(procFSBasePath, strconv.Itoa(pid), procFSCWDRelPath, sysFSBasePath, sysFSNetClassRelPath,
+		assumedContainerIfaceName, sysFSIfLinkRelPath)
+	output, err := os.ReadFile(ifaceSysPath)
+	if err != nil {
+		listAvailableIfaces()
+		return ifaceID, fmt.Errorf("unable to read the ifaceID inside the container from %s, output was: %s, error "+
+			"was: %v", ifaceSysPath, string(output), err)
+	}
+
+	ifaceID, err = strconv.Atoi(strings.TrimSuffix(string(output), "\n"))
+	if ifaceID == 0 || err != nil {
+		listAvailableIfaces()
+		return ifaceID, fmt.Errorf("unable to find the ifaceID inside the container from %s, output was: %s, error "+
+			"was %v", ifaceSysPath, string(output), err)
+	}
+
+	return ifaceID, nil
 }
 
 func (ln *linuxNetworking) configureContainerForDSR(
@@ -673,6 +689,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 			containerID, pid, err)
 	}
 
+	// This is just for logging, and that is why we close it immediately after getting it
 	activeNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
 		return fmt.Errorf("failed to get activeNetworkNamespace due to %v", err)
@@ -746,11 +763,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 			sysctlErr.Error())
 	}
 
-	// TODO: it's bad to rely on eth0 here. While this is inside the container's namespace and is determined by the
-	// container runtime and so far we've been able to count on this being reliably set to eth0, it is possible that
-	// this may shift sometime in the future with a different runtime. It would be better to find a reliable way to
-	// determine the interface name from inside the container.
-	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "eth0", 0)
+	sysctlErr = utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, assumedContainerIfaceName, 0)
 	if sysctlErr != nil {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 		return fmt.Errorf("failed to disable rp_filter on eth0 in the endpoint container: %s", sysctlErr.Error())

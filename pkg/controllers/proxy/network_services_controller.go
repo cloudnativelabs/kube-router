@@ -145,6 +145,9 @@ type NetworkServicesController struct {
 	podIPv6CIDRs        []string
 	isIPv4Capable       bool
 	isIPv6Capable       bool
+
+	hpc                *hairpinController
+	hpEndpointReceiver chan string
 }
 
 type ipvsCalls interface {
@@ -229,6 +232,9 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	if err != nil {
 		klog.Fatalf("error cleaning up old/bad masquerade rules: %s", err.Error())
 	}
+
+	wg.Add(1)
+	go nsc.hpc.Run(stopCh, wg, healthChan)
 
 	// enable masquerade rule
 	err = nsc.ensureMasqueradeIptablesRule()
@@ -1258,6 +1264,17 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 					continue
 				}
 
+				// Ensure that hairpin mode is enabled for the virtual interface assigned to the pod behind the endpoint
+				// IP.
+				//
+				// This used to be handled by the kubelet, and then later the functionality was moved to the docker-shim
+				// but now the docker-shim has been removed, and its possible that it never existed for containerd or
+				// cri-o so we now ensure that it is handled.
+				//
+				// Without this change, the return traffic from a client to a service within the same pod will never
+				// make it back into the pod's namespace
+				nsc.hpEndpointReceiver <- ep.ip
+
 				// Handle ClusterIP Service
 				hairpinRuleFrom(familyClusterIPs, ep.ip, family, svcInfo.port, rulesMap)
 
@@ -2006,6 +2023,9 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.epSliceLister = epSliceInformer.GetIndexer()
 	nsc.EndpointSliceEventHandler = nsc.newEndpointSliceEventHandler()
+
+	nsc.hpEndpointReceiver = make(chan string)
+	nsc.hpc = NewHairpinController(&nsc, nsc.hpEndpointReceiver)
 
 	return &nsc, nil
 }
