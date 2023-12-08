@@ -625,7 +625,9 @@ func (ln *linuxNetworking) findIfaceLinkForPid(pid int) (int, error) {
 			sysFSNetClassRelPath)
 		entries, err := os.ReadDir(ifacesPath)
 		if err != nil {
-			klog.Warningf("could not list: %s due to: %v", ifacesPath, entries)
+			klog.Warningf("Could not list: %s due to: %v", ifacesPath, err)
+			klog.Warning("If above error was 'no such file or directory' it may be that you haven't enabled " +
+				"'hostPID=true' in your kube-router deployment")
 			return
 		}
 		var sb strings.Builder
