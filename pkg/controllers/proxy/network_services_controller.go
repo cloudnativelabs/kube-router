@@ -1050,7 +1050,7 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 			// so here we need to limit our endpoints to only the ones that are ready. In the future, we could consider
 			// changing this to .Serving which continues to include pods that are in Terminating state. For now we keep
 			// it the same.
-			if !*ep.Conditions.Ready {
+			if ep.Conditions.Ready == nil || !*ep.Conditions.Ready {
 				continue
 			}
 
