@@ -112,6 +112,7 @@ spec:
         - mountPath: /etc/kube-router
           name: kube-router-cfg
       hostNetwork: true
+      hostPID: true
       tolerations:
       - effect: NoSchedule
         operator: Exists

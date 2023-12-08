@@ -64,6 +64,7 @@ spec:
           mountPath: /run/xtables.lock
           readOnly: false
       hostNetwork: true
+      hostPID: true
       tolerations:
       - effect: NoSchedule
         operator: Exists
