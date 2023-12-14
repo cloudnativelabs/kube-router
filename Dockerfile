@@ -10,10 +10,11 @@ RUN apk add --no-cache make git \
     && make gobgp
 
 FROM ${RUNTIME_BASE}
-
+# pin iptables to a less recent version, in order to support RHEL8-based OSes.
+# 1.8.8 was chosen because Cilium uses it at the time of writing. https://github.com/cilium/image-tools/blob/master/images/iptables/Dockerfile
 RUN apk add --no-cache \
-      iptables \
-      ip6tables \
+      iptables=1.8.8-r1 \
+      ip6tables=1.8.8-r1 \
       ipset \
       iproute2 \
       ipvsadm \
