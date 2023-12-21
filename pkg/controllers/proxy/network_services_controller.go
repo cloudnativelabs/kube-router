@@ -1870,7 +1870,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	ipsetMutex *sync.Mutex) (*NetworkServicesController, error) {
 
 	var err error
-	ln, err := newLinuxNetworking()
+	ln, err := newLinuxNetworking(config.ServiceTCPTimeout, config.ServiceTCPFinTimeout, config.ServiceUDPTimeout)
 	if err != nil {
 		return nil, err
 	}

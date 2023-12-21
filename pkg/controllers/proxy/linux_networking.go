@@ -815,11 +815,20 @@ func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 	return dummyVipInterface, nil
 }
 
-func newLinuxNetworking() (*linuxNetworking, error) {
+func newLinuxNetworking(tcpTimeout, tcpFinTimeout, udpTimeout time.Duration) (*linuxNetworking, error) {
 	ln := &linuxNetworking{}
 	ipvsHandle, err := ipvs.New("")
 	if err != nil {
 		return nil, err
+	}
+	ipvsConfig := &ipvs.Config{
+		TimeoutTCP:    tcpTimeout,
+		TimeoutTCPFin: tcpFinTimeout,
+		TimeoutUDP:    udpTimeout,
+	}
+	err = ipvsHandle.SetConfig(ipvsConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to configure IPVS config with timeouts: %v", err)
 	}
 	ln.ipvsHandle = ipvsHandle
 	return ln, nil

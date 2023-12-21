@@ -127,6 +127,9 @@ Usage of kube-router:
       --service-cluster-ip-range strings              CIDR values from which service cluster IPs are assigned (can be specified up to 2 times) (default [10.96.0.0/12])
       --service-external-ip-range strings             Specify external IP CIDRs that are used for inter-cluster communication (can be specified multiple times)
       --service-node-port-range string                NodePort range specified with either a hyphen or colon (default "30000-32767")
+      --service-tcp-timeout duration                  Specify TCP timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves default system value (default: 0s)
+      --service-tcpfin-timeout duration               Specify TCP FIN timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves default system value (default: 0s)
+      --service-udp-timeout duration                  Specify UDP timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves default system value (default: 0s)
   -v, --v string                                      log level for V logs (default "0")
   -V, --version                                       Print version information.
 ```

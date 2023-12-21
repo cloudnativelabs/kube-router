@@ -80,6 +80,9 @@ type KubeRouterConfig struct {
 	RunServiceProxy                bool
 	RunLoadBalancer                bool
 	RuntimeEndpoint                string
+	ServiceTCPTimeout              time.Duration
+	ServiceTCPFinTimeout           time.Duration
+	ServiceUDPTimeout              time.Duration
 	Version                        bool
 	VLevel                         string
 	// FullMeshPassword    string
@@ -95,13 +98,16 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		ClusterIPCIDRs:                 []string{"10.96.0.0/12"},
 		EnableOverlay:                  true,
 		IPTablesSyncPeriod:             5 * time.Minute,
+		InjectedRoutesSyncPeriod:       60 * time.Second,
 		IpvsGracefulPeriod:             30 * time.Second,
 		IpvsSyncPeriod:                 5 * time.Minute,
 		LoadBalancerSyncPeriod:         time.Minute,
 		NodePortRange:                  "30000-32767",
 		OverlayType:                    "subnet",
 		RoutesSyncPeriod:               5 * time.Minute,
-		InjectedRoutesSyncPeriod:       60 * time.Second,
+		ServiceTCPTimeout:              0 * time.Second,
+		ServiceTCPFinTimeout:           0 * time.Second,
+		ServiceUDPTimeout:              0 * time.Second,
 	}
 }
 
@@ -191,7 +197,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The address of the Kubernetes API server (overrides any value in kubeconfig).")
 	fs.StringVar(&s.MetricsPath, "metrics-path", "/metrics", "Prometheus metrics path")
 	fs.Uint16Var(&s.MetricsPort, "metrics-port", 0, "Prometheus metrics port, (Default 0, Disabled)")
-	fs.StringVar(&s.MetricsAddr, "metrics-addr", "", "Prometheus metrics address to listen on, (Default: all interfaces)")
+	fs.StringVar(&s.MetricsAddr, "metrics-addr", "", "Prometheus metrics address to listen on, (Default: all "+
+		"interfaces)")
 	fs.BoolVar(&s.NodePortBindOnAllIP, "nodeport-bindon-all-ip", false,
 		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,
@@ -245,6 +252,15 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 			"(can be specified multiple times)")
 	fs.StringVar(&s.NodePortRange, "service-node-port-range", s.NodePortRange,
 		"NodePort range specified with either a hyphen or colon")
+	fs.DurationVar(&s.ServiceTCPTimeout, "service-tcp-timeout", s.ServiceTCPTimeout,
+		"Specify TCP timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves "+
+			"default system value (default: 0s)")
+	fs.DurationVar(&s.ServiceTCPFinTimeout, "service-tcpfin-timeout", s.ServiceTCPFinTimeout,
+		"Specify TCP FIN timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s "+
+			"preserves default system value (default: 0s)")
+	fs.DurationVar(&s.ServiceUDPTimeout, "service-udp-timeout", s.ServiceUDPTimeout,
+		"Specify UDP timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves "+
+			"default system value (default: 0s)")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
 	fs.BoolVarP(&s.Version, "version", "V", false,
 		"Print version information.")
