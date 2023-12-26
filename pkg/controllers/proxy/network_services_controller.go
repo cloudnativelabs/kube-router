@@ -1612,24 +1612,24 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 	args := []string{"-d", ip, "-m", protocol, "-p", protocol, "--dport", port, "-j", "MARK", "--set-mark", fwmark}
 	exists, err := iptablesCmdHandler.Exists("mangle", "PREROUTING", args...)
 	if err != nil {
-		return fmt.Errorf("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
+		return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %v", err)
 	}
 	if exists {
 		klog.V(2).Infof("removing mangle rule with: iptables -D PREROUTING -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "PREROUTING", args...)
 		if err != nil {
-			return fmt.Errorf("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
+			return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %v", err)
 		}
 	}
 	exists, err = iptablesCmdHandler.Exists("mangle", "OUTPUT", args...)
 	if err != nil {
-		return fmt.Errorf("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
+		return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %v", err)
 	}
 	if exists {
 		klog.V(2).Infof("removing mangle rule with: iptables -D OUTPUT -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "OUTPUT", args...)
 		if err != nil {
-			return fmt.Errorf("Failed to cleanup iptables command to set up FWMARK due to " + err.Error())
+			return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %v", err)
 		}
 	}
 
