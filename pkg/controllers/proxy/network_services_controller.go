@@ -76,6 +76,7 @@ const (
 
 	// kubernetes standard labels / annotations
 	svcProxyNameLabel = "service.kubernetes.io/service-proxy-name"
+	svcHeadlessLabel  = "service.kubernetes.io/headless"
 
 	// All IPSET names need to be less than 31 characters in order for the Kernel to accept them. Keep in mind that the
 	// actual formulation for this may be inet6:<setNameBase> depending on ip family, plus when we change ipsets we use
@@ -901,6 +902,15 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 		if err == nil && proxyName != kubeRouterProxyName {
 			klog.V(2).Infof("Skipping service name:%s namespace:%s due to service-proxy-name label not being one "+
 				"that belongs to kube-router", svc.Name, svc.Namespace)
+			continue
+		}
+
+		// We handle headless service labels differently from a "None" or blank ClusterIP because ClusterIP is
+		// guaranteed to be immuteable whereas labels can be added / removed
+		_, err = getLabelFromMap(svcHeadlessLabel, svc.Labels)
+		if err == nil {
+			klog.V(2).Infof("Skipping service name:%s namespace:%s due to headless label being set", svc.Name,
+				svc.Namespace)
 			continue
 		}
 
