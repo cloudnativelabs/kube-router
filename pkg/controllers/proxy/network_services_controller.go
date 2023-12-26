@@ -800,7 +800,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(es *discovery.EndpointSl
 		klog.Warningf("failed to lookup any service as an owner for %s/%s", es.Namespace, es.Name)
 		return
 	}
-	if utils.ServiceIsHeadless(svc) {
+	if utils.ServiceHasNoClusterIP(svc) {
 		klog.V(1).Infof("The service associated with endpoint: %s/%s is headless, skipping...",
 			es.Namespace, es.Name)
 		return
@@ -839,7 +839,7 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *v1.Service) {
 	// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we don't
 	// need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now, it was a
 	// ClusterIP before.
-	if utils.ServiceIsHeadless(svc) {
+	if utils.ServiceHasNoClusterIP(svc) {
 		klog.V(1).Infof("%s/%s is headless, skipping...", svc.Namespace, svc.Name)
 		return
 	}
