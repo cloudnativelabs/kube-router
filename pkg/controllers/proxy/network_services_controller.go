@@ -45,6 +45,7 @@ const (
 	customDSRRouteTableName  = "kube-router-dsr"
 	externalIPRouteTableID   = "79"
 	externalIPRouteTableName = "external_ip"
+	kubeRouterProxyName      = "kube-router"
 
 	// Taken from https://github.com/torvalds/linux/blob/master/include/uapi/linux/ip_vs.h#L21
 	ipvsPersistentFlagHex = 0x0001
@@ -64,6 +65,7 @@ const (
 	arpAnnounceUseBestLocalAddress      = 2
 	arpIgnoreReplyOnlyIfTargetIPIsLocal = 1
 
+	// kube-router custom labels / annotations
 	svcDSRAnnotation                = "kube-router.io/service.dsr"
 	svcSchedulerAnnotation          = "kube-router.io/service.scheduler"
 	svcHairpinAnnotation            = "kube-router.io/service.hairpin"
@@ -71,6 +73,9 @@ const (
 	svcLocalAnnotation              = "kube-router.io/service.local"
 	svcSkipLbIpsAnnotation          = "kube-router.io/service.skiplbips"
 	svcSchedFlagsAnnotation         = "kube-router.io/service.schedflags"
+
+	// kubernetes standard labels / annotations
+	svcProxyNameLabel = "service.kubernetes.io/service-proxy-name"
 
 	// All IPSET names need to be less than 31 characters in order for the Kernel to accept them. Keep in mind that the
 	// actual formulation for this may be inet6:<setNameBase> depending on ip family, plus when we change ipsets we use
@@ -889,6 +894,13 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 		if svc.Spec.Type == "ExternalName" {
 			klog.V(2).Infof("Skipping service name:%s namespace:%s due to service Type=%s",
 				svc.Name, svc.Namespace, svc.Spec.Type)
+			continue
+		}
+
+		proxyName, err := getLabelFromMap(svcProxyNameLabel, svc.Labels)
+		if err == nil && proxyName != kubeRouterProxyName {
+			klog.V(2).Infof("Skipping service name:%s namespace:%s due to service-proxy-name label not being one "+
+				"that belongs to kube-router", svc.Name, svc.Namespace)
 			continue
 		}
 

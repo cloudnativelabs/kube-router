@@ -530,3 +530,15 @@ func runIPCommandsWithArgs(ipArgs []string, additionalArgs ...string) *exec.Cmd 
 	allArgs = append(allArgs, additionalArgs...)
 	return exec.Command("ip", allArgs...)
 }
+
+// getLabelFromMap checks the list of passed labels for the service.kubernetes.io/service-proxy-name
+// label and if it exists, returns it otherwise returns an error
+func getLabelFromMap(label string, labels map[string]string) (string, error) {
+	for lbl, val := range labels {
+		if lbl == label {
+			return val, nil
+		}
+	}
+
+	return "", fmt.Errorf("label doesn't exist in map")
+}
