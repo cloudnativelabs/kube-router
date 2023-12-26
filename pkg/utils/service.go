@@ -115,11 +115,11 @@ func ServiceForEndpointSlice(ci *cache.Indexer, es *discovery.EndpointSlice) (in
 	return item, true, nil
 }
 
-// ServiceIsHeadless decides whether or not the this service is a headless service which is often useful to kube-router
-// as there is no need to execute logic on most headless changes. Function takes a generic interface as its input
-// parameter so that it can be used more easily in early processing if needed. If a non-service object is given,
+// ServiceHasNoClusterIP decides whether or not the this service is a headless service which is often useful to
+// kube-router as there is no need to execute logic on most headless changes. Function takes a generic interface as its
+// input parameter so that it can be used more easily in early processing if needed. If a non-service object is given,
 // function will return false.
-func ServiceIsHeadless(obj interface{}) bool {
+func ServiceHasNoClusterIP(obj interface{}) bool {
 	if svc, _ := obj.(*v1core.Service); svc != nil {
 		if svc.Spec.Type == v1core.ServiceTypeClusterIP {
 			if ClusterIPIsNone(svc.Spec.ClusterIP) && containsOnlyNone(svc.Spec.ClusterIPs) {

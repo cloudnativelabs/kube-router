@@ -204,7 +204,7 @@ func (nrc *NetworkRoutingController) tryHandleServiceUpdate(objOld, objNew inter
 	// skip processing as we only work with VIPs in the next section. Since the ClusterIP field is immutable we
 	// don't need to consider previous versions of the service here as we are guaranteed if is a ClusterIP now,
 	// it was a ClusterIP before.
-	if utils.ServiceIsHeadless(objNew) {
+	if utils.ServiceHasNoClusterIP(objNew) {
 		klog.V(1).Infof("%s/%s is headless, skipping...", svcNew.Namespace, svcNew.Name)
 		return
 	}
@@ -228,7 +228,7 @@ func (nrc *NetworkRoutingController) tryHandleServiceDelete(oldObj interface{}, 
 	klog.V(1).Infof(logMsgFormat, oldSvc.Namespace, oldSvc.Name)
 
 	// If the service is headless skip processing as we only work with VIPs in the next section.
-	if utils.ServiceIsHeadless(oldObj) {
+	if utils.ServiceHasNoClusterIP(oldObj) {
 		klog.V(1).Infof("%s/%s is headless, skipping...", oldSvc.Namespace, oldSvc.Name)
 		return
 	}
