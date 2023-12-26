@@ -131,3 +131,37 @@ func TestNetworkServicesController_lookupServiceByFWMark(t *testing.T) {
 		assert.Zero(t, foundPort, "port should be zero on error")
 	})
 }
+
+func TestNetworkServicesController_getLabelFromMap(t *testing.T) {
+	labels := map[string]string{
+		"service.kubernetes.io": "foo",
+		"kube-router.io":        "bar",
+	}
+	copyLabels := func(srcLbls map[string]string) map[string]string {
+		dstLbls := map[string]string{}
+		for k, v := range srcLbls {
+			dstLbls[k] = v
+		}
+		return dstLbls
+	}
+	t.Run("return blank when passed labels don't contain service-proxy-name label", func(t *testing.T) {
+		lbl, err := getLabelFromMap(svcProxyNameLabel, labels)
+		assert.Empty(t, lbl, "should return blank for a list of labels that don't contain a service-proxy-name label")
+		assert.Error(t, err, "should return an error when the label doesn't exist")
+	})
+
+	t.Run("return blank when empty label map is passed", func(t *testing.T) {
+		lbls := map[string]string{}
+		lbl, err := getLabelFromMap(svcProxyNameLabel, lbls)
+		assert.Empty(t, lbl, "should return blank for a map with no elements")
+		assert.Error(t, err, "should return an error when the map doesn't contain any elements")
+	})
+
+	t.Run("return value when an labels contains service-proxy-name label", func(t *testing.T) {
+		lbls := copyLabels(labels)
+		lbls[svcProxyNameLabel] = "foo"
+		lbl, err := getLabelFromMap(svcProxyNameLabel, lbls)
+		assert.Equal(t, "foo", lbl, "should return value when service-proxy-name passed")
+		assert.Nil(t, err, "error should be nil when the label exists")
+	})
+}
