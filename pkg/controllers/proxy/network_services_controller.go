@@ -1025,6 +1025,7 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 	for _, obj := range nsc.epSliceLister.List() {
 		var isIPv4, isIPv6 bool
 		es := obj.(*discovery.EndpointSlice)
+		klog.V(2).Infof("Building endpoint info for EndpointSlice: %s/%s", es.Namespace, es.Name)
 		switch es.AddressType {
 		case discovery.AddressTypeIPv4:
 			isIPv4 = true
@@ -1073,6 +1074,7 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 			// changing this to .Serving which continues to include pods that are in Terminating state. For now we keep
 			// it the same.
 			if ep.Conditions.Ready == nil || !*ep.Conditions.Ready {
+				klog.V(2).Infof("Endpoint (with addresses %s) does not have a ready status, skipping...", ep.Addresses)
 				continue
 			}
 
