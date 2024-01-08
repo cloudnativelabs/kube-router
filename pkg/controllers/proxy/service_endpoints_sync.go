@@ -107,7 +107,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 	endpointsInfoMap endpointSliceInfoMap, activeServiceEndpointMap map[string][]string) error {
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return errors.New("Failed get list of IPVS services due to: " + err.Error())
+		return fmt.Errorf("failed get list of IPVS services due to: %v", err)
 	}
 
 	for k, svc := range serviceInfoMap {
@@ -126,7 +126,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		ipv6NodeIP := utils.FindBestIPv6NodeAddress(nsc.primaryIP, nsc.nodeIPv6Addrs)
 		dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
 		if err != nil {
-			return errors.New("Failed creating dummy interface: " + err.Error())
+			return fmt.Errorf("failed creating dummy interface: %v", err)
 		}
 
 		for family, famClusIPs := range clusterIPs {
