@@ -145,6 +145,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 				// node
 				err = nsc.ln.ipAddrAdd(dummyVipInterface, clusterIP.String(), nodeIP, true)
 				if err != nil {
+					// Not logging an error here because it was already logged in the ipAddrAdd function
 					continue
 				}
 
@@ -153,6 +154,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 					protocol, uint16(svc.port))
 				// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
 				if svcID == "" {
+					// not logging an error here because it was already logged in the addIPVSService function
 					continue
 				}
 
@@ -191,12 +193,16 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		family = v1.IPv6Protocol
 	}
 
+	if len(endpoints) < 1 {
+		klog.Infof("No endpoints detected for service VIP: %s, skipping adding endpoints...", vip)
+	}
 	for _, endpoint := range endpoints {
 		// Conditions on which to add an endpoint on this node:
 		// 1) Service is not a local service
 		// 2) Service is a local service, but has no active endpoints on this node
 		// 3) Service is a local service, has active endpoints on this node, and this endpoint is one of them
 		if svc.local && !endpoint.isLocal {
+			klog.V(2).Info("service is local, but endpoint is not, continuing...")
 			continue
 		}
 		var syscallINET uint16
@@ -227,11 +233,11 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		}
 		err := nsc.ln.ipvsAddServer(ipvsSvc, &dst)
 		if err != nil {
-			klog.Errorf(err.Error())
-		} else {
-			svcEndpointMap[svcID] = append(svcEndpointMap[svcID],
-				generateEndpointID(endpoint.ip, strconv.Itoa(endpoint.port)))
+			klog.Errorf("encountered error adding endpoint to service: %v", err)
+			continue
 		}
+		svcEndpointMap[svcID] = append(svcEndpointMap[svcID],
+			generateEndpointID(endpoint.ip, strconv.Itoa(endpoint.port)))
 	}
 }
 
@@ -336,7 +342,8 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 			}
 		}
 		if !addrsFound {
-			klog.V(1).Infof("no IP addresses returned for external service %s:%s", svc.namespace, svc.name)
+			klog.V(1).Infof("no external IP addresses returned for service %s:%s skipping...",
+				svc.namespace, svc.name)
 			continue
 		}
 
