@@ -197,7 +197,8 @@ type serviceInfo struct {
 	skipLbIps                     bool
 	externalIPs                   []string
 	loadBalancerIPs               []string
-	local                         bool
+	intTrafficPolicy              *v1.ServiceInternalTrafficPolicy
+	extTrafficPolicy              *v1.ServiceExternalTrafficPolicy
 	flags                         schedFlags
 }
 
@@ -914,18 +915,21 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			continue
 		}
 
+		intClusterPolicyDefault := v1.ServiceInternalTrafficPolicyCluster
+		extClusterPolicyDefault := v1.ServiceExternalTrafficPolicyCluster
 		for _, port := range svc.Spec.Ports {
 			svcInfo := serviceInfo{
-				clusterIP:   net.ParseIP(svc.Spec.ClusterIP),
-				clusterIPs:  make([]string, len(svc.Spec.ClusterIPs)),
-				port:        int(port.Port),
-				targetPort:  port.TargetPort.String(),
-				protocol:    strings.ToLower(string(port.Protocol)),
-				nodePort:    int(port.NodePort),
-				name:        svc.ObjectMeta.Name,
-				namespace:   svc.ObjectMeta.Namespace,
-				externalIPs: make([]string, len(svc.Spec.ExternalIPs)),
-				local:       false,
+				clusterIP:        net.ParseIP(svc.Spec.ClusterIP),
+				clusterIPs:       make([]string, len(svc.Spec.ClusterIPs)),
+				port:             int(port.Port),
+				targetPort:       port.TargetPort.String(),
+				protocol:         strings.ToLower(string(port.Protocol)),
+				nodePort:         int(port.NodePort),
+				name:             svc.ObjectMeta.Name,
+				namespace:        svc.ObjectMeta.Namespace,
+				externalIPs:      make([]string, len(svc.Spec.ExternalIPs)),
+				intTrafficPolicy: &intClusterPolicyDefault,
+				extTrafficPolicy: &extClusterPolicyDefault,
 			}
 			dsrMethod, ok := svc.ObjectMeta.Annotations[svcDSRAnnotation]
 			if ok {
@@ -971,10 +975,18 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			}
 			_, svcInfo.hairpin = svc.ObjectMeta.Annotations[svcHairpinAnnotation]
 			_, svcInfo.hairpinExternalIPs = svc.ObjectMeta.Annotations[svcHairpinExternalIPsAnnotation]
-			_, svcInfo.local = svc.ObjectMeta.Annotations[svcLocalAnnotation]
 			_, svcInfo.skipLbIps = svc.ObjectMeta.Annotations[svcSkipLbIpsAnnotation]
-			if svc.Spec.ExternalTrafficPolicy == v1.ServiceExternalTrafficPolicyTypeLocal {
-				svcInfo.local = true
+			svcInfo.intTrafficPolicy = svc.Spec.InternalTrafficPolicy
+			svcInfo.extTrafficPolicy = &svc.Spec.ExternalTrafficPolicy
+
+			// The kube-router.io/service.local annotation has the ability to override the internal and external traffic
+			// policy that is set in the spec. In this case we set both to local when the annotation is true so that
+			// previous functionality of the annotation is best preserved.
+			if svc.ObjectMeta.Annotations[svcLocalAnnotation] == "true" {
+				intTrafficPolicyLocal := v1.ServiceInternalTrafficPolicyLocal
+				extTrafficPolicyLocal := v1.ServiceExternalTrafficPolicyLocal
+				svcInfo.intTrafficPolicy = &intTrafficPolicyLocal
+				svcInfo.extTrafficPolicy = &extTrafficPolicyLocal
 			}
 
 			svcID := generateServiceID(svc.Namespace, svc.Name, port.Name)

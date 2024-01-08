@@ -169,7 +169,7 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 		}
 
 		advIPPrefixList := make([]*gobgpapi.Prefix, 0)
-		advIps, _, _ := nrc.getAllVIPs()
+		advIps, _, _ := nrc.getVIPs()
 		for _, ipStr := range advIps {
 			ip := net.ParseIP(ipStr)
 			if ip == nil {

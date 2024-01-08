@@ -114,7 +114,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		endpoints := endpointsInfoMap[k]
 		// First we check to see if this is a local service and that it has any active endpoints, if it doesn't there
 		// isn't any use doing any of the below work, let's save some compute cycles and break fast
-		if svc.local && !hasActiveEndpoints(endpoints) {
+		if *svc.intTrafficPolicy == v1.ServiceInternalTrafficPolicyLocal && !hasActiveEndpoints(endpoints) {
 			klog.V(1).Infof("Skipping setting up ClusterIP service %s/%s as it does not have active endpoints",
 				svc.namespace, svc.name)
 			continue
@@ -159,7 +159,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 				}
 
 				// add IPVS remote server to the IPVS service
-				nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, clusterIP)
+				nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, clusterIP, true)
 			}
 		}
 	}
@@ -185,7 +185,8 @@ func (nsc *NetworkServicesController) addIPVSService(ipvsSvcs []*ipvs.Service, s
 }
 
 func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endpointSliceInfo,
-	svcEndpointMap map[string][]string, svc *serviceInfo, svcID string, ipvsSvc *ipvs.Service, vip net.IP) {
+	svcEndpointMap map[string][]string, svc *serviceInfo, svcID string, ipvsSvc *ipvs.Service, vip net.IP,
+	isClusterIP bool) {
 	var family v1.IPFamily
 	if vip.To4() != nil {
 		family = v1.IPv4Protocol
@@ -201,9 +202,14 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		// 1) Service is not a local service
 		// 2) Service is a local service, but has no active endpoints on this node
 		// 3) Service is a local service, has active endpoints on this node, and this endpoint is one of them
-		if svc.local && !endpoint.isLocal {
-			klog.V(2).Info("service is local, but endpoint is not, continuing...")
-			continue
+		if !endpoint.isLocal {
+			if isClusterIP && *svc.intTrafficPolicy == v1.ServiceInternalTrafficPolicyLocal {
+				klog.V(2).Info("service has an internal traffic policy of local, but endpoint is not, continuing...")
+				continue
+			} else if !isClusterIP && *svc.extTrafficPolicy == v1.ServiceExternalTrafficPolicyLocal {
+				klog.V(2).Info("service has an external traffic policy of local, but endpoint is not, continuing...")
+				continue
+			}
 		}
 		var syscallINET uint16
 		eIP := net.ParseIP(endpoint.ip)
@@ -260,7 +266,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 		endpoints := endpointsInfoMap[k]
 		// First we check to see if this is a local service and that it has any active endpoints, if it doesn't there
 		// isn't any use doing any of the below work, let's save some compute cycles and break fast
-		if svc.local && !hasActiveEndpoints(endpoints) {
+		if *svc.extTrafficPolicy == v1.ServiceExternalTrafficPolicyLocal && !hasActiveEndpoints(endpoints) {
 			klog.V(1).Infof("Skipping setting up NodePort service %s/%s as it does not have active endpoints",
 				svc.namespace, svc.name)
 			continue
@@ -301,7 +307,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 					if svcID == "" {
 						continue
 					}
-					nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, addr)
+					nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, addr, false)
 				}
 			}
 		} else {
@@ -311,7 +317,8 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 			if svcID == "" {
 				continue
 			}
-			nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, nsc.primaryIP)
+			nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, nsc.primaryIP,
+				false)
 		}
 	}
 
@@ -324,7 +331,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 		endpoints := endpointsInfoMap[k]
 		// First we check to see if this is a local service and that it has any active endpoints, if it doesn't there
 		// isn't any use doing any of the below work, let's save some compute cycles and break fast
-		if svc.local && !hasActiveEndpoints(endpoints) {
+		if *svc.extTrafficPolicy == v1.ServiceExternalTrafficPolicyLocal && !hasActiveEndpoints(endpoints) {
 			klog.V(1).Infof("Skipping setting up IPVS service for external IP and LoadBalancer IP "+
 				"for the service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
 			continue
@@ -427,7 +434,7 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 	}
 
 	// add pod endpoints to the IPVS service
-	nsc.addEndpointsToIPVSService(endpoints, svcEndpointMap, svc, svcID, ipvsExternalIPSvc, externalIP)
+	nsc.addEndpointsToIPVSService(endpoints, svcEndpointMap, svc, svcID, ipvsExternalIPSvc, externalIP, false)
 
 	return nil
 }
@@ -508,7 +515,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 		// 1) Service is not a local service
 		// 2) Service is a local service, but has no active endpoints on this node
 		// 3) Service is a local service, has active endpoints on this node, and this endpoint is one of them
-		if svc.local && !endpoint.isLocal {
+		if *svc.extTrafficPolicy == v1.ServiceExternalTrafficPolicyLocal && !endpoint.isLocal {
 			continue
 		}
 		var syscallINET uint16

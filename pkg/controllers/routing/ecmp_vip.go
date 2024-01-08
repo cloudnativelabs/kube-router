@@ -141,7 +141,7 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svcOld, svcNew *v1core.
 		return
 	}
 
-	toAdvertise, toWithdraw, err := nrc.getChangedVIPs(svcOld, svcNew, true)
+	toAdvertise, toWithdraw, err := nrc.getChangedVIPs(svcOld, svcNew)
 	if err != nil {
 		klog.Errorf("error getting routes for services: %s", err)
 		return
@@ -167,15 +167,21 @@ func (nrc *NetworkRoutingController) handleServiceDelete(oldSvc *v1core.Service)
 
 	err := nrc.AddPolicies()
 	if err != nil {
-		klog.Errorf("Error adding BGP policies: %s", err.Error())
+		klog.Errorf("Error adding BGP policies during service update for %s/%s: %v", oldSvc.Namespace, oldSvc.Name,
+			err)
 	}
 
-	activeVIPs, _, err := nrc.getActiveVIPs()
+	activeVIPs, _, err := nrc.getVIPs()
 	if err != nil {
-		klog.Errorf("Failed to get active VIP's on service delete event due to: %s", err.Error())
+		klog.Errorf("Failed to get active VIP's on service delete event for %s/%s due to: %v", oldSvc.Namespace,
+			oldSvc.Name, err)
 		return
 	}
-	advertiseIPList, unadvertiseIPList := nrc.getAllVIPsForService(oldSvc)
+	advertiseIPList, unadvertiseIPList, err := nrc.getAllVIPsForService(oldSvc)
+	if err != nil {
+		klog.Errorf("Error getting VIPs on service delete event for %s/%s due to: %v", oldSvc.Namespace, oldSvc.Name,
+			err)
+	}
 	//nolint:gocritic // we understand that we're assigning to a new slice
 	allIPList := append(advertiseIPList, unadvertiseIPList...)
 	withdrawVIPs := make([]string, 0)
@@ -364,23 +370,14 @@ func (nrc *NetworkRoutingController) getLoadBalancerIPs(svc *v1core.Service) []s
 	return loadBalancerIPList
 }
 
-func (nrc *NetworkRoutingController) getChangedVIPs(oldSvc, newSvc *v1core.Service,
-	onlyActiveEndpoints bool) ([]string, []string, error) {
+func (nrc *NetworkRoutingController) getChangedVIPs(oldSvc, newSvc *v1core.Service) ([]string, []string, error) {
 	advertiseService := true
 
-	_, hasLocalAnnotation := newSvc.Annotations[svcLocalAnnotation]
-	hasLocalTrafficPolicy := newSvc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal
-	isLocal := hasLocalAnnotation || hasLocalTrafficPolicy
-
-	if onlyActiveEndpoints && isLocal {
-		var err error
-		advertiseService, err = nrc.nodeHasEndpointsForService(newSvc)
-		if err != nil {
-			return nil, nil, err
-		}
+	newAdvertiseServiceVIPs, newUnadvertiseServiceVIPs, err := nrc.getAllVIPsForService(newSvc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get all VIPs for new service %s/%s due to: %v", newSvc.Namespace,
+			newSvc.Name, err)
 	}
-
-	newAdvertiseServiceVIPs, newUnadvertiseServiceVIPs := nrc.getAllVIPsForService(newSvc)
 	// This function allows oldSvc to be nil, if this is the case, we don't have any old VIPs to compare against and
 	// possibly withdraw instead treat all VIPs as new and return them as either toAdvertise or toWithdraw depending
 	// on service configuration
@@ -393,7 +390,11 @@ func (nrc *NetworkRoutingController) getChangedVIPs(oldSvc, newSvc *v1core.Servi
 			return nil, allVIPs, nil
 		}
 	}
-	oldAdvertiseServiceVIPs, oldUnadvertiseServiceVIPs := nrc.getAllVIPsForService(oldSvc)
+	oldAdvertiseServiceVIPs, oldUnadvertiseServiceVIPs, err := nrc.getAllVIPsForService(oldSvc)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get all VIPs for old service %s/%s due to: %v", oldSvc.Namespace,
+			oldSvc.Name, err)
+	}
 	//nolint:gocritic // we understand that we're assigning to a new slice
 	oldAllServiceVIPs := append(oldAdvertiseServiceVIPs, oldUnadvertiseServiceVIPs...)
 
@@ -416,7 +417,7 @@ func (nrc *NetworkRoutingController) getChangedVIPs(oldSvc, newSvc *v1core.Servi
 	// It is possible that this host may have the same IP advertised from multiple services, and we don't want to
 	// withdraw it if there is an active service for this VIP on a different service than the one that is changing.
 	toWithdrawListFinal := make([]string, 0)
-	allVIPsOnServer, _, err := nrc.getVIPs(onlyActiveEndpoints)
+	allVIPsOnServer, _, err := nrc.getVIPs()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -429,22 +430,14 @@ func (nrc *NetworkRoutingController) getChangedVIPs(oldSvc, newSvc *v1core.Servi
 	return toAdvertiseListFinal, toWithdrawListFinal, nil
 }
 
-func (nrc *NetworkRoutingController) getAllVIPs() ([]string, []string, error) {
-	return nrc.getVIPs(false)
-}
-
-func (nrc *NetworkRoutingController) getActiveVIPs() ([]string, []string, error) {
-	return nrc.getVIPs(true)
-}
-
-func (nrc *NetworkRoutingController) getVIPs(onlyActiveEndpoints bool) ([]string, []string, error) {
+func (nrc *NetworkRoutingController) getVIPs() ([]string, []string, error) {
 	toAdvertiseList := make([]string, 0)
 	toWithdrawList := make([]string, 0)
 
 	for _, obj := range nrc.svcLister.List() {
 		svc := obj.(*v1core.Service)
 
-		toAdvertise, toWithdraw, err := nrc.getVIPsForService(svc, onlyActiveEndpoints)
+		toAdvertise, toWithdraw, err := nrc.getAllVIPsForService(svc)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -472,52 +465,67 @@ func (nrc *NetworkRoutingController) getVIPs(onlyActiveEndpoints bool) ([]string
 }
 
 func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service, annotation string,
-	defaultValue bool) bool {
+	defaultValue, isClusterIP bool) (bool, error) {
 	returnValue := defaultValue
 	stringValue, exists := svc.Annotations[annotation]
 	if exists {
 		// Service annotations overrides defaults.
 		returnValue, _ = strconv.ParseBool(stringValue)
 	}
-	return returnValue
-}
 
-func (nrc *NetworkRoutingController) getVIPsForService(svc *v1core.Service,
-	onlyActiveEndpoints bool) ([]string, []string, error) {
-
-	advertise := true
-
-	_, hasLocalAnnotation := svc.Annotations[svcLocalAnnotation]
-	hasLocalTrafficPolicy := svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyTypeLocal
-	isLocal := hasLocalAnnotation || hasLocalTrafficPolicy
-
-	if onlyActiveEndpoints && isLocal {
-		var err error
-		advertise, err = nrc.nodeHasEndpointsForService(svc)
-		if err != nil {
-			return nil, nil, err
-		}
+	// If we already know that we shouldn't advertise the service, fail fast
+	if !returnValue {
+		return returnValue, nil
 	}
 
-	advertiseIPList, unAdvertisedIPList := nrc.getAllVIPsForService(svc)
-
-	if !advertise {
-		//nolint:gocritic // we understand that we're assigning to a new slice
-		allIPList := append(advertiseIPList, unAdvertisedIPList...)
-		return nil, allIPList, nil
+	hasLocalEndpoints, err := nrc.nodeHasEndpointsForService(svc)
+	if err != nil {
+		return returnValue, err
 	}
 
-	return advertiseIPList, unAdvertisedIPList, nil
+	// If:
+	// - We are assessing the clusterIP of the service (the internally facing VIP)
+	// - The service has an internal traffic policy of "local" or the service has the service.local annotation on it
+	// - The service doesn't have any endpoints on the node we're executing on
+	// Then: return false
+	// We handle spec.internalTrafficPolicy different because it was introduced in v1.26 and may not be available in all
+	// clusters, in this case, it will be set to nil
+	serIntTrafPol := false
+	if svc.Spec.InternalTrafficPolicy != nil {
+		serIntTrafPol = *svc.Spec.InternalTrafficPolicy == v1core.ServiceInternalTrafficPolicyLocal
+	}
+	intLocalPol := (serIntTrafPol || svc.Annotations[svcLocalAnnotation] == "true")
+	if isClusterIP && intLocalPol && !hasLocalEndpoints {
+		return false, nil
+	}
+
+	// If:
+	// - We are assessing something other than a clusterIP like an externalIP or nodePort (externally facing)
+	// - The service has an external traffic policy of "local" or the service has the service.local annotation on it
+	// - The service doesn't have any endpoints on the node we're executing on
+	// Then: return false
+	extLocalPol := (svc.Spec.ExternalTrafficPolicy == v1core.ServiceExternalTrafficPolicyLocal ||
+		svc.Annotations[svcLocalAnnotation] == "true")
+	if !isClusterIP && extLocalPol && !hasLocalEndpoints {
+		return false, nil
+	}
+
+	return returnValue, nil
 }
 
-func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) ([]string, []string) {
+func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) ([]string, []string, error) {
 
 	advertisedIPList := make([]string, 0)
 	unAdvertisedIPList := make([]string, 0)
 
 	clusterIPs := nrc.getClusterIP(svc)
 	if len(clusterIPs) > 0 {
-		if nrc.shouldAdvertiseService(svc, svcAdvertiseClusterAnnotation, nrc.advertiseClusterIP) {
+		shouldAdvCIP, err := nrc.shouldAdvertiseService(svc, svcAdvertiseClusterAnnotation, nrc.advertiseClusterIP,
+			true)
+		if err != nil {
+			return advertisedIPList, unAdvertisedIPList, err
+		}
+		if shouldAdvCIP {
 			advertisedIPList = append(advertisedIPList, clusterIPs...)
 		} else {
 			unAdvertisedIPList = append(unAdvertisedIPList, clusterIPs...)
@@ -526,7 +534,12 @@ func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) (
 
 	externalIPs := nrc.getExternalIPs(svc)
 	if len(externalIPs) > 0 {
-		if nrc.shouldAdvertiseService(svc, svcAdvertiseExternalAnnotation, nrc.advertiseExternalIP) {
+		shouldAdvEIP, err := nrc.shouldAdvertiseService(svc, svcAdvertiseExternalAnnotation, nrc.advertiseExternalIP,
+			false)
+		if err != nil {
+			return advertisedIPList, unAdvertisedIPList, err
+		}
+		if shouldAdvEIP {
 			advertisedIPList = append(advertisedIPList, externalIPs...)
 		} else {
 			unAdvertisedIPList = append(unAdvertisedIPList, externalIPs...)
@@ -537,16 +550,19 @@ func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) (
 	lbIPs := nrc.getLoadBalancerIPs(svc)
 	if len(lbIPs) > 0 {
 		_, skiplbips := svc.Annotations[svcSkipLbIpsAnnotation]
-		advertiseLoadBalancer := nrc.shouldAdvertiseService(svc, svcAdvertiseLoadBalancerAnnotation,
-			nrc.advertiseLoadBalancerIP)
-		if advertiseLoadBalancer && !skiplbips {
+		shouldAdvLIP, err := nrc.shouldAdvertiseService(svc, svcAdvertiseLoadBalancerAnnotation,
+			nrc.advertiseLoadBalancerIP, false)
+		if err != nil {
+			return advertisedIPList, unAdvertisedIPList, err
+		}
+		if shouldAdvLIP && !skiplbips {
 			advertisedIPList = append(advertisedIPList, lbIPs...)
 		} else {
 			unAdvertisedIPList = append(unAdvertisedIPList, lbIPs...)
 		}
 	}
 
-	return advertisedIPList, unAdvertisedIPList
+	return advertisedIPList, unAdvertisedIPList, nil
 
 }
 
