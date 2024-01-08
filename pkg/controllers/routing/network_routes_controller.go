@@ -371,7 +371,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		}
 
 		// advertise or withdraw IPs for the services to be reachable via host
-		toAdvertise, toWithdraw, err := nrc.getActiveVIPs()
+		toAdvertise, toWithdraw, err := nrc.getVIPs()
 		if err != nil {
 			klog.Errorf("failed to get routes to advertise/withdraw %s", err)
 		}
