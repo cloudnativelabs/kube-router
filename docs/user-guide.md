@@ -253,6 +253,19 @@ Advertising LoadBalancer IPs works by inspecting the services `status.loadBalanc
 LoadBalancers like for example MetalLb. This has been successfully tested together with
 [MetalLB](https://github.com/google/metallb) in ARP mode.
 
+## Controlling Service Locality / Traffic Policies
+
+Service availability both externally and locally (within the cluster) can be controlled via the Kubernetes standard
+[Traffic Policies](https://kubernetes.io/docs/reference/networking/virtual-ips/#traffic-policies) and via the custom
+kube-router service annotation: `kube-router.io/service.local: true`.
+
+Refer to the previously linked upstream Kubernetes documentation for more information on `spec.internalTrafficPolicy`
+and `spec.externalTrafficPolicy`.
+
+In order to keep backwards compatibility the `kube-router.io/service.local: true` annotation effectively overrides
+`spec.internalTrafficPolicy` and `spec.externalTrafficPolicy` and forces kube-router to behave as if both were set to
+`Local`.
+
 ## Hairpin Mode
 
 Communication from a Pod that is behind a Service to its own ClusterIP:Port is not supported by default.  However, it
