@@ -51,9 +51,13 @@ issues:
     - text: "G306:"
       linters:
         - gosec
-    # Exlude tests from long line linter
+    # Exclude tests from long line linter
     - linters:
         - lll
+      path: _test\.go
+    # Exclude tests from duplicate linter
+    - linters:
+      - dupl
       path: _test\.go
   # always show all issues rather than only showing 50 at a time
   max-issues-per-linter: 0

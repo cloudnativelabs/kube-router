@@ -23,9 +23,10 @@ import (
 
 func Test_advertiseClusterIPs(t *testing.T) {
 	testcases := []struct {
-		name             string
-		nrc              *NetworkRoutingController
-		existingServices []*v1core.Service
+		name              string
+		nrc               *NetworkRoutingController
+		existingServices  []*v1core.Service
+		existingEndpoints []*v1core.Endpoints
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -34,16 +35,39 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			"add bgp path for service with ClusterIP",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      ClusterIPST,
-						ClusterIP: "10.0.0.1",
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -55,34 +79,93 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			"add bgp path for service with ClusterIP/NodePort/LoadBalancer",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      ClusterIPST,
-						ClusterIP: "10.0.0.1",
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-2",
+						Name:      "svc-2",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      LoadBalancerST,
-						ClusterIP: "10.0.0.2",
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.2",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-3",
+						Name:      "svc-3",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      NodePortST,
-						ClusterIP: "10.0.0.3",
+						Type:                  NodePortST,
+						ClusterIP:             "10.0.0.3",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-3",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -96,16 +179,22 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			"add bgp path for invalid service type",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      ClusterIPST,
-						ClusterIP: "10.0.0.1",
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
@@ -113,8 +202,42 @@ func Test_advertiseClusterIPs(t *testing.T) {
 						Name: "svc-2",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      "AnotherType",
-						ClusterIP: "10.0.0.2",
+						Type:                  "AnotherType",
+						ClusterIP:             "10.0.0.2",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -126,34 +249,93 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			"add bgp path for headless service",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      ClusterIPST,
-						ClusterIP: "10.0.0.1",
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-2",
+						Name:      "svc-2",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      ClusterIPST,
-						ClusterIP: "None",
+						Type:                  ClusterIPST,
+						ClusterIP:             "None",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-3",
+						Name:      "svc-3",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      ClusterIPST,
-						ClusterIP: "",
+						Type:                  ClusterIPST,
+						ClusterIP:             "",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-3",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -168,7 +350,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
 				Asn:        1,
-				RouterId:   "10.0.0.0",
+				RouterId:   testNodeIPv4,
 				ListenPort: 10000,
 			}
 			err := testcase.nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global})
@@ -187,6 +369,11 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			err = createServices(clientset, testcase.existingServices)
 			if err != nil {
 				t.Fatalf("failed to create existing services: %v", err)
+			}
+
+			err = createEndpoints(clientset, testcase.existingEndpoints)
+			if err != nil {
+				t.Fatalf("failed to create existing endpoints: %v", err)
 			}
 
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
@@ -218,7 +405,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			testcase.nrc.advertiseExternalIP = false
 			testcase.nrc.advertiseLoadBalancerIP = false
 
-			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
+			toAdvertise, toWithdraw, _ := testcase.nrc.getVIPs()
 			testcase.nrc.advertiseVIPs(toAdvertise)
 			testcase.nrc.withdrawVIPs(toWithdraw)
 
@@ -253,9 +440,10 @@ func Test_advertiseClusterIPs(t *testing.T) {
 
 func Test_advertiseExternalIPs(t *testing.T) {
 	testcases := []struct {
-		name             string
-		nrc              *NetworkRoutingController
-		existingServices []*v1core.Service
+		name              string
+		nrc               *NetworkRoutingController
+		existingServices  []*v1core.Service
+		existingEndpoints []*v1core.Endpoints
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -264,16 +452,39 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
 				primaryIP: net.ParseIP("10.0.0.1"),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -286,37 +497,96 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"add bgp path for services with external IPs of type ClusterIP/NodePort/LoadBalancer",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						ExternalIPs:           []string{"1.1.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-2",
+						Name:      "svc-2",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        LoadBalancerST,
-						ClusterIP:   "10.0.0.2",
-						ExternalIPs: []string{"2.2.2.2"},
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.2",
+						ExternalIPs:           []string{"2.2.2.2"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-3",
+						Name:      "svc-3",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        NodePortST,
-						ClusterIP:   "10.0.0.3",
-						ExternalIPs: []string{"3.3.3.3", "4.4.4.4"},
+						Type:                  NodePortST,
+						ClusterIP:             "10.0.0.3",
+						ExternalIPs:           []string{"3.3.3.3", "4.4.4.4"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-3",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -331,27 +601,68 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"add bgp path for invalid service type",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						ExternalIPs:           []string{"1.1.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-2",
+						Name:      "svc-2",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "AnotherType",
-						ClusterIP:   "10.0.0.2",
-						ExternalIPs: []string{"2.2.2.2"},
+						Type:                  "AnotherType",
+						ClusterIP:             "10.0.0.2",
+						ExternalIPs:           []string{"2.2.2.2"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -363,37 +674,96 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"add bgp path for headless service",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						ExternalIPs:           []string{"1.1.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-2",
+						Name:      "svc-2",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "None",
-						ExternalIPs: []string{"2.2.2.2"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "None",
+						ExternalIPs:           []string{"2.2.2.2"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-3",
+						Name:      "svc-3",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "",
-						ExternalIPs: []string{"3.3.3.3"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "",
+						ExternalIPs:           []string{"3.3.3.3"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-3",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -405,16 +775,22 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"skip bgp path to loadbalancerIP for service without LoadBalancer IP",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      LoadBalancerST,
-						ClusterIP: "10.0.0.1",
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.1",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 					Status: v1core.ServiceStatus{
 						LoadBalancer: v1core.LoadBalancerStatus{
@@ -427,22 +803,45 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+			},
 			map[string]bool{},
 		},
 		{
 			"add bgp path to loadbalancerIP for service with LoadBalancer IP",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      LoadBalancerST,
-						ClusterIP: "10.0.0.1",
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.1",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 					Status: v1core.ServiceStatus{
 						LoadBalancer: v1core.LoadBalancerStatus{
@@ -452,6 +851,23 @@ func Test_advertiseExternalIPs(t *testing.T) {
 								},
 								{
 									IP: "10.0.255.2",
+								},
+							},
+						},
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
 								},
 							},
 						},
@@ -467,20 +883,43 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"no bgp path to nil loadbalancerIPs for service with LoadBalancer",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      LoadBalancerST,
-						ClusterIP: "10.0.0.1",
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.1",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 					Status: v1core.ServiceStatus{
 						LoadBalancer: v1core.LoadBalancerStatus{
 							Ingress: []v1core.LoadBalancerIngress{},
+						},
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
 						},
 					},
 				},
@@ -491,19 +930,25 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"no bgp path to loadbalancerIPs for service with LoadBalancer and skiplbips annotation",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.0.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 						Annotations: map[string]string{
 							svcSkipLbIpsAnnotation: "true",
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:      LoadBalancerST,
-						ClusterIP: "10.0.0.1",
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.1",
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 					Status: v1core.ServiceStatus{
 						LoadBalancer: v1core.LoadBalancerStatus{
@@ -519,17 +964,33 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+			},
 			map[string]bool{},
 		},
 	}
 
-	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
 				Asn:        1,
-				RouterId:   "10.0.0.0",
+				RouterId:   testNodeIPv4,
 				ListenPort: 10000,
 			}
 			err := testcase.nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global})
@@ -572,6 +1033,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
+			err = createEndpoints(clientset, testcase.existingEndpoints)
+			if err != nil {
+				t.Fatalf("failed to create existing endpoints: %v", err)
+			}
+
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
 			// ExternalIPs
@@ -579,7 +1045,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			testcase.nrc.advertiseExternalIP = true
 			testcase.nrc.advertiseLoadBalancerIP = true
 
-			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
+			toAdvertise, toWithdraw, _ := testcase.nrc.getVIPs()
 			testcase.nrc.advertiseVIPs(toAdvertise)
 			testcase.nrc.withdrawVIPs(toWithdraw)
 			timeoutCh := time.After(time.Second * 10)
@@ -614,9 +1080,10 @@ func Test_advertiseExternalIPs(t *testing.T) {
 
 func Test_advertiseAnnotationOptOut(t *testing.T) {
 	testcases := []struct {
-		name             string
-		nrc              *NetworkRoutingController
-		existingServices []*v1core.Service
+		name              string
+		nrc               *NetworkRoutingController
+		existingServices  []*v1core.Service
+		existingEndpoints []*v1core.Endpoints
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -624,37 +1091,49 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			"add bgp paths for all service IPs",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.1.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						ExternalIPs:           []string{"1.1.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-2",
+						Name:      "svc-2",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        NodePortST,
-						ClusterIP:   "10.0.0.2",
-						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
+						Type:                  NodePortST,
+						ClusterIP:             "10.0.0.2",
+						ExternalIPs:           []string{"2.2.2.2", "3.3.3.3"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-3",
+						Name:      "svc-3",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        LoadBalancerST,
-						ClusterIP:   "10.0.0.3",
-						ExternalIPs: []string{"4.4.4.4"},
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.3",
+						ExternalIPs:           []string{"4.4.4.4"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 					Status: v1core.ServiceStatus{
 						LoadBalancer: v1core.LoadBalancerStatus{
@@ -664,6 +1143,53 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 								},
 								{
 									IP: "10.0.255.2",
+								},
+							},
+						},
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-3",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
 								},
 							},
 						},
@@ -686,12 +1212,16 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			"opt out to advertise any IPs via annotations",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.1.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 						Annotations: map[string]string{
 							svcAdvertiseClusterAnnotation:      "false",
 							svcAdvertiseExternalAnnotation:     "false",
@@ -699,9 +1229,11 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        LoadBalancerST,
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.1",
+						ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 					Status: v1core.ServiceStatus{
 						LoadBalancer: v1core.LoadBalancerStatus{
@@ -717,11 +1249,27 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 					},
 				},
 			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+			},
 			map[string]bool{},
 		},
 	}
 
-	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -771,6 +1319,11 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
+			err = createEndpoints(clientset, testcase.existingEndpoints)
+			if err != nil {
+				t.Fatalf("failed to create existing endpoints: %v", err)
+			}
+
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
 			// By default advertise all IPs
@@ -778,7 +1331,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			testcase.nrc.advertiseExternalIP = true
 			testcase.nrc.advertiseLoadBalancerIP = true
 
-			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
+			toAdvertise, toWithdraw, _ := testcase.nrc.getVIPs()
 			testcase.nrc.advertiseVIPs(toAdvertise)
 			testcase.nrc.withdrawVIPs(toWithdraw)
 			timeoutCh := time.After(time.Second * 10)
@@ -813,9 +1366,10 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 
 func Test_advertiseAnnotationOptIn(t *testing.T) {
 	testcases := []struct {
-		name             string
-		nrc              *NetworkRoutingController
-		existingServices []*v1core.Service
+		name              string
+		nrc               *NetworkRoutingController
+		existingServices  []*v1core.Service
+		existingEndpoints []*v1core.Endpoints
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -823,39 +1377,51 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			"no bgp paths for any service IPs",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.1.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						ExternalIPs:           []string{"1.1.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-2",
+						Name:      "svc-2",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        NodePortST,
-						ClusterIP:   "10.0.0.2",
-						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
+						Type:                  NodePortST,
+						ClusterIP:             "10.0.0.2",
+						ExternalIPs:           []string{"2.2.2.2", "3.3.3.3"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-3",
+						Name:      "svc-3",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
 						Type:      LoadBalancerST,
 						ClusterIP: "10.0.0.3",
 						// ignored since LoadBalancer services don't
 						// advertise external IPs.
-						ExternalIPs: []string{"4.4.4.4"},
+						ExternalIPs:           []string{"4.4.4.4"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 					Status: v1core.ServiceStatus{
 						LoadBalancer: v1core.LoadBalancerStatus{
@@ -871,18 +1437,69 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					},
 				},
 			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-3",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+			},
 			map[string]bool{},
 		},
 		{
 			"opt in to advertise all IPs via annotations",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				primaryIP: net.ParseIP("10.0.1.1"),
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 						Annotations: map[string]string{
 							svcAdvertiseClusterAnnotation:      "true",
 							svcAdvertiseExternalAnnotation:     "true",
@@ -890,14 +1507,17 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.0.0.1",
+						ExternalIPs:           []string{"1.1.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-2",
+						Name:      "svc-2",
+						Namespace: "default",
 						Annotations: map[string]string{
 							svcAdvertiseClusterAnnotation:      "true",
 							svcAdvertiseExternalAnnotation:     "true",
@@ -905,14 +1525,17 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        NodePortST,
-						ClusterIP:   "10.0.0.2",
-						ExternalIPs: []string{"2.2.2.2", "3.3.3.3"},
+						Type:                  NodePortST,
+						ClusterIP:             "10.0.0.2",
+						ExternalIPs:           []string{"2.2.2.2", "3.3.3.3"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-3",
+						Name:      "svc-3",
+						Namespace: "default",
 						Annotations: map[string]string{
 							svcAdvertiseClusterAnnotation:      "true",
 							svcAdvertiseExternalAnnotation:     "true",
@@ -920,9 +1543,11 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 						},
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        LoadBalancerST,
-						ClusterIP:   "10.0.0.3",
-						ExternalIPs: []string{"4.4.4.4"},
+						Type:                  LoadBalancerST,
+						ClusterIP:             "10.0.0.3",
+						ExternalIPs:           []string{"4.4.4.4"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
 					},
 					Status: v1core.ServiceStatus{
 						LoadBalancer: v1core.LoadBalancerStatus{
@@ -932,6 +1557,53 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 								},
 								{
 									IP: "10.0.255.2",
+								},
+							},
+						},
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-2",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-3",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
 								},
 							},
 						},
@@ -952,7 +1624,6 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 		},
 	}
 
-	//nolint:dupl // There is no need to spend a lot of time de-duplicating test code
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
@@ -1002,6 +1673,11 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
+			err = createEndpoints(clientset, testcase.existingEndpoints)
+			if err != nil {
+				t.Fatalf("failed to create existing endpoints: %v", err)
+			}
+
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
 			// By default do not advertise any IPs
@@ -1009,7 +1685,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			testcase.nrc.advertiseExternalIP = false
 			testcase.nrc.advertiseLoadBalancerIP = false
 
-			toAdvertise, toWithdraw, _ := testcase.nrc.getActiveVIPs()
+			toAdvertise, toWithdraw, _ := testcase.nrc.getVIPs()
 			testcase.nrc.advertiseVIPs(toAdvertise)
 			testcase.nrc.withdrawVIPs(toWithdraw)
 
@@ -1055,7 +1731,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 		{
 			"node has endpoints for service",
 			&NetworkRoutingController{
-				nodeName: "node-1",
+				nodeName:  "node-1",
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			&v1core.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1063,9 +1743,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1core.ServiceSpec{
-					Type:        ClusterIPST,
-					ClusterIP:   "10.0.0.1",
-					ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
+					Type:                  ClusterIPST,
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &testClusterIntTrafPol,
+					ExternalTrafficPolicy: testClusterExtTrafPol,
 				},
 			},
 			&v1core.Endpoints{
@@ -1094,7 +1776,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 		{
 			"node has no endpoints for service",
 			&NetworkRoutingController{
-				nodeName: "node-1",
+				nodeName:  "node-1",
+				primaryIP: net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			&v1core.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1102,9 +1788,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: v1core.ServiceSpec{
-					Type:        ClusterIPST,
-					ClusterIP:   "10.0.0.1",
-					ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
+					Type:                  ClusterIPST,
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &testClusterIntTrafPol,
+					ExternalTrafficPolicy: testClusterExtTrafPol,
 				},
 			},
 			&v1core.Endpoints{
@@ -1183,7 +1871,10 @@ func Test_advertisePodRoute(t *testing.T) {
 				podCidr:       "172.20.0.0/24",
 				isIPv4Capable: true,
 				podIPv4CIDRs:  []string{"172.20.0.0/24"},
-				primaryIP:     net.ParseIP("10.0.0.1"),
+				primaryIP:     net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			"node-1",
 			&v1core.Node{
@@ -1210,7 +1901,10 @@ func Test_advertisePodRoute(t *testing.T) {
 				podCidr:          "172.20.0.0/24",
 				isIPv4Capable:    true,
 				podIPv4CIDRs:     []string{"172.20.0.0/24"},
-				primaryIP:        net.ParseIP("10.0.0.1"),
+				primaryIP:        net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			"",
 			&v1core.Node{
@@ -1240,7 +1934,10 @@ func Test_advertisePodRoute(t *testing.T) {
 					v1core.NodeInternalIP: {net.IPv6loopback},
 				},
 				isIPv6Capable: true,
-				primaryIP:     net.ParseIP("10.0.0.1"),
+				primaryIP:     net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 			},
 			"",
 			&v1core.Node{
@@ -1303,7 +2000,7 @@ func Test_advertisePodRoute(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
 				Asn:        1,
-				RouterId:   "10.0.0.0",
+				RouterId:   testNodeIPv4,
 				ListenPort: 10000,
 			}
 			err := testcase.nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global})
@@ -1398,9 +2095,12 @@ func Test_syncInternalPeers(t *testing.T) {
 			&NetworkRoutingController{
 				bgpFullMeshMode: true,
 				clientset:       fake.NewSimpleClientset(),
-				primaryIP:       net.ParseIP("10.0.0.0"),
-				bgpServer:       gobgp.NewBgpServer(),
-				activeNodes:     make(map[string]bool),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
+				bgpServer:   gobgp.NewBgpServer(),
+				activeNodes: make(map[string]bool),
 			},
 			[]*v1core.Node{
 				{
@@ -1426,9 +2126,12 @@ func Test_syncInternalPeers(t *testing.T) {
 			&NetworkRoutingController{
 				bgpFullMeshMode: true,
 				clientset:       fake.NewSimpleClientset(),
-				primaryIP:       net.ParseIP("10.0.0.0"),
-				bgpServer:       gobgp.NewBgpServer(),
-				activeNodes:     make(map[string]bool),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
+				bgpServer:   gobgp.NewBgpServer(),
+				activeNodes: make(map[string]bool),
 			},
 			[]*v1core.Node{
 				{
@@ -1468,8 +2171,11 @@ func Test_syncInternalPeers(t *testing.T) {
 			&NetworkRoutingController{
 				bgpFullMeshMode: true,
 				clientset:       fake.NewSimpleClientset(),
-				primaryIP:       net.ParseIP("10.0.0.0"),
-				bgpServer:       gobgp.NewBgpServer(),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
+				bgpServer: gobgp.NewBgpServer(),
 				activeNodes: map[string]bool{
 					"10.0.0.2": true,
 				},
@@ -1498,10 +2204,13 @@ func Test_syncInternalPeers(t *testing.T) {
 			&NetworkRoutingController{
 				bgpFullMeshMode: false,
 				clientset:       fake.NewSimpleClientset(),
-				primaryIP:       net.ParseIP("10.0.0.0"),
-				bgpServer:       gobgp.NewBgpServer(),
-				activeNodes:     make(map[string]bool),
-				nodeAsnNumber:   100,
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
+				bgpServer:     gobgp.NewBgpServer(),
+				activeNodes:   make(map[string]bool),
+				nodeAsnNumber: 100,
 			},
 			[]*v1core.Node{
 				{
@@ -1545,7 +2254,7 @@ func Test_syncInternalPeers(t *testing.T) {
 			go testcase.nrc.bgpServer.Serve()
 			global := &gobgpapi.Global{
 				Asn:        1,
-				RouterId:   "10.0.0.0",
+				RouterId:   testNodeIPv4,
 				ListenPort: 10000,
 			}
 			err := testcase.nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global})
@@ -1604,11 +2313,14 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR server with int cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				primaryIP:        net.ParseIP("10.0.0.0"),
-				routerID:         "10.0.0.0",
+				bgpFullMeshMode: false,
+				bgpPort:         10000,
+				clientset:       fake.NewSimpleClientset(),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
+				routerID:         testNodeIPv4,
 				bgpServer:        gobgp.NewBgpServer(),
 				activeNodes:      make(map[string]bool),
 				nodeAsnNumber:    100,
@@ -1631,11 +2343,14 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR server with IPv4 cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				primaryIP:        net.ParseIP("10.0.0.0"),
-				routerID:         "10.0.0.0",
+				bgpFullMeshMode: false,
+				bgpPort:         10000,
+				clientset:       fake.NewSimpleClientset(),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
+				routerID:         testNodeIPv4,
 				bgpServer:        gobgp.NewBgpServer(),
 				activeNodes:      make(map[string]bool),
 				nodeAsnNumber:    100,
@@ -1658,11 +2373,14 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR client with int cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				primaryIP:        net.ParseIP("10.0.0.0"),
-				routerID:         "10.0.0.0",
+				bgpFullMeshMode: false,
+				bgpPort:         10000,
+				clientset:       fake.NewSimpleClientset(),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
+				routerID:         testNodeIPv4,
 				bgpServer:        gobgp.NewBgpServer(),
 				activeNodes:      make(map[string]bool),
 				nodeAsnNumber:    100,
@@ -1685,11 +2403,14 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR client with IPv4 cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				primaryIP:        net.ParseIP("10.0.0.0"),
-				routerID:         "10.0.0.0",
+				bgpFullMeshMode: false,
+				bgpPort:         10000,
+				clientset:       fake.NewSimpleClientset(),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
+				routerID:         testNodeIPv4,
 				bgpServer:        gobgp.NewBgpServer(),
 				activeNodes:      make(map[string]bool),
 				nodeAsnNumber:    100,
@@ -1712,10 +2433,13 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR server with unparseable cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				primaryIP:        net.ParseIP("10.0.0.0"),
+				bgpFullMeshMode: false,
+				bgpPort:         10000,
+				clientset:       fake.NewSimpleClientset(),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 				bgpServer:        gobgp.NewBgpServer(),
 				activeNodes:      make(map[string]bool),
 				nodeAsnNumber:    100,
@@ -1738,10 +2462,13 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 		{
 			"RR client with unparseable cluster id",
 			&NetworkRoutingController{
-				bgpFullMeshMode:  false,
-				bgpPort:          10000,
-				clientset:        fake.NewSimpleClientset(),
-				primaryIP:        net.ParseIP("10.0.0.0"),
+				bgpFullMeshMode: false,
+				bgpPort:         10000,
+				clientset:       fake.NewSimpleClientset(),
+				primaryIP:       net.ParseIP(testNodeIPv4),
+				nodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {
+					net.ParseIP(testNodeIPv4)},
+				},
 				bgpServer:        gobgp.NewBgpServer(),
 				activeNodes:      make(map[string]bool),
 				nodeAsnNumber:    100,
@@ -2003,7 +2730,7 @@ func Test_generateTunnelName(t *testing.T) {
 
 func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) error {
 	for _, svc := range svcs {
-		_, err := clientset.CoreV1().Services("default").Create(context.Background(), svc, metav1.CreateOptions{})
+		_, err := clientset.CoreV1().Services(svc.ObjectMeta.Namespace).Create(context.Background(), svc, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -2015,6 +2742,18 @@ func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) erro
 func createNodes(clientset kubernetes.Interface, nodes []*v1core.Node) error {
 	for _, node := range nodes {
 		_, err := clientset.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func createEndpoints(clientset kubernetes.Interface, endpoints []*v1core.Endpoints) error {
+	for _, eps := range endpoints {
+		_, err := clientset.CoreV1().Endpoints(eps.ObjectMeta.Namespace).Create(
+			context.Background(), eps, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
