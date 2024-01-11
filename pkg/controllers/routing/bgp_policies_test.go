@@ -21,6 +21,7 @@ type PolicyTestCase struct {
 	nrc                          *NetworkRoutingController
 	existingNodes                []*v1core.Node
 	existingServices             []*v1core.Service
+	existingEndpoints            []*v1core.Endpoints
 	podDefinedSet                *gobgpapi.DefinedSet
 	clusterIPDefinedSet          *gobgpapi.DefinedSet
 	externalPeerDefinedSet       *gobgpapi.DefinedSet
@@ -75,12 +76,32 @@ func Test_AddPolicies(t *testing.T) {
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.1.0.1",
-						ExternalIPs: []string{"1.1.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.1.0.1",
+						ExternalIPs:           []string{"1.1.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -205,12 +226,32 @@ func Test_AddPolicies(t *testing.T) {
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
-						ClusterIP:   "10.11.0.1",
-						ExternalIPs: []string{"1.11.1.1"},
+						Type:                  "ClusterIP",
+						ClusterIP:             "10.11.0.1",
+						ExternalIPs:           []string{"1.11.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -428,12 +469,32 @@ func Test_AddPolicies(t *testing.T) {
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.12.0.1",
-						ExternalIPs: []string{"1.12.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.12.0.1",
+						ExternalIPs:           []string{"1.12.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -613,12 +674,32 @@ func Test_AddPolicies(t *testing.T) {
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.13.0.1",
-						ExternalIPs: []string{"1.13.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.13.0.1",
+						ExternalIPs:           []string{"1.13.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -783,12 +864,32 @@ func Test_AddPolicies(t *testing.T) {
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.14.0.1",
-						ExternalIPs: []string{"1.14.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.14.0.1",
+						ExternalIPs:           []string{"1.14.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -973,12 +1074,32 @@ func Test_AddPolicies(t *testing.T) {
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.15.0.1",
-						ExternalIPs: []string{"1.15.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.15.0.1",
+						ExternalIPs:           []string{"1.15.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1164,12 +1285,32 @@ func Test_AddPolicies(t *testing.T) {
 			[]*v1core.Service{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
+						Name:      "svc-1",
+						Namespace: "default",
 					},
 					Spec: v1core.ServiceSpec{
-						Type:        ClusterIPST,
-						ClusterIP:   "10.16.0.1",
-						ExternalIPs: []string{"1.16.1.1"},
+						Type:                  ClusterIPST,
+						ClusterIP:             "10.16.0.1",
+						ExternalIPs:           []string{"1.16.1.1"},
+						InternalTrafficPolicy: &testClusterIntTrafPol,
+						ExternalTrafficPolicy: testClusterExtTrafPol,
+					},
+				},
+			},
+			[]*v1core.Endpoints{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "svc-1",
+						Namespace: "default",
+					},
+					Subsets: []v1core.EndpointSubset{
+						{
+							Addresses: []v1core.EndpointAddress{
+								{
+									IP: testNodeIPv4,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -1309,7 +1450,11 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			if err := createServices(testcase.nrc.clientset, testcase.existingServices); err != nil {
-				t.Errorf("failed to create existing nodes: %v", err)
+				t.Errorf("failed to create existing services: %v", err)
+			}
+
+			if err := createEndpoints(testcase.nrc.clientset, testcase.existingEndpoints); err != nil {
+				t.Errorf("failed to create existing endpoints: %v", err)
 			}
 
 			err := testcase.nrc.startBgpServer(false)
