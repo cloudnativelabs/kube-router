@@ -130,7 +130,10 @@ spec:
             TMP=/var/lib/kube-router/.tmp-kubeconfig;
             cp /etc/kube-router/kubeconfig ${TMP};
             mv ${TMP} /var/lib/kube-router/kubeconfig;
-          fi
+          fi;
+          if [ -x /usr/local/bin/cni-install ]; then
+            /usr/local/bin/cni-install;
+          fi;
         volumeMounts:
         - mountPath: /etc/cni/net.d
           name: cni-conf-dir
@@ -138,6 +141,8 @@ spec:
           name: kube-router-cfg
         - name: kubeconfig
           mountPath: /var/lib/kube-router
+        - name: host-opt
+          mountPath: /opt
       hostNetwork: true
       hostPID: true
       tolerations:
@@ -164,6 +169,9 @@ spec:
         hostPath:
           path: /run/xtables.lock
           type: FileOrCreate
+      - name: host-opt
+        hostPath:
+          path: /opt
 
 ---
 apiVersion: v1
