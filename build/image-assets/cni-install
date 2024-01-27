@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+set -euo pipefail -x
+
+# CNI binaries that kube-router uses
+KUBE_ROUTER_CNI_BINS=("bridge" "portmap" "host-local" "loopback")
+# Local path of the CNI binaries within the kube-router container image
+LOCAL_BIN_PATH="${LOCAL_BIN_PATH:-/usr/libexec/cni}"
+# Path on the host where the CRI will look for the CNI binaries. This should be mounted into the initContainer so that
+# the CRI can reference the binaries and this script has the intended effect.
+HOST_BIN_PATH="${HOST_BIN_PATH:-/opt/cni/bin}"
+
+setup_cni() {
+	local cni_bin cni_dst_path cni_loc_path
+
+	# If the host path for the binaries doesn't exist, create it
+	if [[ ! -d "${HOST_BIN_PATH}" ]]; then
+		printf "Host CNI bin path %s doesn't exist on node host, creating it\n" "${HOST_BIN_PATH}"
+		if mkdir -p "${HOST_BIN_PATH}" >/dev/null; then
+			printf "Successfully created CNI bin path\n"
+		else
+			printf "Failed to create missing CNI bin path, exiting\n"
+			return 1
+		fi
+	fi
+
+	# Loop over CNI binaries
+	for cni_bin in "${KUBE_ROUTER_CNI_BINS[@]}"; do
+		cni_dst_path="${HOST_BIN_PATH}/${cni_bin}"
+		cni_loc_path="${LOCAL_BIN_PATH}/${cni_bin}"
+
+		# Check to see if the binary already exists on the host node
+		if [[ -x "${cni_dst_path}" ]]; then
+			# If it did, then output a message and skip this loop
+			printf "CNI binary %s already exists and is executable, skipping\n" "${cni_dst_path}"
+			continue
+		fi
+
+		# If it didn't then try to install it
+		printf "CNI binary %s was missing or wasn't executable, installing it\n" "${cni_dst_path}"
+		if install -m 755 "${cni_loc_path}" "${cni_dst_path}" >/dev/null; then
+			printf "CNI install successfull\n"
+		else
+			printf "Failed to install CNI binary, exiting\n"
+			return 2
+		fi
+	done
+
+	printf "CNI setup completed successfully!"
+	return 0
+}
+
+setup_cni "${@}"
+exit $?

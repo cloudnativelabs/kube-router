@@ -6,3 +6,4 @@ _output
 _cache
 vendor
 .*.sw?
+/cni-download

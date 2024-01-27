@@ -33,6 +33,7 @@ GOBGP_VERSION=v3.19.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v1.21.2
 MOQ_VERSION=v0.3.2
+CNI_VERSION=v1.4.0
 UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
@@ -110,7 +111,7 @@ markdownlint:
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
-container: kube-router gobgp multiarch-binverify ## Builds a Docker container image.
+container: kube-router gobgp multiarch-binverify cni-download ## Builds a Docker container image.
 	@echo Starting kube-router container image build for $(GOARCH) on $(shell go env GOHOSTARCH)
 	@if [ "$(GOARCH)" != "$(shell go env GOHOSTARCH)" ]; then \
 		echo "Using qemu to build non-native container"; \
@@ -182,6 +183,7 @@ release: push-release github-release ## Pushes a release to DockerHub and GitHub
 clean: ## Removes the kube-router binary and Docker images
 	rm -f kube-router
 	rm -f gobgp
+	rm -rf cni-download
 	if [ $(shell $(DOCKER) images -q $(REGISTRY_DEV):$(IMG_TAG) 2> /dev/null) ]; then \
 		 $(DOCKER) rmi $(REGISTRY_DEV):$(IMG_TAG); \
 	fi
@@ -227,6 +229,14 @@ endif
 multiarch-binverify:
 	@echo 'Verifying kube-router gobgp for ARCH=$(FILE_ARCH) ...'
 	@[ `file kube-router gobgp| cut -d, -f2 |grep -cw "$(FILE_ARCH)"` -eq 2 ]
+
+cni-download:
+	@echo Downloading CNI Plugins for $(GOARCH)
+		curl -L -o cni-plugins-$(GOARCH).tgz \
+			https://github.com/containernetworking/plugins/releases/download/$(CNI_VERSION)/cni-plugins-linux-$(GOARCH)-$(CNI_VERSION).tgz
+		mkdir -p cni-download
+		tar -xf cni-plugins-$(GOARCH).tgz -C cni-download
+		rm -f cni-plugins-$(GOARCH).tgz
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:

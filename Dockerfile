@@ -1,13 +1,16 @@
 ARG BUILDTIME_BASE=golang:1-alpine
 ARG RUNTIME_BASE=alpine:latest
+ARG TARGETPLATFORM
+ARG CNI_VERSION
 FROM ${BUILDTIME_BASE} as builder
 ENV BUILD_IN_DOCKER=false
 
 WORKDIR /build
 COPY . /build
-RUN apk add --no-cache make git \
+RUN apk add --no-cache make git tar curl \
     && make kube-router \
-    && make gobgp
+    && make gobgp \
+    && make cni-download
 
 FROM ${RUNTIME_BASE}
 
@@ -29,7 +32,9 @@ COPY build/image-assets/bashrc /root/.bashrc
 COPY build/image-assets/profile /root/.profile
 COPY build/image-assets/vimrc /root/.vimrc
 COPY build/image-assets/motd-kube-router.sh /etc/motd-kube-router.sh
+COPY build/image-assets/cni-install /usr/local/bin/cni-install
 COPY --from=builder /build/kube-router /build/gobgp /usr/local/bin/
+COPY --from=builder /build/cni-download /usr/libexec/cni
 
 # Use iptables-wrappers so that correct version of iptables-legacy or iptables-nft gets used. Alpine contains both, but
 # which version is used should be based on the host system as well as where rules that may have been added before
