@@ -39,8 +39,9 @@ datastore to maintain in your cluster.
 kube-router's elegant design also means there is no dependency on another CNI
 plugin. The
 [official "bridge" plugin](https://github.com/containernetworking/plugins/tree/master/plugins/main/bridge)
-provided by the CNI project is all you need -- and chances are you already have
-it in your CNI binary directory!
+provided by the CNI project is all you need. While it is likely that you already have this plugin on your file system
+if you've installed Kubernetes, kube-router will install the plugins it needs for you in `/opt/cni/bin` if it sees
+you're missing them.
 
 Read more about the advantages and potential of BGP with Kubernetes:
 

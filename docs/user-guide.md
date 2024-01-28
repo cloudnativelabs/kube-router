@@ -169,6 +169,16 @@ kube-router --master=http://192.168.1.99:8080/` or `kube-router --kubeconfig=<pa
 wget -O /etc/cni/net.d/10-kuberouter.conf https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/cni/10-kuberouter.conf`
 ```
 
+- Additionally, the aforementioned `bridge` and `host-local` CNI plugins need to exist for the container runtime to
+  reference if you have kube-router manage the pod-to-pod network. Additionally, if you use `hostPort`'s on any of your
+  pods, you'll need to install the `hostport` plugin. As of kube-router v2.1.X, these plugins will be installed to
+  `/opt/cni/bin` for you during the `initContainer` phase if kube-router finds them missing. Most container runtimes
+  will know to look for your plugins there by default, however, you may have to configure them if you are having
+  problems with your pods coming up.
+  - [containerd configuration](https://github.com/containerd/containerd/blob/c1d59e38ef222f5a80dde9d817bac1f98e2db78c/docs/cri/config.md?plain=1#L409)
+  - [cri-o configuration](https://github.com/cri-o/cri-o/blob/main/contrib/cni/README.md#plugin-directory)
+  - [cri-dockerd configuration](https://github.com/Mirantis/cri-dockerd/blob/519e39ceaa7f9e00319149b9d74b243466fa3963/config/options.go#L161)
+
 ## running as daemonset
 
 This is quickest way to deploy kube-router in Kubernetes (**dont forget to ensure the requirements above**).
