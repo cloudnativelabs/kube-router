@@ -20,7 +20,7 @@ BUILD_IN_DOCKER?=true
 # Upgrading to Go 1.21.{0,1,2} seems to in cause some sort of race condition that causes tests to fail sporadically.
 # Sometimes they fail in apparent race conditions, other times they end up with nil pointer and SIGSEGV errors. We'll
 # either need to try with a future bug fix release or do some in-depth debugging before we upgrade.
-DOCKER_BUILD_IMAGE?=golang:1.20.9-alpine3.18
+DOCKER_BUILD_IMAGE?=golang:1.20.13-alpine3.18
 ## These variables are used by the Dockerfile as the bases for building and creating the runtime container
 ## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
 GO_CACHE?=$(shell go env GOCACHE)
@@ -29,7 +29,7 @@ BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 RUNTIME_BASE?=alpine:3.18
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.54.2
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.37.0
-GOBGP_VERSION=v3.19.0
+GOBGP_VERSION=v3.23.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v1.21.2
 MOQ_VERSION=v0.3.2
