@@ -214,11 +214,14 @@ type serviceInfoMap map[string]*serviceInfo
 
 // internal representation of endpoints
 type endpointSliceInfo struct {
-	ip      string
-	port    int
-	isLocal bool
-	isIPv4  bool
-	isIPv6  bool
+	ip            string
+	port          int
+	isLocal       bool
+	isIPv4        bool
+	isIPv6        bool
+	isReady       bool
+	isServing     bool
+	isTerminating bool
 }
 
 // map of all endpoints, with unique service id(namespace name, service name, port) as key
@@ -1105,11 +1108,14 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 				for _, addr := range ep.Addresses {
 					isLocal := ep.NodeName != nil && *ep.NodeName == nsc.nodeHostName
 					endpoints = append(endpoints, endpointSliceInfo{
-						ip:      addr,
-						port:    int(*port.Port),
-						isLocal: isLocal,
-						isIPv4:  isIPv4,
-						isIPv6:  isIPv6,
+						ip:            addr,
+						port:          int(*port.Port),
+						isLocal:       isLocal,
+						isIPv4:        isIPv4,
+						isIPv6:        isIPv6,
+						isReady:       ep.Conditions.Ready != nil && *ep.Conditions.Ready,
+						isServing:     ep.Conditions.Serving != nil && *ep.Conditions.Serving,
+						isTerminating: ep.Conditions.Terminating != nil && *ep.Conditions.Terminating,
 					})
 				}
 				endpointsMap[svcID] = shuffle(endpoints)
