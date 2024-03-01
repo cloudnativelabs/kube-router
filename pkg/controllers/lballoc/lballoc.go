@@ -186,6 +186,7 @@ func (lbc *LoadBalancerController) OnUpdate(oldObj interface{}, newObj interface
 
 func getIPFamilies(families []v1core.IPFamily) (v4, v6 bool) {
 	for _, ipf := range families {
+		//nolint:exhaustive // we don't need exhaustive searching for IP Families
 		switch ipf {
 		case v1core.IPv4Protocol:
 			v4 = true

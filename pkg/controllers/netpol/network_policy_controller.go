@@ -258,6 +258,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		err := iptablesSaveRestore.SaveInto("filter", npc.filterTableRules[ipFamily])
 		saveEndTime := time.Since(saveStart)
 		if npc.MetricsEnabled {
+			//nolint:exhaustive // we don't need exhaustive searching for IP Families
 			switch ipFamily {
 			case v1core.IPv4Protocol:
 				metrics.ControllerIptablesV4SaveTime.Observe(saveEndTime.Seconds())
@@ -297,6 +298,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		err := iptablesSaveRestore.Restore("filter", npc.filterTableRules[ipFamily].Bytes())
 		restoreEndTime := time.Since(restoreStart)
 		if npc.MetricsEnabled {
+			//nolint:exhaustive // we don't need exhaustive searching for IP Families
 			switch ipFamily {
 			case v1core.IPv4Protocol:
 				metrics.ControllerIptablesV4RestoreTime.Observe(restoreEndTime.Seconds())
