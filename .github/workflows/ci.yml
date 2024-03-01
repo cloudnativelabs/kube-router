@@ -18,8 +18,8 @@ env:
   # Upgrading to Go 1.21.{0,1,2} seems to in cause some sort of race condition that causes tests to fail sporadically.
   # Sometimes they fail in apparent race conditions, other times they end up with nil pointer and SIGSEGV errors. We'll
   # either need to try with a future bug fix release or do some in-depth debugging before we upgrade.
-  BUILDTIME_BASE: "golang:1.21.7-alpine3.18"
-  RUNTIME_BASE: "alpine:3.18"
+  BUILDTIME_BASE: "golang:1.21.7-alpine3.19"
+  RUNTIME_BASE: "alpine:3.19"
   GO_VERSION: "~1.21.7"
   GO_CACHE: "/home/runner/.cache/go-build"
   GO_MOD_CACHE: "/home/runner/go/pkg/mod"
