@@ -243,6 +243,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		klog.Fatalf("error cleaning up old/bad masquerade rules: %s", err.Error())
 	}
 
+	// Run the hairpin controller
 	wg.Add(1)
 	go nsc.hpc.Run(stopCh, wg, healthChan)
 
