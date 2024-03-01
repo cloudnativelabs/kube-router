@@ -61,6 +61,13 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 			err.Error())
 	}
 
+	klog.V(1).Info("Setting up NodePort Health Checks for LB services")
+	err = nsc.nphc.UpdateServicesInfo(serviceInfoMap, endpointsInfoMap)
+	if err != nil {
+		syncErrors = true
+		klog.Errorf("Error setting up NodePort Health Checks for LB Services: %v", err)
+	}
+
 	klog.V(1).Info("Cleaning Up Stale VIPs from dummy interface")
 	err = nsc.cleanupStaleVIPs(activeServiceEndpointMap)
 	if err != nil {
