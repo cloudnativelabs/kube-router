@@ -839,6 +839,7 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 				fouArgs = append(fouArgs, "fou", "add", "port", strFormattedEncapPort, "gue")
 				out, err := exec.Command("ip", fouArgs...).CombinedOutput()
 				if err != nil {
+					//nolint:goconst // don't need to make error messages a constant
 					return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
 						"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
 				}
@@ -983,10 +984,6 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 
 		var ipv4Addrs, ipv6Addrs [][]string
 		intExtNodeIPsv4, intExtNodeIPsv6 := utils.GetAllNodeIPs(node)
-		if err != nil {
-			klog.Errorf("Failed to find a node IP, cannot add to node ipset which could affect routing: %v", err)
-			continue
-		}
 		for _, nodeIPv4s := range intExtNodeIPsv4 {
 			for _, nodeIPv4 := range nodeIPv4s {
 				ipv4Addrs = append(ipv4Addrs, []string{nodeIPv4.String(), utils.OptionTimeout, "0"})

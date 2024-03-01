@@ -24,6 +24,12 @@ linters:
     - stylecheck
     - unconvert
     - unparam
+linters-settings:
+  goconst:
+    # Exclude few word constants
+    min-len: 20
+    # Don't use goconst to check test files
+    ignore-tests: true
 issues:
   exclude-rules:
     # Excluding single digits from magic number detector because it produces too many obvious results (like klog)
@@ -57,7 +63,7 @@ issues:
       path: _test\.go
     # Exclude tests from duplicate linter
     - linters:
-      - dupl
+        - dupl
       path: _test\.go
   # always show all issues rather than only showing 50 at a time
   max-issues-per-linter: 0

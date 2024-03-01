@@ -673,8 +673,8 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 			}
 			address = net.ParseIP(ipString)
 			if address == nil {
-				klog.Warning("failed to parse IP %s returned from FWMark %s - this may not be a kube-router" +
-					"controlled service, but if it is then something's gone wrong")
+				klog.Warningf("failed to parse IP %s returned from FWMark %d - this may not be a kube-router"+
+					"controlled service, but if it is then something's gone wrong", ipString, ipvsService.FWMark)
 			}
 		}
 		var family v1.IPFamily

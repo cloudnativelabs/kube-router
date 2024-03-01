@@ -393,7 +393,7 @@ func linkFOUEnabled(linkName string) bool {
 	out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
 
 	if err != nil {
-		klog.Warning("recevied an error while trying to look at the link details of %s, this shouldn't have happened",
+		klog.Warningf("recevied an error while trying to look at the link details of %s, this shouldn't have happened",
 			linkName)
 		return false
 	}
