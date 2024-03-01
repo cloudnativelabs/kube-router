@@ -154,6 +154,8 @@ type NetworkServicesController struct {
 
 	hpc                *hairpinController
 	hpEndpointReceiver chan string
+
+	nphc *nodePortHealthCheckController
 }
 
 type ipvsCalls interface {
@@ -200,6 +202,7 @@ type serviceInfo struct {
 	intTrafficPolicy              *v1.ServiceInternalTrafficPolicy
 	extTrafficPolicy              *v1.ServiceExternalTrafficPolicy
 	flags                         schedFlags
+	healthCheckNodePort           int
 }
 
 // IPVS scheduler flags
@@ -315,6 +318,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			nsc.mu.Lock()
 			nsc.readyForUpdates = false
 			nsc.mu.Unlock()
+			nsc.nphc.StopAll()
 			klog.Info("Shutting down network services controller")
 			return
 
@@ -923,17 +927,18 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 		extClusterPolicyDefault := v1.ServiceExternalTrafficPolicyCluster
 		for _, port := range svc.Spec.Ports {
 			svcInfo := serviceInfo{
-				clusterIP:        net.ParseIP(svc.Spec.ClusterIP),
-				clusterIPs:       make([]string, len(svc.Spec.ClusterIPs)),
-				port:             int(port.Port),
-				targetPort:       port.TargetPort.String(),
-				protocol:         strings.ToLower(string(port.Protocol)),
-				nodePort:         int(port.NodePort),
-				name:             svc.ObjectMeta.Name,
-				namespace:        svc.ObjectMeta.Namespace,
-				externalIPs:      make([]string, len(svc.Spec.ExternalIPs)),
-				intTrafficPolicy: &intClusterPolicyDefault,
-				extTrafficPolicy: &extClusterPolicyDefault,
+				clusterIP:           net.ParseIP(svc.Spec.ClusterIP),
+				clusterIPs:          make([]string, len(svc.Spec.ClusterIPs)),
+				port:                int(port.Port),
+				targetPort:          port.TargetPort.String(),
+				protocol:            strings.ToLower(string(port.Protocol)),
+				nodePort:            int(port.NodePort),
+				name:                svc.ObjectMeta.Name,
+				namespace:           svc.ObjectMeta.Namespace,
+				externalIPs:         make([]string, len(svc.Spec.ExternalIPs)),
+				intTrafficPolicy:    &intClusterPolicyDefault,
+				extTrafficPolicy:    &extClusterPolicyDefault,
+				healthCheckNodePort: int(svc.Spec.HealthCheckNodePort),
 			}
 			dsrMethod, ok := svc.ObjectMeta.Annotations[svcDSRAnnotation]
 			if ok {
@@ -2069,6 +2074,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 	nsc.hpEndpointReceiver = make(chan string)
 	nsc.hpc = NewHairpinController(&nsc, nsc.hpEndpointReceiver)
+
+	nsc.nphc = NewNodePortHealthCheck()
 
 	return &nsc, nil
 }
