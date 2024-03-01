@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -378,12 +379,17 @@ func Test_advertiseClusterIPs(t *testing.T) {
 
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
+			eventMu := sync.Mutex{}
 			var events []*gobgpapi.Path
 			pathWatch := func(r *gobgpapi.WatchEventResponse) {
 				if table := r.GetTable(); table != nil {
 					for _, p := range table.Paths {
 						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
-							events = append(events, p)
+							func() {
+								defer eventMu.Unlock()
+								eventMu.Lock()
+								events = append(events, p)
+							}()
 						}
 					}
 				}
@@ -410,18 +416,26 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			testcase.nrc.withdrawVIPs(toWithdraw)
 
 			timeoutCh := time.After(time.Second * 10)
+			ticker := time.NewTicker(100 * time.Millisecond)
 		L:
 			for {
 				select {
 				case <-timeoutCh:
 					t.Fatalf("timeout exceeded waiting for %d watch events, got %d", len(testcase.watchEvents), len(events))
-				default:
-					if len(events) == len(testcase.watchEvents) {
+				case <-ticker.C:
+					stopLoop := func() bool {
+						defer eventMu.Unlock()
+						eventMu.Lock()
+						return len(events) == len(testcase.watchEvents)
+					}()
+					if stopLoop {
 						break L
 					}
 				}
 			}
 
+			defer eventMu.Unlock()
+			eventMu.Lock()
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
@@ -1004,11 +1018,16 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			}()
 
 			var events []*gobgpapi.Path
+			eventMu := sync.Mutex{}
 			pathWatch := func(r *gobgpapi.WatchEventResponse) {
 				if table := r.GetTable(); table != nil {
 					for _, p := range table.Paths {
 						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
-							events = append(events, p)
+							func() {
+								defer eventMu.Unlock()
+								eventMu.Lock()
+								events = append(events, p)
+							}()
 						}
 					}
 				}
@@ -1049,19 +1068,27 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			testcase.nrc.advertiseVIPs(toAdvertise)
 			testcase.nrc.withdrawVIPs(toWithdraw)
 			timeoutCh := time.After(time.Second * 10)
+			ticker := time.NewTicker(500 * time.Millisecond)
 
 		L:
 			for {
 				select {
 				case <-timeoutCh:
 					t.Fatalf("timeout exceeded waiting for %d watch events, got %d", len(testcase.watchEvents), len(events))
-				default:
-					if len(events) == len(testcase.watchEvents) {
+				case <-ticker.C:
+					stopLoop := func() bool {
+						defer eventMu.Unlock()
+						eventMu.Lock()
+						return len(events) == len(testcase.watchEvents)
+					}()
+					if stopLoop {
 						break L
 					}
 				}
 			}
 
+			defer eventMu.Unlock()
+			eventMu.Lock()
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
@@ -1289,11 +1316,16 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			}()
 
 			var events []*gobgpapi.Path
+			eventMu := sync.Mutex{}
 			pathWatch := func(r *gobgpapi.WatchEventResponse) {
 				if table := r.GetTable(); table != nil {
 					for _, p := range table.Paths {
 						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
-							events = append(events, p)
+							func() {
+								defer eventMu.Unlock()
+								eventMu.Lock()
+								events = append(events, p)
+							}()
 						}
 					}
 				}
@@ -1335,19 +1367,27 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			testcase.nrc.advertiseVIPs(toAdvertise)
 			testcase.nrc.withdrawVIPs(toWithdraw)
 			timeoutCh := time.After(time.Second * 10)
+			ticker := time.NewTicker(100 * time.Millisecond)
 
 		L:
 			for {
 				select {
 				case <-timeoutCh:
 					t.Fatalf("timeout exceeded waiting for %d watch events, got %d", len(testcase.watchEvents), len(events))
-				default:
-					if len(events) == len(testcase.watchEvents) {
+				case <-ticker.C:
+					stopLoop := func() bool {
+						defer eventMu.Unlock()
+						eventMu.Lock()
+						return len(events) == len(testcase.watchEvents)
+					}()
+					if stopLoop {
 						break L
 					}
 				}
 			}
 
+			defer eventMu.Unlock()
+			eventMu.Lock()
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
@@ -1643,11 +1683,16 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			}()
 
 			var events []*gobgpapi.Path
+			eventMu := sync.Mutex{}
 			pathWatch := func(r *gobgpapi.WatchEventResponse) {
 				if table := r.GetTable(); table != nil {
 					for _, p := range table.Paths {
 						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
-							events = append(events, p)
+							func() {
+								defer eventMu.Unlock()
+								eventMu.Lock()
+								events = append(events, p)
+							}()
 						}
 					}
 				}
@@ -1690,19 +1735,27 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			testcase.nrc.withdrawVIPs(toWithdraw)
 
 			timeoutCh := time.After(time.Second * 10)
+			ticker := time.NewTicker(100 * time.Millisecond)
 
 		L:
 			for {
 				select {
 				case <-timeoutCh:
 					t.Fatalf("timeout exceeded waiting for %d watch events, got %d", len(testcase.watchEvents), len(events))
-				default:
-					if len(events) == len(testcase.watchEvents) {
+				case <-ticker.C:
+					stopLoop := func() bool {
+						defer eventMu.Unlock()
+						eventMu.Lock()
+						return len(events) == len(testcase.watchEvents)
+					}()
+					if stopLoop {
 						break L
 					}
 				}
 			}
 
+			defer eventMu.Unlock()
+			eventMu.Lock()
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix
@@ -2014,11 +2067,16 @@ func Test_advertisePodRoute(t *testing.T) {
 			}()
 
 			var events []*gobgpapi.Path
+			eventMu := sync.Mutex{}
 			pathWatch := func(r *gobgpapi.WatchEventResponse) {
 				if table := r.GetTable(); table != nil {
 					for _, p := range table.Paths {
 						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
-							events = append(events, p)
+							func() {
+								defer eventMu.Unlock()
+								eventMu.Lock()
+								events = append(events, p)
+							}()
 						}
 					}
 				}
@@ -2054,19 +2112,27 @@ func Test_advertisePodRoute(t *testing.T) {
 			}
 
 			timeoutCh := time.After(time.Second * 10)
+			ticker := time.NewTicker(100 * time.Millisecond)
 
 		waitForEvents:
 			for {
 				select {
 				case <-timeoutCh:
 					t.Fatalf("timeout exceeded waiting for %d watch events, got %d", len(testcase.watchEvents), len(events))
-				default:
-					if len(events) == len(testcase.watchEvents) {
+				case <-ticker.C:
+					stopLoop := func() bool {
+						defer eventMu.Unlock()
+						eventMu.Lock()
+						return len(events) == len(testcase.watchEvents)
+					}()
+					if stopLoop {
 						break waitForEvents
 					}
 				}
 			}
 
+			defer eventMu.Unlock()
+			eventMu.Lock()
 			for _, path := range events {
 				nlri := path.GetNlri()
 				var prefix gobgpapi.IPAddressPrefix

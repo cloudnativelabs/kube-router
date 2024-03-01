@@ -74,6 +74,7 @@ func validateNodePortRange(nodePortOption string) (string, error) {
 func getIPsFromPods(pods []podInfo, family api.IPFamily) []string {
 	var ips []string
 	for _, pod := range pods {
+		//nolint:exhaustive // we don't need exhaustive searching for IP Families
 		switch family {
 		case api.IPv4Protocol:
 			ip, err := getPodIPv4Address(pod)
@@ -146,6 +147,7 @@ func getPodIPv4Address(pod podInfo) (string, error) {
 }
 
 func getPodIPForFamily(pod podInfo, ipFamily api.IPFamily) (string, error) {
+	//nolint:exhaustive // we don't need exhaustive searching for IP Families
 	switch ipFamily {
 	case api.IPv4Protocol:
 		if ip, err := getPodIPv4Address(pod); err != nil {

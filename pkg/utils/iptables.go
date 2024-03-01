@@ -125,6 +125,7 @@ type IPTablesSaveRestore struct {
 // NewIPTablesSaveRestore returns an IPTablesSaveRestore
 // with apparopriate commands based on ipFamily (IPv4 or IPv6)
 func NewIPTablesSaveRestore(ipFamily v1core.IPFamily) *IPTablesSaveRestore {
+	//nolint:exhaustive // we don't need exhaustive searching for IP Families
 	switch ipFamily {
 	case v1core.IPv6Protocol:
 		return &IPTablesSaveRestore{

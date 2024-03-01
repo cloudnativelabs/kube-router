@@ -152,6 +152,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 		restoreEndTime := time.Since(restoreStart)
 
 		if npc.MetricsEnabled {
+			//nolint:exhaustive // we don't need exhaustive searching for IP Families
 			switch ipFamily {
 			case api.IPv4Protocol:
 				metrics.ControllerPolicyIpsetV4RestoreTime.Observe(restoreEndTime.Seconds())

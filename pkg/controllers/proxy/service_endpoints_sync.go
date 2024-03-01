@@ -138,6 +138,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 
 		for family, famClusIPs := range clusterIPs {
 			var nodeIP string
+			//nolint:exhaustive // we don't need exhaustive searching for IP Families
 			switch family {
 			case v1.IPv4Protocol:
 				nodeIP = ipv4NodeIP.String()
@@ -221,6 +222,7 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		var syscallINET uint16
 		eIP := net.ParseIP(endpoint.ip)
 
+		//nolint:exhaustive // we don't need exhaustive searching for IP Families
 		switch family {
 		case v1.IPv4Protocol:
 			if endpoint.isIPv6 {
@@ -529,6 +531,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 		var syscallINET uint16
 		eIP := net.ParseIP(endpoint.ip)
 
+		//nolint:exhaustive // we don't need exhaustive searching for IP Families
 		switch family {
 		case v1.IPv4Protocol:
 			if eIP.To4() == nil {

@@ -461,6 +461,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		var icmpType string
 		var icmpRejectType string
 
+		//nolint:exhaustive // we don't need exhaustive searching for IP Families
 		switch family {
 		case v1.IPv4Protocol:
 			icmpProto = "icmp"
@@ -1361,6 +1362,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 
 	for handlerFamily, iptablesCmdHandler := range nsc.iptablesCmdHandlers {
 		var rulesNeeded map[string][]string
+		//nolint:exhaustive // we don't need exhaustive searching for IP Families
 		switch handlerFamily {
 		case v1.IPv4Protocol:
 			rulesNeeded = ipv4RulesNeeded

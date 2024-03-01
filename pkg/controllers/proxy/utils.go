@@ -266,6 +266,7 @@ func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, 
 func (nsc *NetworkServicesController) getPrimaryAndCIDRsByFamily(ipFamily v1.IPFamily) (string, []string) {
 	var primaryIP string
 	cidrMap := make(map[string]bool)
+	//nolint:exhaustive // we don't need exhaustive searching for IP Families
 	switch ipFamily {
 	case v1.IPv4Protocol:
 		// If we're not detected to be IPv4 capable break early
@@ -410,6 +411,7 @@ func hairpinRuleFrom(serviceIPs []net.IP, endpointIP string, endpointFamily v1.I
 	ruleMap map[string][]string) {
 	var vipSubnet string
 
+	//nolint:exhaustive // we don't need exhaustive searching for IP Families
 	switch endpointFamily {
 	case v1.IPv4Protocol:
 		vipSubnet = "/32"
