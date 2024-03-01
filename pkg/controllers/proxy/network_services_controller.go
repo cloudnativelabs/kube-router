@@ -1081,12 +1081,12 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 		//     protocol: TCP
 		//
 		for _, ep := range es.Endpoints {
-			// Previously, when we used endpoints, we only looked at subsets.addresses and not subsets.notReadyAddresses
-			// so here we need to limit our endpoints to only the ones that are ready. In the future, we could consider
-			// changing this to .Serving which continues to include pods that are in Terminating state. For now we keep
-			// it the same.
-			if ep.Conditions.Ready == nil || !*ep.Conditions.Ready {
-				klog.V(2).Infof("Endpoint (with addresses %s) does not have a ready status, skipping...", ep.Addresses)
+			// We should only look at serving or ready if we want to be compliant with the upstream expectantions of a
+			// network provider
+			if (ep.Conditions.Serving == nil || !*ep.Conditions.Serving) &&
+				(ep.Conditions.Ready == nil || !*ep.Conditions.Ready) {
+				klog.V(2).Infof("Endpoint (with addresses %s) does not have a ready or serving status, skipping...",
+					ep.Addresses)
 				continue
 			}
 
