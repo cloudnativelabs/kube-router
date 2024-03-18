@@ -91,6 +91,9 @@ spec:
         - name: run
           mountPath: /var/run/docker.sock
           readOnly: true
+        - name: rt_tables
+          mountPath: /etc/iproute2/rt_tables
+          readOnly: false
         - name: xtables-lock
           mountPath: /run/xtables.lock
           readOnly: false
@@ -140,6 +143,9 @@ spec:
       - name: run
         hostPath:
           path: /var/run/docker.sock
+      - name: rt_tables
+        hostPath:
+          path: /etc/iproute2/rt_tables
       - name: kube-router-cfg
         configMap:
           name: kube-router-cfg
