@@ -27,6 +27,7 @@ Requirements:
   * `hostIPC: true` must be set for the pod
   * `hostPID: true` must be set for the pod
   * The container runtime socket must be mounted into the kube-router pod via a `hostPath` volume mount.
+  * `/etc/iproute2/rt_tables` must be read/write mounted into the kube-router pod via a `hostPath` volume mount.
 * A pod network that allows for IPIP encapsulated traffic. The most notable exception to this is that Azure does not
   transit IPIP encapsulated packets on their network. In this scenario, the end-user may be able to get around this
   issue by enabling FoU (`--overlay-encap=fou`) and full overlay networking (`--overlay-type=full`) options in
@@ -85,6 +86,9 @@ spec:
       - name: run
         hostPath:
           path: /var/run/docker.sock
+      - name: rt_tables
+        hostPath:
+          path: /etc/iproute2/rt_tables
       ...
       containers:
       - name: kube-router
@@ -94,6 +98,9 @@ spec:
         - name: run
           mountPath: /var/run/docker.sock
           readOnly: true
+        - name: rt_tables
+          mountPath: /etc/iproute2/rt_tables
+          readOnly: false
 ...
 ```
 
