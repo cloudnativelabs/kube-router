@@ -114,7 +114,7 @@ jobs:
       id: extract_tag
 
     - name: Build and push - New Push
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v5
       if: ${{ startsWith(github.ref, 'refs/tags/v') != true && github.event_name != 'pull_request' }}
       with:
         context: .
@@ -131,7 +131,7 @@ jobs:
         tags: cloudnativelabs/kube-router-git:${{ steps.extract_branch.outputs.branch }}
 
     - name: Build and push - New PR
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v5
       if: github.event_name == 'pull_request'
       with:
         context: .
@@ -145,7 +145,7 @@ jobs:
 
     # Tagging a release candidate, don't update latest
     - name: Build and push - New Tag (Release Candidate)
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v5
       if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-rc') }}
       with:
         context: .
@@ -164,7 +164,7 @@ jobs:
 
     # Tagging a proper release, update latest
     - name: Build and push - New Tag
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v5
       if: ${{ startsWith(github.ref, 'refs/tags/v') && ! contains(github.ref, '-rc') }}
       with:
         context: .
