@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"os"
 	"os/exec"
 	"reflect"
 	"runtime"
@@ -1928,21 +1927,11 @@ func routeVIPTrafficToDirector(fwmark string) error {
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 // setupPolicyRoutingForDSR: setups policy routing so that FWMARKed packets are delivered locally
 func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
-	b, err := os.ReadFile("/etc/iproute2/rt_tables")
+	err := utils.RouteTableAdd(customDSRRouteTableID, customDSRRouteTableName)
 	if err != nil {
 		return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
 	}
 
-	if !strings.Contains(string(b), customDSRRouteTableName) {
-		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
-		}
-		defer utils.CloseCloserDisregardError(f)
-		if _, err = f.WriteString(customDSRRouteTableID + " " + customDSRRouteTableName + "\n"); err != nil {
-			return errors.New("Failed to setup policy routing required for DSR due to " + err.Error())
-		}
-	}
 	out, err := exec.Command("ip", "route", "list", "table", customDSRRouteTableID).Output()
 	if err != nil || !strings.Contains(string(out), " lo ") {
 		if err = exec.Command("ip", "route", "add", "local", "default", "dev", "lo", "table",
@@ -1959,20 +1948,9 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR() error {
 // setupRoutesForExternalIPForDSR: setups routing so that kernel does not think return packets as martians
 
 func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap) error {
-	b, err := os.ReadFile("/etc/iproute2/rt_tables")
+	err := utils.RouteTableAdd(externalIPRouteTableID, externalIPRouteTableName)
 	if err != nil {
 		return errors.New("Failed to setup external ip routing table required for DSR due to " + err.Error())
-	}
-
-	if !strings.Contains(string(b), externalIPRouteTableName) {
-		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
-		}
-		defer utils.CloseCloserDisregardError(f)
-		if _, err = f.WriteString(externalIPRouteTableID + " " + externalIPRouteTableName + "\n"); err != nil {
-			return errors.New("Failed setup external ip routing table required for DSR due to " + err.Error())
-		}
 	}
 
 	out, err := exec.Command("ip", "rule", "list").Output()
