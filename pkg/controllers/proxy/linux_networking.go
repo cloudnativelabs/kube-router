@@ -426,20 +426,9 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 // setupPolicyRoutingForDSR: setups policy routing so that FWMARKed packets are delivered locally
 func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) error {
-	b, err := os.ReadFile("/etc/iproute2/rt_tables")
+	err := utils.RouteTableAdd(customDSRRouteTableID, customDSRRouteTableName)
 	if err != nil {
 		return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
-	}
-
-	if !strings.Contains(string(b), customDSRRouteTableName) {
-		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
-		}
-		defer utils.CloseCloserDisregardError(f)
-		if _, err = f.WriteString(customDSRRouteTableID + " " + customDSRRouteTableName + "\n"); err != nil {
-			return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
-		}
 	}
 
 	if setupIPv4 {
@@ -470,20 +459,9 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 
 func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap,
 	setupIPv4, setupIPv6 bool) error {
-	b, err := os.ReadFile("/etc/iproute2/rt_tables")
+	err := utils.RouteTableAdd(externalIPRouteTableID, externalIPRouteTableName)
 	if err != nil {
-		return fmt.Errorf("failed to setup external ip routing table required for DSR due to %v", err)
-	}
-
-	if !strings.Contains(string(b), externalIPRouteTableName) {
-		f, err := os.OpenFile("/etc/iproute2/rt_tables", os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			return fmt.Errorf("failed setup external ip routing table required for DSR due to %v", err)
-		}
-		defer utils.CloseCloserDisregardError(f)
-		if _, err = f.WriteString(externalIPRouteTableID + " " + externalIPRouteTableName + "\n"); err != nil {
-			return fmt.Errorf("failed setup external ip routing table required for DSR due to %v", err)
-		}
+		return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
 	}
 
 	setupIPRulesAndRoutes := func(ipArgs []string) error {
