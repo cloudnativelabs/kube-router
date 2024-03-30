@@ -90,7 +90,7 @@ spec:
       - name: run
         hostPath:
           path: /var/run/docker.sock
-      - name: rt_tables
+      - name: rt-tables
         hostPath:
           path: /etc/iproute2/rt_tables
       ...
@@ -102,7 +102,7 @@ spec:
         - name: run
           mountPath: /var/run/docker.sock
           readOnly: true
-        - name: rt_tables
+        - name: rt-tables
           mountPath: /etc/iproute2/rt_tables
           readOnly: false
 ...
