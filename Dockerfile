@@ -54,9 +54,5 @@ RUN if ! command -v iptables-nft > /dev/null; then \
     fi && \
     /iptables-wrapper-installer.sh --no-sanity-check
 
-# Since alpine image doesn't contain /etc/nsswitch.conf, the hosts in /etc/hosts (e.g. localhost)
-# cannot be used. So manually add /etc/nsswitch.conf to work around this issue.
-RUN echo "hosts: files dns" > /etc/nsswitch.conf
-
 WORKDIR /root
 ENTRYPOINT ["/usr/local/bin/kube-router"]
