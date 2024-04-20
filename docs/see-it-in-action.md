@@ -38,7 +38,7 @@ Demo of Kube-router's iptables based implementaton of network policies
 ## Network Routes Controller
 
 Network routes controller is responsible for reading pod CIDR allocated by controller manager to the node, and
-advertises the routes to the rest of the nodes in the cluster (BGP peers). Use of BGP is transperent to user for basic
+advertises the routes to the rest of the nodes in the cluster (BGP peers). Use of BGP is transparent to user for basic
 pod-to-pod networking.
 
 [![asciicast](https://asciinema.org/a/120885.png)](https://asciinema.org/a/120885)
