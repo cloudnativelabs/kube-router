@@ -1782,6 +1782,16 @@ func (nsc *NetworkServicesController) Cleanup() {
 		handle.Close()
 	}
 
+	// In prep for further steps make sure that ipset and iptables handlers are created
+	if len(nsc.iptablesCmdHandlers) < 1 {
+		// Even though we have a config at this point (via passed param), we want to send nil so that the node will
+		// discover which IP address families it has and act accordingly
+		err = nsc.setupHandlers(nil, nil)
+		if err != nil {
+			klog.Errorf("could not cleanup because we couldn't create iptables/ipset command handlers due to: %v", err)
+		}
+	}
+
 	// cleanup iptables masquerade rule
 	err = nsc.deleteMasqueradeIptablesRule()
 	if err != nil {
@@ -1790,15 +1800,21 @@ func (nsc *NetworkServicesController) Cleanup() {
 	}
 
 	// cleanup iptables hairpin rules
-	err = nsc.deleteHairpinIptablesRules(v1.IPv4Protocol)
-	if err != nil {
-		klog.Errorf("Failed to cleanup iptables hairpin rules: %s", err.Error())
-		return
+	if _, ok := nsc.iptablesCmdHandlers[v1.IPv4Protocol]; ok {
+		klog.Info("Processing IPv4 hairpin rule cleanup")
+		err = nsc.deleteHairpinIptablesRules(v1.IPv4Protocol)
+		if err != nil {
+			klog.Errorf("Failed to cleanup iptables hairpin rules: %s", err.Error())
+			return
+		}
 	}
-	err = nsc.deleteHairpinIptablesRules(v1.IPv6Protocol)
-	if err != nil {
-		klog.Errorf("Failed to cleanup iptables hairpin rules: %s", err.Error())
-		return
+	if _, ok := nsc.iptablesCmdHandlers[v1.IPv6Protocol]; ok {
+		klog.Info("Processing IPv6 hairpin rule cleanup")
+		err = nsc.deleteHairpinIptablesRules(v1.IPv6Protocol)
+		if err != nil {
+			klog.Errorf("Failed to cleanup iptables hairpin rules: %s", err.Error())
+			return
+		}
 	}
 
 	nsc.cleanupIpvsFirewall()
@@ -1927,6 +1943,70 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 	nsc.OnServiceUpdate(service)
 }
 
+// setupHandlers Here we test to see whether the node is IPv6 capable, if the user has enabled IPv6 (via command-line
+// options) and the node has an IPv6 address, the following method will return an IPv6 address
+func (nsc *NetworkServicesController) setupHandlers(config *options.KubeRouterConfig, node *v1.Node) error {
+	// node being nil covers the case where this function is called by something that doesn't have a kube-apiserver
+	// connection like the cleanup code. In this instance we want all possible iptables and ipset handlers
+	if node != nil {
+		nsc.nodeIPv4Addrs, nsc.nodeIPv6Addrs = utils.GetAllNodeIPs(node)
+	}
+
+	// We test for nil configs as the Cleanup() method often doesn't have a valid config in this respect, so rather
+	// than trying to guess options, it is better to just let the logic fallthrough. For the primary path to this func,
+	// NewNetworkServicesController, the config will not be nil and we want to check that we have options that match
+	// the node's capability to ensure sanity later down the road.
+	if config != nil {
+		if config.EnableIPv4 && len(nsc.nodeIPv4Addrs[v1.NodeInternalIP]) < 1 &&
+			len(nsc.nodeIPv4Addrs[v1.NodeExternalIP]) < 1 {
+			return fmt.Errorf("IPv4 was enabled, but no IPv4 address was found on the node")
+		}
+	}
+	nsc.isIPv4Capable = len(nsc.nodeIPv4Addrs) > 0
+	if config != nil {
+		if config.EnableIPv6 && len(nsc.nodeIPv6Addrs[v1.NodeInternalIP]) < 1 &&
+			len(nsc.nodeIPv6Addrs[v1.NodeExternalIP]) < 1 {
+			return fmt.Errorf("IPv6 was enabled, but no IPv6 address was found on the node")
+		}
+	}
+	nsc.isIPv6Capable = len(nsc.nodeIPv6Addrs) > 0
+
+	nsc.ipSetHandlers = make(map[v1.IPFamily]utils.IPSetHandler)
+	nsc.iptablesCmdHandlers = make(map[v1.IPFamily]utils.IPTablesHandler)
+	if node == nil || len(nsc.nodeIPv4Addrs) > 0 {
+		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
+		if err != nil {
+			klog.Fatalf("Failed to allocate IPv4 iptables handler: %v", err)
+			return fmt.Errorf("failed to create iptables handler: %w", err)
+		}
+		nsc.iptablesCmdHandlers[v1.IPv4Protocol] = iptHandler
+
+		ipset, err := utils.NewIPSet(false)
+		if err != nil {
+			klog.Fatalf("Failed to allocate IPv4 ipset handler: %v", err)
+			return fmt.Errorf("failed to create ipset handler: %w", err)
+		}
+		nsc.ipSetHandlers[v1.IPv4Protocol] = ipset
+	}
+	if node == nil || len(nsc.nodeIPv6Addrs) > 0 {
+		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
+		if err != nil {
+			klog.Fatalf("Failed to allocate IPv6 iptables handler: %v", err)
+			return fmt.Errorf("failed to create iptables handler: %w", err)
+		}
+		nsc.iptablesCmdHandlers[v1.IPv6Protocol] = iptHandler
+
+		ipset, err := utils.NewIPSet(true)
+		if err != nil {
+			klog.Fatalf("Failed to allocate IPv6 ipset handler: %v", err)
+			return fmt.Errorf("failed to create ipset handler: %w", err)
+		}
+		nsc.ipSetHandlers[v1.IPv6Protocol] = ipset
+	}
+
+	return nil
+}
+
 // NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
@@ -2021,51 +2101,9 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
-	// Here we test to see whether the node is IPv6 capable, if the user has enabled IPv6 (via command-line options)
-	// and the node has an IPv6 address, the following method will return an IPv6 address
-	nsc.nodeIPv4Addrs, nsc.nodeIPv6Addrs = utils.GetAllNodeIPs(node)
-	if config.EnableIPv4 && len(nsc.nodeIPv4Addrs[v1.NodeInternalIP]) < 1 &&
-		len(nsc.nodeIPv4Addrs[v1.NodeExternalIP]) < 1 {
-		return nil, fmt.Errorf("IPv4 was enabled, but no IPv4 address was found on the node")
-	}
-	nsc.isIPv4Capable = len(nsc.nodeIPv4Addrs) > 0
-	if config.EnableIPv6 && len(nsc.nodeIPv6Addrs[v1.NodeInternalIP]) < 1 &&
-		len(nsc.nodeIPv6Addrs[v1.NodeExternalIP]) < 1 {
-		return nil, fmt.Errorf("IPv6 was enabled, but no IPv6 address was found on the node")
-	}
-	nsc.isIPv6Capable = len(nsc.nodeIPv6Addrs) > 0
-
-	nsc.ipSetHandlers = make(map[v1.IPFamily]utils.IPSetHandler)
-	nsc.iptablesCmdHandlers = make(map[v1.IPFamily]utils.IPTablesHandler)
-	if len(nsc.nodeIPv4Addrs) > 0 {
-		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
-		if err != nil {
-			klog.Fatalf("Failed to allocate IPv4 iptables handler: %v", err)
-			return nil, fmt.Errorf("failed to create iptables handler: %w", err)
-		}
-		nsc.iptablesCmdHandlers[v1.IPv4Protocol] = iptHandler
-
-		ipset, err := utils.NewIPSet(false)
-		if err != nil {
-			klog.Fatalf("Failed to allocate IPv4 ipset handler: %v", err)
-			return nil, fmt.Errorf("failed to create ipset handler: %w", err)
-		}
-		nsc.ipSetHandlers[v1.IPv4Protocol] = ipset
-	}
-	if len(nsc.nodeIPv6Addrs) > 0 {
-		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
-		if err != nil {
-			klog.Fatalf("Failed to allocate IPv6 iptables handler: %v", err)
-			return nil, fmt.Errorf("failed to create iptables handler: %w", err)
-		}
-		nsc.iptablesCmdHandlers[v1.IPv6Protocol] = iptHandler
-
-		ipset, err := utils.NewIPSet(true)
-		if err != nil {
-			klog.Fatalf("Failed to allocate IPv6 ipset handler: %v", err)
-			return nil, fmt.Errorf("failed to create ipset handler: %w", err)
-		}
-		nsc.ipSetHandlers[v1.IPv6Protocol] = ipset
+	err = nsc.setupHandlers(config, node)
+	if err != nil {
+		return nil, err
 	}
 
 	automtu, err := utils.GetMTUFromNodeIP(nsc.primaryIP)

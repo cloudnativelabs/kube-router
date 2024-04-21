@@ -723,6 +723,26 @@ func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[st
 func (npc *NetworkPolicyController) Cleanup() {
 	klog.Info("Cleaning up NetworkPolicyController configurations...")
 
+	if len(npc.iptablesCmdHandlers) < 1 {
+		iptablesCmdHandlers, ipSetHandlers, err := NewIPTablesHandlers(nil)
+		if err != nil {
+			klog.Errorf("unable to get iptables and ipset handlers: %v", err)
+			return
+		}
+		npc.iptablesCmdHandlers = iptablesCmdHandlers
+		npc.ipSetHandlers = ipSetHandlers
+
+		// Make other structures that we rely on
+		npc.iptablesSaveRestore = make(map[v1core.IPFamily]utils.IPTablesSaveRestorer, 2)
+		npc.iptablesSaveRestore[v1core.IPv4Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv4Protocol)
+		npc.iptablesSaveRestore[v1core.IPv6Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv6Protocol)
+		npc.filterTableRules = make(map[v1core.IPFamily]*bytes.Buffer, 2)
+		var buf bytes.Buffer
+		npc.filterTableRules[v1core.IPv4Protocol] = &buf
+		var buf2 bytes.Buffer
+		npc.filterTableRules[v1core.IPv6Protocol] = &buf2
+	}
+
 	var emptySet map[string]bool
 	// Take a dump (iptables-save) of the current filter table for cleanupStaleRules() to work on
 	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
@@ -762,7 +782,7 @@ func NewIPTablesHandlers(config *options.KubeRouterConfig) (
 	iptablesCmdHandlers := make(map[v1core.IPFamily]utils.IPTablesHandler, 2)
 	ipSetHandlers := make(map[v1core.IPFamily]utils.IPSetHandler, 2)
 
-	if config.EnableIPv4 {
+	if config == nil || config.EnableIPv4 {
 		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create iptables handler: %w", err)
@@ -775,7 +795,7 @@ func NewIPTablesHandlers(config *options.KubeRouterConfig) (
 		}
 		ipSetHandlers[v1core.IPv4Protocol] = ipset
 	}
-	if config.EnableIPv6 {
+	if config == nil || config.EnableIPv6 {
 		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create iptables handler: %w", err)
