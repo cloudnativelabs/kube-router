@@ -896,6 +896,17 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 func (nrc *NetworkRoutingController) Cleanup() {
 	klog.Infof("Cleaning up NetworkRoutesController configurations")
 
+	// In prep for further steps make sure that ipset and iptables handlers are created
+	if len(nrc.iptablesCmdHandlers) < 1 {
+		// Even though we have a config at this point (via passed param), we want to send nil so that the node will
+		// discover which IP address families it has and act accordingly
+		err := nrc.setupHandlers(nil)
+		if err != nil {
+			klog.Errorf("could not cleanup because iptables/ipset handlers could not be created due to: %v", err)
+			return
+		}
+	}
+
 	// Pod egress cleanup
 	err := nrc.deletePodEgressRule()
 	if err != nil {
@@ -1359,7 +1370,55 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	return nil
 }
 
-// func (nrc *NetworkRoutingController) getExternalNodeIPs(
+func (nrc *NetworkRoutingController) setupHandlers(node *v1core.Node) error {
+	var err error
+
+	// node being nil covers the case where this function is called by something that doesn't have a kube-apiserver
+	// connection like the cleanup code. In this instance we want all possible iptables and ipset handlers
+	if node != nil {
+		nrc.podIPv4CIDRs, nrc.podIPv6CIDRs, err = utils.GetPodCIDRsFromNodeSpecDualStack(node)
+		if err != nil {
+			klog.Fatalf("Failed to get pod CIDRs from node spec. kube-router relies on kube-controller-manager to"+
+				"allocate pod CIDRs for the node or an annotation `kube-router.io/pod-cidrs`. Error: %v", err)
+			return fmt.Errorf("failed to get pod CIDRs detail from Node.spec: %v", err)
+		}
+	}
+
+	nrc.iptablesCmdHandlers = make(map[v1core.IPFamily]utils.IPTablesHandler)
+	nrc.ipSetHandlers = make(map[v1core.IPFamily]utils.IPSetHandler)
+	if node == nil || len(nrc.nodeIPv4Addrs) > 0 {
+		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
+		if err != nil {
+			klog.Fatalf("Failed to allocate IPv4 iptables handler: %v", err)
+			return fmt.Errorf("failed to create iptables handler: %w", err)
+		}
+		nrc.iptablesCmdHandlers[v1core.IPv4Protocol] = iptHandler
+
+		ipset, err := utils.NewIPSet(false)
+		if err != nil {
+			klog.Fatalf("Failed to allocate IPv4 ipset handler: %v", err)
+			return fmt.Errorf("failed to create ipset handler: %w", err)
+		}
+		nrc.ipSetHandlers[v1core.IPv4Protocol] = ipset
+	}
+	if node == nil || len(nrc.nodeIPv6Addrs) > 0 {
+		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
+		if err != nil {
+			klog.Fatalf("Failed to allocate IPv6 iptables handler: %v", err)
+			return fmt.Errorf("failed to create iptables handler: %w", err)
+		}
+		nrc.iptablesCmdHandlers[v1core.IPv6Protocol] = iptHandler
+
+		ipset, err := utils.NewIPSet(true)
+		if err != nil {
+			klog.Fatalf("Failed to allocate IPv6 ipset handler: %v", err)
+			return fmt.Errorf("failed to create ipset handler: %w", err)
+		}
+		nrc.ipSetHandlers[v1core.IPv6Protocol] = ipset
+	}
+
+	return nil
+}
 
 // NewNetworkRoutingController returns new NetworkRoutingController object
 func NewNetworkRoutingController(clientset kubernetes.Interface,
@@ -1473,44 +1532,9 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 	nrc.podCidr = cidr
 
-	nrc.podIPv4CIDRs, nrc.podIPv6CIDRs, err = utils.GetPodCIDRsFromNodeSpecDualStack(node)
+	err = nrc.setupHandlers(node)
 	if err != nil {
-		klog.Fatalf("Failed to get pod CIDRs from node spec. kube-router relies on kube-controller-manager to"+
-			"allocate pod CIDRs for the node or an annotation `kube-router.io/pod-cidrs`. Error: %v", err)
-		return nil, fmt.Errorf("failed to get pod CIDRs detail from Node.spec: %v", err)
-	}
-
-	nrc.iptablesCmdHandlers = make(map[v1core.IPFamily]utils.IPTablesHandler)
-	nrc.ipSetHandlers = make(map[v1core.IPFamily]utils.IPSetHandler)
-	if len(nrc.nodeIPv4Addrs) > 0 {
-		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
-		if err != nil {
-			klog.Fatalf("Failed to allocate IPv4 iptables handler: %v", err)
-			return nil, fmt.Errorf("failed to create iptables handler: %w", err)
-		}
-		nrc.iptablesCmdHandlers[v1core.IPv4Protocol] = iptHandler
-
-		ipset, err := utils.NewIPSet(false)
-		if err != nil {
-			klog.Fatalf("Failed to allocate IPv4 ipset handler: %v", err)
-			return nil, fmt.Errorf("failed to create ipset handler: %w", err)
-		}
-		nrc.ipSetHandlers[v1core.IPv4Protocol] = ipset
-	}
-	if len(nrc.nodeIPv6Addrs) > 0 {
-		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
-		if err != nil {
-			klog.Fatalf("Failed to allocate IPv6 iptables handler: %v", err)
-			return nil, fmt.Errorf("failed to create iptables handler: %w", err)
-		}
-		nrc.iptablesCmdHandlers[v1core.IPv6Protocol] = iptHandler
-
-		ipset, err := utils.NewIPSet(true)
-		if err != nil {
-			klog.Fatalf("Failed to allocate IPv6 ipset handler: %v", err)
-			return nil, fmt.Errorf("failed to create ipset handler: %w", err)
-		}
-		nrc.ipSetHandlers[v1core.IPv6Protocol] = ipset
+		return nil, err
 	}
 
 	for _, handler := range nrc.ipSetHandlers {
