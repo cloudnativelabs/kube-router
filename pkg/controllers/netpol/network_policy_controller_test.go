@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -754,6 +755,7 @@ func (ips *fakeIPSet) Name(name string) string {
 }
 
 func TestNetworkPolicyController(t *testing.T) {
+	curHostname, _ := os.Hostname()
 	testCases := []tNetPolConfigTestCase{
 		{
 			"Default options are successful",
@@ -765,7 +767,8 @@ func TestNetworkPolicyController(t *testing.T) {
 			"Missing nodename fails appropriately",
 			newMinimalKubeRouterConfig([]string{""}, "", "", nil, nil, false),
 			true,
-			"failed to identify the node by NODE_NAME, hostname or --hostname-override",
+			fmt.Sprintf("failed to identify the node by NODE_NAME, %s or --hostname-override: nodes \"%s\""+
+				" not found", curHostname, curHostname),
 		},
 		{
 			"Test bad cluster CIDR (not properly formatting ip address)",

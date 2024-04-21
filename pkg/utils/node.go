@@ -17,31 +17,33 @@ import (
 
 // GetNodeObject returns the node API object for the node
 func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*apiv1.Node, error) {
+	// if env NODE_NAME is not set and node is not registered with hostname, then use host name override
+	if hostnameOverride != "" {
+		node, err := clientset.CoreV1().Nodes().Get(context.Background(), hostnameOverride, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("unable to get node %s, due to: %v", hostnameOverride, err)
+		}
+		return node, nil
+	}
+
 	// assuming kube-router is running as pod, first check env NODE_NAME
 	nodeName := os.Getenv("NODE_NAME")
 	if nodeName != "" {
 		node, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
-		if err == nil {
-			return node, nil
+		if err != nil {
+			return nil, fmt.Errorf("unable to get node %s, due to: %v", nodeName, err)
 		}
+		return node, nil
 	}
 
 	// if env NODE_NAME is not set then check if node is register with hostname
 	hostName, _ := os.Hostname()
 	node, err := clientset.CoreV1().Nodes().Get(context.Background(), hostName, metav1.GetOptions{})
-	if err == nil {
-		return node, nil
+	if err != nil {
+		return nil, fmt.Errorf("failed to identify the node by NODE_NAME, %s or --hostname-override: %v", hostName, err)
 	}
 
-	// if env NODE_NAME is not set and node is not registered with hostname, then use host name override
-	if hostnameOverride != "" {
-		node, err = clientset.CoreV1().Nodes().Get(context.Background(), hostnameOverride, metav1.GetOptions{})
-		if err == nil {
-			return node, nil
-		}
-	}
-
-	return nil, fmt.Errorf("failed to identify the node by NODE_NAME, hostname or --hostname-override")
+	return node, nil
 }
 
 // GetPrimaryNodeIP returns the most valid external facing IP address for a node.

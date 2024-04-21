@@ -38,7 +38,7 @@ func Test_GetNodeObject(t *testing.T) {
 			nil,
 		},
 		{
-			"node with hostname overrie exists",
+			"node with hostname override exists",
 			"something-else",
 			"test-node",
 			&apiv1.Node{
@@ -50,8 +50,8 @@ func Test_GetNodeObject(t *testing.T) {
 		},
 		{
 			"node with current hostname exists",
-			"something-else",
-			"something-else",
+			"",
+			"",
 			&apiv1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: curHostname,
@@ -68,7 +68,7 @@ func Test_GetNodeObject(t *testing.T) {
 					Name: "another-node",
 				},
 			},
-			errors.New("failed to identify the node by NODE_NAME, hostname or --hostname-override"),
+			errors.New("unable to get node test-node, due to: nodes \"test-node\" not found"),
 		},
 	}
 
