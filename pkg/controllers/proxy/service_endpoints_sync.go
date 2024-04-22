@@ -564,9 +564,13 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 				endpoint.ip, externalIP, err)
 		}
 
-		// add the external IP to a virtual interface inside the pod so that the pod can receive it
-		if err = nsc.addDSRIPInsidePodNetNamespace(externalIP.String(), endpoint.ip); err != nil {
-			return fmt.Errorf("unable to setup DSR receiver inside pod: %v", err)
+		// It's only for local endpoints that we can enter the container's namespace and add DSR receivers inside it.
+		// If we aren't local, then we should skip this step so that we don't accidentally throw an error.
+		if endpoint.isLocal {
+			// add the external IP to a virtual interface inside the pod so that the pod can receive it
+			if err = nsc.addDSRIPInsidePodNetNamespace(externalIP.String(), endpoint.ip); err != nil {
+				return fmt.Errorf("unable to setup DSR receiver inside pod: %v", err)
+			}
 		}
 
 		svcEndpointMap[externalIPServiceID] = append(svcEndpointMap[externalIPServiceID],
