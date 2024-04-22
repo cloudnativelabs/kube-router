@@ -12,6 +12,15 @@ RUN apk add --no-cache make git tar curl \
     && make gobgp \
     && make cni-download
 
+WORKDIR /iptables-wrappers
+# This is the latest commit on the master branch.
+ENV IPTABLES_WRAPPERS_VERSION=f6ef44b2c449cca8f005b32dea9a4b497202dbef
+RUN git clone https://github.com/kubernetes-sigs/iptables-wrappers.git . \
+    && git checkout "${IPTABLES_WRAPPERS_VERSION}" \
+    && make build \
+    && test -x bin/iptables-wrapper \
+    && test -x iptables-wrapper-installer.sh
+
 FROM ${RUNTIME_BASE}
 
 RUN apk add --no-cache \
@@ -39,7 +48,8 @@ COPY --from=builder /build/cni-download /usr/libexec/cni
 # Use iptables-wrappers so that correct version of iptables-legacy or iptables-nft gets used. Alpine contains both, but
 # which version is used should be based on the host system as well as where rules that may have been added before
 # kube-router are being placed. For more information see: https://github.com/kubernetes-sigs/iptables-wrappers
-COPY build/image-assets/iptables-wrapper-installer.sh /
+COPY --from=builder /iptables-wrappers/bin/iptables-wrapper /
+COPY --from=builder /iptables-wrappers/iptables-wrapper-installer.sh /
 # This is necessary because of the bug reported here: https://github.com/flannel-io/flannel/pull/1340/files
 # Basically even under QEMU emulation, it still doesn't have an ARM kernel in-play which means that calls to
 # iptables-nft will fail in the build process. The sanity check here only makes sure that iptables-nft and iptables-legacy
