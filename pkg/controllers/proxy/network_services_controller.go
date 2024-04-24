@@ -289,6 +289,20 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	setSysCtlAndCheckError(utils.IPv4ConfAllArpAnnounce, arpAnnounceUseBestLocalAddress)
 
+	// Ensure rp_filter=2 for DSR capability, see:
+	// * https://access.redhat.com/solutions/53031
+	// * https://github.com/cloudnativelabs/kube-router/pull/1651#issuecomment-2072851683
+	if nsc.isIPv4Capable {
+		sysctlErr := utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "all", 2)
+		if sysctlErr != nil {
+			if sysctlErr.IsFatal() {
+				klog.Fatal(sysctlErr.Error())
+			} else {
+				klog.Error(sysctlErr.Error())
+			}
+		}
+	}
+
 	// https://github.com/cloudnativelabs/kube-router/issues/282
 	err = nsc.setupIpvsFirewall()
 	if err != nil {
