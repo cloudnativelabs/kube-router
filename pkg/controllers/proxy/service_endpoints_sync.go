@@ -476,7 +476,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 
 	dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
 	if err != nil {
-		return errors.New("Failed creating dummy interface: " + err.Error())
+		return errors.New("Failed getting dummy interface: " + err.Error())
 	}
 
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
