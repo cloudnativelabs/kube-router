@@ -207,8 +207,23 @@ kube-router --master=http://192.168.1.99:8080/ --run-firewall=true --run-service
 Please delete kube-router daemonset and then clean up all the configurations done (to ipvs, iptables, ipset, ip routes
 etc) by kube-router on the node by running below command.
 
+### Docker
+
 ```sh
-docker run --privileged --net=host cloudnativelabs/kube-router --cleanup-config
+docker run --privileged --net=host \
+--mount type=bind,source=/lib/modules,target=/lib/modules,readonly \
+--mount type=bind,source=/run/xtables.lock,target=/run/xtables.lock,bind-propagation=rshared \
+cloudnativelabs/kube-router /usr/local/bin/kube-router --cleanup-config
+```
+
+### containerd
+
+```sh
+$ ctr image pull docker.io/cloudnativelabs/kube-router:latest
+$ ctr run --privileged -t --net-host \
+--mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro \
+--mount type=bind,src=/run/xtables.lock,dst=/run/xtables.lock,options=rbind:rw \
+docker.io/cloudnativelabs/kube-router:latest kube-router-cleanup /usr/local/bin/kube-router --cleanup-config
 ```
 
 ## trying kube-router as alternative to kube-proxy
