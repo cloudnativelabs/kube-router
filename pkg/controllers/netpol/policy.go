@@ -474,10 +474,10 @@ func (npc *NetworkPolicyController) appendRuleToPolicyChain(policyChainName, com
 		args = append(args, "-m", "comment", "--comment", "\""+comment+"\"")
 	}
 	if srcIPSetName != "" {
-		args = append(args, "-m", "set", "--match-set", npc.ipSetHandlers[ipFamily].Name(srcIPSetName), "src")
+		args = append(args, "-m", "set", "--match-set", ipSetName(srcIPSetName, ipFamily), "src")
 	}
 	if dstIPSetName != "" {
-		args = append(args, "-m", "set", "--match-set", npc.ipSetHandlers[ipFamily].Name(dstIPSetName), "dst")
+		args = append(args, "-m", "set", "--match-set", ipSetName(dstIPSetName, ipFamily), "dst")
 	}
 	if protocol != "" {
 		args = append(args, "-p", protocol)
