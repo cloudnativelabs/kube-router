@@ -904,13 +904,13 @@ func networkPolicyChainName(namespace, policyName string, version string, ipFami
 func policySourcePodIPSetName(namespace, policyName string, ipFamily api.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + string(ipFamily)))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeSourceIPSetPrefix + encoded[:16]
+	return ipSetName(kubeSourceIPSetPrefix+encoded[:16], ipFamily)
 }
 
 func policyDestinationPodIPSetName(namespace, policyName string, ipFamily api.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + string(ipFamily)))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
+	return ipSetName(kubeDestinationIPSetPrefix+encoded[:16], ipFamily)
 }
 
 func policyIndexedSourcePodIPSetName(
@@ -918,7 +918,7 @@ func policyIndexedSourcePodIPSetName(
 	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
 		string(ipFamily) + "pod"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeSourceIPSetPrefix + encoded[:16]
+	return ipSetName(kubeSourceIPSetPrefix+encoded[:16], ipFamily)
 }
 
 func policyIndexedDestinationPodIPSetName(
@@ -926,7 +926,7 @@ func policyIndexedDestinationPodIPSetName(
 	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
 		string(ipFamily) + "pod"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
+	return ipSetName(kubeDestinationIPSetPrefix+encoded[:16], ipFamily)
 }
 
 func policyIndexedSourceIPBlockIPSetName(
@@ -934,7 +934,7 @@ func policyIndexedSourceIPBlockIPSetName(
 	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
 		string(ipFamily) + "ipblock"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeSourceIPSetPrefix + encoded[:16]
+	return ipSetName(kubeSourceIPSetPrefix+encoded[:16], ipFamily)
 }
 
 func policyIndexedDestinationIPBlockIPSetName(
@@ -942,7 +942,7 @@ func policyIndexedDestinationIPBlockIPSetName(
 	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
 		string(ipFamily) + "ipblock"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
+	return ipSetName(kubeDestinationIPSetPrefix+encoded[:16], ipFamily)
 }
 
 func policyIndexedIngressNamedPortIPSetName(
@@ -950,7 +950,7 @@ func policyIndexedIngressNamedPortIPSetName(
 	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
 		strconv.Itoa(namedPortNo) + string(ipFamily) + "namedport"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
+	return ipSetName(kubeDestinationIPSetPrefix+encoded[:16], ipFamily)
 }
 
 func policyIndexedEgressNamedPortIPSetName(
@@ -958,7 +958,7 @@ func policyIndexedEgressNamedPortIPSetName(
 	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
 		strconv.Itoa(namedPortNo) + string(ipFamily) + "namedport"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
+	return ipSetName(kubeDestinationIPSetPrefix+encoded[:16], ipFamily)
 }
 
 func policyRulePortsHasNamedPort(npPorts []networking.NetworkPolicyPort) bool {
