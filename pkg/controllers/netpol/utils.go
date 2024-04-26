@@ -166,3 +166,11 @@ func getPodIPForFamily(pod podInfo, ipFamily api.IPFamily) (string, error) {
 	return "", fmt.Errorf("did not recognize IP Family for pod: %s:%s family: %s", pod.namespace, pod.name,
 		ipFamily)
 }
+
+func ipSetName(setName string, ipFamily api.IPFamily) string {
+	if ipFamily == api.IPv4Protocol {
+		return utils.IPSetName(setName, false)
+	} else {
+		return utils.IPSetName(setName, true)
+	}
+}

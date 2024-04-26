@@ -427,11 +427,16 @@ func (set *Set) IsActive() (bool, error) {
 	return true, nil
 }
 
-func (ipset *IPSet) Name(setName string) string {
-	if ipset.isIpv6 && !strings.HasPrefix(setName, IPv6SetPrefix+":") {
+// IPSetName returns the proper set name for this component based upon whether or not it is an IPv6 set
+func IPSetName(setName string, isIPv6 bool) string {
+	if isIPv6 && !strings.HasPrefix(setName, IPv6SetPrefix+":") {
 		return fmt.Sprintf("%s:%s", IPv6SetPrefix, setName)
 	}
 	return setName
+}
+
+func (ipset *IPSet) Name(setName string) string {
+	return IPSetName(setName, ipset.isIpv6)
 }
 
 func (set *Set) name() string {
