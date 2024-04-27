@@ -17,6 +17,7 @@ data:
              "type":"bridge",
              "bridge":"kube-bridge",
              "isDefaultGateway":true,
+             "hairpinMode":true,
              "ipam":{
                 "type":"host-local"
              }
