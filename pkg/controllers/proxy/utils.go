@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"net"
@@ -197,7 +198,7 @@ func convertSysCallProtoToSvcProto(sysProtocol uint16) string {
 //     namespace, it doesn't really matter which container we choose here, if this function gets used for something
 //     else in the future, this might have to be re-evaluated)
 func (nsc *NetworkServicesController) findContainerRuntimeReferences(endpointIP string) (string, string, error) {
-	podObj, err := nsc.getPodObjectForEndpoint(endpointIP)
+	podObj, err := nsc.getPodObjectForEndpointIP(endpointIP)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to find endpoint with ip: %s. so skipping preparing endpoint for DSR",
 			endpointIP)
@@ -312,6 +313,18 @@ func (nsc *NetworkServicesController) getPrimaryAndCIDRsByFamily(ipFamily v1.IPF
 	}
 
 	return primaryIP, cidrs
+}
+
+func (nsc *NetworkServicesController) getPodObjectForEndpointIP(endpointIP string) (*v1.Pod, error) {
+	for _, obj := range nsc.podLister.List() {
+		pod := obj.(*v1.Pod)
+		for _, ip := range pod.Status.PodIPs {
+			if strings.Compare(ip.IP, endpointIP) == 0 {
+				return pod, nil
+			}
+		}
+	}
+	return nil, errors.New("Failed to find pod with ip " + endpointIP)
 }
 
 // GetAllClusterIPs returns all of the cluster IPs on a service separated into IPv4 and IPv6 lists

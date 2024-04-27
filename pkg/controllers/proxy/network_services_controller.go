@@ -893,18 +893,6 @@ func hasActiveEndpoints(endpoints []endpointSliceInfo) bool {
 	return false
 }
 
-func (nsc *NetworkServicesController) getPodObjectForEndpoint(endpointIP string) (*v1.Pod, error) {
-	for _, obj := range nsc.podLister.List() {
-		pod := obj.(*v1.Pod)
-		for _, ip := range pod.Status.PodIPs {
-			if strings.Compare(ip.IP, endpointIP) == 0 {
-				return pod, nil
-			}
-		}
-	}
-	return nil, errors.New("Failed to find pod with ip " + endpointIP)
-}
-
 func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 	serviceMap := make(serviceInfoMap)
 	for _, obj := range nsc.svcLister.List() {
