@@ -247,8 +247,10 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	}
 
 	// Run the hairpin controller
-	wg.Add(1)
-	go nsc.hpc.Run(stopCh, wg, healthChan)
+	if nsc.hpc != nil {
+		wg.Add(1)
+		go nsc.hpc.Run(stopCh, wg, healthChan)
+	}
 
 	// enable masquerade rule
 	err = nsc.ensureMasqueradeIptablesRule()
@@ -1324,7 +1326,9 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 				//
 				// Without this change, the return traffic from a client to a service within the same pod will never
 				// make it back into the pod's namespace
-				nsc.hpEndpointReceiver <- ep.ip
+				if nsc.hpc != nil {
+					nsc.hpEndpointReceiver <- ep.ip
+				}
 
 				// Handle ClusterIP Service
 				hairpinRuleFrom(familyClusterIPs, ep.ip, family, svcInfo.port, rulesMap)
@@ -2114,8 +2118,12 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.epSliceLister = epSliceInformer.GetIndexer()
 	nsc.EndpointSliceEventHandler = nsc.newEndpointSliceEventHandler()
 
-	nsc.hpEndpointReceiver = make(chan string)
-	nsc.hpc = NewHairpinController(&nsc, nsc.hpEndpointReceiver)
+	// Not creating the hairpin controller for now because this should be handled at the CNI level. The CNI bridge
+	// plugin ensures that hairpin mode is set much more reliably than we do. However, as a lot of work was put into
+	// the hairpin controller, and so that it is around to reference in the future if needed, I'm leaving the code
+	// for now.
+	// nsc.hpEndpointReceiver = make(chan string)
+	// nsc.hpc = NewHairpinController(&nsc, nsc.hpEndpointReceiver)
 
 	nsc.nphc = NewNodePortHealthCheck()
 
