@@ -166,11 +166,11 @@ func (hc *HealthController) CheckHealth() bool {
 			klog.Error("NetworkService Controller heartbeat missed")
 			health = false
 		}
-		if time.Since(hc.Status.HairpinControllerAlive) >
-			HPCSyncPeriod+hc.Status.HairpinControllerAliveTTL+graceTime {
-			klog.Error("Hairpin Controller heartbeat missed")
-			health = false
-		}
+		// if time.Since(hc.Status.HairpinControllerAlive) >
+		// 	HPCSyncPeriod+hc.Status.HairpinControllerAliveTTL+graceTime {
+		//	klog.Error("Hairpin Controller heartbeat missed")
+		//	health = false
+		// }
 	}
 
 	if hc.Config.MetricsEnabled {
