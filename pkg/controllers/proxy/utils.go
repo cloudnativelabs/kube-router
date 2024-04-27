@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -17,6 +18,8 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"
 )
@@ -325,6 +328,24 @@ func (nsc *NetworkServicesController) getPodObjectForEndpointIP(endpointIP strin
 		}
 	}
 	return nil, errors.New("Failed to find pod with ip " + endpointIP)
+}
+
+func (nsc *NetworkServicesController) getServiceForServiceInfo(svcIn *serviceInfo) (*v1.Service, error) {
+	svc, err := nsc.client.CoreV1().Services(svcIn.namespace).Get(context.Background(), svcIn.name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return svc, err
+}
+
+func (nsc *NetworkServicesController) getPodListForService(svc *v1.Service) (*v1.PodList, error) {
+	lbSet := labels.Set(svc.Spec.Selector)
+	listOpts := metav1.ListOptions{LabelSelector: lbSet.AsSelector().String()}
+	pods, err := nsc.client.CoreV1().Pods(svc.Namespace).List(context.Background(), listOpts)
+	if err != nil {
+		return nil, err
+	}
+	return pods, err
 }
 
 // GetAllClusterIPs returns all of the cluster IPs on a service separated into IPv4 and IPv6 lists
