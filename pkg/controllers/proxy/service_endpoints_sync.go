@@ -457,10 +457,31 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 // For external IPs (which are meant for ingress traffic) configured for DSR, kube-router sets up IPVS services
 // based on FWMARK to enable direct server return functionality. DSR requires a director without a VIP
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html to avoid martian packets
-func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceInfo, externalIP net.IP,
+func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *serviceInfo, externalIP net.IP,
 	endpoints []endpointSliceInfo, svcEndpointMap map[string][]string) error {
+	// Look across all endpoints of the service and see if any of the pods behind this service have hostNetwork: true
+	// set. In this case, we cannot perform DSR, so give a warning and short-circuit.
+	svc, err := nsc.getServiceForServiceInfo(svcIn)
+	if err != nil {
+		return fmt.Errorf("encountered Kubernetes error %v while resolving service info (%s:%s) to service", err,
+			svcIn.namespace, svcIn.name)
+	}
+	pods, err := nsc.getPodListForService(svc)
+	if err != nil {
+		return fmt.Errorf("encountered Kubernetes error %v while resolving service (%s:%s) to a list of pods", err,
+			svc.Namespace, svc.Name)
+	}
+	for _, pod := range pods.Items {
+		if pod.Spec.HostNetwork {
+			klog.Errorf("detected pod (%s:%s) with hostNetwork: true while attempting to setup DSR for service "+
+				"(%s:%s) - DSR does not work with hostNetwork: true pods, skipping!", pod.Namespace, pod.Name,
+				svc.Namespace, svc.Name)
+			return nil
+		}
+	}
+
 	// Get everything we need to get setup to process the external IP
-	protocol := convertSvcProtoToSysCallProto(svc.protocol)
+	protocol := convertSvcProtoToSysCallProto(svcIn.protocol)
 	var nodeIP net.IP
 	var family v1.IPFamily
 	var sysFamily uint16
@@ -484,13 +505,13 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 		return errors.New("Failed get list of IPVS services due to: " + err.Error())
 	}
 
-	fwMark, err := nsc.generateUniqueFWMark(externalIP.String(), svc.protocol, strconv.Itoa(svc.port))
+	fwMark, err := nsc.generateUniqueFWMark(externalIP.String(), svcIn.protocol, strconv.Itoa(svcIn.port))
 	if err != nil {
 		return fmt.Errorf("failed to generate FW mark")
 	}
 
-	ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(ipvsSvcs, fwMark, sysFamily, protocol, uint16(svc.port),
-		svc.sessionAffinity, svc.sessionAffinityTimeoutSeconds, svc.scheduler, svc.flags)
+	ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(ipvsSvcs, fwMark, sysFamily, protocol, uint16(svcIn.port),
+		svcIn.sessionAffinity, svcIn.sessionAffinityTimeoutSeconds, svcIn.scheduler, svcIn.flags)
 	if err != nil {
 		return fmt.Errorf("failed to create IPVS service for FWMark service: %d (external IP: %s) due to: %s",
 			fwMark, externalIP, err.Error())
@@ -499,7 +520,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 	externalIPServiceID := fmt.Sprint(fwMark)
 
 	// ensure there is iptables mangle table rule to FWMARK the packet
-	err = nsc.setupMangleTableRule(externalIP.String(), svc.protocol, strconv.Itoa(svc.port), externalIPServiceID,
+	err = nsc.setupMangleTableRule(externalIP.String(), svcIn.protocol, strconv.Itoa(svcIn.port), externalIPServiceID,
 		nsc.dsrTCPMSS)
 	if err != nil {
 		return fmt.Errorf("failed to setup mangle table rule to forward the traffic to external IP")
@@ -525,7 +546,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 		// 1) Service is not a local service
 		// 2) Service is a local service, but has no active endpoints on this node
 		// 3) Service is a local service, has active endpoints on this node, and this endpoint is one of them
-		if *svc.extTrafficPolicy == v1.ServiceExternalTrafficPolicyLocal && !endpoint.isLocal {
+		if *svcIn.extTrafficPolicy == v1.ServiceExternalTrafficPolicyLocal && !endpoint.isLocal {
 			continue
 		}
 		var syscallINET uint16
@@ -536,14 +557,14 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 		case v1.IPv4Protocol:
 			if eIP.To4() == nil {
 				klog.V(3).Infof("not adding endpoint %s to service %s with VIP %s because families don't "+
-					"match", endpoint.ip, svc.name, externalIP)
+					"match", endpoint.ip, svcIn.name, externalIP)
 				continue
 			}
 			syscallINET = syscall.AF_INET
 		case v1.IPv6Protocol:
 			if eIP.To4() != nil {
 				klog.V(3).Infof("not adding endpoint %s to service %s with VIP %s because families don't "+
-					"match", endpoint.ip, svc.name, externalIP)
+					"match", endpoint.ip, svcIn.name, externalIP)
 				continue
 			}
 			syscallINET = syscall.AF_INET6
