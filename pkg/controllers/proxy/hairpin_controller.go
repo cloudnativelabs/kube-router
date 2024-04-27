@@ -15,6 +15,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// !!!! IMPORTANT !!!! - This code is not currently used
+// Not creating the hairpin controller for now because this should be handled at the CNI level. The CNI bridge
+// plugin ensures that hairpin mode is set much more reliably than we do. However, as a lot of work was put into
+// the hairpin controller, and so that it is around to reference in the future if needed, I'm leaving the code
+// for now.
+
 type hairpinController struct {
 	epC <-chan string
 	nsc *NetworkServicesController
