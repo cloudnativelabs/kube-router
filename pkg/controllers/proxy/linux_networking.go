@@ -96,11 +96,11 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 	if err != nil {
 		if err.Error() != IfaceHasNoAddr {
 			klog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
-				ip, KubeDummyIf, err.Error())
+				ip, iface.Attrs().Name, err.Error())
 			return err
 		} else {
-			klog.Warningf("got an IfaceHasNoAddr error while trying to delete address from netlink: %v (this is not "+
-				"normally bad enough to stop processing)", err)
+			klog.Warningf("got an IfaceHasNoAddr error while trying to delete address %s from netlink %s: %v (this "+
+				"is not normally bad enough to stop processing)", ip, iface.Attrs().Name, err)
 		}
 	}
 
