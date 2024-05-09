@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_buildIPSetRestore(t *testing.T) {
@@ -100,4 +101,72 @@ func Test_scrubInitValFromOptions(t *testing.T) {
 		noInitVal := strings.Split("hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12", " ")
 		assert.Equal(t, desired, scrubInitValFromOptions(noInitVal))
 	})
+}
+
+func Test_parseIPSetSave(t *testing.T) {
+	ipsetSaveText := `
+create inet6:kube-router-local-ips hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x6b804011
+create inet6:kube-router-svip hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x1f794545
+add inet6:kube-router-svip 2001:db8:42:1::423b timeout 0
+add inet6:kube-router-svip 2001:db8:42:1200:: timeout 0
+create inet6:kube-router-svip-prt hash:ip,port family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xdf8a8ddd
+add inet6:kube-router-svip-prt 2001:db8:42:1200::,tcp:5000 timeout 0
+add inet6:kube-router-svip-prt 2001:db8:42:1::423b,tcp:5000 timeout 0
+create KUBE-DST-2FAIIK2E4RIPMTGF hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x331717b4
+add KUBE-DST-2FAIIK2E4RIPMTGF 10.242.1.11 timeout 0
+create inet6:KUBE-DST-I3PRO5XXEERITJZO hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xb7e095a4
+add inet6:KUBE-DST-I3PRO5XXEERITJZO 2001:db8:42:1001::b timeout 0
+`
+	tests := []struct {
+		name  string
+		ipset *IPSet
+		have  string
+		want  map[string][]string
+	}{
+		{
+			name:  "Ensure IPv4 parent only contains IPv4 sets",
+			ipset: &IPSet{isIpv6: false},
+			have:  ipsetSaveText,
+			want: map[string][]string{
+				"KUBE-DST-2FAIIK2E4RIPMTGF": {
+					"10.242.1.11",
+				},
+			},
+		},
+		{
+			name:  "Ensure IPv6 parent only contains IPv6 sets",
+			ipset: &IPSet{isIpv6: true},
+			have:  ipsetSaveText,
+			want: map[string][]string{
+				"inet6:kube-router-local-ips": {},
+				"inet6:kube-router-svip": {
+					"2001:db8:42:1::423b",
+					"2001:db8:42:1200::",
+				},
+				"inet6:kube-router-svip-prt": {
+					"2001:db8:42:1200::,tcp:5000",
+					"2001:db8:42:1::423b,tcp:5000",
+				},
+				"inet6:KUBE-DST-I3PRO5XXEERITJZO": {
+					"2001:db8:42:1001::b",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := parseIPSetSave(tt.ipset, tt.have)
+			require.Len(t, results, len(tt.want), "want and have should be the same length")
+			idx := 0
+			for ipsetName, ipsetEntries := range tt.want {
+				require.Contains(t, results, ipsetName)
+				resEntries := results[ipsetName]
+				for idx2, entry := range ipsetEntries {
+					assert.Equal(t, entry, resEntries.Entries[idx2].Options[0])
+				}
+				idx++
+			}
+		})
+	}
 }
