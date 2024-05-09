@@ -566,7 +566,7 @@ func (ipset *IPSet) Save() error {
 // Send formatted ipset.sets into stdin of "ipset restore" command.
 func (ipset *IPSet) Restore() error {
 	restoreString := buildIPSetRestore(ipset)
-	klog.V(3).Infof("ipset restore looks like: %s", restoreString)
+	klog.V(3).Infof("ipset (ipv6? %t) restore looks like:\n%s", ipset.isIpv6, restoreString)
 	stdin := bytes.NewBufferString(restoreString)
 	err := ipset.runWithStdin(stdin, "restore", "-exist")
 	if err != nil {
