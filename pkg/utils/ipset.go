@@ -449,17 +449,38 @@ func (set *Set) name() string {
 // add KUBE-DST-3YNVZWWGX3UQQ4VQ 100.96.1.6 timeout 0
 func parseIPSetSave(ipset *IPSet, result string) map[string]*Set {
 	sets := make(map[string]*Set)
+
+	// Checks that the parent IPSet family aligns with the ipset that we're saving. This makes ipset.Save() (which is
+	// IP family agnostic) behave a bit more like iptables.Save() which is IP family sensitive since different commands
+	// give access to different IP families.
+	createRelevant := func(pIPSet *IPSet, ipsetName string) bool {
+		if pIPSet.isIpv6 {
+			return strings.HasPrefix(ipsetName, IPv6SetPrefix)
+		}
+		return !strings.HasPrefix(ipsetName, IPv6SetPrefix)
+	}
+
 	// Save is always in order
 	lines := strings.Split(result, "\n")
+	skipTilNextCreate := false
 	for _, line := range lines {
 		content := strings.Split(line, " ")
-		if content[0] == "create" {
+		switch stmtType := content[0]; stmtType {
+		case "create":
+			if !createRelevant(ipset, content[1]) {
+				skipTilNextCreate = true
+				continue
+			}
+			skipTilNextCreate = false
 			sets[content[1]] = &Set{
 				Parent:  ipset,
 				Name:    content[1],
 				Options: scrubInitValFromOptions(content[2:]),
 			}
-		} else if content[0] == "add" {
+		case "add":
+			if skipTilNextCreate {
+				continue
+			}
 			set := sets[content[1]]
 			set.Entries = append(set.Entries, &Entry{
 				Set:     set,
