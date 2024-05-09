@@ -684,28 +684,16 @@ func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[st
 		}()
 	}
 
-	for ipFamily, ipsets := range npc.ipSetHandlers {
+	for _, ipsets := range npc.ipSetHandlers {
 		cleanupPolicyIPSets := make([]*utils.Set, 0)
-
 		if err := ipsets.Save(); err != nil {
 			klog.Fatalf("failed to initialize ipsets command executor due to %s", err.Error())
 		}
-		if ipFamily == v1core.IPv6Protocol {
-			for _, set := range ipsets.Sets() {
-				if strings.HasPrefix(set.Name, fmt.Sprintf("%s:%s", utils.FamillyInet6, kubeSourceIPSetPrefix)) ||
-					strings.HasPrefix(set.Name, fmt.Sprintf("%s:%s", utils.FamillyInet6, kubeDestinationIPSetPrefix)) {
-					if _, ok := activePolicyIPSets[set.Name]; !ok {
-						cleanupPolicyIPSets = append(cleanupPolicyIPSets, set)
-					}
-				}
-			}
-		} else {
-			for _, set := range ipsets.Sets() {
-				if strings.HasPrefix(set.Name, kubeSourceIPSetPrefix) ||
-					strings.HasPrefix(set.Name, kubeDestinationIPSetPrefix) {
-					if _, ok := activePolicyIPSets[set.Name]; !ok {
-						cleanupPolicyIPSets = append(cleanupPolicyIPSets, set)
-					}
+		for _, set := range ipsets.Sets() {
+			if set.HasPrefix(kubeSourceIPSetPrefix) ||
+				set.HasPrefix(kubeDestinationIPSetPrefix) {
+				if _, ok := activePolicyIPSets[set.Name]; !ok {
+					cleanupPolicyIPSets = append(cleanupPolicyIPSets, set)
 				}
 			}
 		}
