@@ -226,6 +226,22 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
 
+	for ipFamily := range npc.ipSetHandlers {
+		// Ensure that we start with clean handlers that don't contain previous save data
+		var err error
+		//nolint:exhaustive // we don't need a default condition here because we control this ourselves
+		switch ipFamily {
+		case v1core.IPv4Protocol:
+			npc.ipSetHandlers[ipFamily], err = utils.NewIPSet(false)
+		case v1core.IPv6Protocol:
+			npc.ipSetHandlers[ipFamily], err = utils.NewIPSet(true)
+		}
+		if err != nil {
+			klog.Errorf("failed to create ipset handler: %v", err)
+			return
+		}
+	}
+
 	healthcheck.SendHeartBeat(npc.healthChan, "NPC")
 	start := time.Now()
 	syncVersion := strconv.FormatInt(start.UnixNano(), syncVersionBase)
