@@ -439,6 +439,11 @@ func (ipset *IPSet) Name(setName string) string {
 	return IPSetName(setName, ipset.isIpv6)
 }
 
+func (set *Set) HasPrefix(prefix string) bool {
+	fullPrefix := IPSetName(prefix, set.Parent.isIpv6)
+	return strings.HasPrefix(set.name(), fullPrefix)
+}
+
 func (set *Set) name() string {
 	return set.Parent.Name(set.Name)
 }
