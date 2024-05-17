@@ -351,10 +351,11 @@ information see the section above.
 
 ## Load balancing Scheduling Algorithms
 
-Kube-router uses LVS for service proxy. LVS support rich set of
-[scheduling alogirthms](http://kb.linuxvirtualserver.org/wiki/IPVS#Job_Scheduling_Algorithms). You can annotate
-the service to choose one of the scheduling alogirthms. When a service is not annotated `round-robin` scheduler is
-selected by default
+Kube-router uses LVS for service proxy. LVS supports a rich set of [scheduling
+algorithms](https://en.wikipedia.org/wiki/Linux_Virtual_Server#Schedulers). The
+scheduling algorithm for a service is configured by means of annotations. The
+`round-robin` scheduler is used by default when a service is lacks the
+scheduler annotation.
 
 ```sh
 #For least connection scheduling use:
@@ -368,6 +369,17 @@ $ kubectl annotate service my-service "kube-router.io/service.scheduler=sh"
 
 #For destination hashing scheduling use:
 $ kubectl annotate service my-service "kube-router.io/service.scheduler=dh"
+
+#For maglev scheduling use:
+$ kubectl annotate service my-service "kube-router.io/service.scheduler=mh"
+
+# The maglev scheduler can be further tuned with additional options.
+#To use the maglev scheduler's fallback option use:
+$ kubectl annotate service my-service "kube-router.io/service.schedFlags=flag-1"
+#To use the maglev scheduler's port option use:
+$ kubectl annotate service my-service "kube-router.io/service.schedFlags=flag-2"
+#To use the maglev scheduler's port and fallback option use:
+$ kubectl annotate service my-service "kube-router.io/service.schedFlags=flag-1,flag-2"
 ```
 
 ## HostPort support
