@@ -1631,7 +1631,7 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 	// setup iptables rule TCPMSS for DSR mode to fix mtu problem
 	// only reply packets from PODs are altered here
 	if protocol == tcpProtocol {
-		mtuArgs := []string{"-s", ip, "-m", tcpProtocol, "-p", tcpProtocol, "--sport", port,
+		mtuArgs := []string{"-s", ip, "-m", tcpProtocol, "-p", tcpProtocol, "--sport", port, "-i", "kube-bridge",
 			"--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", strconv.Itoa(tcpMSS)}
 		err = iptablesCmdHandler.AppendUnique("mangle", "PREROUTING", mtuArgs...)
 		if err != nil {
@@ -1679,7 +1679,7 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 	// cleanup iptables rule TCPMSS
 	// only reply packets from PODs are altered here
 	if protocol == tcpProtocol {
-		mtuArgs := []string{"-s", ip, "-m", tcpProtocol, "-p", tcpProtocol, "--sport", port,
+		mtuArgs := []string{"-s", ip, "-m", tcpProtocol, "-p", tcpProtocol, "--sport", port, "-i", "kube-bridge",
 			"--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", strconv.Itoa(tcpMSS)}
 		exists, err = iptablesCmdHandler.Exists("mangle", "PREROUTING", mtuArgs...)
 		if err != nil {
