@@ -375,11 +375,11 @@ $ kubectl annotate service my-service "kube-router.io/service.scheduler=mh"
 
 # The maglev scheduler can be further tuned with additional options.
 #To use the maglev scheduler's fallback option use:
-$ kubectl annotate service my-service "kube-router.io/service.schedFlags=flag-1"
+$ kubectl annotate service my-service "kube-router.io/service.schedflags=flag-1"
 #To use the maglev scheduler's port option use:
-$ kubectl annotate service my-service "kube-router.io/service.schedFlags=flag-2"
+$ kubectl annotate service my-service "kube-router.io/service.schedflags=flag-2"
 #To use the maglev scheduler's port and fallback option use:
-$ kubectl annotate service my-service "kube-router.io/service.schedFlags=flag-1,flag-2"
+$ kubectl annotate service my-service "kube-router.io/service.schedflags=flag-1,flag-2"
 ```
 
 ## HostPort support
