@@ -1639,6 +1639,26 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 		}
 	}
 
+	// Previous versions of MTU args were this way, we will clean then up for the next couple of versions to ensure
+	// that old mangle table rules don't stick around
+	// TODO: remove after v2.4.X or above
+	for firstArg, chain := range map[string]string{"-s": "POSTROUTING", "-d": "PREROUTING"} {
+		prevMTUArgs := []string{firstArg, ip, "-m", tcpProtocol, "-p", tcpProtocol, "--tcp-flags", "SYN,RST", "SYN",
+			"-j", "TCPMSS", "--set-mss", strconv.Itoa(tcpMSS)}
+		klog.V(2).Infof("looking for mangle rule with: %s -t mangle %s", chain, prevMTUArgs)
+		exists, err := iptablesCmdHandler.Exists("mangle", chain, prevMTUArgs...)
+		if err != nil {
+			return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
+		}
+		if exists {
+			klog.V(2).Infof("removing mangle rule with: iptables -D %s -t mangle %s", chain, prevMTUArgs)
+			err = iptablesCmdHandler.Delete("mangle", chain, prevMTUArgs...)
+			if err != nil {
+				return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1688,26 +1708,6 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 		if exists {
 			klog.V(2).Infof("removing mangle rule with: iptables -D PREROUTING -t mangle %s", args)
 			err = iptablesCmdHandler.Delete("mangle", "PREROUTING", mtuArgs...)
-			if err != nil {
-				return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
-			}
-		}
-	}
-
-	// Previous versions of MTU args were this way, we will clean then up for the next couple of versions to ensure
-	// that old mangle table rules don't stick around
-	// TODO: remove after v2.4.X or above
-	for firstArg, chain := range map[string]string{"-s": "POSTROUTING", "-d": "PREROUTING"} {
-		prevMTUArgs := []string{firstArg, ip, "-m", tcpProtocol, "-p", tcpProtocol, "--tcp-flags", "SYN,RST", "SYN",
-			"-j", "TCPMSS", "--set-mss", strconv.Itoa(tcpMSS)}
-		klog.V(2).Infof("looking for mangle rule with: %s -t mangle %s", chain, prevMTUArgs)
-		exists, err = iptablesCmdHandler.Exists("mangle", chain, prevMTUArgs...)
-		if err != nil {
-			return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
-		}
-		if exists {
-			klog.V(2).Infof("removing mangle rule with: iptables -D %s -t mangle %s", chain, prevMTUArgs)
-			err = iptablesCmdHandler.Delete("mangle", chain, prevMTUArgs...)
 			if err != nil {
 				return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
 			}
