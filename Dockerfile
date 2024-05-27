@@ -25,7 +25,6 @@ FROM ${RUNTIME_BASE}
 
 RUN apk add --no-cache \
       iptables \
-      iptables-legacy \
       ipset \
       iproute2 \
       ipvsadm \
