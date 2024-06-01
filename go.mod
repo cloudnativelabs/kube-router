@@ -4,7 +4,7 @@ require (
 	github.com/aws/aws-sdk-go v1.51.32
 	github.com/coreos/go-iptables v0.7.0
 	github.com/docker/docker v25.0.5+incompatible
-	github.com/hashicorp/go-version v1.6.0
+	github.com/hashicorp/go-version v1.7.0
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.32.0
