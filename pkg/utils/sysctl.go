@@ -15,6 +15,7 @@ const (
 	IPv4IPVSConnReuseMode    = "net/ipv4/vs/conn_reuse_mode"
 	IPv4ConfAllArpIgnore     = "net/ipv4/conf/all/arp_ignore"
 	IPv4ConfAllArpAnnounce   = "net/ipv4/conf/all/arp_announce"
+	IPv6ConfAllDisableIPv6   = "net/ipv6/conf/all/disable_ipv6"
 
 	// Network Routes Configuration Paths
 	BridgeNFCallIPTables  = "net/bridge/bridge-nf-call-iptables"

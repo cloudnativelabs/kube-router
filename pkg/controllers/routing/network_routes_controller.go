@@ -1494,6 +1494,14 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 	nrc.isIPv6Capable = len(nrc.nodeIPv6Addrs) > 0
 
+	if kubeRouterConfig.EnableIPv6 {
+		sysctlErr := utils.SetSysctl(utils.IPv6ConfAllDisableIPv6, 0)
+		if sysctlErr != nil {
+			klog.Errorf("Failed to set /proc/sys/net/ipv6/conf/all/disable_ipv6. IPv6 may "+
+				"not work: %s", sysctlErr.Error())
+		}
+	}
+
 	switch {
 	case kubeRouterConfig.RouterID == "generate":
 		h := fnv.New32a()
