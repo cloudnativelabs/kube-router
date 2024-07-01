@@ -454,7 +454,7 @@ func hairpinRuleFrom(serviceIPs []net.IP, endpointIP string, endpointFamily v1.I
 	}
 
 	for _, svcIP := range serviceIPs {
-		ruleArgs := []string{"-s", endpointIP + "/32", "-d", endpointIP + vipSubnet,
+		ruleArgs := []string{"-s", endpointIP + vipSubnet, "-d", endpointIP + vipSubnet,
 			"-m", "ipvs", "--vaddr", svcIP.String(), "--vport", strconv.Itoa(servicePort),
 			"-j", "SNAT", "--to-source", svcIP.String()}
 
