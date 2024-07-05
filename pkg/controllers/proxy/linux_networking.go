@@ -18,6 +18,7 @@ import (
 	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 	"k8s.io/klog/v2"
 )
 
@@ -129,6 +130,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
 	var netMask net.IPMask
 	var ipRouteCmdArgs []string
+	var isIPv6 bool
 	parsedIP := net.ParseIP(ip)
 	parsedNodeIP := net.ParseIP(nodeIP)
 	if parsedIP.To4() != nil {
@@ -139,6 +141,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 
 		netMask = net.CIDRMask(ipv4NetMaskBits, ipv4NetMaskBits)
 		ipRouteCmdArgs = make([]string, 0)
+		isIPv6 = false
 	} else {
 		// If we're supposed to add a route and the IP family of the NodeIP and the VIP IP don't match, we can't proceed
 		if addRoute && parsedNodeIP.To4() != nil {
@@ -147,6 +150,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 
 		netMask = net.CIDRMask(ipv6NetMaskBits, ipv6NetMaskBits)
 		ipRouteCmdArgs = []string{"-6"}
+		isIPv6 = true
 	}
 
 	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: parsedIP, Mask: netMask}, Scope: syscall.RT_SCOPE_LINK}
@@ -175,6 +179,33 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 		klog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s",
 			ip, KubeDummyIf, err, out)
 		return err
+	}
+
+	// IPv6 address adds in iproute2 appear to create some misc routes that will interfere with the source routing that
+	// we attempt to do below and cuased the issue commented on above. We need to remove those before we attempt to
+	// create the source route below. See: https://github.com/cloudnativelabs/kube-router/issues/1698
+	if isIPv6 {
+		nRoute := &netlink.Route{
+			Dst:   &net.IPNet{IP: parsedIP, Mask: netMask},
+			Table: unix.RT_TABLE_UNSPEC,
+		}
+		routes, err := netlink.RouteListFiltered(netlink.FAMILY_V6, nRoute,
+			netlink.RT_FILTER_DST|netlink.RT_FILTER_TABLE)
+		if err != nil {
+			klog.Errorf("failed to list routes for interface %s: %v", iface.Attrs().Name, err)
+			return err
+		}
+		for idx, route := range routes {
+			klog.V(1).Infof("Checking route %s for interface %s...", route, iface.Attrs().Name)
+			// Looking for routes where the destination matches our VIP AND the source is either nil or not the node IP
+			if route.Src == nil || !route.Src.Equal(parsedNodeIP) {
+				klog.V(1).Infof("Deleting route %s for interface %s...", route, iface.Attrs().Name)
+				err = netlink.RouteDel(&routes[idx])
+				if err != nil {
+					klog.Errorf("failed to delete route %s for interface %s: %v", route, iface.Attrs().Name, err)
+				}
+			}
+		}
 	}
 
 	return nil
