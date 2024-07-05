@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -601,14 +600,6 @@ func getIPVSFirewallInputChainRule(family v1.IPFamily) []string {
 		"-m", "comment", "--comment", "handle traffic to IPVS service IPs in custom chain",
 		"-m", "set", "--match-set", getIPSetName(serviceIPsIPSetName, family), "dst",
 		"-j", ipvsFirewallChainName}
-}
-
-// runIPCommandsWithArgs extend the exec.Command interface to allow passing an additional array of arguments to ip
-func runIPCommandsWithArgs(ipArgs []string, additionalArgs ...string) *exec.Cmd {
-	var allArgs []string
-	allArgs = append(allArgs, ipArgs...)
-	allArgs = append(allArgs, additionalArgs...)
-	return exec.Command("ip", allArgs...)
 }
 
 // getLabelFromMap checks the list of passed labels for the service.kubernetes.io/service-proxy-name
