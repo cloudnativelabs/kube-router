@@ -165,3 +165,59 @@ func TestNetworkServicesController_getLabelFromMap(t *testing.T) {
 		assert.Nil(t, err, "error should be nil when the label exists")
 	})
 }
+
+func TestIsValidKubeRouterServiceArtifact(t *testing.T) {
+	// Mock data
+	service1 := &serviceInfo{
+		clusterIPs:      []string{"10.0.0.1"},
+		externalIPs:     []string{"192.168.1.1"},
+		loadBalancerIPs: []string{"172.16.0.1"},
+		nodePort:        30000,
+	}
+	service2 := &serviceInfo{
+		clusterIPs:      []string{"10.0.0.2"},
+		externalIPs:     []string{"192.168.1.2"},
+		loadBalancerIPs: []string{"172.16.0.2"},
+		nodePort:        30001,
+	}
+	service3 := &serviceInfo{
+		clusterIPs:      []string{"10.0.0.3"},
+		externalIPs:     []string{"192.168.1.3"},
+		loadBalancerIPs: []string{"172.16.0.3"},
+	}
+
+	nsc := &NetworkServicesController{
+		serviceMap: map[string]*serviceInfo{
+			"service1": service1,
+			"service2": service2,
+			"service3": service3,
+		},
+		nodeportBindOnAllIP: false,
+		primaryIP:           net.ParseIP("192.168.1.10"),
+	}
+
+	tests := []struct {
+		address  net.IP
+		port     int
+		expected bool
+		err      error
+	}{
+		{net.ParseIP("10.0.0.1"), 0, true, nil},
+		{net.ParseIP("192.168.1.1"), 0, true, nil},
+		{net.ParseIP("172.16.0.1"), 0, true, nil},
+		{net.ParseIP("10.0.0.2"), 0, true, nil},
+		{net.ParseIP("192.168.1.2"), 0, true, nil},
+		{net.ParseIP("172.16.0.2"), 0, true, nil},
+		{net.ParseIP("192.168.1.10"), 30000, true, nil},
+		{net.ParseIP("192.168.1.10"), 30001, true, nil},
+		{net.ParseIP("192.168.1.4"), 0, false, fmt.Errorf("service not found for address 192.168.1.4")},
+		{net.ParseIP("192.168.1.10"), 0, false, fmt.Errorf("service not found for address 192.168.1.10")},
+	}
+
+	for _, test := range tests {
+		result, err := nsc.isValidKubeRouterServiceArtifact(test.address, test.port)
+		if result != test.expected || (err != nil && err.Error() != test.err.Error()) {
+			t.Errorf("lookupServiceByAddress(%v) = %v, %v; want %v, %v", test.address, result, err, test.expected, test.err)
+		}
+	}
+}
