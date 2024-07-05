@@ -122,6 +122,50 @@ func (nsc *NetworkServicesController) lookupServiceByFWMark(fwMark uint32) (stri
 	return serviceKeySplit[0], serviceKeySplit[1], int(port), nil
 }
 
+// isValidKubeRouterServiceArtifact looks up a service by its clusterIP, externalIP, or loadBalancerIP. It returns
+// truthy
+func (nsc *NetworkServicesController) isValidKubeRouterServiceArtifact(address net.IP, nodePort int) (bool, error) {
+	for _, svc := range nsc.serviceMap {
+		for _, clIP := range svc.clusterIPs {
+			if net.ParseIP(clIP).Equal(address) {
+				return true, nil
+			}
+		}
+		for _, exIP := range svc.externalIPs {
+			if net.ParseIP(exIP).Equal(address) {
+				return true, nil
+			}
+		}
+		for _, lbIP := range svc.loadBalancerIPs {
+			if net.ParseIP(lbIP).Equal(address) {
+				return true, nil
+			}
+		}
+		if nodePort != 0 && svc.nodePort == nodePort {
+			if nsc.nodeportBindOnAllIP {
+				addrMap, err := getAllLocalIPs()
+				if err != nil {
+					return false, fmt.Errorf("failed to get all local IPs: %v", err)
+				}
+				var addresses []net.IP
+				if address.To4() != nil {
+					addresses = addrMap[v1.IPv4Protocol]
+				} else {
+					addresses = addrMap[v1.IPv6Protocol]
+				}
+				for _, addr := range addresses {
+					if addr.Equal(address) {
+						return true, nil
+					}
+				}
+			} else if address.Equal(nsc.primaryIP) {
+				return true, nil
+			}
+		}
+	}
+	return false, fmt.Errorf("service not found for address %s", address.String())
+}
+
 // unsortedListsEquivalent compares two lists of endpointsInfo and considers them the same if they contains the same
 // contents regardless of order. Returns true if both lists contain the same contents.
 func unsortedListsEquivalent(a, b []endpointSliceInfo) bool {
