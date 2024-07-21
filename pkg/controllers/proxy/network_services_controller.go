@@ -2115,6 +2115,11 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
+	// This function is responsible for quite a bit:
+	// * Sets nsc.nodeIPv4Addrs & nsc.isIPv4Capable
+	// * Sets nsc.nodeIPv6Addr & nsc.isIPv6Capable
+	// * Creates the iptables handlers for ipv4 & ipv6
+	// * Creates the ipset handlers for ipv4 & ipv6
 	err = nsc.setupHandlers(config, node)
 	if err != nil {
 		return nil, err
