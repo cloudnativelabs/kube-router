@@ -563,7 +563,7 @@ func getAllLocalIPs() (map[v1.IPFamily][]net.IP, error) {
 			continue
 		}
 
-		linkAddrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
+		linkAddrs, err := netlink.AddrList(link, netlink.FAMILY_ALL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get IPs for interface: %v", err)
 		}
