@@ -15,11 +15,11 @@ on:
     - prep-v[1-9].*
 
 env:
-  BUILDTIME_BASE: "golang:1.21.7-alpine3.18"
+  BUILDTIME_BASE: "golang:1.22.3-alpine3.18"
   # Do not bump past Alpine 3.18 until upstream netfilter problems in iptables v1.8.10 are resolved. See:
   # https://github.com/cloudnativelabs/kube-router/issues/1676
   RUNTIME_BASE: "alpine:3.18"
-  GO_VERSION: "~1.21.7"
+  GO_VERSION: "~1.22.3"
   GO_CACHE: "/home/runner/.cache/go-build"
   GO_MOD_CACHE: "/home/runner/go/pkg/mod"
 
