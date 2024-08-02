@@ -473,47 +473,24 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		var comment string
 		var args []string
 		var exists bool
-		var icmpProto string
-		var icmpType string
 		var icmpRejectType string
-
 		//nolint:exhaustive // we don't need exhaustive searching for IP Families
 		switch family {
 		case v1.IPv4Protocol:
-			icmpProto = "icmp"
-			icmpType = "--icmp-type"
 			icmpRejectType = "icmp-port-unreachable"
 		case v1.IPv6Protocol:
-			icmpProto = "ipv6-icmp"
-			icmpType = "--icmpv6-type"
 			icmpRejectType = "icmp6-port-unreachable"
 		}
 
-		// Allow various types of ICMP that are important for routing
-		comment = "allow icmp echo requests to service IPs"
-		args = []string{"-m", "comment", "--comment", comment, "-p", icmpProto, icmpType, "echo-request",
-			"-j", "ACCEPT"}
-		err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
-		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
-		}
-
-		comment = "allow icmp ttl exceeded messages to service IPs"
-		args = []string{"-m", "comment", "--comment", comment, "-p", icmpProto, icmpType, "time-exceeded",
-			"-j", "ACCEPT"}
-		err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
-		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
-		}
-
-		// destination-unreachable here is also responsible for handling / allowing
-		// PMTU (https://en.wikipedia.org/wiki/Path_MTU_Discovery) responses
-		comment = "allow icmp destination unreachable messages to service IPs"
-		args = []string{"-m", "comment", "--comment", comment, "-p", icmpProto, icmpType, "destination-unreachable",
-			"-j", "ACCEPT"}
-		err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
-		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
+		// Add common IPv4/IPv6 ICMP rules to the default network policy chain to ensure that pods communicate properly
+		icmpRules := utils.CommonICMPRules(family)
+		for _, icmpRule := range icmpRules {
+			icmpArgs := []string{"-m", "comment", "--comment", icmpRule.Comment, "-p", icmpRule.IPTablesProto,
+				icmpRule.IPTablesType, icmpRule.ICMPType, "-j", "ACCEPT"}
+			err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, icmpArgs...)
+			if err != nil {
+				return fmt.Errorf("failed to run iptables command: %v", err)
+			}
 		}
 
 		// Get into specific service specific allowances

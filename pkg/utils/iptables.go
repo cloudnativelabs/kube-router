@@ -14,6 +14,13 @@ import (
 
 var hasWait bool
 
+const (
+	ICMPv4Proto = "icmp"
+	ICMPv4Type  = "--icmp-type"
+	ICMPv6Proto = "ipv6-icmp"
+	ICMPv6Type  = "--icmpv6-type"
+)
+
 // IPTablesHandler interface based on the IPTables struct from github.com/coreos/go-iptables
 // which allows to mock it.
 type IPTablesHandler interface {
@@ -41,6 +48,13 @@ type IPTablesHandler interface {
 	ChangePolicy(table, chain, target string) error
 	HasRandomFully() bool
 	GetIptablesVersion() (int, int, int)
+}
+
+type ICMPRule struct {
+	IPTablesProto string
+	IPTablesType  string
+	ICMPType      string
+	Comment       string
 }
 
 //nolint:gochecknoinits // This is actually a good usage of the init() function
@@ -180,4 +194,30 @@ func (i *IPTablesSaveRestore) Restore(table string, data []byte) error {
 		args = []string{"-T", table}
 	}
 	return i.exec(i.restoreCmd, args, data, nil)
+}
+
+// CommonICMPRules returns a list of common ICMP rules that should always be allowed for given IP family
+func CommonICMPRules(family v1core.IPFamily) []ICMPRule {
+	// Allow various types of ICMP that are important for routing
+	// This first block applies to both IPv4 and IPv6 type rules
+	icmpRules := []ICMPRule{
+		{ICMPv4Proto, ICMPv4Type, "echo-request", "allow icmp echo requests"},
+		// destination-unreachable here is also responsible for handling / allowing PMTU
+		// (https://en.wikipedia.org/wiki/Path_MTU_Discovery) responses
+		{ICMPv4Proto, ICMPv4Type, "destination-unreachable", "allow icmp destination unreachable messages"},
+		{ICMPv4Proto, ICMPv4Type, "time-exceeded", "allow icmp time exceeded messages"},
+	}
+
+	if family == v1core.IPv6Protocol {
+		// Neighbor discovery packets are especially crucial here as without them pods will not communicate properly
+		// over IPv6. Neighbor discovery packets are essentially like ARP for IPv4 which was always allowed under.
+		// previous kube-router versions.
+		icmpRules = append(icmpRules, []ICMPRule{
+			{ICMPv6Proto, ICMPv6Type, "neighbor-solicitation", "allow icmp neighbor solicitation messages"},
+			{ICMPv6Proto, ICMPv6Type, "neighbor-advertisement", "allow icmp neighbor advertisement messages"},
+			{ICMPv6Proto, ICMPv6Type, "echo-reply", "allow icmp echo reply messages"},
+		}...)
+	}
+
+	return icmpRules
 }

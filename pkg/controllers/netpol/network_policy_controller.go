@@ -581,12 +581,7 @@ func (npc *NetworkPolicyController) ensureExplicitAccept() {
 
 // Creates custom chains KUBE-NWPLCY-DEFAULT
 func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
-	for _, iptablesCmdHandler := range npc.iptablesCmdHandlers {
-		markArgs := make([]string, 0)
-		markComment := "rule to mark traffic matching a network policy"
-		markArgs = append(markArgs, "-j", "MARK", "-m", "comment", "--comment", markComment,
-			"--set-xmark", "0x10000/0x10000")
-
+	for family, iptablesCmdHandler := range npc.iptablesCmdHandlers {
 		exists, err := iptablesCmdHandler.ChainExists("filter", kubeDefaultNetpolChain)
 		if err != nil {
 			klog.Fatalf("failed to check for the existence of chain %s, error: %v", kubeDefaultNetpolChain, err)
@@ -598,6 +593,24 @@ func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
 					kubeDefaultNetpolChain, err.Error())
 			}
 		}
+
+		// Add common IPv4/IPv6 ICMP rules to the default network policy chain to ensure that pods communicate properly
+		icmpRules := utils.CommonICMPRules(family)
+		for _, icmpRule := range icmpRules {
+			icmpArgs := []string{"-m", "comment", "--comment", icmpRule.Comment, "-p", icmpRule.IPTablesProto,
+				icmpRule.IPTablesType, icmpRule.ICMPType, "-j", "ACCEPT"}
+			err = iptablesCmdHandler.AppendUnique("filter", kubeDefaultNetpolChain, icmpArgs...)
+			if err != nil {
+				klog.Fatalf("failed to run iptables command: %v", err)
+			}
+		}
+
+		// Start off by marking traffic with an invalid mark so that we can allow list only traffic accepted by a
+		// matching policy. Anything that still has 0x10000
+		markArgs := make([]string, 0)
+		markComment := "rule to mark traffic matching a network policy"
+		markArgs = append(markArgs, "-j", "MARK", "-m", "comment", "--comment", markComment,
+			"--set-xmark", "0x10000/0x10000")
 		err = iptablesCmdHandler.AppendUnique("filter", kubeDefaultNetpolChain, markArgs...)
 		if err != nil {
 			klog.Fatalf("Failed to run iptables command: %s", err.Error())
