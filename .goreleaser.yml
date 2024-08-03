@@ -1,4 +1,5 @@
 ---
+version: 2
 release:
   draft: true
   prerelease: auto

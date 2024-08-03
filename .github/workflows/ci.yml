@@ -196,9 +196,10 @@ jobs:
       id: go
 
     - name: Run GoReleaser
-      uses: goreleaser/goreleaser-action@v5
+      uses: goreleaser/goreleaser-action@v6
       with:
-        version: latest
+        version: "~> v2"
+        distribution: goreleaser
         args: release --clean
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
