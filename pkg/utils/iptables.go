@@ -200,12 +200,22 @@ func (i *IPTablesSaveRestore) Restore(table string, data []byte) error {
 func CommonICMPRules(family v1core.IPFamily) []ICMPRule {
 	// Allow various types of ICMP that are important for routing
 	// This first block applies to both IPv4 and IPv6 type rules
+
+	var icmpProto, icmpType;
+	if family == v1core.IPv6Protocol {
+		icmpProto = ICMPv6Proto
+		icmpType = ICMPv6Type
+	} else {
+		icmpProto = ICMPv4Proto
+		icmpType = ICMPv4Type
+	}
+
 	icmpRules := []ICMPRule{
-		{ICMPv4Proto, ICMPv4Type, "echo-request", "allow icmp echo requests"},
+		{icmpProto, icmpType, "echo-request", "allow icmp echo requests"},
 		// destination-unreachable here is also responsible for handling / allowing PMTU
 		// (https://en.wikipedia.org/wiki/Path_MTU_Discovery) responses
-		{ICMPv4Proto, ICMPv4Type, "destination-unreachable", "allow icmp destination unreachable messages"},
-		{ICMPv4Proto, ICMPv4Type, "time-exceeded", "allow icmp time exceeded messages"},
+		{icmpProto, icmpType, "destination-unreachable", "allow icmp destination unreachable messages"},
+		{icmpProto, icmpType, "time-exceeded", "allow icmp time exceeded messages"},
 	}
 
 	if family == v1core.IPv6Protocol {
