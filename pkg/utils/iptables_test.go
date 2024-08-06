@@ -27,9 +27,9 @@ func TestCommonICMPRules(t *testing.T) {
 			name:   "IPv6",
 			family: v1core.IPv6Protocol,
 			expected: []ICMPRule{
-				{"icmp", "--icmp-type", "echo-request", "allow icmp echo requests"},
-				{"icmp", "--icmp-type", "destination-unreachable", "allow icmp destination unreachable messages"},
-				{"icmp", "--icmp-type", "time-exceeded", "allow icmp time exceeded messages"},
+				{"ipv6-icmp", "--icmpv6-type", "echo-request", "allow icmp echo requests"},
+				{"ipv6-icmp", "--icmpv6-type", "destination-unreachable", "allow icmp destination unreachable messages"},
+				{"ipv6-icmp", "--icmpv6-type", "time-exceeded", "allow icmp time exceeded messages"},
 				{"ipv6-icmp", "--icmpv6-type", "neighbor-solicitation", "allow icmp neighbor solicitation messages"},
 				{"ipv6-icmp", "--icmpv6-type", "neighbor-advertisement", "allow icmp neighbor advertisement messages"},
 				{"ipv6-icmp", "--icmpv6-type", "echo-reply", "allow icmp echo reply messages"},
