@@ -201,7 +201,7 @@ func CommonICMPRules(family v1core.IPFamily) []ICMPRule {
 	// Allow various types of ICMP that are important for routing
 	// This first block applies to both IPv4 and IPv6 type rules
 
-	var icmpProto, icmpType;
+	var icmpProto, icmpType string
 	if family == v1core.IPv6Protocol {
 		icmpProto = ICMPv6Proto
 		icmpType = ICMPv6Type
