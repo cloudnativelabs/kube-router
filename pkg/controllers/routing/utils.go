@@ -1,13 +1,11 @@
 package routing
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -336,41 +334,20 @@ func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet u
 // where the only thing that distinguishes them is the -6 or not on the end
 // WARNING we're parsing a CLI tool here not an API, this may break at some point in the future
 func fouPortAndProtoExist(port uint16, isIPv6 bool) bool {
-	const ipRoute2IPv6Prefix = "-6"
-	strPort := strconv.FormatInt(int64(port), 10)
-	fouArgs := make([]string, 0)
-	klog.V(2).Infof("Checking FOU Port and Proto... %s - %t", strPort, isIPv6)
+	klog.V(2).Infof("Checking FOU Port and Proto... %d - %t", port, isIPv6)
 
+	fouFamily := netlink.FAMILY_V4
 	if isIPv6 {
-		fouArgs = append(fouArgs, ipRoute2IPv6Prefix)
+		fouFamily = netlink.FAMILY_V6
 	}
-	fouArgs = append(fouArgs, "fou", "show")
-
-	out, err := exec.Command("ip", fouArgs...).CombinedOutput()
-	// iproute2 returns an error if no fou configuration exists
+	fous, err := netlink.FouList(fouFamily)
 	if err != nil {
+		klog.Errorf("failed to list fou ports: %v", err)
 		return false
 	}
 
-	strOut := string(out)
-	klog.V(2).Infof("Combined output of ip fou show: %s", strOut)
-	scanner := bufio.NewScanner(strings.NewReader(strOut))
-
-	// loop over all lines of output
-	for scanner.Scan() {
-		scannedLine := scanner.Text()
-		// if the output doesn't contain our port at all, then continue
-		if !strings.Contains(scannedLine, strPort) {
-			continue
-		}
-
-		// if this is IPv6 port and it has the correct IPv6 suffix (see example above) then return true
-		if isIPv6 && strings.HasSuffix(scannedLine, ipRoute2IPv6Prefix) {
-			return true
-		}
-
-		// if this is not IPv6 and it does not have an IPv6 suffix (see example above) then return true
-		if !isIPv6 && !strings.HasSuffix(scannedLine, ipRoute2IPv6Prefix) {
+	for _, fou := range fous {
+		if fou.Port == int(port) && fou.EncapType == netlink.FOU_ENCAP_GUE {
 			return true
 		}
 	}
@@ -387,18 +364,17 @@ func fouPortAndProtoExist(port uint16, isIPv6 bool) bool {
 // Output for a normal IPIP tunnel looks like:
 // ipip ipip remote <ip> local <ip> dev <dev> ttl inherit ...
 func linkFOUEnabled(linkName string) bool {
-	const fouEncapEnabled = "encap gue"
-	cmdArgs := []string{"-details", "link", "show", linkName}
+	const fouEncapType = "gue"
 
-	out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
-
+	nLink, err := netlink.LinkByName(linkName)
 	if err != nil {
-		klog.Warningf("recevied an error while trying to look at the link details of %s, this shouldn't have happened",
-			linkName)
+		klog.Errorf("recevied an error while trying to look at the link details of %s, this shouldn't have happened: "+
+			"%v", linkName, err)
 		return false
+
 	}
 
-	if strings.Contains(string(out), fouEncapEnabled) {
+	if nLink.Attrs().EncapType == fouEncapType {
 		return true
 	}
 

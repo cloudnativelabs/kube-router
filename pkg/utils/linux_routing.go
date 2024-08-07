@@ -22,7 +22,7 @@ var (
 )
 
 // RouteTableAdd adds a new named table to iproute's rt_tables configuration file
-func RouteTableAdd(tableNumber, tableName string) error {
+func RouteTableAdd(tableNumber int, tableName string) error {
 	var rtTablesLoc string
 	for _, possibleLoc := range rtTablesPosLoc {
 		_, err := os.Stat(possibleLoc)
@@ -47,7 +47,7 @@ func RouteTableAdd(tableNumber, tableName string) error {
 			return fmt.Errorf("failed to open: %s", err.Error())
 		}
 		defer CloseCloserDisregardError(f)
-		if _, err = f.WriteString(tableNumber + " " + tableName + "\n"); err != nil {
+		if _, err = f.WriteString(fmt.Sprint(tableNumber) + " " + tableName + "\n"); err != nil {
 			return fmt.Errorf("failed to write: %s", err.Error())
 		}
 	}

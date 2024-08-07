@@ -33,7 +33,7 @@ import (
 const (
 	IfaceNotFound = "Link not found"
 
-	customRouteTableID   = "77"
+	customRouteTableID   = 77
 	customRouteTableName = "kube-router"
 	podSubnetsIPSetName  = "kube-router-pod-subnets"
 	nodeAddrsIPSetName   = "kube-router-node-ips"
@@ -753,11 +753,11 @@ func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet,
 // setupOverlayTunnel attempts to create a tunnel link and corresponding routes for IPIP based overlay networks
 func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextHop net.IP,
 	nextHopSubnet *net.IPNet) (netlink.Link, error) {
-	var out []byte
 	link, err := netlink.LinkByName(tunnelName)
 
 	var bestIPForFamily net.IP
 	var ipipMode, fouLinkType string
+	var nFamily int
 	isIPv6 := false
 	ipBase := make([]string, 0)
 	strFormattedEncapPort := strconv.FormatInt(int64(nrc.overlayEncapPort), 10)
@@ -766,12 +766,14 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 		bestIPForFamily = utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
 		ipipMode = encapTypeIPIP
 		fouLinkType = ipipModev4
+		nFamily = netlink.FAMILY_V4
 	} else {
 		// Need to activate the ip command in IPv6 mode
 		ipBase = append(ipBase, "-6")
 		bestIPForFamily = utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
 		ipipMode = ipipModev6
 		fouLinkType = "ip6tnl"
+		nFamily = netlink.FAMILY_V6
 		isIPv6 = true
 	}
 	if nil == bestIPForFamily {
@@ -799,13 +801,17 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 
 				// If we are transitioning from FoU to IPIP we also need to clean up the old FoU port if it exists
 				if fouPortAndProtoExist(nrc.overlayEncapPort, isIPv6) {
-					fouArgs := ipBase
-					fouArgs = append(fouArgs, "fou", "del", "port", strFormattedEncapPort)
-					out, err := exec.Command("ip", fouArgs...).CombinedOutput()
+					nFOU := &netlink.Fou{
+						Family:    nFamily,
+						Port:      int(nrc.overlayEncapPort),
+						EncapType: netlink.FOU_ENCAP_GUE,
+					}
+
+					err = netlink.FouDel(*nFOU)
 					if err != nil {
-						klog.Warningf("failed to clean up previous FoU tunnel port (this is only a warning because it "+
-							"won't stop kube-router from working for now, but still shouldn't have happened) - error: "+
-							"%v, output %s", err, out)
+						klog.Errorf("failed to clean up previous FoU tunnel (%s) port (this is only a warning because "+
+							"it won't stop kube-router from working for now, but still shouldn't have happened) - "+
+							"error: %v", tunnelName, err)
 					}
 				}
 			}
@@ -835,13 +841,16 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 		case encapTypeFOU:
 			// Ensure that the FOU tunnel port is set correctly
 			if !fouPortAndProtoExist(nrc.overlayEncapPort, isIPv6) {
-				fouArgs := ipBase
-				fouArgs = append(fouArgs, "fou", "add", "port", strFormattedEncapPort, "gue")
-				out, err := exec.Command("ip", fouArgs...).CombinedOutput()
+				nFOU := netlink.Fou{
+					Family:    nFamily,
+					Port:      int(nrc.overlayEncapPort),
+					EncapType: netlink.FOU_ENCAP_GUE,
+				}
+				err = netlink.FouAdd(nFOU)
 				if err != nil {
-					//nolint:goconst // don't need to make error messages a constant
+					//nolint:goconst // This does not need to be abstracted
 					return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
-						"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
+						"Failed to set FoU tunnel port - error: %s", tunnelName, err)
 				}
 			}
 
@@ -856,6 +865,10 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 		}
 
 		klog.V(2).Infof("Executing the following command to create tunnel: ip %s", cmdArgs)
+		// TODO: we should make this call via the netlink library whenever they support ip6ip6 tunnels. Right now, it
+		// doesn't appear like the project supports them. They support something else called an ip6tun which seems
+		// similar, but we would probably need to figure out what combination of primitives we need to serialize in
+		// order to get the same effect we get below.
 		out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
@@ -875,17 +888,16 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 
 	// Now that the tunnel link exists, we need to add a route to it, so the node knows where to send traffic bound for
 	// this interface
-	//nolint:gocritic // we understand that we are appending to a new slice
-	cmdArgs := append(ipBase, "route", "list", "table", customRouteTableID)
-	out, err = exec.Command("ip", cmdArgs...).CombinedOutput()
-	// This used to be "dev "+tunnelName+" scope" but this isn't consistent with IPv6's output, so we changed it to just
-	// "dev "+tunnelName, but at this point I'm unsure if there was a good reason for adding scope on before, so that's
-	// why this comment is here.
-	if err != nil || !strings.Contains(string(out), "dev "+tunnelName) {
-		//nolint:gocritic // we understand that we are appending to a new slice
-		cmdArgs = append(ipBase, "route", "add", nextHop.String(), "dev", tunnelName, "table", customRouteTableID)
-		if out, err = exec.Command("ip", cmdArgs...).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
+	nRoute := &netlink.Route{
+		Gw:        nextHop,
+		LinkIndex: link.Attrs().Index,
+		Table:     customRouteTableID,
+	}
+	foundRoutes, err := netlink.RouteListFiltered(netlink.FAMILY_ALL, nRoute,
+		netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
+	if err != nil || len(foundRoutes) < 1 {
+		if err = netlink.RouteAdd(nRoute); err != nil {
+			return nil, fmt.Errorf("failed to list routes in custom route table %d, error: %v", customRouteTableID, err)
 		}
 	}
 
