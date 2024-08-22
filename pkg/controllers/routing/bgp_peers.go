@@ -207,7 +207,8 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
 func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer,
 	bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration, bgpGracefulRestartTime time.Duration,
-	peerMultihopTTL uint8) error {
+	peerMultihopTTL uint8,
+) error {
 	for _, n := range peerNeighbors {
 		neighborIPStr := n.Conf.NeighborAddress
 		neighborIP := net.ParseIP(neighborIPStr)
@@ -288,7 +289,8 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 
 // Does validation and returns neighbor configs
 func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []string, localips []string,
-	holdtime float64, localAddress string) ([]*gobgpapi.Peer, error) {
+	holdtime float64, localAddress string,
+) ([]*gobgpapi.Peer, error) {
 	peers := make([]*gobgpapi.Peer, 0)
 
 	// Validations
@@ -377,6 +379,7 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			// we are only interested in node add/delete, so skip update
+			nrc.OnNodeUpdate(newObj)
 		},
 		DeleteFunc: func(obj interface{}) {
 			node, ok := obj.(*v1core.Node)
