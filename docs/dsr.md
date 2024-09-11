@@ -26,7 +26,8 @@ Requirements:
 * If kube-router is deployed as a Kubernetes pod:
   * `hostIPC: true` must be set for the pod
   * `hostPID: true` must be set for the pod
-  * The container runtime socket must be mounted into the kube-router pod via a `hostPath` volume mount.
+  * The container runtime (CRI) socket directory must be mounted into the kube-router pod via a `hostPath` volume mount.
+    We need to mount the entire directory as the socket file might change in case of the container runtime restarts.
   * `/etc/iproute2/rt_tables` (or similar) must be read/write mounted into the kube-router pod via a `hostPath` volume
     mount. NOTE: since v6.5.0 of iproute2 this file has been moved underneath `/usr` in either
     `/usr/lib/iproute2/rt_tables` or `/usr/share/iproute2/rt_tables` instead of in `/etc` so this mount may need to be
@@ -59,63 +60,8 @@ kubectl annotate service my-service "kube-router.io/service.dsr=tunnel"
 
 ## Kubernetes Pod Examples
 
-As mentioned previously, if kube-router is run as a Kubernetes deployment, there are a couple of things needed on the
-deployment. Below is an example of what is necessary to get going (this is NOT a full deployment, it is just meant to
-highlight the elements needed for DSR):
-
-```sh
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  labels:
-    k8s-app: kube-router
-    tier: node
-  name: kube-router
-  namespace: kube-system
-spec:
-  selector:
-    matchLabels:
-      k8s-app: kube-router
-      tier: node
-  template:
-    metadata:
-      labels:
-        k8s-app: kube-router
-        tier: node
-    spec:
-      hostNetwork: true
-      hostIPC: true
-      hostPID: true
-      volumes:
-      - name: run
-        hostPath:
-          path: /var/run/docker.sock
-      - name: rt-tables
-        hostPath:
-          path: /etc/iproute2/rt_tables
-      ...
-      containers:
-      - name: kube-router
-        image: docker.io/cloudnativelabs/kube-router:latest
-        ...
-        volumeMounts:
-        - name: run
-          mountPath: /var/run/docker.sock
-          readOnly: true
-        - name: rt-tables
-          mountPath: /etc/iproute2/rt_tables
-          readOnly: false
-...
-```
-
-For an example manifest please look at the
-[kube-router all features manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirements for
-Docker enabled.
-
-### DSR with containerd or cri-o
-
-As of kube-router-1.2.X and later, kube-router's DSR mode now works with non-docker container runtimes. Officially only
-containerd has been tested, but this solution should work with cri-o as well.
+As of kube-router-1.2.X and later, kube-router's DSR mode now works with CRI compliant container runtimes.
+Officially only containerd has been tested, but this solution should work with cri-o as well.
 
 Most of what was said above also applies for non-docker container runtimes, however, there are some adjustments that
 you'll need to make:
@@ -139,7 +85,10 @@ spec:
       volumes:
       - name: containerd-sock
         hostPath:
-          path: /run/containerd/containerd.sock
+          path: /run/containerd/
+      - name: rt-tables
+        hostPath:
+          path: /etc/iproute2/rt_tables
       ...
       containers:
       - name: kube-router
@@ -148,10 +97,17 @@ spec:
         ...
         volumeMounts:
         - name: containerd-sock
-          mountPath: /run/containerd/containerd.sock
+          mountPath: /run/containerd/
           readOnly: true
+        - name: rt-tables
+          mountPath: /etc/iproute2/rt_tables
+          readOnly: false
 ...
 ```
+
+For an example manifest please look at the
+[kube-router all features manifest](../daemonset/kubeadm-kuberouter-all-features-dsr.yaml) with DSR requirements for
+containerd enabled.
 
 ## More Details About DSR
 
