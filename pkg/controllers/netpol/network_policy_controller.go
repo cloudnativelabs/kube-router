@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
@@ -63,7 +64,7 @@ var (
 
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	krNode                      utils.NodeIPAndFamilyAware
+	krNode                      pkg.NodeIPAndFamilyAware
 	serviceClusterIPRanges      []net.IPNet
 	serviceExternalIPRanges     []net.IPNet
 	serviceLoadBalancerIPRanges []net.IPNet

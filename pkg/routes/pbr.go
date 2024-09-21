@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 )
 
@@ -17,13 +18,13 @@ const (
 
 // PolicyBasedRules is a struct that holds all of the information needed for manipulating policy based routing rules
 type PolicyBasedRules struct {
-	nfa          utils.NodeFamilyAware
+	nfa          pkg.NodeFamilyAware
 	podIPv4CIDRs []string
 	podIPv6CIDRs []string
 }
 
 // NewPolicyBasedRules creates a new PBR object which will be used to manipulate policy based routing rules
-func NewPolicyBasedRules(nfa utils.NodeFamilyAware, podIPv4CIDRs, podIPv6CIDRs []string) *PolicyBasedRules {
+func NewPolicyBasedRules(nfa pkg.NodeFamilyAware, podIPv4CIDRs, podIPv6CIDRs []string) *PolicyBasedRules {
 	return &PolicyBasedRules{
 		nfa:          nfa,
 		podIPv4CIDRs: podIPv4CIDRs,

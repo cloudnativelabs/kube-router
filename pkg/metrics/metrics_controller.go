@@ -209,6 +209,21 @@ var (
 		Name:      "controller_policy_ipsets",
 		Help:      "Active policy ipsets",
 	})
+	// HostRoutesSyncedGauge Number of routes currently synced to the system
+	HostRoutesSyncedGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "host_routes_synced",
+		Help: "Number of routes currently synced to the system",
+	})
+	// HostRoutesOutOfSyncAddedCounter Total number of routes added by checkCacheAgainstBGP
+	HostRoutesStaleAddedCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "host_routes_stale_added_total",
+		Help: "Total number of stale cached host routes needing to be added",
+	})
+	// HostRoutesOutOfSyncRemovedCounter Total number of routes removed by checkCacheAgainstBGP
+	HostRoutesStaleRemovedCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "host_routes_stale_removed_total",
+		Help: "Total number of stale cached host routes needing to be removed",
+	})
 )
 
 // Controller Holds settings for the metrics controller

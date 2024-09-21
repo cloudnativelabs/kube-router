@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
@@ -108,7 +109,7 @@ const (
 
 // NetworkServicesController struct stores information needed by the controller
 type NetworkServicesController struct {
-	krNode              utils.NodeAware
+	krNode              pkg.NodeAware
 	syncPeriod          time.Duration
 	mu                  sync.Mutex
 	serviceMap          serviceInfoMap

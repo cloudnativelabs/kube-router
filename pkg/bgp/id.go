@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	gobgp "github.com/osrg/gobgp/v3/pkg/packet/bgp"
 )
 
@@ -21,7 +21,7 @@ const (
 // GenerateRouterID will generate a router ID based upon the user's configuration (or lack there of) and the node's
 // primary IP address if the user has not specified. If the user has configured the router ID as "generate" then we
 // will generate a router ID based upon fnv hashing the node's primary IP address.
-func GenerateRouterID(nodeIPAware utils.NodeIPAware, configRouterID string) (string, error) {
+func GenerateRouterID(nodeIPAware pkg.NodeIPAware, configRouterID string) (string, error) {
 	switch {
 	case configRouterID == "generate":
 		h := fnv.New32a()

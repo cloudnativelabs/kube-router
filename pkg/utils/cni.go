@@ -9,10 +9,6 @@ import (
 	"strings"
 )
 
-const (
-	noIPsSpecifiedErrorMsg = "no IP ranges specified"
-)
-
 type cniNetworkConfig struct {
 	FilePath string
 	Conf     *Conf
