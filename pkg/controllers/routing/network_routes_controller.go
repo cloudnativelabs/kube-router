@@ -632,7 +632,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 
 		// Also delete route from state map so that it doesn't get re-synced after deletion
 		nrc.routeSyncer.DelInjectedRoute(dst)
-		return routes.DeleteByDestination(dst)
+		return nil
 	}
 
 	shouldCreateTunnel := func() bool {
