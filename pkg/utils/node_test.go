@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -169,24 +170,26 @@ func Test_GetNodeIP(t *testing.T) {
 				},
 			},
 			nil,
-			errors.New("host IP unknown"),
+			errors.New("error getting primary NodeIP: host IP unknown"),
 		},
 	}
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			ip, err := GetPrimaryNodeIP(testcase.node)
-			if !reflect.DeepEqual(err, testcase.err) {
-				t.Logf("actual error: %v", err)
-				t.Logf("expected error: %v", testcase.err)
-				t.Error("did not get expected error")
+			krNode, err := NewRemoteKRNode(testcase.node)
+			if err != nil {
+				assert.EqualError(t, err, testcase.err.Error())
+				return
+			}
+			ip := krNode.GetPrimaryNodeIP()
+
+			if testcase.err == nil {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, testcase.err.Error())
 			}
 
-			if !reflect.DeepEqual(ip, testcase.ip) {
-				t.Logf("actual ip: %v", ip)
-				t.Logf("expected ip: %v", testcase.ip)
-				t.Error("did not get expected node ip")
-			}
+			assert.Equal(t, testcase.ip, ip)
 		})
 	}
 }

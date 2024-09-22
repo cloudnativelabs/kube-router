@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"os/exec"
 	"regexp"
@@ -119,23 +121,26 @@ func statementsEqualByName(a, b []*gobgpapi.Statement) bool {
 	return true
 }
 
-func getNodeSubnet(nodeIP net.IP) (net.IPNet, string, error) {
-	links, err := netlink.LinkList()
-	if err != nil {
-		return net.IPNet{}, "", errors.New("failed to get list of links")
+// generateRouterID will generate a router ID based upon the user's configuration (or lack there of) and the node's
+// primary IP address if the user has not specified. If the user has configured the router ID as "generate" then we
+// will generate a router ID based upon fnv hashing the node's primary IP address.
+func generateRouterID(nodeIPAware utils.NodeIPAware, configRouterID string) (string, error) {
+	switch {
+	case configRouterID == "generate":
+		h := fnv.New32a()
+		h.Write(nodeIPAware.GetPrimaryNodeIP())
+		hs := h.Sum32()
+		gip := make(net.IP, 4)
+		binary.BigEndian.PutUint32(gip, hs)
+		return gip.String(), nil
+	case configRouterID != "":
+		return configRouterID, nil
 	}
-	for _, link := range links {
-		addresses, err := netlink.AddrList(link, netlink.FAMILY_ALL)
-		if err != nil {
-			return net.IPNet{}, "", errors.New("failed to get list of addr")
-		}
-		for _, addr := range addresses {
-			if addr.IPNet.IP.Equal(nodeIP) {
-				return *addr.IPNet, link.Attrs().Name, nil
-			}
-		}
+
+	if nodeIPAware.GetPrimaryNodeIP().To4() == nil {
+		return "", errors.New("router-id must be specified when primary node IP is an IPv6 address")
 	}
-	return net.IPNet{}, "", errors.New("failed to find interface with specified node ip")
+	return configRouterID, nil
 }
 
 // generateTunnelName will generate a name for a tunnel interface given a node IP
@@ -306,7 +311,7 @@ func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet u
 	if ip.To4() != nil {
 		subnet = 32
 		afiFamily = gobgpapi.Family_AFI_IP
-		nhIP := utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
+		nhIP := nrc.krNode.FindBestIPv4NodeAddress()
 		if nhIP == nil {
 			err = fmt.Errorf("could not find an IPv4 address on node to set as nexthop for vip: %s", vip)
 		}
@@ -316,7 +321,7 @@ func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet u
 	if ip.To16() != nil {
 		subnet = 128
 		afiFamily = gobgpapi.Family_AFI_IP6
-		nhIP := utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
+		nhIP := nrc.krNode.FindBestIPv6NodeAddress()
 		if nhIP == nil {
 			err = fmt.Errorf("could not find an IPv6 address on node to set as nexthop for vip: %s", vip)
 		}

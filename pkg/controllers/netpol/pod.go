@@ -115,7 +115,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 
 	// loop through the pods running on the node
 	allLocalPods := make(map[string]podInfo)
-	for _, nodeIP := range npc.nodeIPs {
+	for _, nodeIP := range npc.krNode.GetNodeIPAddrs() {
 		npc.getLocalPods(allLocalPods, nodeIP.String())
 	}
 	for _, pod := range allLocalPods {

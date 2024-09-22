@@ -343,15 +343,17 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() (map[v1core.IPFami
 	nodes := nrc.nodeLister.List()
 	for _, node := range nodes {
 		nodeObj := node.(*v1core.Node)
-		nodeIP, err := utils.GetPrimaryNodeIP(nodeObj)
+		targetNode, err := utils.NewRemoteKRNode(nodeObj)
 		if err != nil {
 			klog.Errorf("Failed to find a node IP and therefore cannot add internal BGP Peer: %v", err)
 			continue
 		}
-		if nodeIP.To4() != nil {
-			iBGPPeerCIDRs[v1core.IPv4Protocol] = append(iBGPPeerCIDRs[v1core.IPv4Protocol], nodeIP.String()+"/32")
+		if targetNode.GetPrimaryNodeIP().To4() != nil {
+			iBGPPeerCIDRs[v1core.IPv4Protocol] = append(iBGPPeerCIDRs[v1core.IPv4Protocol],
+				targetNode.GetPrimaryNodeIP().String()+"/32")
 		} else {
-			iBGPPeerCIDRs[v1core.IPv6Protocol] = append(iBGPPeerCIDRs[v1core.IPv6Protocol], nodeIP.String()+"/128")
+			iBGPPeerCIDRs[v1core.IPv6Protocol] = append(iBGPPeerCIDRs[v1core.IPv6Protocol],
+				targetNode.GetPrimaryNodeIP().String()+"/128")
 		}
 	}
 

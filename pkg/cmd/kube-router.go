@@ -220,7 +220,7 @@ func (kr *KubeRouter) Run() error {
 			return fmt.Errorf("failed to create iptables handlers: %v", err)
 		}
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
-			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, iptablesCmdHandlers, ipSetHandlers)
+			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil, iptablesCmdHandlers, ipSetHandlers)
 		if err != nil {
 			return fmt.Errorf("failed to create network policy controller: %v", err)
 		}

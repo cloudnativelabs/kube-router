@@ -15,6 +15,291 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
+// nodeAddressMap is a mapping of address types to a list of addresses of that type.
+// It preallocates the slices of addresses.
+type nodeAddressMap map[apiv1.NodeAddressType][]apiv1.NodeAddress
+
+// add adds an address of the given type to the address map. If the given type
+// was not already in the map, it creates a new preallocated entry for it.
+func (m nodeAddressMap) add(address apiv1.NodeAddress) {
+	if _, ok := m[address.Type]; ok {
+		m[address.Type] = append(m[address.Type], address)
+	} else {
+		m[address.Type] = make([]apiv1.NodeAddress, 0)
+		m[address.Type] = append(m[address.Type], address)
+	}
+}
+
+// nodeAddressMap is a mapping of address types to a list of addresses of that type.
+// It preallocates the slices of addresses.
+type addressMap map[apiv1.NodeAddressType][]net.IP
+
+// KRNode is a struct that holds information about a node that is used by kube-router.
+type KRNode struct {
+	NodeInterfaceName string
+	NodeIPv4Addrs     addressMap
+	NodeIPv6Addrs     addressMap
+	NodeName          string
+	linkQ             LocalLinkQuerier
+	PrimaryNodeSubnet net.IPNet
+	PrimaryIP         net.IP
+}
+
+// NodeIPAware is an interface that provides methods to get the node's IP addresses in various data structures.
+type NodeIPAware interface {
+	FindBestIPv4NodeAddress() net.IP
+	FindBestIPv6NodeAddress() net.IP
+	GetNodeIPv4AddrsTypeMap() addressMap
+	GetNodeIPv6AddrsTypeMap() addressMap
+	GetNodeIPv4Addrs() []net.IP
+	GetNodeIPv6Addrs() []net.IP
+	GetNodeIPAddrs() []net.IP
+	GetPrimaryNodeIP() net.IP
+}
+
+// NodeInterfaceAware is an interface that provides methods to get the node's interface name, MTU, and subnet. This
+// interface is a collection of functions that are only available if you are running on the node itself, as kube-router
+// determines this by looking at the node's interfaces and parsing the address data there. If you attempt to call these
+// functions on a remote node, they will return nil or an error.
+type NodeInterfaceAware interface {
+	GetNodeInterfaceName() string
+	GetPrimaryNodeSubnet() net.IPNet
+	GetNodeMTU() (int, error)
+}
+
+// NodeFamilyAware is an interface that provides methods to check if a node is IPv4 or IPv6 capable.
+type NodeFamilyAware interface {
+	IsIPv4Capable() bool
+	IsIPv6Capable() bool
+}
+
+// NodeNameAware is an interface that provides a method to get the node's name.
+type NodeNameAware interface {
+	GetNodeName() string
+}
+
+// NodeIPAndFamilyAware is an interface that combines the NodeIPAware and NodeFamilyAware interfaces.
+type NodeIPAndFamilyAware interface {
+	NodeIPAware
+	NodeFamilyAware
+}
+
+// NodeAware is an interface that combines the NodeIPAware, NodeInterfaceAware, NodeFamilyAware, and NodeNameAware
+// interfaces.
+type NodeAware interface {
+	NodeIPAware
+	NodeInterfaceAware
+	NodeFamilyAware
+	NodeNameAware
+}
+
+// GetNodeIPv4AddrsTypeMap returns the node's IPv4 addresses grouped by Kubernetes Node Object address type (internal /
+// external).
+func (n *KRNode) GetNodeIPv4AddrsTypeMap() addressMap {
+	return n.NodeIPv4Addrs
+}
+
+// GetNodeIPv4Addrs returns the node's IPv4 addresses as defined by the Kubernetes Node Object.
+func (n *KRNode) GetNodeIPv4Addrs() []net.IP {
+	var nodeIPs []net.IP
+	for _, ip := range n.NodeIPv4Addrs {
+		nodeIPs = append(nodeIPs, ip...)
+	}
+	return nodeIPs
+}
+
+// GetNodeIPv6AddrsTypeMap returns the node's IPv6 addresses grouped by Kubernetes Node Object address type (internal /
+// external).
+func (n *KRNode) GetNodeIPv6AddrsTypeMap() addressMap {
+	return n.NodeIPv6Addrs
+}
+
+// GetNodeIPv6Addrs returns the node's IPv6 addresses as defined by the Kubernetes Node Object.
+func (n *KRNode) GetNodeIPv6Addrs() []net.IP {
+	var nodeIPs []net.IP
+	for _, ip := range n.NodeIPv6Addrs {
+		nodeIPs = append(nodeIPs, ip...)
+	}
+	return nodeIPs
+}
+
+// GetPrimaryNodeIP returns the node's primary IP address which for the purposes of kube-router is defined as the first
+// internal address defined on the Kubernetes node object. If no internal address is defined, the first external address
+// is used.
+func (n *KRNode) GetPrimaryNodeIP() net.IP {
+	return n.PrimaryIP
+}
+
+// GetPrimaryNodeSubnet returns the node's primary subnet as defined by the primary IP address. This function is only
+// available if you are running on the node itself, as kube-router determines this by looking at the node's interfaces
+// and parsing the address data there. If you attempt to call this function on a remote node, it will return nil.
+func (n *KRNode) GetPrimaryNodeSubnet() net.IPNet {
+	return n.PrimaryNodeSubnet
+}
+
+// GetNodeInterfaceName returns the node's interface name as defined by the primary IP address. This function is only
+// available if you are running on the node itself, as kube-router determines this by looking at the node's interfaces
+// and parsing the address data there. If you attempt to call this function on a remote node, it will return nil.
+func (n *KRNode) GetNodeInterfaceName() string {
+	return n.NodeInterfaceName
+}
+
+// IsIPv4Capable returns true if the node has at least one IPv4 address defined in the Kubernetes Node Object.
+func (n *KRNode) IsIPv4Capable() bool {
+	return len(n.NodeIPv4Addrs[apiv1.NodeInternalIP]) > 0 || len(n.NodeIPv4Addrs[apiv1.NodeExternalIP]) > 0
+}
+
+// IsIPv6Capable returns true if the node has at least one IPv6 address defined in the Kubernetes Node Object.
+func (n *KRNode) IsIPv6Capable() bool {
+	return len(n.NodeIPv6Addrs[apiv1.NodeInternalIP]) > 0 || len(n.NodeIPv6Addrs[apiv1.NodeExternalIP]) > 0
+}
+
+// GetNodeName returns the node's name as defined by the Kubernetes Node Object.
+func (n *KRNode) GetNodeName() string {
+	return n.NodeName
+}
+
+// FindBestIPv6NodeAddress returns the best available IPv6 address for the node. If the primary IP is already an IPv6
+// address, it will return that. Otherwise, it will return the first internal or external IPv6 address defined in the
+// Kubernetes Node Object.
+func (n KRNode) FindBestIPv6NodeAddress() net.IP {
+	if n.PrimaryIP != nil && n.PrimaryIP.To4() == nil && n.PrimaryIP.To16() != nil {
+		// the NRC's primary IP is already an IPv6 address, so we'll use that
+		return n.PrimaryIP
+	}
+	// the NRC's primary IP is not an IPv6, let's try to find the best available IPv6 address out of our
+	// available node addresses to use as the nextHop for our route
+	if n.NodeIPv6Addrs != nil {
+		if len(n.NodeIPv6Addrs[apiv1.NodeInternalIP]) > 0 {
+			return n.NodeIPv6Addrs[apiv1.NodeInternalIP][0]
+		} else if len(n.NodeIPv6Addrs[apiv1.NodeExternalIP]) > 0 {
+			return n.NodeIPv6Addrs[apiv1.NodeExternalIP][0]
+		}
+	}
+	return nil
+}
+
+// FindBestIPv4NodeAddress returns the best available IPv4 address for the node. If the primary IP is already an IPv4
+// address, it will return that. Otherwise, it will return the first internal or external IPv4 address defined in the
+// Kubernetes Node Object.
+func (n KRNode) FindBestIPv4NodeAddress() net.IP {
+	if n.PrimaryIP != nil && n.PrimaryIP.To4() != nil {
+		// the NRC's primary IP is already an IPv6 address, so we'll use that
+		return n.PrimaryIP
+	}
+	// the NRC's primary IP is not an IPv6, let's try to find the best available IPv6 address out of our
+	// available node addresses to use as the nextHop for our route
+	if n.NodeIPv4Addrs != nil {
+		if len(n.NodeIPv4Addrs[apiv1.NodeInternalIP]) > 0 {
+			return n.NodeIPv4Addrs[apiv1.NodeInternalIP][0]
+		} else if len(n.NodeIPv4Addrs[apiv1.NodeExternalIP]) > 0 {
+			return n.NodeIPv4Addrs[apiv1.NodeExternalIP][0]
+		}
+	}
+	return nil
+}
+
+// GetNodeMTU returns the MTU of the interface that the node's primary IP address is assigned to. This function is only
+// available if you are running on the node itself, as kube-router determines this by looking at the node's interfaces
+// and parsing the address data there. If you attempt to call this function on a remote node, it will return an error.
+func (n KRNode) GetNodeMTU() (int, error) {
+	links, err := n.linkQ.LinkList()
+	if err != nil {
+		return 0, errors.New("failed to get list of links")
+	}
+	for _, link := range links {
+		addresses, err := n.linkQ.AddrList(link, netlink.FAMILY_ALL)
+		if err != nil {
+			return 0, errors.New("failed to get list of addr")
+		}
+		for _, addr := range addresses {
+			if addr.IPNet.IP.Equal(n.PrimaryIP) {
+				linkMTU := link.Attrs().MTU
+				return linkMTU, nil
+			}
+		}
+	}
+	return 0, errors.New("failed to find interface with specified node IP")
+}
+
+// GetNodeIPAddrs returns all of the node's IP addresses (whether internal or external) as defined by the Kubernetes
+// Node Object.
+func (n KRNode) GetNodeIPAddrs() []net.IP {
+	var nodeIPs []net.IP
+	for _, ip := range n.NodeIPv4Addrs {
+		nodeIPs = append(nodeIPs, ip...)
+	}
+	for _, ip := range n.NodeIPv6Addrs {
+		nodeIPs = append(nodeIPs, ip...)
+	}
+	return nodeIPs
+}
+
+// NewKRNode creates a new KRNode object from a Kubernetes Node Object. This function is used when kube-router is
+// running on the node itself and has access to the node's interfaces and address data. If you attempt to run this on
+// a remote node, it will result in an error as it will not be able to find the correct subnet / interface information.
+// For this use-case use NewRemoteKRNode instead. It will also return an error if the node does not have any IPv4 or
+// IPv6 addresses defined in the Kubernetes Node Object.
+func NewKRNode(node *apiv1.Node, linkQ LocalLinkQuerier, enableIPv4, enableIPv6 bool) (NodeAware, error) {
+	if linkQ == nil {
+		linkQ = &netlink.Handle{}
+	}
+
+	primaryNodeIP, err := getPrimaryNodeIP(node)
+	if err != nil {
+		return nil, fmt.Errorf("error getting primary NodeIP: %w", err)
+	}
+
+	ipv4Addrs, ipv6Addrs := getAllNodeIPs(node)
+	if enableIPv4 && len(ipv4Addrs[apiv1.NodeInternalIP]) < 1 &&
+		len(ipv4Addrs[apiv1.NodeExternalIP]) < 1 {
+		return nil, fmt.Errorf("IPv4 was enabled, but no IPv4 address was found on the node")
+	}
+
+	if enableIPv6 && len(ipv6Addrs[apiv1.NodeInternalIP]) < 1 &&
+		len(ipv6Addrs[apiv1.NodeExternalIP]) < 1 {
+		return nil, fmt.Errorf("IPv6 was enabled, but no IPv6 address was found on the node")
+	}
+
+	primaryNodeSubnet, nodeInterfaceName, err := GetNodeSubnet(primaryNodeIP, linkQ)
+	if err != nil {
+		return nil, fmt.Errorf("error getting node subnet: %w", err)
+	}
+
+	krNode := &KRNode{
+		linkQ:             linkQ,
+		NodeName:          node.Name,
+		PrimaryIP:         primaryNodeIP,
+		NodeIPv4Addrs:     ipv4Addrs,
+		NodeIPv6Addrs:     ipv6Addrs,
+		PrimaryNodeSubnet: primaryNodeSubnet,
+		NodeInterfaceName: nodeInterfaceName,
+	}
+
+	return krNode, nil
+}
+
+// NewRemoteKRNode creates a new KRNode object from a Kubernetes Node Object. This function is used when kube-router is
+// attempting to parse a remote node and does not have access to the node's interfaces and address data. It will return
+// an error if the node does not have any IPv4 or IPv6 addresses defined in the Kubernetes Node Object.
+func NewRemoteKRNode(node *apiv1.Node) (NodeIPAndFamilyAware, error) {
+	primaryNodeIP, err := getPrimaryNodeIP(node)
+	if err != nil {
+		return nil, fmt.Errorf("error getting primary NodeIP: %w", err)
+	}
+
+	ipv4Addrs, ipv6Addrs := getAllNodeIPs(node)
+
+	krNode := &KRNode{
+		NodeName:      node.Name,
+		PrimaryIP:     primaryNodeIP,
+		NodeIPv4Addrs: ipv4Addrs,
+		NodeIPv6Addrs: ipv6Addrs,
+	}
+
+	return krNode, nil
+}
+
 // GetNodeObject returns the node API object for the node
 func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*apiv1.Node, error) {
 	// if env NODE_NAME is not set and node is not registered with hostname, then use host name override
@@ -46,11 +331,11 @@ func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*ap
 	return node, nil
 }
 
-// GetPrimaryNodeIP returns the most valid external facing IP address for a node.
+// getPrimaryNodeIP returns the most valid external facing IP address for a node.
 // Order of preference:
 // 1. NodeInternalIP
-// 2. NodeExternalIP (Only set on cloud providers usually)
-func GetPrimaryNodeIP(node *apiv1.Node) (net.IP, error) {
+// 2. NodeExternalIP (usually only set on cloud providers usually)
+func getPrimaryNodeIP(node *apiv1.Node) (net.IP, error) {
 	addresses := node.Status.Addresses
 	addressMap := make(map[apiv1.NodeAddressType][]apiv1.NodeAddress)
 	for i := range addresses {
@@ -65,28 +350,13 @@ func GetPrimaryNodeIP(node *apiv1.Node) (net.IP, error) {
 	return nil, errors.New("host IP unknown")
 }
 
-// addressMap is a mapping of address types to a list of addresses of that type.
-// It preallocates the slices of addresses.
-type addressMap map[apiv1.NodeAddressType][]apiv1.NodeAddress
-
-// add adds an address of the given type to the address map. If the given type
-// was not already in the map, it creates a new preallocated entry for it.
-func (m addressMap) add(address apiv1.NodeAddress) {
-	if _, ok := m[address.Type]; ok {
-		m[address.Type] = append(m[address.Type], address)
-	} else {
-		// There can be at most 2 addresses of the same type.
-		m[address.Type] = make([]apiv1.NodeAddress, 2)
-		m[address.Type] = append(m[address.Type], address)
-	}
-}
-
-// GetAllNodeIPs returns all internal and external IP addresses grouped as IPv4 and IPv6
-func GetAllNodeIPs(node *apiv1.Node) (map[apiv1.NodeAddressType][]net.IP, map[apiv1.NodeAddressType][]net.IP) {
-	ipAddrv4 := make(map[apiv1.NodeAddressType][]net.IP)
-	ipAddrv6 := make(map[apiv1.NodeAddressType][]net.IP)
+// getAllNodeIPs returns all internal and external IP addresses grouped as IPv4 and IPv6 in a map that is indexed by
+// the Kubernetes Node Object address type (internal / external).
+func getAllNodeIPs(node *apiv1.Node) (map[apiv1.NodeAddressType][]net.IP, map[apiv1.NodeAddressType][]net.IP) {
+	ipAddrv4 := make(addressMap)
+	ipAddrv6 := make(addressMap)
 	addresses := node.Status.Addresses
-	addressesPerType := make(addressMap)
+	addressesPerType := make(nodeAddressMap)
 	for _, address := range addresses {
 		addressesPerType.add(address)
 	}
@@ -114,57 +384,28 @@ func GetAllNodeIPs(node *apiv1.Node) (map[apiv1.NodeAddressType][]net.IP, map[ap
 	return ipAddrv4, ipAddrv6
 }
 
-func FindBestIPv6NodeAddress(priIP net.IP, intExtIPv6Addresses map[apiv1.NodeAddressType][]net.IP) net.IP {
-	if priIP != nil && priIP.To4() == nil && priIP.To16() != nil {
-		// the NRC's primary IP is already an IPv6 address, so we'll use that
-		return priIP
+// GetNodeSubnet returns the subnet and interface name for a given node IP
+func GetNodeSubnet(nodeIP net.IP, linkQ LocalLinkQuerier) (net.IPNet, string, error) {
+	if linkQ == nil {
+		linkQ = &netlink.Handle{}
 	}
-	// the NRC's primary IP is not an IPv6, let's try to find the best available IPv6 address out of our
-	// available node addresses to use as the nextHop for our route
-	if intExtIPv6Addresses != nil {
-		if len(intExtIPv6Addresses[apiv1.NodeInternalIP]) > 0 {
-			return intExtIPv6Addresses[apiv1.NodeInternalIP][0]
-		} else if len(intExtIPv6Addresses[apiv1.NodeExternalIP]) > 0 {
-			return intExtIPv6Addresses[apiv1.NodeExternalIP][0]
-		}
-	}
-	return nil
-}
 
-func FindBestIPv4NodeAddress(priIP net.IP, intExtIPv4Addresses map[apiv1.NodeAddressType][]net.IP) net.IP {
-	if priIP != nil && priIP.To4() != nil {
-		// the NRC's primary IP is already an IPv6 address, so we'll use that
-		return priIP
-	}
-	// the NRC's primary IP is not an IPv6, let's try to find the best available IPv6 address out of our
-	// available node addresses to use as the nextHop for our route
-	if intExtIPv4Addresses != nil {
-		if len(intExtIPv4Addresses[apiv1.NodeInternalIP]) > 0 {
-			return intExtIPv4Addresses[apiv1.NodeInternalIP][0]
-		} else if len(intExtIPv4Addresses[apiv1.NodeExternalIP]) > 0 {
-			return intExtIPv4Addresses[apiv1.NodeExternalIP][0]
-		}
-	}
-	return nil
-}
-
-// GetMTUFromNodeIP returns the MTU by detecting it from the IP on the node and figuring in tunneling configurations
-func GetMTUFromNodeIP(nodeIP net.IP) (int, error) {
-	links, err := netlink.LinkList()
+	links, err := linkQ.LinkList()
 	if err != nil {
-		return 0, errors.New("failed to get list of links")
+		return net.IPNet{}, "", errors.New("failed to get list of links")
 	}
+
 	for _, link := range links {
-		addresses, err := netlink.AddrList(link, netlink.FAMILY_ALL)
+		addresses, err := linkQ.AddrList(link, netlink.FAMILY_ALL)
 		if err != nil {
-			return 0, errors.New("failed to get list of addr")
+			return net.IPNet{}, "", errors.New("failed to get list of addr")
 		}
 		for _, addr := range addresses {
 			if addr.IPNet.IP.Equal(nodeIP) {
-				linkMTU := link.Attrs().MTU
-				return linkMTU, nil
+				return *addr.IPNet, link.Attrs().Name, nil
 			}
 		}
 	}
-	return 0, errors.New("failed to find interface with specified node IP")
+
+	return net.IPNet{}, "", errors.New("failed to find interface with specified node ip")
 }

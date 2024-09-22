@@ -2,10 +2,8 @@ package routing
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"net"
 	"os"
 	"os/exec"
@@ -85,15 +83,8 @@ const (
 
 // NetworkRoutingController is struct to hold necessary information required by controller
 type NetworkRoutingController struct {
-	primaryIP                      net.IP
-	nodeIPv4Addrs                  map[v1core.NodeAddressType][]net.IP
-	nodeIPv6Addrs                  map[v1core.NodeAddressType][]net.IP
-	nodeName                       string
-	nodeSubnet                     net.IPNet
-	nodeInterface                  string
+	krNode                         utils.NodeAware
 	routerID                       string
-	isIPv4Capable                  bool
-	isIPv6Capable                  bool
 	activeNodes                    map[string]bool
 	mu                             sync.Mutex
 	clientset                      kubernetes.Interface
@@ -167,7 +158,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	klog.V(1).Info("Populating ipsets.")
-	err = nrc.syncNodeIPSets()
+	err = nrc.syncNodeIPSets(nrc.krNode)
 	if err != nil {
 		klog.Errorf("Failed initial ipset setup: %s", err)
 	}
@@ -258,10 +249,10 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	if nrc.autoMTU {
-		mtu, err := utils.GetMTUFromNodeIP(nrc.primaryIP)
+		mtu, err := nrc.krNode.GetNodeMTU()
 		if err != nil {
 			klog.Errorf("Failed to find MTU for node IP: %s for intelligently setting the kube-bridge MTU "+
-				"due to %s.", nrc.primaryIP, err.Error())
+				"due to %s.", nrc.krNode.GetPrimaryNodeIP(), err.Error())
 		}
 		if mtu > 0 {
 			klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
@@ -300,7 +291,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		klog.Errorf("Failed to enable iptables for bridge. Network policies and service proxy may "+
 			"not work: %s", sysctlErr.Error())
 	}
-	if nrc.isIPv6Capable {
+	if nrc.krNode.IsIPv6Capable() {
 		sysctlErr = utils.SetSysctl(utils.BridgeNFCallIP6Tables, 1)
 		if sysctlErr != nil {
 			klog.Errorf("Failed to enable ip6tables for bridge. Network policies and service proxy may "+
@@ -358,7 +349,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		// Update ipset entries
 		if nrc.enablePodEgress || nrc.enableOverlays {
 			klog.V(1).Info("Syncing ipsets")
-			err = nrc.syncNodeIPSets()
+			err = nrc.syncNodeIPSets(nrc.krNode)
 			if err != nil {
 				klog.Errorf("Error synchronizing ipsets: %s", err.Error())
 			}
@@ -436,7 +427,7 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 
 	if nrc.autoMTU {
 		// Get the MTU by looking at the node's interface that is associated with the primary IP of the cluster
-		mtu, err := utils.GetMTUFromNodeIP(nrc.primaryIP)
+		mtu, err := nrc.krNode.GetNodeMTU()
 		if err != nil {
 			klog.Fatalf("failed to generate MTU: %v", err)
 		}
@@ -491,8 +482,8 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	}
 
 	// Advertise IPv4 CIDRs
-	nodePrimaryIPv4IP := utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
-	if nrc.isIPv4Capable && nodePrimaryIPv4IP == nil {
+	nodePrimaryIPv4IP := nrc.krNode.FindBestIPv4NodeAddress()
+	if nrc.krNode.IsIPv4Capable() && nodePrimaryIPv4IP == nil {
 		return fmt.Errorf("previous logic marked this node as IPv4 capable, but we couldn't find any " +
 			"available IPv4 node IPs, this shouldn't happen")
 	}
@@ -502,7 +493,8 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 		if err != nil || cidrLen < 0 || cidrLen > 32 {
 			return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
 		}
-		klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers", ip, cidrLen, nrc.primaryIP.String())
+		klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers",
+			ip, cidrLen, nrc.krNode.GetPrimaryNodeIP().String())
 		nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
 			PrefixLen: uint32(cidrLen),
 			Prefix:    ip.String(),
@@ -530,8 +522,8 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	}
 
 	// Advertise IPv6 CIDRs
-	if nrc.isIPv6Capable {
-		nodePrimaryIPv6IP := utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
+	if nrc.krNode.IsIPv6Capable() {
+		nodePrimaryIPv6IP := nrc.krNode.FindBestIPv6NodeAddress()
 		if nodePrimaryIPv6IP == nil {
 			return fmt.Errorf("previous logic marked this node as IPv6 capable, but we couldn't find any " +
 				"available IPv6 node IPs, this shouldn't happen")
@@ -590,18 +582,16 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	}
 
 	tunnelName := generateTunnelName(nextHop.String())
-	checkNHSameSubnet := func(protoIPSets map[v1core.NodeAddressType][]net.IP) bool {
-		for _, nodeIPSet := range protoIPSets {
-			for _, nodeIP := range nodeIPSet {
-				nodeSubnet, _, err := getNodeSubnet(nodeIP)
-				if err != nil {
-					klog.Warningf("unable to get subnet for node IP: %s, err: %v... skipping", nodeIP, err)
-					continue
-				}
-				// If we've found a subnet that contains our nextHop then we're done here
-				if nodeSubnet.Contains(nextHop) {
-					return true
-				}
+	checkNHSameSubnet := func(needle net.IP, haystack []net.IP) bool {
+		for _, nodeIP := range haystack {
+			nodeSubnet, _, err := utils.GetNodeSubnet(nodeIP, nil)
+			if err != nil {
+				klog.Warningf("unable to get subnet for node IP: %s, err: %v... skipping", nodeIP, err)
+				continue
+			}
+			// If we've found a subnet that contains our nextHop then we're done here
+			if nodeSubnet.Contains(needle) {
+				return true
 			}
 		}
 		return false
@@ -609,9 +599,9 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 
 	var sameSubnet bool
 	if nextHop.To4() != nil {
-		sameSubnet = checkNHSameSubnet(nrc.nodeIPv4Addrs)
+		sameSubnet = checkNHSameSubnet(nextHop, nrc.krNode.GetNodeIPv4Addrs())
 	} else if nextHop.To16() != nil {
-		sameSubnet = checkNHSameSubnet(nrc.nodeIPv6Addrs)
+		sameSubnet = checkNHSameSubnet(nextHop, nrc.krNode.GetNodeIPv6Addrs())
 	}
 
 	// If we've made it this far, then it is likely that the node is holding a destination route for this path already.
@@ -673,10 +663,10 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 		// if we set up an overlay tunnel link, then use it for destination routing
 		var bestIPForFamily net.IP
 		if dst.IP.To4() != nil {
-			bestIPForFamily = utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
+			bestIPForFamily = nrc.krNode.FindBestIPv4NodeAddress()
 		} else {
 			// Need to activate the ip command in IPv6 mode
-			bestIPForFamily = utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
+			bestIPForFamily = nrc.krNode.FindBestIPv6NodeAddress()
 		}
 		if bestIPForFamily == nil {
 			return fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
@@ -763,13 +753,13 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 	strFormattedEncapPort := strconv.FormatInt(int64(nrc.overlayEncapPort), 10)
 
 	if nextHop.To4() != nil {
-		bestIPForFamily = utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs)
+		bestIPForFamily = nrc.krNode.FindBestIPv4NodeAddress()
 		ipipMode = encapTypeIPIP
 		fouLinkType = ipipModev4
 	} else {
 		// Need to activate the ip command in IPv6 mode
 		ipBase = append(ipBase, "-6")
-		bestIPForFamily = utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs)
+		bestIPForFamily = nrc.krNode.FindBestIPv6NodeAddress()
 		ipipMode = ipipModev6
 		fouLinkType = "ip6tnl"
 		isIPv6 = true
@@ -951,7 +941,7 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	klog.Infof("Successfully cleaned the NetworkRoutesController configuration done by kube-router")
 }
 
-func (nrc *NetworkRoutingController) syncNodeIPSets() error {
+func (nrc *NetworkRoutingController) syncNodeIPSets(nodeIPAware utils.NodeIPAware) error {
 	var err error
 	start := time.Now()
 	defer func() {
@@ -994,16 +984,11 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		}
 
 		var ipv4Addrs, ipv6Addrs [][]string
-		intExtNodeIPsv4, intExtNodeIPsv6 := utils.GetAllNodeIPs(node)
-		for _, nodeIPv4s := range intExtNodeIPsv4 {
-			for _, nodeIPv4 := range nodeIPv4s {
-				ipv4Addrs = append(ipv4Addrs, []string{nodeIPv4.String(), utils.OptionTimeout, "0"})
-			}
+		for _, nodeIPv4 := range nodeIPAware.GetNodeIPv6Addrs() {
+			ipv4Addrs = append(ipv4Addrs, []string{nodeIPv4.String(), utils.OptionTimeout, "0"})
 		}
-		for _, nodeIPv6s := range intExtNodeIPsv6 {
-			for _, nodeIPv6 := range nodeIPv6s {
-				ipv6Addrs = append(ipv6Addrs, []string{nodeIPv6.String(), utils.OptionTimeout, "0"})
-			}
+		for _, nodeIPv6 := range nodeIPAware.GetNodeIPv6Addrs() {
+			ipv6Addrs = append(ipv6Addrs, []string{nodeIPv6.String(), utils.OptionTimeout, "0"})
 		}
 		currentNodeIPs[v1core.IPv4Protocol] = append(currentNodeIPs[v1core.IPv4Protocol], ipv4Addrs...)
 		currentNodeIPs[v1core.IPv6Protocol] = append(currentNodeIPs[v1core.IPv6Protocol], ipv6Addrs...)
@@ -1055,7 +1040,7 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		}
 
 		comment = "allow outbound node port traffic on node interface with which node ip is associated"
-		args = []string{"-m", "comment", "--comment", comment, "-o", nrc.nodeInterface, "-j", "ACCEPT"}
+		args = []string{"-m", "comment", "--comment", comment, "-o", nrc.krNode.GetNodeInterfaceName(), "-j", "ACCEPT"}
 		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
 			return fmt.Errorf("failed to run iptables command: %s", err.Error())
@@ -1178,7 +1163,8 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 	if grpcServer {
 		nrc.bgpServer = gobgp.NewBgpServer(
-			gobgp.GrpcListenAddress(net.JoinHostPort(nrc.primaryIP.String(), "50051") + "," + "127.0.0.1:50051"))
+			gobgp.GrpcListenAddress(net.JoinHostPort(nrc.krNode.GetPrimaryNodeIP().String(),
+				"50051") + "," + "127.0.0.1:50051"))
 	} else {
 		nrc.bgpServer = gobgp.NewBgpServer()
 	}
@@ -1186,12 +1172,12 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 	var localAddressList []string
 
-	if nrc.isIPv4Capable && !utils.ContainsIPv4Address(nrc.localAddressList) {
+	if nrc.krNode.IsIPv4Capable() && !utils.ContainsIPv4Address(nrc.localAddressList) {
 		klog.Warningf("List of local addresses did not contain a valid IPv4 address, but IPv4 was " +
 			"enabled in kube-router's CLI options. BGP may not work as expected!")
 	}
 
-	if nrc.isIPv6Capable && !utils.ContainsIPv6Address(nrc.localAddressList) {
+	if nrc.krNode.IsIPv6Capable() && !utils.ContainsIPv6Address(nrc.localAddressList) {
 		klog.Warningf("List of local addresses did not contain a valid IPv6 address, but IPv6 was " +
 			"enabled in kube-router's CLI options. BGP may not work as expected!")
 	}
@@ -1207,13 +1193,13 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 		// Make sure that the address type matches what we're capable of before listening
 		if ip.To4() != nil {
-			if !nrc.isIPv4Capable {
+			if !nrc.krNode.IsIPv4Capable() {
 				klog.Warningf("was configured to listen on %s, but node is not enabled for IPv4 or does not "+
 					"have any IPv4 addresses configured for it, skipping", addr)
 				continue
 			}
 		} else {
-			if !nrc.isIPv6Capable {
+			if !nrc.krNode.IsIPv6Capable() {
 				klog.Warningf("was configured to listen on %s, but node is not enabled for IPv6 or does not "+
 					"have any IPv6 addresses configured for it, skipping", addr)
 				continue
@@ -1338,7 +1324,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 		// Create and set Global Peer Router complete configs
 		nrc.globalPeerRouters, err = newGlobalPeers(peerIPs, peerPorts, peerASNs, peerPasswords, peerLocalIPs,
-			nrc.bgpHoldtime, nrc.primaryIP.String())
+			nrc.bgpHoldtime, nrc.krNode.GetPrimaryNodeIP().String())
 		if err != nil {
 			err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
 			if err2 != nil {
@@ -1386,7 +1372,7 @@ func (nrc *NetworkRoutingController) setupHandlers(node *v1core.Node) error {
 
 	nrc.iptablesCmdHandlers = make(map[v1core.IPFamily]utils.IPTablesHandler)
 	nrc.ipSetHandlers = make(map[v1core.IPFamily]utils.IPSetHandler)
-	if node == nil || len(nrc.nodeIPv4Addrs) > 0 {
+	if node == nil || nrc.krNode.IsIPv4Capable() {
 		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
 		if err != nil {
 			klog.Fatalf("Failed to allocate IPv4 iptables handler: %v", err)
@@ -1401,7 +1387,7 @@ func (nrc *NetworkRoutingController) setupHandlers(node *v1core.Node) error {
 		}
 		nrc.ipSetHandlers[v1core.IPv4Protocol] = ipset
 	}
-	if node == nil || len(nrc.nodeIPv6Addrs) > 0 {
+	if node == nil || nrc.krNode.IsIPv6Capable() {
 		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
 		if err != nil {
 			klog.Fatalf("Failed to allocate IPv6 iptables handler: %v", err)
@@ -1470,29 +1456,10 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		return nil, errors.New("failed getting node object from API server: " + err.Error())
 	}
 
-	nrc.nodeName = node.Name
-
-	// We preserve the old logic here for getting the primary IP which is set on nrc.primaryIP. This can be either IPv4
-	// or IPv6
-	nodeIP, err := utils.GetPrimaryNodeIP(node)
+	nrc.krNode, err = utils.NewKRNode(node, nil, kubeRouterConfig.EnableIPv4, kubeRouterConfig.EnableIPv6)
 	if err != nil {
-		return nil, errors.New("failed getting IP address from node object: " + err.Error())
+		return nil, err
 	}
-	nrc.primaryIP = nodeIP
-
-	// Here we test to see whether the node is IPv6 capable, if the user has enabled IPv6 (via command-line options)
-	// and the node has an IPv6 address, the following method will return an IPv6 address
-	nrc.nodeIPv4Addrs, nrc.nodeIPv6Addrs = utils.GetAllNodeIPs(node)
-	if kubeRouterConfig.EnableIPv4 && len(nrc.nodeIPv4Addrs[v1core.NodeInternalIP]) < 1 &&
-		len(nrc.nodeIPv4Addrs[v1core.NodeExternalIP]) < 1 {
-		return nil, fmt.Errorf("IPv4 was enabled, but no IPv4 address was found on the node")
-	}
-	nrc.isIPv4Capable = len(nrc.nodeIPv4Addrs) > 0
-	if kubeRouterConfig.EnableIPv6 && len(nrc.nodeIPv6Addrs[v1core.NodeInternalIP]) < 1 &&
-		len(nrc.nodeIPv6Addrs[v1core.NodeExternalIP]) < 1 {
-		return nil, fmt.Errorf("IPv6 was enabled, but no IPv6 address was found on the node")
-	}
-	nrc.isIPv6Capable = len(nrc.nodeIPv6Addrs) > 0
 
 	if kubeRouterConfig.EnableIPv6 {
 		sysctlErr := utils.SetSysctl(utils.IPv6ConfAllDisableIPv6, 0)
@@ -1502,21 +1469,9 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	}
 
-	switch {
-	case kubeRouterConfig.RouterID == "generate":
-		h := fnv.New32a()
-		h.Write(nrc.primaryIP)
-		hs := h.Sum32()
-		gip := make(net.IP, 4)
-		binary.BigEndian.PutUint32(gip, hs)
-		nrc.routerID = gip.String()
-	case kubeRouterConfig.RouterID != "":
-		nrc.routerID = kubeRouterConfig.RouterID
-	default:
-		if nrc.primaryIP.To4() == nil {
-			return nil, errors.New("router-id must be specified when primary node IP is an IPv6 address")
-		}
-		nrc.routerID = nrc.primaryIP.String()
+	nrc.routerID, err = generateRouterID(nrc.krNode, kubeRouterConfig.RouterID)
+	if err != nil {
+		return nil, err
 	}
 
 	// let's start with assumption we have necessary IAM creds to access EC2 api
@@ -1627,26 +1582,18 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 
 	nrc.globalPeerRouters, err = newGlobalPeers(kubeRouterConfig.PeerRouters, peerPorts,
-		peerASNs, peerPasswords, nil, nrc.bgpHoldtime, nrc.primaryIP.String())
+		peerASNs, peerPasswords, nil, nrc.bgpHoldtime, nrc.krNode.GetPrimaryNodeIP().String())
 	if err != nil {
 		return nil, fmt.Errorf("error processing Global Peer Router configs: %s", err)
 	}
 
-	nrc.nodeSubnet, nrc.nodeInterface, err = getNodeSubnet(nodeIP)
-	if err != nil {
-		return nil, errors.New("failed find the subnet of the node IP and interface on" +
-			"which its configured: " + err.Error())
-	}
-
 	bgpLocalAddressListAnnotation, ok := node.ObjectMeta.Annotations[bgpLocalAddressAnnotation]
 	if !ok {
-		if nrc.isIPv4Capable {
-			nrc.localAddressList = append(nrc.localAddressList,
-				utils.FindBestIPv4NodeAddress(nrc.primaryIP, nrc.nodeIPv4Addrs).String())
+		if nrc.krNode.IsIPv4Capable() {
+			nrc.localAddressList = append(nrc.localAddressList, nrc.krNode.FindBestIPv4NodeAddress().String())
 		}
-		if nrc.isIPv6Capable {
-			nrc.localAddressList = append(nrc.localAddressList,
-				utils.FindBestIPv6NodeAddress(nrc.primaryIP, nrc.nodeIPv6Addrs).String())
+		if nrc.krNode.IsIPv6Capable() {
+			nrc.localAddressList = append(nrc.localAddressList, nrc.krNode.FindBestIPv6NodeAddress().String())
 		}
 		klog.Infof("Could not find annotation `kube-router.io/bgp-local-addresses` on node object so BGP "+
 			"will listen on node IP: %s addresses.", nrc.localAddressList)

@@ -41,14 +41,14 @@ func (nrc *NetworkRoutingController) enablePolicyBasedRouting() error {
 		return fmt.Errorf("failed to update rt_tables file: %s", err)
 	}
 
-	if nrc.isIPv4Capable {
+	if nrc.krNode.IsIPv4Capable() {
 		for _, ipv4CIDR := range nrc.podIPv4CIDRs {
 			if err := ipRuleAbstraction("-4", "add", ipv4CIDR); err != nil {
 				return err
 			}
 		}
 	}
-	if nrc.isIPv6Capable {
+	if nrc.krNode.IsIPv6Capable() {
 		for _, ipv6CIDR := range nrc.podIPv6CIDRs {
 			if err := ipRuleAbstraction("-6", "add", ipv6CIDR); err != nil {
 				return err
@@ -65,14 +65,14 @@ func (nrc *NetworkRoutingController) disablePolicyBasedRouting() error {
 		return fmt.Errorf("failed to update rt_tables file: %s", err)
 	}
 
-	if nrc.isIPv4Capable {
+	if nrc.krNode.IsIPv4Capable() {
 		for _, ipv4CIDR := range nrc.podIPv4CIDRs {
 			if err := ipRuleAbstraction("-4", "del", ipv4CIDR); err != nil {
 				return err
 			}
 		}
 	}
-	if nrc.isIPv6Capable {
+	if nrc.krNode.IsIPv6Capable() {
 		for _, ipv6CIDR := range nrc.podIPv6CIDRs {
 			if err := ipRuleAbstraction("-6", "del", ipv6CIDR); err != nil {
 				return err
