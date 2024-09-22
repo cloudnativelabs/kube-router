@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -1893,7 +1894,7 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 			waitForListerWithTimeout(testcase.nrc.epLister, time.Second*10, t)
 
 			nodeHasEndpoints, err := testcase.nrc.nodeHasEndpointsForService(testcase.existingService)
-			if !reflect.DeepEqual(err, testcase.err) {
+			if !errors.Is(err, testcase.err) {
 				t.Logf("actual err: %v", err)
 				t.Logf("expected err: %v", testcase.err)
 				t.Error("unexpected error")
