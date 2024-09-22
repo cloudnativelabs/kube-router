@@ -129,8 +129,8 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 
 		protocol := convertSvcProtoToSysCallProto(svc.protocol)
 		clusterIPs := getAllClusterIPs(svc)
-		ipv4NodeIP := utils.FindBestIPv4NodeAddress(nsc.primaryIP, nsc.nodeIPv4Addrs)
-		ipv6NodeIP := utils.FindBestIPv6NodeAddress(nsc.primaryIP, nsc.nodeIPv6Addrs)
+		ipv4NodeIP := nsc.krNode.FindBestIPv4NodeAddress()
+		ipv6NodeIP := nsc.krNode.FindBestIPv6NodeAddress()
 		dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
 		if err != nil {
 			return fmt.Errorf("failed creating dummy interface: %v", err)
@@ -321,14 +321,14 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 				}
 			}
 		} else {
-			ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc, nsc.primaryIP,
-				protocol, uint16(svc.nodePort))
+			ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc,
+				nsc.krNode.GetPrimaryNodeIP(), protocol, uint16(svc.nodePort))
 			// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
 			if svcID == "" {
 				continue
 			}
-			nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, nsc.primaryIP,
-				false)
+			nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc,
+				nsc.krNode.GetPrimaryNodeIP(), false)
 		}
 	}
 
@@ -401,9 +401,9 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 	var ipvsExternalIPSvc *ipvs.Service
 
 	if externalIP.To4() != nil {
-		nodeIP = utils.FindBestIPv4NodeAddress(nsc.primaryIP, nsc.nodeIPv4Addrs)
+		nodeIP = nsc.krNode.FindBestIPv4NodeAddress()
 	} else {
-		nodeIP = utils.FindBestIPv6NodeAddress(nsc.primaryIP, nsc.nodeIPv6Addrs)
+		nodeIP = nsc.krNode.FindBestIPv6NodeAddress()
 	}
 
 	dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
@@ -486,11 +486,11 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 	var family v1.IPFamily
 	var sysFamily uint16
 	if externalIP.To4() != nil {
-		nodeIP = utils.FindBestIPv4NodeAddress(nsc.primaryIP, nsc.nodeIPv4Addrs)
+		nodeIP = nsc.krNode.FindBestIPv4NodeAddress()
 		family = v1.IPv4Protocol
 		sysFamily = syscall.AF_INET
 	} else {
-		nodeIP = utils.FindBestIPv6NodeAddress(nsc.primaryIP, nsc.nodeIPv6Addrs)
+		nodeIP = nsc.krNode.FindBestIPv6NodeAddress()
 		family = v1.IPv6Protocol
 		sysFamily = syscall.AF_INET6
 	}
@@ -603,7 +603,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 
 func (nsc *NetworkServicesController) setupForDSR(serviceInfoMap serviceInfoMap) error {
 	klog.V(1).Infof("Setting up policy routing required for Direct Server Return functionality.")
-	err := nsc.ln.setupPolicyRoutingForDSR(nsc.isIPv4Capable, nsc.isIPv6Capable)
+	err := nsc.ln.setupPolicyRoutingForDSR(nsc.krNode.IsIPv4Capable(), nsc.krNode.IsIPv6Capable())
 	if err != nil {
 		return errors.New("Failed setup PBR for DSR due to: " + err.Error())
 	}
@@ -611,7 +611,7 @@ func (nsc *NetworkServicesController) setupForDSR(serviceInfoMap serviceInfoMap)
 		customDSRRouteTableName)
 
 	klog.V(1).Infof("Setting up custom route table required to add routes for external IP's.")
-	err = nsc.ln.setupRoutesForExternalIPForDSR(serviceInfoMap, nsc.isIPv4Capable, nsc.isIPv6Capable)
+	err = nsc.ln.setupRoutesForExternalIPForDSR(serviceInfoMap, nsc.krNode.IsIPv4Capable(), nsc.krNode.IsIPv6Capable())
 	if err != nil {
 		klog.Errorf("failed setup custom routing table required to add routes for external IP's due to: %v",
 			err)
@@ -649,9 +649,9 @@ func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap 
 				klog.V(1).Infof("Found an IP %s which is no longer needed so cleaning up", addr.IP.String())
 				var nodeIPForFamily net.IP
 				if addr.IP.To4() != nil {
-					nodeIPForFamily = utils.FindBestIPv4NodeAddress(nsc.primaryIP, nsc.nodeIPv4Addrs)
+					nodeIPForFamily = nsc.krNode.FindBestIPv4NodeAddress()
 				} else {
-					nodeIPForFamily = utils.FindBestIPv6NodeAddress(nsc.primaryIP, nsc.nodeIPv6Addrs)
+					nodeIPForFamily = nsc.krNode.FindBestIPv6NodeAddress()
 				}
 
 				err := nsc.ln.ipAddrDel(intfc, addr.IP.String(), nodeIPForFamily.String())
@@ -821,10 +821,10 @@ func (nsc *NetworkServicesController) cleanupDSRService(fwMark uint32) error {
 		}
 	}
 
-	if nsc.isIPv4Capable {
+	if nsc.krNode.IsIPv4Capable() {
 		cleanupTables("iptables-save")
 	}
-	if nsc.isIPv6Capable {
+	if nsc.krNode.IsIPv6Capable() {
 		cleanupTables("ip6tables-save")
 	}
 

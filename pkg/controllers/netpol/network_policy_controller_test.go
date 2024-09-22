@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
+	"github.com/vishvananda/netlink"
 
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -207,7 +208,6 @@ func newUneventfulNetworkPolicyController(podInformer cache.SharedIndexInformer,
 	npc.iptablesSaveRestore = make(map[v1.IPFamily]utils.IPTablesSaveRestorer)
 	npc.filterTableRules = make(map[v1.IPFamily]*bytes.Buffer)
 	npc.ipSetHandlers = make(map[v1.IPFamily]utils.IPSetHandler)
-	npc.nodeIPs = make(map[v1.IPFamily]net.IP)
 
 	// TODO: Handle both IP families
 	npc.iptablesCmdHandlers[v1.IPv4Protocol] = newFakeIPTables(iptables.ProtocolIPv4)
@@ -215,9 +215,13 @@ func newUneventfulNetworkPolicyController(podInformer cache.SharedIndexInformer,
 	var buf bytes.Buffer
 	npc.filterTableRules[v1.IPv4Protocol] = &buf
 	npc.ipSetHandlers[v1.IPv4Protocol] = &fakeIPSet{}
-	npc.nodeIPs[v1.IPv4Protocol] = net.IPv4(10, 10, 10, 10)
 
-	npc.nodeHostName = "node"
+	krNode := utils.KRNode{
+		NodeName:      "node",
+		NodeIPv4Addrs: map[v1.NodeAddressType][]net.IP{v1.NodeInternalIP: {net.IPv4(10, 10, 10, 10)}},
+	}
+	npc.krNode = &krNode
+
 	npc.podLister = podInformer.GetIndexer()
 	npc.nsLister = nsInformer.GetIndexer()
 	npc.npLister = npInformer.GetIndexer()
@@ -754,6 +758,51 @@ func (ips *fakeIPSet) Name(name string) string {
 	return name
 }
 
+type fakeLocalLinkQuerier struct {
+	links []netlink.Link
+	addrs []*net.IPNet
+}
+
+func newFakeLocalLinkQuerier(addrStrings []string) *fakeLocalLinkQuerier {
+	links := make([]netlink.Link, len(addrStrings))
+	for idx := range addrStrings {
+		linkAttrs := netlink.LinkAttrs{
+			Index: idx,
+		}
+		linkDevice := netlink.Device{LinkAttrs: linkAttrs}
+		links[idx] = &linkDevice
+	}
+	addrs := make([]*net.IPNet, len(addrStrings))
+	for idx, addr := range addrStrings {
+		ip := net.ParseIP(addr)
+		var netMask net.IPMask
+		if ip.To4() != nil {
+			netMask = net.CIDRMask(24, 32)
+		} else {
+			netMask = net.CIDRMask(64, 128)
+		}
+		ipNet := &net.IPNet{
+			IP:   ip,
+			Mask: netMask,
+		}
+		addrs[idx] = ipNet
+	}
+	return &fakeLocalLinkQuerier{
+		links: links,
+		addrs: addrs,
+	}
+}
+
+func (f *fakeLocalLinkQuerier) LinkList() ([]netlink.Link, error) {
+	return f.links, nil
+}
+
+func (f *fakeLocalLinkQuerier) AddrList(link netlink.Link, family int) ([]netlink.Addr, error) {
+	addrs := make([]netlink.Addr, 1)
+	addrs[0] = netlink.Addr{IPNet: f.addrs[link.Attrs().Index]}
+	return addrs, nil
+}
+
 func TestNetworkPolicyController(t *testing.T) {
 	curHostname, _ := os.Hostname()
 	testCases := []tNetPolConfigTestCase{
@@ -939,7 +988,9 @@ func TestNetworkPolicyController(t *testing.T) {
 			"",
 		},
 	}
-	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10", "2001:0db8:0042:0001:0000:0000:0000:0000"})}})
+	fakeNodeIPs := []string{"10.10.10.10", "2001:0db8:0042:0001:0000:0000:0000:0000"}
+	fakeLinkQuerier := newFakeLocalLinkQuerier(fakeNodeIPs)
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", fakeNodeIPs)}})
 	_, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
@@ -948,7 +999,8 @@ func TestNetworkPolicyController(t *testing.T) {
 			iptablesHandlers[v1.IPv4Protocol] = newFakeIPTables(iptables.ProtocolIPv4)
 			ipSetHandlers := make(map[v1.IPFamily]utils.IPSetHandler, 1)
 			ipSetHandlers[v1.IPv4Protocol] = &fakeIPSet{}
-			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer, &sync.Mutex{}, iptablesHandlers, ipSetHandlers)
+			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer,
+				&sync.Mutex{}, fakeLinkQuerier, iptablesHandlers, ipSetHandlers)
 			if err == nil && test.expectError {
 				t.Error("This config should have failed, but it was successful instead")
 			} else if err != nil {

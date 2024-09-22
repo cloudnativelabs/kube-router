@@ -158,7 +158,7 @@ func (nsc *NetworkServicesController) isValidKubeRouterServiceArtifact(address n
 						return true, nil
 					}
 				}
-			} else if address.Equal(nsc.primaryIP) {
+			} else if address.Equal(nsc.krNode.GetPrimaryNodeIP()) {
 				return true, nil
 			}
 		}
@@ -252,7 +252,7 @@ func (nsc *NetworkServicesController) findContainerRuntimeReferences(endpointIP 
 	}
 
 	// we are only concerned with endpoint pod running on current node
-	if strings.Compare(podObj.Status.HostIP, nsc.primaryIP.String()) != 0 {
+	if strings.Compare(podObj.Status.HostIP, nsc.krNode.GetPrimaryNodeIP().String()) != 0 {
 		return "", "", nil
 	}
 
@@ -318,11 +318,11 @@ func (nsc *NetworkServicesController) getPrimaryAndCIDRsByFamily(ipFamily v1.IPF
 	switch ipFamily {
 	case v1.IPv4Protocol:
 		// If we're not detected to be IPv4 capable break early
-		if !nsc.isIPv4Capable {
+		if !nsc.krNode.IsIPv4Capable() {
 			return "", nil
 		}
 
-		primaryIP = utils.FindBestIPv4NodeAddress(nsc.primaryIP, nsc.nodeIPv4Addrs).String()
+		primaryIP = nsc.krNode.FindBestIPv4NodeAddress().String()
 		if len(nsc.podCidr) > 0 && netutils.IsIPv4CIDRString(nsc.podCidr) {
 			cidrMap[nsc.podCidr] = true
 		}
@@ -335,11 +335,11 @@ func (nsc *NetworkServicesController) getPrimaryAndCIDRsByFamily(ipFamily v1.IPF
 		}
 	case v1.IPv6Protocol:
 		// If we're not detected to be IPv6 capable break early
-		if !nsc.isIPv6Capable {
+		if !nsc.krNode.IsIPv6Capable() {
 			return "", nil
 		}
 
-		primaryIP = utils.FindBestIPv6NodeAddress(nsc.primaryIP, nsc.nodeIPv6Addrs).String()
+		primaryIP = nsc.krNode.FindBestIPv6NodeAddress().String()
 		if len(nsc.podCidr) > 0 && netutils.IsIPv6CIDRString(nsc.podCidr) {
 			cidrMap[nsc.podCidr] = true
 		}

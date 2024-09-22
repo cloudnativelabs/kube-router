@@ -3,6 +3,7 @@ package routing
 import (
 	"context"
 	"fmt"
+	"net"
 	"reflect"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	gobgp "github.com/osrg/gobgp/v3/pkg/server"
 )
@@ -34,6 +36,9 @@ type PolicyTestCase struct {
 }
 
 func Test_AddPolicies(t *testing.T) {
+	ipv4CapableKRNode := &utils.KRNode{
+		NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.IPv4(10, 10, 10, 10)}},
+	}
 	testcases := []PolicyTestCase{
 		{
 			"has nodes and services",
@@ -49,7 +54,7 @@ func Test_AddPolicies(t *testing.T) {
 				activeNodes:       make(map[string]bool),
 				nodeAsnNumber:     100,
 				podCidr:           "172.20.0.0/24",
-				isIPv4Capable:     true,
+				krNode:            ipv4CapableKRNode,
 				podIPv4CIDRs:      []string{"172.20.0.0/24"},
 			},
 			[]*v1core.Node{
@@ -180,7 +185,7 @@ func Test_AddPolicies(t *testing.T) {
 				activeNodes:       make(map[string]bool),
 				nodeAsnNumber:     100,
 				podCidr:           "172.21.0.0/24",
-				isIPv4Capable:     true,
+				krNode:            ipv4CapableKRNode,
 				podIPv4CIDRs:      []string{"172.21.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
@@ -423,7 +428,7 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.22.0.0/24",
-				isIPv4Capable:     true,
+				krNode:            ipv4CapableKRNode,
 				podIPv4CIDRs:      []string{"172.22.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
@@ -628,7 +633,7 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.23.0.0/24",
-				isIPv4Capable:     true,
+				krNode:            ipv4CapableKRNode,
 				podIPv4CIDRs:      []string{"172.23.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
@@ -816,7 +821,7 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.24.0.0/24",
-				isIPv4Capable:     true,
+				krNode:            ipv4CapableKRNode,
 				podIPv4CIDRs:      []string{"172.24.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
@@ -1027,7 +1032,7 @@ func Test_AddPolicies(t *testing.T) {
 				bgpServer:         gobgp.NewBgpServer(),
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.25.0.0/24",
-				isIPv4Capable:     true,
+				krNode:            ipv4CapableKRNode,
 				podIPv4CIDRs:      []string{"172.25.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{
@@ -1238,7 +1243,7 @@ func Test_AddPolicies(t *testing.T) {
 				advertisePodCidr:  true,
 				activeNodes:       make(map[string]bool),
 				podCidr:           "172.26.0.0/24",
-				isIPv4Capable:     true,
+				krNode:            ipv4CapableKRNode,
 				podIPv4CIDRs:      []string{"172.26.0.0/24"},
 				globalPeerRouters: []*gobgpapi.Peer{
 					{

@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -140,10 +141,13 @@ var _ = Describe("NetworkServicesController", func() {
 			fatalf("failed to create existing services: %v", err)
 		}
 
+		krNode := &utils.KRNode{
+			NodeName:  "node-1",
+			PrimaryIP: net.ParseIP("10.0.0.0"),
+		}
 		nsc = &NetworkServicesController{
-			primaryIP:    net.ParseIP("10.0.0.0"),
-			nodeHostName: "node-1",
-			ln:           mockedLinuxNetworking,
+			krNode: krNode,
+			ln:     mockedLinuxNetworking,
 		}
 
 		startInformersForServiceProxy(nsc, clientset)

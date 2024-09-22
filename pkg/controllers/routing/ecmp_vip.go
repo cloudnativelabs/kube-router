@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"golang.org/x/exp/maps"
-
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
@@ -594,28 +592,15 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 		return false, errors.New("failed to convert cache item to Endpoints type")
 	}
 
-	// Find all the IPs that this node has on it so that we can use it to compare it against endpoint IPs
-	allNodeIPs := make([]string, 0)
-	for _, ips := range maps.Values(nrc.nodeIPv4Addrs) {
-		for _, ip := range ips {
-			allNodeIPs = append(allNodeIPs, ip.String())
-		}
-	}
-	for _, ips := range maps.Values(nrc.nodeIPv6Addrs) {
-		for _, ip := range ips {
-			allNodeIPs = append(allNodeIPs, ip.String())
-		}
-	}
-
 	for _, subset := range ep.Subsets {
 		for _, address := range subset.Addresses {
 			if address.NodeName != nil {
-				if *address.NodeName == nrc.nodeName {
+				if *address.NodeName == nrc.krNode.GetNodeName() {
 					return true, nil
 				}
 			} else {
-				for _, nodeIP := range allNodeIPs {
-					if address.IP == nodeIP {
+				for _, nodeIP := range nrc.krNode.GetNodeIPAddrs() {
+					if address.IP == nodeIP.String() {
 						return true, nil
 					}
 				}

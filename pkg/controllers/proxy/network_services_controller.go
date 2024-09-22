@@ -108,8 +108,7 @@ const (
 
 // NetworkServicesController struct stores information needed by the controller
 type NetworkServicesController struct {
-	primaryIP           net.IP
-	nodeHostName        string
+	krNode              utils.NodeAware
 	syncPeriod          time.Duration
 	mu                  sync.Mutex
 	serviceMap          serviceInfoMap
@@ -145,12 +144,8 @@ type NetworkServicesController struct {
 
 	iptablesCmdHandlers map[v1.IPFamily]utils.IPTablesHandler
 	ipSetHandlers       map[v1.IPFamily]utils.IPSetHandler
-	nodeIPv4Addrs       map[v1.NodeAddressType][]net.IP
-	nodeIPv6Addrs       map[v1.NodeAddressType][]net.IP
 	podIPv4CIDRs        []string
 	podIPv6CIDRs        []string
-	isIPv4Capable       bool
-	isIPv6Capable       bool
 
 	hpc                *hairpinController
 	hpEndpointReceiver chan string
@@ -294,7 +289,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	// Ensure rp_filter=2 for DSR capability, see:
 	// * https://access.redhat.com/solutions/53031
 	// * https://github.com/cloudnativelabs/kube-router/pull/1651#issuecomment-2072851683
-	if nsc.isIPv4Capable {
+	if nsc.krNode.IsIPv4Capable() {
 		sysctlErr := utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "all", 2)
 		if sysctlErr != nil {
 			if sysctlErr.IsFatal() {
@@ -618,10 +613,10 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 
 	for family, addrs := range addrsMap {
 		// Don't run for families that we don't support
-		if family == v1.IPv4Protocol && !nsc.isIPv4Capable {
+		if family == v1.IPv4Protocol && !nsc.krNode.IsIPv4Capable() {
 			continue
 		}
-		if family == v1.IPv6Protocol && !nsc.isIPv6Capable {
+		if family == v1.IPv6Protocol && !nsc.krNode.IsIPv6Capable() {
 			continue
 		}
 
@@ -744,10 +739,10 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 				} else {
 					pushMetric = false
 				}
-			case nsc.primaryIP.String():
+			case nsc.krNode.GetPrimaryNodeIP().String():
 				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
 					pushMetric = true
-					svcVip = nsc.primaryIP.String()
+					svcVip = nsc.krNode.GetPrimaryNodeIP().String()
 				} else {
 					pushMetric = false
 				}
@@ -1106,7 +1101,7 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 				}
 
 				for _, addr := range ep.Addresses {
-					isLocal := ep.NodeName != nil && *ep.NodeName == nsc.nodeHostName
+					isLocal := ep.NodeName != nil && *ep.NodeName == nsc.krNode.GetNodeName()
 					endpoints = append(endpoints, endpointSliceInfo{
 						ip:            addr,
 						port:          int(*port.Port),
@@ -1287,17 +1282,13 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 					family = v1.IPv4Protocol
 					familyClusterIPs = clusterIPs[v1.IPv4Protocol]
 					familyExternalIPs = externalIPs[v1.IPv4Protocol]
-					//nolint:gocritic // we intend to append to separate maps here
-					familyNodeIPs = append(nsc.nodeIPv4Addrs[v1.NodeInternalIP],
-						nsc.nodeIPv4Addrs[v1.NodeExternalIP]...)
+					familyNodeIPs = nsc.krNode.GetNodeIPv4Addrs()
 					rulesMap = ipv4RulesNeeded
 				} else {
 					family = v1.IPv6Protocol
 					familyClusterIPs = clusterIPs[v1.IPv6Protocol]
 					familyExternalIPs = externalIPs[v1.IPv6Protocol]
-					//nolint:gocritic // we intend to append to separate maps here
-					familyNodeIPs = append(nsc.nodeIPv6Addrs[v1.NodeInternalIP],
-						nsc.nodeIPv6Addrs[v1.NodeExternalIP]...)
+					familyNodeIPs = nsc.krNode.GetNodeIPv6Addrs()
 					rulesMap = ipv6RulesNeeded
 				}
 				if len(familyClusterIPs) < 1 {
@@ -1336,14 +1327,14 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	}
 
 	// Cleanup (if needed) and return if there's no hairpin-mode Services
-	if len(ipv4RulesNeeded) == 0 && nsc.isIPv4Capable {
+	if len(ipv4RulesNeeded) == 0 && nsc.krNode.IsIPv4Capable() {
 		klog.V(1).Info("No IPv4 hairpin-mode enabled services found -- no hairpin rules created")
 		err := nsc.deleteHairpinIptablesRules(v1.IPv4Protocol)
 		if err != nil {
 			return fmt.Errorf("error deleting hairpin rules: %v", err)
 		}
 	}
-	if len(ipv6RulesNeeded) == 0 && nsc.isIPv6Capable {
+	if len(ipv6RulesNeeded) == 0 && nsc.krNode.IsIPv6Capable() {
 		klog.V(1).Info("No IPv6 hairpin-mode enabled services found -- no hairpin rules created")
 		err := nsc.deleteHairpinIptablesRules(v1.IPv6Protocol)
 		if err != nil {
@@ -1777,7 +1768,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 	if len(nsc.iptablesCmdHandlers) < 1 {
 		// Even though we have a config at this point (via passed param), we want to send nil so that the node will
 		// discover which IP address families it has and act accordingly
-		err = nsc.setupHandlers(nil, nil)
+		err = nsc.setupHandlers(nil)
 		if err != nil {
 			klog.Errorf("could not cleanup because we couldn't create iptables/ipset command handlers due to: %v", err)
 		}
@@ -1936,35 +1927,13 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 
 // setupHandlers Here we test to see whether the node is IPv6 capable, if the user has enabled IPv6 (via command-line
 // options) and the node has an IPv6 address, the following method will return an IPv6 address
-func (nsc *NetworkServicesController) setupHandlers(config *options.KubeRouterConfig, node *v1.Node) error {
-	// node being nil covers the case where this function is called by something that doesn't have a kube-apiserver
-	// connection like the cleanup code. In this instance we want all possible iptables and ipset handlers
-	if node != nil {
-		nsc.nodeIPv4Addrs, nsc.nodeIPv6Addrs = utils.GetAllNodeIPs(node)
-	}
-
-	// We test for nil configs as the Cleanup() method often doesn't have a valid config in this respect, so rather
-	// than trying to guess options, it is better to just let the logic fallthrough. For the primary path to this func,
-	// NewNetworkServicesController, the config will not be nil and we want to check that we have options that match
-	// the node's capability to ensure sanity later down the road.
-	if config != nil {
-		if config.EnableIPv4 && len(nsc.nodeIPv4Addrs[v1.NodeInternalIP]) < 1 &&
-			len(nsc.nodeIPv4Addrs[v1.NodeExternalIP]) < 1 {
-			return fmt.Errorf("IPv4 was enabled, but no IPv4 address was found on the node")
-		}
-	}
-	nsc.isIPv4Capable = len(nsc.nodeIPv4Addrs) > 0
-	if config != nil {
-		if config.EnableIPv6 && len(nsc.nodeIPv6Addrs[v1.NodeInternalIP]) < 1 &&
-			len(nsc.nodeIPv6Addrs[v1.NodeExternalIP]) < 1 {
-			return fmt.Errorf("IPv6 was enabled, but no IPv6 address was found on the node")
-		}
-	}
-	nsc.isIPv6Capable = len(nsc.nodeIPv6Addrs) > 0
-
+func (nsc *NetworkServicesController) setupHandlers(node *v1.Node) error {
 	nsc.ipSetHandlers = make(map[v1.IPFamily]utils.IPSetHandler)
 	nsc.iptablesCmdHandlers = make(map[v1.IPFamily]utils.IPTablesHandler)
-	if node == nil || len(nsc.nodeIPv4Addrs) > 0 {
+
+	// node being nil covers the case where this function is called by something that doesn't have a kube-apiserver
+	// connection like the cleanup code. In this instance we want all possible iptables and ipset handlers
+	if node == nil || nsc.krNode == nil || nsc.krNode.IsIPv4Capable() {
 		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
 		if err != nil {
 			klog.Fatalf("Failed to allocate IPv4 iptables handler: %v", err)
@@ -1979,7 +1948,7 @@ func (nsc *NetworkServicesController) setupHandlers(config *options.KubeRouterCo
 		}
 		nsc.ipSetHandlers[v1.IPv4Protocol] = ipset
 	}
-	if node == nil || len(nsc.nodeIPv6Addrs) > 0 {
+	if node == nil || nsc.krNode == nil || nsc.krNode.IsIPv6Capable() {
 		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
 		if err != nil {
 			klog.Fatalf("Failed to allocate IPv6 iptables handler: %v", err)
@@ -2084,10 +2053,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
-	nsc.nodeHostName = node.Name
-	// We preserve the old logic here for getting the primary IP which is set on nrc.primaryIP. This can be either IPv4
-	// or IPv6
-	nsc.primaryIP, err = utils.GetPrimaryNodeIP(node)
+	nsc.krNode, err = utils.NewKRNode(node, nil, config.EnableIPv4, config.EnableIPv6)
 	if err != nil {
 		return nil, err
 	}
@@ -2097,12 +2063,12 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	// * Sets nsc.nodeIPv6Addr & nsc.isIPv6Capable
 	// * Creates the iptables handlers for ipv4 & ipv6
 	// * Creates the ipset handlers for ipv4 & ipv6
-	err = nsc.setupHandlers(config, node)
+	err = nsc.setupHandlers(node)
 	if err != nil {
 		return nil, err
 	}
 
-	automtu, err := utils.GetMTUFromNodeIP(nsc.primaryIP)
+	automtu, err := nsc.krNode.GetNodeMTU()
 	if err != nil {
 		return nil, err
 	}

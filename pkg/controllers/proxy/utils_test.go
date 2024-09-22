@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,11 +23,15 @@ func getMoqNSC() *NetworkServicesController {
 		setupPolicyRoutingForDSRFunc:       lnm.setupPolicyRoutingForDSR,
 		setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSR,
 	}
+
+	krNode := &utils.KRNode{
+		NodeName:  "node-1",
+		PrimaryIP: net.ParseIP("10.0.0.0"),
+	}
 	return &NetworkServicesController{
-		primaryIP:    net.ParseIP("10.0.0.0"),
-		nodeHostName: "node-1",
-		ln:           mockedLinuxNetworking,
-		fwMarkMap:    map[uint32]string{},
+		krNode:    krNode,
+		ln:        mockedLinuxNetworking,
+		fwMarkMap: map[uint32]string{},
 	}
 }
 
@@ -186,14 +191,19 @@ func TestIsValidKubeRouterServiceArtifact(t *testing.T) {
 		loadBalancerIPs: []string{"172.16.0.3"},
 	}
 
+	krNode := &utils.KRNode{
+		NodeName:  "node-1",
+		PrimaryIP: net.ParseIP("192.168.1.10"),
+	}
+
 	nsc := &NetworkServicesController{
+		krNode: krNode,
 		serviceMap: map[string]*serviceInfo{
 			"service1": service1,
 			"service2": service2,
 			"service3": service3,
 		},
 		nodeportBindOnAllIP: false,
-		primaryIP:           net.ParseIP("192.168.1.10"),
 	}
 
 	tests := []struct {

@@ -46,14 +46,14 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	currentNodes := make([]string, 0)
 	for _, obj := range nodes {
 		node := obj.(*v1core.Node)
-		nodeIP, err := utils.GetPrimaryNodeIP(node)
+		targetNode, err := utils.NewRemoteKRNode(node)
 		if err != nil {
-			klog.Errorf("Failed to find a node IP and therefore cannot sync internal BGP Peer: %v", err)
+			klog.Errorf("failed to create KRNode from node object: %v", err)
 			continue
 		}
 
 		// skip self
-		if nodeIP.String() == nrc.primaryIP.String() {
+		if targetNode.GetPrimaryNodeIP().Equal(nrc.krNode.GetPrimaryNodeIP()) {
 			continue
 		}
 
@@ -70,50 +70,48 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			nodeasn, ok := node.ObjectMeta.Annotations[nodeASNAnnotation]
 			if !ok {
 				klog.Infof("Not peering with the Node %s as ASN number of the node is unknown.",
-					nodeIP.String())
+					targetNode.GetPrimaryNodeIP().String())
 				continue
 			}
 
 			asnNo, err := strconv.ParseUint(nodeasn, 0, asnMaxBitSize)
 			if err != nil {
 				klog.Infof("Not peering with the Node %s as ASN number of the node is invalid.",
-					nodeIP.String())
+					targetNode.GetPrimaryNodeIP().String())
 				continue
 			}
 
 			// if the nodes ASN number is different from ASN number of current node skip peering
 			if nrc.nodeAsnNumber != uint32(asnNo) {
 				klog.Infof("Not peering with the Node %s as ASN number of the node is different.",
-					nodeIP.String())
+					targetNode.GetPrimaryNodeIP().String())
 				continue
 			}
 		}
 
-		targetNodeIsIPv4 := nodeIP.To4() != nil
-		sourceNodeIsIPv4 := nrc.primaryIP.To4() != nil
-		ipv4NodeIPs, ipv6NodeIPs := utils.GetAllNodeIPs(node)
-		targetNodeIsIPv4Capable := utils.FindBestIPv4NodeAddress(nodeIP, ipv4NodeIPs) != nil
-		targetNodeIsIPv6Capable := utils.FindBestIPv6NodeAddress(nodeIP, ipv6NodeIPs) != nil
+		targetNodeIsIPv4 := targetNode.GetPrimaryNodeIP().To4() != nil
+		sourceNodeIsIPv4 := nrc.krNode.GetPrimaryNodeIP().To4() != nil
 
 		if targetNodeIsIPv4 != sourceNodeIsIPv4 {
 			klog.Warningf("Not peering with Node %s as it's primary IP (%s) uses a different protocol than "+
-				"our primary IP (%s)", node.ObjectMeta.Name, nodeIP, nrc.primaryIP)
+				"our primary IP (%s)", node.ObjectMeta.Name, targetNode.GetPrimaryNodeIP(),
+				nrc.krNode.GetPrimaryNodeIP())
 			continue
 		}
 
-		currentNodes = append(currentNodes, nodeIP.String())
-		nrc.activeNodes[nodeIP.String()] = true
+		currentNodes = append(currentNodes, targetNode.GetPrimaryNodeIP().String())
+		nrc.activeNodes[targetNode.GetPrimaryNodeIP().String()] = true
 		// explicitly set neighbors.transport.config.local-address with primaryIP which is configured
 		// as their neighbor address at the remote peers.
 		// this prevents the controller from initiating connection to its peers with a different IP address
 		// when multiple L3 interfaces are active.
 		n := &gobgpapi.Peer{
 			Conf: &gobgpapi.PeerConf{
-				NeighborAddress: nodeIP.String(),
+				NeighborAddress: targetNode.GetPrimaryNodeIP().String(),
 				PeerAsn:         nrc.nodeAsnNumber,
 			},
 			Transport: &gobgpapi.Transport{
-				LocalAddress: nrc.primaryIP.String(),
+				LocalAddress: nrc.krNode.GetPrimaryNodeIP().String(),
 				RemotePort:   nrc.bgpPort,
 			},
 		}
@@ -127,7 +125,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			}
 
 			// We choose to only peer using the protocol of the node's primary IP
-			if targetNodeIsIPv4Capable {
+			if targetNode.IsIPv4Capable() {
 				afiSafi := gobgpapi.AfiSafi{
 					Config: &gobgpapi.AfiSafiConfig{
 						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
@@ -142,7 +140,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				}
 				n.AfiSafis = append(n.AfiSafis, &afiSafi)
 			}
-			if targetNodeIsIPv6Capable {
+			if targetNode.IsIPv6Capable() {
 				afiSafi := gobgpapi.AfiSafi{
 					Config: &gobgpapi.AfiSafiConfig{
 						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
@@ -175,7 +173,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			Peer: n,
 		}); err != nil {
 			if !strings.Contains(err.Error(), "can't overwrite the existing peer") {
-				klog.Errorf("Failed to add node %s as peer due to %s", nodeIP.String(), err)
+				klog.Errorf("Failed to add node %s as peer due to %s", targetNode.GetPrimaryNodeIP(), err)
 			}
 		}
 	}
@@ -239,7 +237,7 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 				LocalRestarting: true,
 			}
 
-			if nrc.isIPv4Capable {
+			if nrc.krNode.IsIPv4Capable() {
 				n.AfiSafis = []*gobgpapi.AfiSafi{
 					{
 						Config: &gobgpapi.AfiSafiConfig{
@@ -254,7 +252,7 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 					},
 				}
 			}
-			if nrc.isIPv6Capable {
+			if nrc.krNode.IsIPv6Capable() {
 				afiSafi := gobgpapi.AfiSafi{
 					Config: &gobgpapi.AfiSafiConfig{
 						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
@@ -365,14 +363,14 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			node := obj.(*v1core.Node)
-			nodeIP, err := utils.GetPrimaryNodeIP(node)
+			targetNode, err := utils.NewRemoteKRNode(node)
 			if err != nil {
-				klog.Errorf(
-					"New node received, but we were unable to add it as we were couldn't find its node IP: %v", err)
+				klog.Errorf("failed to create KRNode from node object: %v", err)
 				return
 			}
 
-			klog.V(2).Infof("Received node %s added update from watch API so peer with new node", nodeIP)
+			klog.V(2).Infof("Received node %s added update from watch API so peer with new node",
+				targetNode.GetPrimaryNodeIP())
 			nrc.OnNodeUpdate(obj)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
@@ -391,11 +389,12 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 					return
 				}
 			}
-			nodeIP, err := utils.GetPrimaryNodeIP(node)
+			targetNode, err := utils.NewRemoteKRNode(node)
 			// In this case even if we can't get the NodeIP that's alright as the node is being removed anyway and
 			// future node lister operations that happen in OnNodeUpdate won't be affected as the node won't be returned
-			if err == nil {
-				klog.Infof("Received node %s removed update from watch API, so remove node from peer", nodeIP)
+			if err == nil && targetNode != nil {
+				klog.Infof("Received node %s removed update from watch API, so remove node from peer",
+					targetNode.GetPrimaryNodeIP())
 			} else {
 				klog.Infof("Received node (IP unavailable) removed update from watch API, so remove node " +
 					"from peer")

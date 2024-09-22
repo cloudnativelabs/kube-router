@@ -63,7 +63,7 @@ var (
 
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	nodeHostName                string
+	krNode                      utils.NodeAware
 	serviceClusterIPRanges      []net.IPNet
 	serviceExternalIPRanges     []net.IPNet
 	serviceLoadBalancerIPRanges []net.IPNet
@@ -79,7 +79,6 @@ type NetworkPolicyController struct {
 	iptablesSaveRestore map[v1core.IPFamily]utils.IPTablesSaveRestorer
 	filterTableRules    map[v1core.IPFamily]*bytes.Buffer
 	ipSetHandlers       map[v1core.IPFamily]utils.IPSetHandler
-	nodeIPs             map[v1core.IPFamily]net.IP
 
 	podLister cache.Indexer
 	npLister  cache.Indexer
@@ -832,7 +831,7 @@ func NewIPTablesHandlers(config *options.KubeRouterConfig) (
 func NewNetworkPolicyController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
 	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer,
-	ipsetMutex *sync.Mutex,
+	ipsetMutex *sync.Mutex, linkQ utils.LocalLinkQuerier,
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler,
 	ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler) (*NetworkPolicyController, error) {
 	npc := NetworkPolicyController{ipsetMutex: ipsetMutex}
@@ -941,44 +940,33 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
-	npc.nodeHostName = node.Name
-
-	nodeIPv4, nodeIPv6 := utils.GetAllNodeIPs(node)
+	npc.krNode, err = utils.NewKRNode(node, linkQ, config.EnableIPv4, config.EnableIPv6)
+	if err != nil {
+		return nil, err
+	}
 
 	npc.iptablesCmdHandlers = iptablesCmdHandlers
 	npc.iptablesSaveRestore = make(map[v1core.IPFamily]utils.IPTablesSaveRestorer, 2)
 	npc.filterTableRules = make(map[v1core.IPFamily]*bytes.Buffer, 2)
 	npc.ipSetHandlers = ipSetHandlers
-	npc.nodeIPs = make(map[v1core.IPFamily]net.IP, 2)
 
 	if config.EnableIPv4 {
+		if !npc.krNode.IsIPv4Capable() {
+			return nil, fmt.Errorf("IPv4 was enabled but no IPv4 address was found on node")
+		}
+		klog.V(2).Infof("IPv4 is enabled")
 		npc.iptablesSaveRestore[v1core.IPv4Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv4Protocol)
 		var buf bytes.Buffer
 		npc.filterTableRules[v1core.IPv4Protocol] = &buf
-		// TODO: assuming that NPC should only use a single IP here is short-sighted, fix it so it considers all IPs
-		switch {
-		case len(nodeIPv4[v1core.NodeInternalIP]) > 0:
-			npc.nodeIPs[v1core.IPv4Protocol] = nodeIPv4[v1core.NodeInternalIP][0]
-		case len(nodeIPv4[v1core.NodeExternalIP]) > 0:
-			npc.nodeIPs[v1core.IPv4Protocol] = nodeIPv4[v1core.NodeExternalIP][0]
-		default:
-			return nil, fmt.Errorf("IPv4 was enabled but no IPv4 address was found on node")
-		}
 	}
 	if config.EnableIPv6 {
+		if !npc.krNode.IsIPv6Capable() {
+			return nil, fmt.Errorf("IPv6 was enabled but no IPv6 address was found on node")
+		}
 		klog.V(2).Infof("IPv6 is enabled")
 		npc.iptablesSaveRestore[v1core.IPv6Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv6Protocol)
 		var buf bytes.Buffer
 		npc.filterTableRules[v1core.IPv6Protocol] = &buf
-		// TODO: assuming that NPC should only use a single IP here is short-sighted, fix it so it considers all IPs
-		switch {
-		case len(nodeIPv6[v1core.NodeInternalIP]) > 0:
-			npc.nodeIPs[v1core.IPv6Protocol] = nodeIPv6[v1core.NodeInternalIP][0]
-		case len(nodeIPv6[v1core.NodeExternalIP]) > 0:
-			npc.nodeIPs[v1core.IPv6Protocol] = nodeIPv6[v1core.NodeExternalIP][0]
-		default:
-			return nil, fmt.Errorf("IPv6 was enabled but no IPv6 address was found on node")
-		}
 	}
 
 	npc.podLister = podInformer.GetIndexer()
