@@ -141,9 +141,11 @@ var _ = Describe("NetworkServicesController", func() {
 			fatalf("failed to create existing services: %v", err)
 		}
 
-		krNode := &utils.KRNode{
-			NodeName:  "node-1",
-			PrimaryIP: net.ParseIP("10.0.0.0"),
+		krNode := &utils.LocalKRNode{
+			KRNode: utils.KRNode{
+				NodeName:  "node-1",
+				PrimaryIP: net.ParseIP("10.0.0.0"),
+			},
 		}
 		nsc = &NetworkServicesController{
 			krNode: krNode,
