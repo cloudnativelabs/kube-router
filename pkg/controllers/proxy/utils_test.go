@@ -24,9 +24,11 @@ func getMoqNSC() *NetworkServicesController {
 		setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSR,
 	}
 
-	krNode := &utils.KRNode{
-		NodeName:  "node-1",
-		PrimaryIP: net.ParseIP("10.0.0.0"),
+	krNode := &utils.LocalKRNode{
+		KRNode: utils.KRNode{
+			NodeName:  "node-1",
+			PrimaryIP: net.ParseIP("10.0.0.0"),
+		},
 	}
 	return &NetworkServicesController{
 		krNode:    krNode,
@@ -191,9 +193,11 @@ func TestIsValidKubeRouterServiceArtifact(t *testing.T) {
 		loadBalancerIPs: []string{"172.16.0.3"},
 	}
 
-	krNode := &utils.KRNode{
-		NodeName:  "node-1",
-		PrimaryIP: net.ParseIP("192.168.1.10"),
+	krNode := &utils.LocalKRNode{
+		KRNode: utils.KRNode{
+			NodeName:  "node-1",
+			PrimaryIP: net.ParseIP("192.168.1.10"),
+		},
 	}
 
 	nsc := &NetworkServicesController{

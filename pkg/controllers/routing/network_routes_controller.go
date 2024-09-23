@@ -984,7 +984,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets(nodeIPAware utils.NodeIPAwar
 		}
 
 		var ipv4Addrs, ipv6Addrs [][]string
-		for _, nodeIPv4 := range nodeIPAware.GetNodeIPv6Addrs() {
+		for _, nodeIPv4 := range nodeIPAware.GetNodeIPv4Addrs() {
 			ipv4Addrs = append(ipv4Addrs, []string{nodeIPv4.String(), utils.OptionTimeout, "0"})
 		}
 		for _, nodeIPv6 := range nodeIPAware.GetNodeIPv6Addrs() {

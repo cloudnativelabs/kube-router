@@ -38,9 +38,11 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			"add bgp path for service with ClusterIP",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -82,9 +84,11 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			"add bgp path for service with ClusterIP/NodePort/LoadBalancer",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -182,9 +186,11 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			"add bgp path for invalid service type",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -252,9 +258,11 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			"add bgp path for headless service",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -467,9 +475,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"add bgp path for service with external IPs",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP("10.0.0.1"),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP("10.0.0.1"),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -513,9 +523,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"add bgp path for services with external IPs of type ClusterIP/NodePort/LoadBalancer",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -617,9 +629,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"add bgp path for invalid service type",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -690,9 +704,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"add bgp path for headless service",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -791,9 +807,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"skip bgp path to loadbalancerIP for service without LoadBalancer IP",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -842,9 +860,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"add bgp path to loadbalancerIP for service with LoadBalancer IP",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -899,9 +919,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"no bgp path to nil loadbalancerIPs for service with LoadBalancer",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -946,9 +968,11 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			"no bgp path to loadbalancerIPs for service with LoadBalancer and skiplbips annotation",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -1120,9 +1144,11 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			"add bgp paths for all service IPs",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -1241,9 +1267,11 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			"opt out to advertise any IPs via annotations",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -1419,9 +1447,11 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			"no bgp paths for any service IPs",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -1532,9 +1562,11 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			"opt in to advertise all IPs via annotations",
 			&NetworkRoutingController{
 				bgpServer: gobgp.NewBgpServer(),
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			[]*v1core.Service{
@@ -1786,10 +1818,12 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 		{
 			"node has endpoints for service",
 			&NetworkRoutingController{
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			&v1core.Service{
@@ -1831,10 +1865,12 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 		{
 			"node has no endpoints for service",
 			&NetworkRoutingController{
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			&v1core.Service{
@@ -1925,10 +1961,12 @@ func Test_advertisePodRoute(t *testing.T) {
 				bgpServer:    gobgp.NewBgpServer(),
 				podCidr:      "172.20.0.0/24",
 				podIPv4CIDRs: []string{"172.20.0.0/24"},
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			"node-1",
@@ -1955,10 +1993,12 @@ func Test_advertisePodRoute(t *testing.T) {
 				hostnameOverride: "node-1",
 				podCidr:          "172.20.0.0/24",
 				podIPv4CIDRs:     []string{"172.20.0.0/24"},
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			"",
@@ -1985,12 +2025,14 @@ func Test_advertisePodRoute(t *testing.T) {
 				hostnameOverride: "node-1",
 				podCidr:          "2001:db8:42:2::/64",
 				podIPv6CIDRs:     []string{"2001:db8:42:2::/64"},
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
-					NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{
-						v1core.NodeInternalIP: {net.IPv6loopback},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+						NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{
+							v1core.NodeInternalIP: {net.IPv6loopback},
+						},
 					},
 				},
 			},
@@ -2163,10 +2205,12 @@ func Test_syncInternalPeers(t *testing.T) {
 			&NetworkRoutingController{
 				bgpFullMeshMode: true,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				bgpServer:   gobgp.NewBgpServer(),
 				activeNodes: make(map[string]bool),
@@ -2195,10 +2239,12 @@ func Test_syncInternalPeers(t *testing.T) {
 			&NetworkRoutingController{
 				bgpFullMeshMode: true,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				bgpServer:   gobgp.NewBgpServer(),
 				activeNodes: make(map[string]bool),
@@ -2241,10 +2287,12 @@ func Test_syncInternalPeers(t *testing.T) {
 			&NetworkRoutingController{
 				bgpFullMeshMode: true,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				bgpServer: gobgp.NewBgpServer(),
 				activeNodes: map[string]bool{
@@ -2275,10 +2323,12 @@ func Test_syncInternalPeers(t *testing.T) {
 			&NetworkRoutingController{
 				bgpFullMeshMode: false,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				bgpServer:     gobgp.NewBgpServer(),
 				activeNodes:   make(map[string]bool),
@@ -2388,10 +2438,12 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				bgpFullMeshMode: false,
 				bgpPort:         10000,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				routerID:         testNodeIPv4,
 				bgpServer:        gobgp.NewBgpServer(),
@@ -2419,10 +2471,12 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				bgpFullMeshMode: false,
 				bgpPort:         10000,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				routerID:         testNodeIPv4,
 				bgpServer:        gobgp.NewBgpServer(),
@@ -2450,10 +2504,12 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				bgpFullMeshMode: false,
 				bgpPort:         10000,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				routerID:         testNodeIPv4,
 				bgpServer:        gobgp.NewBgpServer(),
@@ -2481,10 +2537,12 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				bgpFullMeshMode: false,
 				bgpPort:         10000,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				routerID:         testNodeIPv4,
 				bgpServer:        gobgp.NewBgpServer(),
@@ -2512,10 +2570,12 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				bgpFullMeshMode: false,
 				bgpPort:         10000,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				bgpServer:        gobgp.NewBgpServer(),
 				activeNodes:      make(map[string]bool),
@@ -2542,10 +2602,12 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 				bgpFullMeshMode: false,
 				bgpPort:         10000,
 				clientset:       fake.NewSimpleClientset(),
-				krNode: &utils.KRNode{
-					NodeName:      "node-1",
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 				bgpServer:        gobgp.NewBgpServer(),
 				activeNodes:      make(map[string]bool),

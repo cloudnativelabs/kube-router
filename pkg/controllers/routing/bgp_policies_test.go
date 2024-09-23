@@ -36,8 +36,10 @@ type PolicyTestCase struct {
 }
 
 func Test_AddPolicies(t *testing.T) {
-	ipv4CapableKRNode := &utils.KRNode{
-		NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.IPv4(10, 10, 10, 10)}},
+	ipv4CapableKRNode := &utils.LocalKRNode{
+		KRNode: utils.KRNode{
+			NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.IPv4(10, 10, 10, 10)}},
+		},
 	}
 	testcases := []PolicyTestCase{
 		{

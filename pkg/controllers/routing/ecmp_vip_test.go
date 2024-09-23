@@ -56,9 +56,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -98,9 +100,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      false,
 				advertiseExternalIP:     false,
 				advertiseLoadBalancerIP: false,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -140,9 +144,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     false,
 				advertiseLoadBalancerIP: false,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -182,9 +188,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      false,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: false,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -224,9 +232,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      false,
 				advertiseExternalIP:     false,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -266,9 +276,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      false,
 				advertiseExternalIP:     false,
 				advertiseLoadBalancerIP: false,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -337,9 +349,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -395,9 +409,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -445,9 +461,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv6),
-					NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv6),
+						NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -495,9 +513,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -541,9 +561,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv6),
-					NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv6),
+						NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -587,9 +609,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -637,9 +661,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv6),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv6),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -687,9 +713,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -733,9 +761,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv6),
-					NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv6),
+						NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -779,9 +809,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv4),
-					NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
@@ -825,9 +857,11 @@ func Test_getVIPsForService(t *testing.T) {
 				advertiseClusterIP:      true,
 				advertiseExternalIP:     true,
 				advertiseLoadBalancerIP: true,
-				krNode: &utils.KRNode{
-					PrimaryIP:     net.ParseIP(testNodeIPv6),
-					NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv6),
+						NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv6)}},
+					},
 				},
 			},
 			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{

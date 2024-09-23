@@ -63,7 +63,7 @@ var (
 
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	krNode                      utils.NodeAware
+	krNode                      utils.NodeIPAndFamilyAware
 	serviceClusterIPRanges      []net.IPNet
 	serviceExternalIPRanges     []net.IPNet
 	serviceLoadBalancerIPRanges []net.IPNet
