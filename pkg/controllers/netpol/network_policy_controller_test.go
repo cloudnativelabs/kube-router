@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
-	"github.com/vishvananda/netlink"
 
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -758,51 +757,6 @@ func (ips *fakeIPSet) Name(name string) string {
 	return name
 }
 
-type fakeLocalLinkQuerier struct {
-	links []netlink.Link
-	addrs []*net.IPNet
-}
-
-func newFakeLocalLinkQuerier(addrStrings []string) *fakeLocalLinkQuerier {
-	links := make([]netlink.Link, len(addrStrings))
-	for idx := range addrStrings {
-		linkAttrs := netlink.LinkAttrs{
-			Index: idx,
-		}
-		linkDevice := netlink.Device{LinkAttrs: linkAttrs}
-		links[idx] = &linkDevice
-	}
-	addrs := make([]*net.IPNet, len(addrStrings))
-	for idx, addr := range addrStrings {
-		ip := net.ParseIP(addr)
-		var netMask net.IPMask
-		if ip.To4() != nil {
-			netMask = net.CIDRMask(24, 32)
-		} else {
-			netMask = net.CIDRMask(64, 128)
-		}
-		ipNet := &net.IPNet{
-			IP:   ip,
-			Mask: netMask,
-		}
-		addrs[idx] = ipNet
-	}
-	return &fakeLocalLinkQuerier{
-		links: links,
-		addrs: addrs,
-	}
-}
-
-func (f *fakeLocalLinkQuerier) LinkList() ([]netlink.Link, error) {
-	return f.links, nil
-}
-
-func (f *fakeLocalLinkQuerier) AddrList(link netlink.Link, family int) ([]netlink.Addr, error) {
-	addrs := make([]netlink.Addr, 1)
-	addrs[0] = netlink.Addr{IPNet: f.addrs[link.Attrs().Index]}
-	return addrs, nil
-}
-
 func TestNetworkPolicyController(t *testing.T) {
 	curHostname, _ := os.Hostname()
 	testCases := []tNetPolConfigTestCase{
@@ -989,7 +943,7 @@ func TestNetworkPolicyController(t *testing.T) {
 		},
 	}
 	fakeNodeIPs := []string{"10.10.10.10", "2001:0db8:0042:0001:0000:0000:0000:0000"}
-	fakeLinkQuerier := newFakeLocalLinkQuerier(fakeNodeIPs)
+	fakeLinkQuerier := utils.NewFakeLocalLinkQuerier(fakeNodeIPs, nil)
 	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", fakeNodeIPs)}})
 	_, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	for _, test := range testCases {

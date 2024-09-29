@@ -369,7 +369,7 @@ func GetNodeSubnet(nodeIP net.IP, linkQ LocalLinkQuerier) (net.IPNet, string, er
 	for _, link := range links {
 		addresses, err := linkQ.AddrList(link, netlink.FAMILY_ALL)
 		if err != nil {
-			return net.IPNet{}, "", errors.New("failed to get list of addr")
+			return net.IPNet{}, "", errors.New("failed to get list of addrs")
 		}
 		for _, addr := range addresses {
 			if addr.IPNet.IP.Equal(nodeIP) {
