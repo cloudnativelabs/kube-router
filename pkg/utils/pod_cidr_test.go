@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -76,10 +77,8 @@ func Test_GetPodCidrFromNodeSpec(t *testing.T) {
 				t.Error("unable to get node object from API: " + err.Error())
 			}
 			podCIDR, err := GetPodCidrFromNodeSpec(node)
-			if !reflect.DeepEqual(err, testcase.err) {
-				t.Logf("actual error: %v", err)
-				t.Logf("expected error: %v", testcase.err)
-				t.Error("did not get expected error")
+			if testcase.err != nil {
+				assert.EqualError(t, err, testcase.err.Error())
 			}
 
 			if podCIDR != testcase.podCIDR {
@@ -216,10 +215,9 @@ func Test_GetPodCIDRsFromNodeSpec(t *testing.T) {
 				t.Error("unable to get node object from API: " + err.Error())
 			}
 			ipv4CIDRs, ipv6CIDRs, err := GetPodCIDRsFromNodeSpecDualStack(node)
-			if !reflect.DeepEqual(err, testcase.err) {
-				t.Logf("actual error: %v", err)
-				t.Logf("expected error: %v", testcase.err)
-				t.Error("did not get expected error")
+
+			if testcase.err != nil {
+				assert.EqualError(t, err, testcase.err.Error())
 			}
 
 			if !reflect.DeepEqual(ipv4CIDRs, testcase.ipv4CIDRs) {

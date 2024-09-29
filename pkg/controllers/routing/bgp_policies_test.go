@@ -16,6 +16,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	gobgp "github.com/osrg/gobgp/v3/pkg/server"
+	"github.com/stretchr/testify/assert"
 )
 
 type PolicyTestCase struct {
@@ -1457,10 +1458,11 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			err := testcase.nrc.startBgpServer(false)
-			if !reflect.DeepEqual(err, testcase.startBGPServerErr) {
-				t.Logf("expected err when invoking startBGPServer(): %v", testcase.startBGPServerErr)
-				t.Logf("actual err from startBGPServer() received: %v", err)
-				t.Fatal("unexpected error")
+			if testcase.startBGPServerErr != nil && err == nil {
+				t.Errorf("expected error when starting BGP server, got nil on testcase: %s", testcase.name)
+			}
+			if err != nil {
+				assert.EqualError(t, testcase.startBGPServerErr, err.Error())
 			}
 			// If the server was not expected to start we should stop here as the rest of the tests are unimportant
 			if testcase.startBGPServerErr != nil {
