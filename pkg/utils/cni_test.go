@@ -386,9 +386,7 @@ func TestNewCNINetworkConfig(t *testing.T) {
 						"nil either")
 				}
 				assert.True(t, strings.HasPrefix(err.Error(), testcase.err.Error()))
-				if err != nil {
-					return
-				}
+				return
 			}
 
 			assert.Equal(t, testcase.isConfList, cni.IsConfList())
