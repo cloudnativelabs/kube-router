@@ -17,6 +17,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
@@ -68,8 +69,6 @@ const (
 	bgpCommunityMaxPartSize = 16
 	routeReflectorMaxID     = 32
 	ipv4MaskMinBits         = 32
-	// Taken from: https://github.com/torvalds/linux/blob/master/include/uapi/linux/rtnetlink.h#L284
-	zebraRouteOriginator = 0x11
 
 	encapTypeFOU  = "fou"
 	encapTypeIPIP = "ipip"
@@ -138,7 +137,7 @@ type NetworkRoutingController struct {
 	podIPv6CIDRs                   []string
 	CNIFirewallSetup               *sync.Cond
 	ipsetMutex                     *sync.Mutex
-	routeSyncer                    *routeSyncer
+	routeSyncer                    routes.RouteSyncer
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -306,7 +305,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	klog.Infof("Starting network route controller")
 
 	// Start route syncer
-	nrc.routeSyncer.run(stopCh, wg)
+	nrc.routeSyncer.Run(stopCh, wg)
 
 	// Wait till we are ready to launch BGP server
 	for {
@@ -621,14 +620,14 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 			klog.V(1).Infof("Peer '%s' was not found any longer, removing tunnel and routes",
 				nextHop.String())
 			// Also delete route from state map so that it doesn't get re-synced after deletion
-			nrc.routeSyncer.delInjectedRoute(dst)
+			nrc.routeSyncer.DelInjectedRoute(dst)
 			nrc.cleanupTunnel(dst, tunnelName)
 			return nil
 		}
 
 		// Also delete route from state map so that it doesn't get re-synced after deletion
-		nrc.routeSyncer.delInjectedRoute(dst)
-		return deleteRoutesByDestination(dst)
+		nrc.routeSyncer.DelInjectedRoute(dst)
+		return routes.DeleteByDestination(dst)
 	}
 
 	shouldCreateTunnel := func() bool {
@@ -676,7 +675,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 			LinkIndex: link.Attrs().Index,
 			Src:       bestIPForFamily,
 			Dst:       dst,
-			Protocol:  zebraRouteOriginator,
+			Protocol:  routes.ZebraOriginator,
 		}
 	case sameSubnet:
 		// if the nextHop is within the same subnet, add a route for the destination so that traffic can bet routed
@@ -692,7 +691,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 		route = &netlink.Route{
 			Dst:      dst,
 			Gw:       nextHop,
-			Protocol: zebraRouteOriginator,
+			Protocol: routes.ZebraOriginator,
 		}
 	default:
 		// otherwise, let BGP do its thing, nothing to do here
@@ -701,9 +700,9 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 
 	// Alright, everything is in place, and we have our route configured, let's add it to the host's routing table
 	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nextHop)
-	nrc.routeSyncer.addInjectedRoute(dst, route)
+	nrc.routeSyncer.AddInjectedRoute(dst, route)
 	// Immediately sync the local route table regardless of timer
-	nrc.routeSyncer.syncLocalRouteTable()
+	nrc.routeSyncer.SyncLocalRouteTable()
 	return nil
 }
 
@@ -728,7 +727,7 @@ func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, err
 // needed. All errors are logged only, as we want to attempt to perform all cleanup actions regardless of their success
 func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
 	klog.V(1).Infof("Cleaning up old routes for %s if there are any", destinationSubnet.String())
-	if err := deleteRoutesByDestination(destinationSubnet); err != nil {
+	if err := routes.DeleteByDestination(destinationSubnet); err != nil {
 		klog.Errorf("Failed to cleanup routes: %v", err)
 	}
 
@@ -1442,7 +1441,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
-	nrc.routeSyncer = newRouteSyncer(kubeRouterConfig.InjectedRoutesSyncPeriod)
+	nrc.routeSyncer = routes.NewRouteSyncer(kubeRouterConfig.InjectedRoutesSyncPeriod)
 
 	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldTime.Seconds()
 	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {
