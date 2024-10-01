@@ -18,6 +18,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/tunnels"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
@@ -67,15 +68,6 @@ const (
 	bgpCommunityMaxPartSize = 16
 	routeReflectorMaxID     = 32
 	ipv4MaskMinBits         = 32
-
-	encapTypeFOU  = "fou"
-	encapTypeIPIP = "ipip"
-
-	ipipModev4 = "ipip"
-	ipipModev6 = "ip6ip6"
-
-	maxPort = uint16(65535)
-	minPort = uint16(1024)
 )
 
 // NetworkRoutingController is struct to hold necessary information required by controller
@@ -111,8 +103,6 @@ type NetworkRoutingController struct {
 	iptablesCmdHandlers            map[v1core.IPFamily]utils.IPTablesHandler
 	enableOverlays                 bool
 	overlayType                    string
-	overlayEncap                   string
-	overlayEncapPort               uint16
 	peerMultihopTTL                uint8
 	MetricsEnabled                 bool
 	bgpServerStarted               bool
@@ -137,6 +127,7 @@ type NetworkRoutingController struct {
 	ipsetMutex                     *sync.Mutex
 	routeSyncer                    routes.RouteSyncer
 	pbr                            routes.PBRer
+	tunneler                       tunnels.Tunneler
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -185,7 +176,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		if err != nil {
 			klog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 		}
-		if nrc.overlayEncap == "fou" {
+		if nrc.tunneler.EncapType() == tunnels.EncapTypeFOU {
 			// enable FoU module for the overlay tunnel
 			if _, err := exec.Command("modprobe", "fou").CombinedOutput(); err != nil {
 				klog.Errorf("Failed to enable FoU for tunnel overlay: %s", err.Error())
@@ -581,7 +572,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 		return err
 	}
 
-	tunnelName := generateTunnelName(nextHop.String())
+	tunnelName := tunnels.GenerateTunnelName(nextHop.String())
 	checkNHSameSubnet := func(needle net.IP, haystack []net.IP) bool {
 		for _, nodeIP := range haystack {
 			nodeSubnet, _, err := utils.GetNodeSubnet(nodeIP, nil)
@@ -622,7 +613,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 				nextHop.String())
 			// Also delete route from state map so that it doesn't get re-synced after deletion
 			nrc.routeSyncer.DelInjectedRoute(dst)
-			nrc.cleanupTunnel(dst, tunnelName)
+			tunnels.CleanupTunnel(dst, tunnelName)
 			return nil
 		}
 
@@ -648,14 +639,14 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	// if the user has disabled overlays, don't create tunnels. If we're not creating a tunnel, check to see if there is
 	// any cleanup that needs to happen.
 	if shouldCreateTunnel() {
-		link, err = nrc.setupOverlayTunnel(tunnelName, nextHop, dst)
+		link, err = nrc.tunneler.SetupOverlayTunnel(tunnelName, nextHop, dst)
 		if err != nil {
 			return err
 		}
 	} else {
 		// knowing that a tunnel shouldn't exist for this route, check to see if there are any lingering tunnels /
 		// routes that need to be cleaned up.
-		nrc.cleanupTunnel(dst, tunnelName)
+		tunnels.CleanupTunnel(dst, tunnelName)
 	}
 
 	switch {
@@ -722,164 +713,6 @@ func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, err
 	}
 
 	return peerConnected, nil
-}
-
-// cleanupTunnel removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer
-// needed. All errors are logged only, as we want to attempt to perform all cleanup actions regardless of their success
-func (nrc *NetworkRoutingController) cleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
-	klog.V(1).Infof("Cleaning up old routes for %s if there are any", destinationSubnet.String())
-	if err := routes.DeleteByDestination(destinationSubnet); err != nil {
-		klog.Errorf("Failed to cleanup routes: %v", err)
-	}
-
-	klog.V(1).Infof("Cleaning up any lingering tunnel interfaces named: %s", tunnelName)
-	if link, err := netlink.LinkByName(tunnelName); err == nil {
-		if err = netlink.LinkDel(link); err != nil {
-			klog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
-		}
-	}
-}
-
-// setupOverlayTunnel attempts to create a tunnel link and corresponding routes for IPIP based overlay networks
-func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextHop net.IP,
-	nextHopSubnet *net.IPNet) (netlink.Link, error) {
-	var out []byte
-	link, err := netlink.LinkByName(tunnelName)
-
-	var bestIPForFamily net.IP
-	var ipipMode, fouLinkType string
-	isIPv6 := false
-	ipBase := make([]string, 0)
-	strFormattedEncapPort := strconv.FormatInt(int64(nrc.overlayEncapPort), 10)
-
-	if nextHop.To4() != nil {
-		bestIPForFamily = nrc.krNode.FindBestIPv4NodeAddress()
-		ipipMode = encapTypeIPIP
-		fouLinkType = ipipModev4
-	} else {
-		// Need to activate the ip command in IPv6 mode
-		ipBase = append(ipBase, "-6")
-		bestIPForFamily = nrc.krNode.FindBestIPv6NodeAddress()
-		ipipMode = ipipModev6
-		fouLinkType = "ip6tnl"
-		isIPv6 = true
-	}
-	if nil == bestIPForFamily {
-		return nil, fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
-			"IP family: %s", nextHop.String())
-	}
-
-	// This indicated that the tunnel already exists, so it's possible that there might be nothing more needed. However,
-	// it is also possible that the user changed the encap type, so we need to make sure that the encap type matches
-	// and if it doesn't, create it
-	recreate := false
-	if err == nil {
-		klog.V(1).Infof("Tunnel interface: %s with encap type %s for the node %s already exists.",
-			tunnelName, link.Attrs().EncapType, nextHop.String())
-
-		switch nrc.overlayEncap {
-		case encapTypeIPIP:
-			if linkFOUEnabled(tunnelName) {
-				klog.Infof("Was configured to use ipip tunnels, but found existing fou tunnels in place, cleaning up")
-				recreate = true
-
-				// Even though we are setup for IPIP tunels we have existing tunnels that are FoU tunnels, remove them
-				// so that we can recreate them as IPIP
-				nrc.cleanupTunnel(nextHopSubnet, tunnelName)
-
-				// If we are transitioning from FoU to IPIP we also need to clean up the old FoU port if it exists
-				if fouPortAndProtoExist(nrc.overlayEncapPort, isIPv6) {
-					fouArgs := ipBase
-					fouArgs = append(fouArgs, "fou", "del", "port", strFormattedEncapPort)
-					out, err := exec.Command("ip", fouArgs...).CombinedOutput()
-					if err != nil {
-						klog.Warningf("failed to clean up previous FoU tunnel port (this is only a warning because it "+
-							"won't stop kube-router from working for now, but still shouldn't have happened) - error: "+
-							"%v, output %s", err, out)
-					}
-				}
-			}
-		case encapTypeFOU:
-			if !linkFOUEnabled(tunnelName) {
-				klog.Infof("Was configured to use fou tunnels, but found existing ipip tunnels in place, cleaning up")
-				recreate = true
-				// Even though we are setup for FoU tunels we have existing tunnels that are IPIP tunnels, remove them
-				// so that we can recreate them as IPIP
-				nrc.cleanupTunnel(nextHopSubnet, tunnelName)
-			}
-		}
-	}
-
-	// an error here indicates that the tunnel didn't exist, so we need to create it, if it already exists there's
-	// nothing to do here
-	if err != nil || recreate {
-		klog.Infof("Creating tunnel %s of type %s with encap %s for destination %s",
-			tunnelName, fouLinkType, nrc.overlayEncap, nextHop.String())
-		cmdArgs := ipBase
-		switch nrc.overlayEncap {
-		case encapTypeIPIP:
-			// Plain IPIP tunnel without any encapsulation
-			cmdArgs = append(cmdArgs, "tunnel", "add", tunnelName, "mode", ipipMode, "local", bestIPForFamily.String(),
-				"remote", nextHop.String())
-
-		case encapTypeFOU:
-			// Ensure that the FOU tunnel port is set correctly
-			if !fouPortAndProtoExist(nrc.overlayEncapPort, isIPv6) {
-				fouArgs := ipBase
-				fouArgs = append(fouArgs, "fou", "add", "port", strFormattedEncapPort, "gue")
-				out, err := exec.Command("ip", fouArgs...).CombinedOutput()
-				if err != nil {
-					//nolint:goconst // don't need to make error messages a constant
-					return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
-						"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
-				}
-			}
-
-			// Prep IPIP tunnel for FOU encapsulation
-			cmdArgs = append(cmdArgs, "link", "add", "name", tunnelName, "type", fouLinkType, "remote", nextHop.String(),
-				"local", bestIPForFamily.String(), "ttl", "225", "encap", "gue", "encap-sport", "auto", "encap-dport",
-				strFormattedEncapPort, "mode", ipipMode)
-
-		default:
-			return nil, fmt.Errorf("unknown tunnel encapsulation was passed: %s, unable to continue with overlay "+
-				"setup", nrc.overlayEncap)
-		}
-
-		klog.V(2).Infof("Executing the following command to create tunnel: ip %s", cmdArgs)
-		out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
-				"Failed to create tunnel interface %s. error: %s, output: %s",
-				nextHop, tunnelName, err, string(out))
-		}
-
-		link, err = netlink.LinkByName(tunnelName)
-		if err != nil {
-			return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
-				"Failed to get tunnel interface by name error: %s", tunnelName, err)
-		}
-		if err = netlink.LinkSetUp(link); err != nil {
-			return nil, errors.New("Failed to bring tunnel interface " + tunnelName + " up due to: " + err.Error())
-		}
-	}
-
-	// Now that the tunnel link exists, we need to add a route to it, so the node knows where to send traffic bound for
-	// this interface
-	//nolint:gocritic // we understand that we are appending to a new slice
-	cmdArgs := append(ipBase, "route", "list", "table", routes.CustomTableID)
-	out, err = exec.Command("ip", cmdArgs...).CombinedOutput()
-	// This used to be "dev "+tunnelName+" scope" but this isn't consistent with IPv6's output, so we changed it to just
-	// "dev "+tunnelName, but at this point I'm unsure if there was a good reason for adding scope on before, so that's
-	// why this comment is here.
-	if err != nil || !strings.Contains(string(out), "dev "+tunnelName) {
-		//nolint:gocritic // we understand that we are appending to a new slice
-		cmdArgs = append(ipBase, "route", "add", nextHop.String(), "dev", tunnelName, "table", routes.CustomTableID)
-		if out, err = exec.Command("ip", cmdArgs...).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
-		}
-	}
-
-	return link, nil
 }
 
 // Cleanup performs the cleanup of configurations done
@@ -1533,18 +1366,16 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.autoMTU = kubeRouterConfig.AutoMTU
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 	nrc.overlayType = kubeRouterConfig.OverlayType
-	nrc.overlayEncap = kubeRouterConfig.OverlayEncap
-	switch nrc.overlayEncap {
-	case encapTypeIPIP:
-	case encapTypeFOU:
-	default:
-		return nil, fmt.Errorf("unknown --overlay-encap option '%s' selected, unable to continue", nrc.overlayEncap)
+	overlayEncap, err := tunnels.ParseEncapType(kubeRouterConfig.OverlayEncap)
+	if err != nil {
+		return nil, fmt.Errorf("unknown --overlay-encap option '%s' selected, unable to continue", overlayEncap)
 	}
-	nrc.overlayEncapPort = kubeRouterConfig.OverlayEncapPort
-	if nrc.overlayEncapPort > maxPort || nrc.overlayEncapPort < minPort {
-		return nil, fmt.Errorf("specified encap port is out of range of valid ports: %d, valid range is from %d to %d",
-			nrc.overlayEncapPort, minPort, maxPort)
+	overlayEncapPort, err := tunnels.ParseEncapPort(kubeRouterConfig.OverlayEncapPort)
+	if err != nil {
+		return nil, fmt.Errorf("unknown --overlay-encap-port option '%d' selected, unable to continue, err: %v",
+			overlayEncapPort, err)
 	}
+	nrc.tunneler = tunnels.NewOverlayTunnel(nrc.krNode, overlayEncap, overlayEncapPort)
 	nrc.CNIFirewallSetup = sync.NewCond(&sync.Mutex{})
 
 	nrc.bgpPort = kubeRouterConfig.BGPPort
