@@ -32,10 +32,8 @@ import (
 const (
 	IfaceNotFound = "Link not found"
 
-	customRouteTableID   = "77"
-	customRouteTableName = "kube-router"
-	podSubnetsIPSetName  = "kube-router-pod-subnets"
-	nodeAddrsIPSetName   = "kube-router-node-ips"
+	podSubnetsIPSetName = "kube-router-pod-subnets"
+	nodeAddrsIPSetName  = "kube-router-node-ips"
 
 	nodeASNAnnotation                = "kube-router.io/node.asn"
 	nodeCommunitiesAnnotation        = "kube-router.io/node.bgp.communities"
@@ -138,6 +136,7 @@ type NetworkRoutingController struct {
 	CNIFirewallSetup               *sync.Cond
 	ipsetMutex                     *sync.Mutex
 	routeSyncer                    routes.RouteSyncer
+	pbr                            routes.PBRer
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -176,11 +175,13 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 
 	nrc.CNIFirewallSetup.Broadcast()
 
+	nrc.pbr = routes.NewPBR(nrc.krNode, nrc.podIPv4CIDRs, nrc.podIPv6CIDRs)
+
 	// Handle ipip tunnel overlay
 	if nrc.enableOverlays {
 		klog.V(1).Info("Tunnel Overlay enabled in configuration.")
 		klog.V(1).Info("Setting up overlay networking.")
-		err = nrc.enablePolicyBasedRouting()
+		err = nrc.pbr.EnablePolicyBasedRouting()
 		if err != nil {
 			klog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 		}
@@ -196,7 +197,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	} else {
 		klog.V(1).Info("Tunnel Overlay disabled in configuration.")
 		klog.V(1).Info("Cleaning up old overlay networking if needed.")
-		err = nrc.disablePolicyBasedRouting()
+		err = nrc.pbr.DisablePolicyBasedRouting()
 		if err != nil {
 			klog.Errorf("Failed to disable policy based routing: %s", err.Error())
 		}
@@ -865,14 +866,14 @@ func (nrc *NetworkRoutingController) setupOverlayTunnel(tunnelName string, nextH
 	// Now that the tunnel link exists, we need to add a route to it, so the node knows where to send traffic bound for
 	// this interface
 	//nolint:gocritic // we understand that we are appending to a new slice
-	cmdArgs := append(ipBase, "route", "list", "table", customRouteTableID)
+	cmdArgs := append(ipBase, "route", "list", "table", routes.CustomTableID)
 	out, err = exec.Command("ip", cmdArgs...).CombinedOutput()
 	// This used to be "dev "+tunnelName+" scope" but this isn't consistent with IPv6's output, so we changed it to just
 	// "dev "+tunnelName, but at this point I'm unsure if there was a good reason for adding scope on before, so that's
 	// why this comment is here.
 	if err != nil || !strings.Contains(string(out), "dev "+tunnelName) {
 		//nolint:gocritic // we understand that we are appending to a new slice
-		cmdArgs = append(ipBase, "route", "add", nextHop.String(), "dev", tunnelName, "table", customRouteTableID)
+		cmdArgs = append(ipBase, "route", "add", nextHop.String(), "dev", tunnelName, "table", routes.CustomTableID)
 		if out, err = exec.Command("ip", cmdArgs...).CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
 		}
