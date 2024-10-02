@@ -14,6 +14,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
@@ -62,12 +63,10 @@ const (
 	ClusterIPST    = "ClusterIP"
 	NodePortST     = "NodePort"
 
-	prependPathMaxBits      = 8
-	asnMaxBitSize           = 32
-	bgpCommunityMaxSize     = 32
-	bgpCommunityMaxPartSize = 16
-	routeReflectorMaxID     = 32
-	ipv4MaskMinBits         = 32
+	prependPathMaxBits  = 8
+	asnMaxBitSize       = 32
+	routeReflectorMaxID = 32
+	ipv4MaskMinBits     = 32
 )
 
 // NetworkRoutingController is struct to hold necessary information required by controller
@@ -567,7 +566,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	var route *netlink.Route
 	var link netlink.Link
 
-	dst, nextHop, err := parseBGPPath(path)
+	dst, nextHop, err := bgp.ParsePath(path)
 	if err != nil {
 		return err
 	}
@@ -965,7 +964,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	} else {
 		nodeCommunities = stringToSlice(nodeBGPCommunitiesAnnotation, ",")
 		for _, nodeCommunity := range nodeCommunities {
-			if err = validateCommunity(nodeCommunity); err != nil {
+			if err = bgp.ValidateCommunity(nodeCommunity); err != nil {
 				klog.Warningf("cannot add BGP community '%s' from node annotation as it does not appear "+
 					"to be a valid community identifier", nodeCommunity)
 				continue
@@ -1302,7 +1301,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 	}
 
-	nrc.routerID, err = generateRouterID(nrc.krNode, kubeRouterConfig.RouterID)
+	nrc.routerID, err = bgp.GenerateRouterID(nrc.krNode, kubeRouterConfig.RouterID)
 	if err != nil {
 		return nil, err
 	}
