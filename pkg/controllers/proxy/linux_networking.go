@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path"
 	"strconv"
 	"strings"
@@ -23,8 +22,10 @@ import (
 )
 
 const (
-	ipv4NetMaskBits = 32
-	ipv6NetMaskBits = 128
+	ipv4NetMaskBits  = 32
+	ipv4DefaultRoute = "0.0.0.0/0"
+	ipv6NetMaskBits  = 128
+	ipv6DefaultRoute = "::/0"
 
 	// TODO: it's bad to rely on eth0 here. While this is inside the container's namespace and is determined by the
 	// container runtime and so far we've been able to count on this being reliably set to eth0, it is possible that
@@ -66,7 +67,6 @@ type netlinkCalls interface {
 
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP string) error {
 	var netMask net.IPMask
-	var ipRouteCmdArgs []string
 	parsedIP := net.ParseIP(ip)
 	parsedNodeIP := net.ParseIP(nodeIP)
 	if parsedIP.To4() != nil {
@@ -76,7 +76,6 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		}
 
 		netMask = net.CIDRMask(ipv4NetMaskBits, ipv4NetMaskBits)
-		ipRouteCmdArgs = make([]string, 0)
 	} else {
 		// If the IP family of the NodeIP and the VIP IP don't match, we can't proceed
 		if parsedNodeIP.To4() != nil {
@@ -89,7 +88,6 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		}
 
 		netMask = net.CIDRMask(ipv6NetMaskBits, ipv6NetMaskBits)
-		ipRouteCmdArgs = []string{"-6"}
 	}
 
 	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: parsedIP, Mask: netMask}, Scope: syscall.RT_SCOPE_LINK}
@@ -107,13 +105,20 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 
 	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
 	// #nosec G204
-	ipRouteCmdArgs = append(ipRouteCmdArgs, "route", "delete", "local", ip, "dev", KubeDummyIf,
-		"table", "local", "proto", "kernel", "scope", "host", "src", nodeIP, "table", "local")
-	out, err := exec.Command("ip", ipRouteCmdArgs...).CombinedOutput()
+	nRoute := &netlink.Route{
+		Type:      unix.RTN_LOCAL,
+		Dst:       &net.IPNet{IP: parsedIP, Mask: netMask},
+		LinkIndex: iface.Attrs().Index,
+		Table:     syscall.RT_TABLE_LOCAL,
+		Protocol:  unix.RTPROT_KERNEL,
+		Scope:     syscall.RT_SCOPE_HOST,
+		Src:       parsedNodeIP,
+	}
+	err = netlink.RouteDel(nRoute)
 	if err != nil {
-		if !strings.Contains(string(out), "No such process") {
-			klog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v, Output: %s",
-				ip, KubeDummyIf, err, out)
+		if !strings.Contains(err.Error(), "no such process") {
+			klog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v",
+				ip, iface.Attrs().Name, err)
 		} else {
 			klog.Warningf("got a No such process error while trying to remove route: %v (this is not normally bad "+
 				"enough to stop processing)", err)
@@ -129,7 +134,6 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 // inside the container.
 func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
 	var netMask net.IPMask
-	var ipRouteCmdArgs []string
 	var isIPv6 bool
 	parsedIP := net.ParseIP(ip)
 	parsedNodeIP := net.ParseIP(nodeIP)
@@ -140,7 +144,6 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 		}
 
 		netMask = net.CIDRMask(ipv4NetMaskBits, ipv4NetMaskBits)
-		ipRouteCmdArgs = make([]string, 0)
 		isIPv6 = false
 	} else {
 		// If we're supposed to add a route and the IP family of the NodeIP and the VIP IP don't match, we can't proceed
@@ -149,11 +152,11 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 		}
 
 		netMask = net.CIDRMask(ipv6NetMaskBits, ipv6NetMaskBits)
-		ipRouteCmdArgs = []string{"-6"}
 		isIPv6 = true
 	}
 
-	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: parsedIP, Mask: netMask}, Scope: syscall.RT_SCOPE_LINK}
+	ipPrefix := &net.IPNet{IP: parsedIP, Mask: netMask}
+	naddr := &netlink.Addr{IPNet: ipPrefix, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrAdd(iface, naddr)
 	if err != nil && err.Error() != IfaceHasAddr {
 		klog.Errorf("failed to assign cluster ip %s to dummy interface: %s", naddr.IPNet.IP.String(), err.Error())
@@ -168,16 +171,24 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 		return nil
 	}
 
-	// TODO: netlink.RouteReplace which is replacement for below command is not working as expected. Call succeeds but
-	// route is not replaced. For now do it with command.
-	// #nosec G204
-	ipRouteCmdArgs = append(ipRouteCmdArgs, "route", "replace", "local", ip, "dev", KubeDummyIf,
-		"table", "local", "proto", "kernel", "scope", "host", "src", nodeIP, "table", "local")
-
-	out, err := exec.Command("ip", ipRouteCmdArgs...).CombinedOutput()
+	kubeDummyLink, err := netlink.LinkByName(KubeDummyIf)
 	if err != nil {
-		klog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v, Output: %s",
-			ip, KubeDummyIf, err, out)
+		klog.Errorf("failed to get %s link due to %v", KubeDummyIf, err)
+		return err
+	}
+	nRoute := &netlink.Route{
+		Type:      unix.RTN_LOCAL,
+		Dst:       ipPrefix,
+		LinkIndex: kubeDummyLink.Attrs().Index,
+		Table:     syscall.RT_TABLE_LOCAL,
+		Protocol:  unix.RTPROT_KERNEL,
+		Scope:     syscall.RT_SCOPE_HOST,
+		Src:       parsedNodeIP,
+	}
+	err = netlink.RouteReplace(nRoute)
+	if err != nil {
+		klog.Errorf("Failed to replace route to service VIP %s configured on %s. Error: %v",
+			ip, KubeDummyIf, err)
 		return err
 	}
 
@@ -462,24 +473,56 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 		return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
 	}
 
+	loNetLink, err := netlink.LinkByName("lo")
+	if err != nil {
+		return fmt.Errorf("failed to get loopback interface due to %v", err)
+	}
+
 	if setupIPv4 {
-		out, err := exec.Command("ip", "route", "list", "table", customDSRRouteTableID).Output()
-		if err != nil || !strings.Contains(string(out), " lo ") {
-			if err = exec.Command("ip", "route", "add", "local", "default", "dev", "lo", "table",
-				customDSRRouteTableID).Run(); err != nil {
-				return fmt.Errorf("failed to add route in custom route table due to: %v", err)
+		nFamily := netlink.FAMILY_V4
+		_, defaultRouteCIDR, err := net.ParseCIDR(ipv4DefaultRoute)
+		if err != nil {
+			//nolint:goconst // This is a static value and should not be changed
+			return fmt.Errorf("failed to parse default (%s) route (this is statically defined, so if you see this "+
+				"error please report because something has gone very wrong) due to: %v", ipv4DefaultRoute, err)
+		}
+		nRoute := &netlink.Route{
+			Type:      unix.RTN_LOCAL,
+			Dst:       defaultRouteCIDR,
+			LinkIndex: loNetLink.Attrs().Index,
+			Table:     customDSRRouteTableID,
+		}
+		routes, err := netlink.RouteListFiltered(nFamily, nRoute, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
+		if err != nil || len(routes) < 1 {
+			err = netlink.RouteAdd(nRoute)
+			if err != nil {
+				return fmt.Errorf("failed to add route to custom route table for DSR due to: %v", err)
 			}
 		}
 	}
+
 	if setupIPv6 {
-		out, err := exec.Command("ip", "-6", "route", "list", "table", customDSRRouteTableID).Output()
-		if err != nil || !strings.Contains(string(out), " lo ") {
-			if err = exec.Command("ip", "-6", "route", "add", "local", "default", "dev", "lo", "table",
-				customDSRRouteTableID).Run(); err != nil {
-				return fmt.Errorf("failed to add route in custom route table due to: %v", err)
+		nFamily := netlink.FAMILY_V6
+		_, defaultRouteCIDR, err := net.ParseCIDR(ipv6DefaultRoute)
+		if err != nil {
+			return fmt.Errorf("failed to parse default (%s) route (this is statically defined, so if you see this "+
+				"error please report because something has gone very wrong) due to: %v", ipv6DefaultRoute, err)
+		}
+		nRoute := &netlink.Route{
+			Type:      unix.RTN_LOCAL,
+			Dst:       defaultRouteCIDR,
+			LinkIndex: loNetLink.Attrs().Index,
+			Table:     customDSRRouteTableID,
+		}
+		routes, err := netlink.RouteListFiltered(nFamily, nRoute, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
+		if err != nil || len(routes) < 1 {
+			err = netlink.RouteAdd(nRoute)
+			if err != nil {
+				return fmt.Errorf("failed to add route to custom route table for DSR due to: %v", err)
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -487,7 +530,6 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 // directly responds back with source IP as external IP kernel will treat as martian packet.
 // To prevent martian packets add route to external IP through the `kube-bridge` interface
 // setupRoutesForExternalIPForDSR: setups routing so that kernel does not think return packets as martians
-
 func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap serviceInfoMap,
 	setupIPv4, setupIPv6 bool) error {
 	err := utils.RouteTableAdd(externalIPRouteTableID, externalIPRouteTableName)
@@ -495,27 +537,45 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
 	}
 
-	setupIPRulesAndRoutes := func(ipArgs []string) error {
-		out, err := runIPCommandsWithArgs(ipArgs, "rule", "list").Output()
+	setupIPRulesAndRoutes := func(isIPv6 bool) error {
+		nFamily := netlink.FAMILY_V4
+		_, defaultPrefixCIDR, err := net.ParseCIDR(ipv4DefaultRoute)
+		if isIPv6 {
+			nFamily = netlink.FAMILY_V6
+			_, defaultPrefixCIDR, err = net.ParseCIDR(ipv6DefaultRoute)
+		}
 		if err != nil {
-			return fmt.Errorf("failed to verify if `ip rule add prio 32765 from all lookup external_ip` exists due to: %v",
-				err)
+			return fmt.Errorf("failed to parse default route (this is statically defined, so if you see this "+
+				"error please report because something has gone very wrong) due to: %v", err)
 		}
 
-		if !(strings.Contains(string(out), externalIPRouteTableName) ||
-			strings.Contains(string(out), externalIPRouteTableID)) {
-			err = runIPCommandsWithArgs(ipArgs, "rule", "add", "prio", "32765", "from", "all", "lookup",
-				externalIPRouteTableID).Run()
+		nRule := &netlink.Rule{
+			Priority: defaultDSRPolicyRulePriority,
+			Src:      defaultPrefixCIDR,
+			Table:    externalIPRouteTableID,
+		}
+		rules, err := netlink.RuleListFiltered(nFamily, nRule,
+			netlink.RT_FILTER_TABLE|netlink.RT_FILTER_SRC|netlink.RT_FILTER_PRIORITY)
+		if err != nil {
+			return fmt.Errorf("failed to list rule for external IP's and verify if `ip rule add prio 32765 from all "+
+				"lookup external_ip` exists due to: %v", err)
+		}
+
+		if len(rules) < 1 {
+			err = netlink.RuleAdd(nRule)
 			if err != nil {
 				klog.Infof("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to %v",
-					err.Error())
+					err)
 				return fmt.Errorf("failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` "+
 					"due to %v", err)
 			}
 		}
 
-		out, _ = runIPCommandsWithArgs(ipArgs, "route", "list", "table", externalIPRouteTableID).Output()
-		outStr := string(out)
+		kubeBridgeLink, err := netlink.LinkByName(KubeBridgeIf)
+		if err != nil {
+			return fmt.Errorf("failed to get kube-bridge interface due to %v", err)
+		}
+
 		activeExternalIPs := make(map[string]bool)
 		for _, svc := range serviceInfoMap {
 			for _, externalIP := range svc.externalIPs {
@@ -528,9 +588,21 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 
 				activeExternalIPs[externalIP] = true
 
-				if !strings.Contains(outStr, externalIP) {
-					if err = runIPCommandsWithArgs(ipArgs, "route", "add", externalIP, "dev", "kube-bridge", "table",
-						externalIPRouteTableID).Run(); err != nil {
+				nSrcIP := net.ParseIP(externalIP)
+				nRoute := &netlink.Route{
+					Src:       nSrcIP,
+					LinkIndex: kubeBridgeLink.Attrs().Index,
+					Table:     externalIPRouteTableID,
+				}
+
+				routes, err := netlink.RouteListFiltered(nFamily, nRoute,
+					netlink.RT_FILTER_SRC|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
+				if err != nil {
+					return fmt.Errorf("failed to list route for external IP's due to: %s", err)
+				}
+				if len(routes) < 1 {
+					err = netlink.RouteAdd(nRoute)
+					if err != nil {
 						klog.Errorf("Failed to add route for %s in custom route table for external IP's due to: %v",
 							externalIP, err)
 						continue
@@ -540,19 +612,18 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 
 		// check if there are any pbr in externalIPRouteTableID for external IP's
-		if len(outStr) > 0 {
-			// clean up stale external IPs
-			for _, line := range strings.Split(strings.Trim(outStr, "\n"), "\n") {
-				route := strings.Split(strings.Trim(line, " "), " ")
-				ip := route[0]
-				if !activeExternalIPs[ip] {
-					args := []string{"route", "del", "table", externalIPRouteTableID}
-					args = append(args, route...)
-					if err = runIPCommandsWithArgs(ipArgs, args...).Run(); err != nil {
-						klog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s",
-							ip, err)
-						continue
-					}
+		routes, err := netlink.RouteList(nil, nFamily)
+		if err != nil {
+			return fmt.Errorf("failed to list route for external IP's due to: %s", err)
+		}
+		for idx, route := range routes {
+			ip := route.Src.String()
+			if !activeExternalIPs[ip] {
+				err = netlink.RouteDel(&routes[idx])
+				if err != nil {
+					klog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s",
+						ip, err)
+					continue
 				}
 			}
 		}
@@ -561,13 +632,13 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 	}
 
 	if setupIPv4 {
-		err = setupIPRulesAndRoutes([]string{})
+		err = setupIPRulesAndRoutes(false)
 		if err != nil {
 			return err
 		}
 	}
 	if setupIPv6 {
-		err = setupIPRulesAndRoutes([]string{"-6"})
+		err = setupIPRulesAndRoutes(true)
 		if err != nil {
 			return err
 		}
