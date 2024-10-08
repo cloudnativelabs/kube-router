@@ -15,20 +15,16 @@ const (
 	CustomTableName = "kube-router"
 )
 
-type PBR struct {
+// PolicyBasedRules is a struct that holds all of the information needed for manipulating policy based routing rules
+type PolicyBasedRules struct {
 	nfa          utils.NodeFamilyAware
 	podIPv4CIDRs []string
 	podIPv6CIDRs []string
 }
 
-type PBRer interface {
-	EnablePolicyBasedRouting() error
-	DisablePolicyBasedRouting() error
-}
-
-// NewPBR creates a new PBR object which will be used to manipulate policy based routing rules
-func NewPBR(nfa utils.NodeFamilyAware, podIPv4CIDRs, podIPv6CIDRs []string) *PBR {
-	return &PBR{
+// NewPolicyBasedRules creates a new PBR object which will be used to manipulate policy based routing rules
+func NewPolicyBasedRules(nfa utils.NodeFamilyAware, podIPv4CIDRs, podIPv6CIDRs []string) *PolicyBasedRules {
+	return &PolicyBasedRules{
 		nfa:          nfa,
 		podIPv4CIDRs: podIPv4CIDRs,
 		podIPv6CIDRs: podIPv6CIDRs,
@@ -60,9 +56,9 @@ func ipRuleAbstraction(ipProtocol, ipOp, cidr string) error {
 	return nil
 }
 
-// setup a custom routing table that will be used for policy based routing to ensure traffic originating
-// on tunnel interface only leaves through tunnel interface irrespective rp_filter enabled/disabled
-func (pbr *PBR) EnablePolicyBasedRouting() error {
+// Enable setup a custom routing table that will be used for policy based routing to ensure traffic
+// originating on tunnel interface only leaves through tunnel interface irrespective rp_filter enabled/disabled
+func (pbr *PolicyBasedRules) Enable() error {
 	err := utils.RouteTableAdd(CustomTableID, CustomTableName)
 	if err != nil {
 		return fmt.Errorf("failed to update rt_tables file: %s", err)
@@ -86,7 +82,8 @@ func (pbr *PBR) EnablePolicyBasedRouting() error {
 	return nil
 }
 
-func (pbr *PBR) DisablePolicyBasedRouting() error {
+// Disable removes the custom routing table that was used for policy based routing
+func (pbr *PolicyBasedRules) Disable() error {
 	err := utils.RouteTableAdd(CustomTableID, CustomTableName)
 	if err != nil {
 		return fmt.Errorf("failed to update rt_tables file: %s", err)

@@ -9,14 +9,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// RouteSyncer is an interface that defines the methods needed to sync routes to the kernel's routing table
-type RouteSyncer interface {
-	AddInjectedRoute(dst *net.IPNet, route *netlink.Route)
-	DelInjectedRoute(dst *net.IPNet)
-	Run(stopCh <-chan struct{}, wg *sync.WaitGroup)
-	SyncLocalRouteTable()
-}
-
 // RouteSync is a struct that holds all of the information needed for syncing routes to the kernel's routing table
 type RouteSync struct {
 	routeTableStateMap       map[string]*netlink.Route

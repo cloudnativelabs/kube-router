@@ -69,6 +69,20 @@ const (
 	ipv4MaskMinBits     = 32
 )
 
+// RouteSyncer is an interface that defines the methods needed to sync routes to the kernel's routing table
+type RouteSyncer interface {
+	AddInjectedRoute(dst *net.IPNet, route *netlink.Route)
+	DelInjectedRoute(dst *net.IPNet)
+	Run(stopCh <-chan struct{}, wg *sync.WaitGroup)
+	SyncLocalRouteTable()
+}
+
+// PolicyBasedRouting is an interface that defines the methods needed to enable/disable policy based routing
+type PolicyBasedRouter interface {
+	Enable() error
+	Disable() error
+}
+
 // NetworkRoutingController is struct to hold necessary information required by controller
 type NetworkRoutingController struct {
 	krNode                         utils.NodeAware
@@ -124,8 +138,8 @@ type NetworkRoutingController struct {
 	podIPv6CIDRs                   []string
 	CNIFirewallSetup               *sync.Cond
 	ipsetMutex                     *sync.Mutex
-	routeSyncer                    routes.RouteSyncer
-	pbr                            routes.PBRer
+	routeSyncer                    RouteSyncer
+	pbr                            PolicyBasedRouter
 	tunneler                       tunnels.Tunneler
 
 	nodeLister cache.Indexer
@@ -165,13 +179,13 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 
 	nrc.CNIFirewallSetup.Broadcast()
 
-	nrc.pbr = routes.NewPBR(nrc.krNode, nrc.podIPv4CIDRs, nrc.podIPv6CIDRs)
+	nrc.pbr = routes.NewPolicyBasedRules(nrc.krNode, nrc.podIPv4CIDRs, nrc.podIPv6CIDRs)
 
 	// Handle ipip tunnel overlay
 	if nrc.enableOverlays {
 		klog.V(1).Info("Tunnel Overlay enabled in configuration.")
 		klog.V(1).Info("Setting up overlay networking.")
-		err = nrc.pbr.EnablePolicyBasedRouting()
+		err = nrc.pbr.Enable()
 		if err != nil {
 			klog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 		}
@@ -187,7 +201,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	} else {
 		klog.V(1).Info("Tunnel Overlay disabled in configuration.")
 		klog.V(1).Info("Cleaning up old overlay networking if needed.")
-		err = nrc.pbr.DisablePolicyBasedRouting()
+		err = nrc.pbr.Disable()
 		if err != nil {
 			klog.Errorf("Failed to disable policy based routing: %s", err.Error())
 		}
@@ -1365,8 +1379,8 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.autoMTU = kubeRouterConfig.AutoMTU
 	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
 	nrc.overlayType = kubeRouterConfig.OverlayType
-	overlayEncap, err := tunnels.ParseEncapType(kubeRouterConfig.OverlayEncap)
-	if err != nil {
+	overlayEncap, ok := tunnels.ParseEncapType(kubeRouterConfig.OverlayEncap)
+	if !ok {
 		return nil, fmt.Errorf("unknown --overlay-encap option '%s' selected, unable to continue", overlayEncap)
 	}
 	overlayEncapPort, err := tunnels.ParseEncapPort(kubeRouterConfig.OverlayEncapPort)

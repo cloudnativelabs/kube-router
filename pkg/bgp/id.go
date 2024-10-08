@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
-	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	gobgp "github.com/osrg/gobgp/v3/pkg/packet/bgp"
@@ -49,11 +49,10 @@ func ValidateCommunity(arg string) error {
 		return nil
 	}
 
-	_regexpCommunity := regexp.MustCompile(`(\d+):(\d+)`)
-	elems := _regexpCommunity.FindStringSubmatch(arg)
-	if len(elems) == 3 {
-		if _, err := strconv.ParseUint(elems[1], 10, CommunityMaxPartSize); err == nil {
-			if _, err = strconv.ParseUint(elems[2], 10, CommunityMaxPartSize); err == nil {
+	elem1, elem2, found := strings.Cut(arg, ":")
+	if found {
+		if _, err := strconv.ParseUint(elem1, 10, CommunityMaxPartSize); err == nil {
+			if _, err = strconv.ParseUint(elem2, 10, CommunityMaxPartSize); err == nil {
 				return nil
 			}
 		}
