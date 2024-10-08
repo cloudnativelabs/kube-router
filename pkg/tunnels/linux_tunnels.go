@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -39,17 +40,6 @@ var (
 // EncapType represents the type of encapsulation used for an overlay tunnel in kube-router.
 type EncapType string
 
-// IsValid checks if the encapsulation type is valid by comparing it against a list of valid types.
-// It returns true if the encapsulation type is valid, otherwise it returns false.
-func (e EncapType) IsValid() bool {
-	for _, validType := range validEncapTypes {
-		if e == validType {
-			return true
-		}
-	}
-	return false
-}
-
 // ParseEncapType parses the given string and returns an Encap type if valid.
 // It returns an error if the encapsulation type is invalid.
 //
@@ -58,13 +48,13 @@ func (e EncapType) IsValid() bool {
 //
 // Returns:
 //   - Encap: The parsed encapsulation type.
-//   - error: An error if the encapsulation type is invalid.
-func ParseEncapType(encapType string) (EncapType, error) {
+//   - bool: A boolean indicating whether the encapsulation type is valid.
+func ParseEncapType(encapType string) (EncapType, bool) {
 	encap := EncapType(encapType)
-	if !encap.IsValid() {
-		return "", fmt.Errorf("invalid encapsulation type: %s", encapType)
+	if !slices.Contains(validEncapTypes, encap) {
+		return "", false
 	}
-	return encap, nil
+	return encap, true
 }
 
 type EncapPort uint16
@@ -92,26 +82,25 @@ type Tunneler interface {
 }
 
 type OverlayTunnel struct {
-	krNode           utils.NodeIPAndFamilyAware
-	overlayEncapPort EncapPort
-	overlayEncap     EncapType
+	krNode    utils.NodeIPAware
+	encapPort EncapPort
+	encapType EncapType
 }
 
-func NewOverlayTunnel(krNode utils.NodeIPAndFamilyAware, overlayEncap EncapType,
-	overlayEncapPort EncapPort) *OverlayTunnel {
+func NewOverlayTunnel(krNode utils.NodeIPAware, encapType EncapType, encapPort EncapPort) *OverlayTunnel {
 	return &OverlayTunnel{
-		krNode:           krNode,
-		overlayEncapPort: overlayEncapPort,
-		overlayEncap:     overlayEncap,
+		krNode:    krNode,
+		encapPort: encapPort,
+		encapType: encapType,
 	}
 }
 
 func (o *OverlayTunnel) EncapType() EncapType {
-	return o.overlayEncap
+	return o.encapType
 }
 
 func (o *OverlayTunnel) EncapPort() EncapPort {
-	return o.overlayEncapPort
+	return o.encapPort
 }
 
 // setupOverlayTunnel attempts to create a tunnel link and corresponding routes for IPIP based overlay networks
@@ -124,7 +113,7 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 	var ipipMode, fouLinkType string
 	isIPv6 := false
 	ipBase := make([]string, 0)
-	strFormattedEncapPort := strconv.FormatInt(int64(o.overlayEncapPort), 10)
+	strFormattedEncapPort := strconv.FormatInt(int64(o.encapPort), 10)
 
 	if nextHop.To4() != nil {
 		bestIPForFamily = o.krNode.FindBestIPv4NodeAddress()
@@ -151,7 +140,7 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 		klog.V(1).Infof("Tunnel interface: %s with encap type %s for the node %s already exists.",
 			tunnelName, link.Attrs().EncapType, nextHop.String())
 
-		switch o.overlayEncap {
+		switch o.encapType {
 		case EncapTypeIPIP:
 			if linkFOUEnabled(tunnelName) {
 				klog.Infof("Was configured to use ipip tunnels, but found existing fou tunnels in place, cleaning up")
@@ -162,7 +151,7 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 				CleanupTunnel(nextHopSubnet, tunnelName)
 
 				// If we are transitioning from FoU to IPIP we also need to clean up the old FoU port if it exists
-				if fouPortAndProtoExist(o.overlayEncapPort, isIPv6) {
+				if fouPortAndProtoExist(o.encapPort, isIPv6) {
 					fouArgs := ipBase
 					fouArgs = append(fouArgs, "fou", "del", "port", strFormattedEncapPort)
 					out, err := exec.Command("ip", fouArgs...).CombinedOutput()
@@ -188,9 +177,9 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 	// nothing to do here
 	if err != nil || recreate {
 		klog.Infof("Creating tunnel %s of type %s with encap %s for destination %s",
-			tunnelName, fouLinkType, o.overlayEncap, nextHop.String())
+			tunnelName, fouLinkType, o.encapType, nextHop.String())
 		cmdArgs := ipBase
-		switch o.overlayEncap {
+		switch o.encapType {
 		case EncapTypeIPIP:
 			// Plain IPIP tunnel without any encapsulation
 			cmdArgs = append(cmdArgs, "tunnel", "add", tunnelName, "mode", ipipMode, "local", bestIPForFamily.String(),
@@ -198,7 +187,7 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 
 		case EncapTypeFOU:
 			// Ensure that the FOU tunnel port is set correctly
-			if !fouPortAndProtoExist(o.overlayEncapPort, isIPv6) {
+			if !fouPortAndProtoExist(o.encapPort, isIPv6) {
 				fouArgs := ipBase
 				fouArgs = append(fouArgs, "fou", "add", "port", strFormattedEncapPort, "gue")
 				out, err := exec.Command("ip", fouArgs...).CombinedOutput()
@@ -216,7 +205,7 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 
 		default:
 			return nil, fmt.Errorf("unknown tunnel encapsulation was passed: %s, unable to continue with overlay "+
-				"setup", o.overlayEncap)
+				"setup", o.encapType)
 		}
 
 		klog.V(2).Infof("Executing the following command to create tunnel: ip %s", cmdArgs)
@@ -276,6 +265,10 @@ func CleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
 // Since linux restricts interface names to 15 characters, we take the sha-256 of the node IP after removing
 // non-entropic characters like '.' and ':', and then use the first 12 bytes of it. This allows us to cater to both
 // long IPv4 addresses and much longer IPv6 addresses.
+//
+// TODO: In the future, we should consider using the hexadecimal byte representation of IPv4 addresses and using a the
+// SHA256 of the hash. Additionally, we should not remove non-entropic characters as it can cause hash collisions as
+// "21.3.0.4" would has the same as "2.13.0.4" without "."'s.
 func GenerateTunnelName(nodeIP string) string {
 	// remove dots from an IPv4 address
 	strippedIP := strings.ReplaceAll(nodeIP, ".", "")
