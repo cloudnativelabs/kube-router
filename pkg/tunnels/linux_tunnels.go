@@ -70,7 +70,7 @@ func ParseEncapType(encapType string) (EncapType, error) {
 type EncapPort uint16
 
 func (e EncapPort) checkWithinRange() error {
-	if uint16(e) > minPort && uint16(e) < maxPort {
+	if uint16(e) >= minPort {
 		return nil
 	}
 	return fmt.Errorf("specified encap port is out of range of valid ports: %d, valid range is from %d to %d",
