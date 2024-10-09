@@ -14,6 +14,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
@@ -69,14 +70,6 @@ const (
 	ipv4MaskMinBits     = 32
 )
 
-// RouteSyncer is an interface that defines the methods needed to sync routes to the kernel's routing table
-type RouteSyncer interface {
-	AddInjectedRoute(dst *net.IPNet, route *netlink.Route)
-	DelInjectedRoute(dst *net.IPNet)
-	Run(stopCh <-chan struct{}, wg *sync.WaitGroup)
-	SyncLocalRouteTable()
-}
-
 // PolicyBasedRouting is an interface that defines the methods needed to enable/disable policy based routing
 type PolicyBasedRouter interface {
 	Enable() error
@@ -114,8 +107,7 @@ type NetworkRoutingController struct {
 	bgpGracefulRestartDeferralTime time.Duration
 	ipSetHandlers                  map[v1core.IPFamily]utils.IPSetHandler
 	iptablesCmdHandlers            map[v1core.IPFamily]utils.IPTablesHandler
-	enableOverlays                 bool
-	overlayType                    string
+	overlayConfig                  pkg.OverlayConfig
 	peerMultihopTTL                uint8
 	MetricsEnabled                 bool
 	bgpServerStarted               bool
@@ -138,9 +130,9 @@ type NetworkRoutingController struct {
 	podIPv6CIDRs                   []string
 	CNIFirewallSetup               *sync.Cond
 	ipsetMutex                     *sync.Mutex
-	routeSyncer                    RouteSyncer
+	routeSyncer                    pkg.RouteSyncer
 	pbr                            PolicyBasedRouter
-	tunneler                       tunnels.Tunneler
+	tunneler                       pkg.Tunneler
 
 	nodeLister cache.Indexer
 	svcLister  cache.Indexer
@@ -182,14 +174,14 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	nrc.pbr = routes.NewPolicyBasedRules(nrc.krNode, nrc.podIPv4CIDRs, nrc.podIPv6CIDRs)
 
 	// Handle ipip tunnel overlay
-	if nrc.enableOverlays {
+	if nrc.overlayConfig.EnableOverlay {
 		klog.V(1).Info("Tunnel Overlay enabled in configuration.")
 		klog.V(1).Info("Setting up overlay networking.")
 		err = nrc.pbr.Enable()
 		if err != nil {
 			klog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 		}
-		if nrc.tunneler.EncapType() == tunnels.EncapTypeFOU {
+		if nrc.tunneler.EncapType() == string(tunnels.EncapTypeFOU) {
 			// enable FoU module for the overlay tunnel
 			if _, err := exec.Command("modprobe", "fou").CombinedOutput(); err != nil {
 				klog.Errorf("Failed to enable FoU for tunnel overlay: %s", err.Error())
@@ -351,7 +343,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		}
 
 		// Update ipset entries
-		if nrc.enablePodEgress || nrc.enableOverlays {
+		if nrc.enablePodEgress || nrc.overlayConfig.EnableOverlay {
 			klog.V(1).Info("Syncing ipsets")
 			err = nrc.syncNodeIPSets(nrc.krNode)
 			if err != nil {
@@ -455,11 +447,13 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 					if nrc.MetricsEnabled {
 						metrics.ControllerBGPadvertisementsReceived.Inc()
 					}
+
 					if path.NeighborIp == "<nil>" {
 						return
 					}
+
 					klog.V(2).Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
-					if err := nrc.injectRoute(path); err != nil {
+					if err := bgp.PathChanged(path, nrc.bgpServer, nrc.routeSyncer, nrc.tunneler); err != nil {
 						klog.Errorf("Failed to inject routes due to: " + err.Error())
 					}
 				}
@@ -573,159 +567,6 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	}
 
 	return nil
-}
-
-func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
-	klog.V(2).Infof("injectRoute Path Looks Like: %s", path.String())
-	var route *netlink.Route
-	var link netlink.Link
-
-	dst, nextHop, err := bgp.ParsePath(path)
-	if err != nil {
-		return err
-	}
-
-	tunnelName := tunnels.GenerateTunnelName(nextHop.String())
-	checkNHSameSubnet := func(needle net.IP, haystack []net.IP) bool {
-		for _, nodeIP := range haystack {
-			nodeSubnet, _, err := utils.GetNodeSubnet(nodeIP, nil)
-			if err != nil {
-				klog.Warningf("unable to get subnet for node IP: %s, err: %v... skipping", nodeIP, err)
-				continue
-			}
-			// If we've found a subnet that contains our nextHop then we're done here
-			if nodeSubnet.Contains(needle) {
-				return true
-			}
-		}
-		return false
-	}
-
-	var sameSubnet bool
-	if nextHop.To4() != nil {
-		sameSubnet = checkNHSameSubnet(nextHop, nrc.krNode.GetNodeIPv4Addrs())
-	} else if nextHop.To16() != nil {
-		sameSubnet = checkNHSameSubnet(nextHop, nrc.krNode.GetNodeIPv6Addrs())
-	}
-
-	// If we've made it this far, then it is likely that the node is holding a destination route for this path already.
-	// If the path we've received from GoBGP is a withdrawal, we should clean up any lingering routes that may exist
-	// on the host (rather than creating a new one or updating an existing one), and then return.
-	if path.IsWithdraw {
-		klog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nextHop)
-
-		// The path might be withdrawn because the peer became unestablished or it may be withdrawn because just the
-		// path was withdrawn. Check to see if the peer is still established before deciding whether to clean the
-		// tunnel and tunnel routes or whether to just delete the destination route.
-		peerEstablished, err := nrc.isPeerEstablished(nextHop.String())
-		if err != nil {
-			klog.Errorf("encountered error while checking peer status: %v", err)
-		}
-		if err == nil && !peerEstablished {
-			klog.V(1).Infof("Peer '%s' was not found any longer, removing tunnel and routes",
-				nextHop.String())
-			// Also delete route from state map so that it doesn't get re-synced after deletion
-			nrc.routeSyncer.DelInjectedRoute(dst)
-			tunnels.CleanupTunnel(dst, tunnelName)
-			return nil
-		}
-
-		// Also delete route from state map so that it doesn't get re-synced after deletion
-		nrc.routeSyncer.DelInjectedRoute(dst)
-		return nil
-	}
-
-	shouldCreateTunnel := func() bool {
-		if !nrc.enableOverlays {
-			return false
-		}
-		if nrc.overlayType == "full" {
-			return true
-		}
-		if nrc.overlayType == "subnet" && !sameSubnet {
-			return true
-		}
-		return false
-	}
-
-	// create IPIP tunnels only when node is not in same subnet or overlay-type is set to 'full'
-	// if the user has disabled overlays, don't create tunnels. If we're not creating a tunnel, check to see if there is
-	// any cleanup that needs to happen.
-	if shouldCreateTunnel() {
-		link, err = nrc.tunneler.SetupOverlayTunnel(tunnelName, nextHop, dst)
-		if err != nil {
-			return err
-		}
-	} else {
-		// knowing that a tunnel shouldn't exist for this route, check to see if there are any lingering tunnels /
-		// routes that need to be cleaned up.
-		tunnels.CleanupTunnel(dst, tunnelName)
-	}
-
-	switch {
-	case link != nil:
-		// if we set up an overlay tunnel link, then use it for destination routing
-		var bestIPForFamily net.IP
-		if dst.IP.To4() != nil {
-			bestIPForFamily = nrc.krNode.FindBestIPv4NodeAddress()
-		} else {
-			// Need to activate the ip command in IPv6 mode
-			bestIPForFamily = nrc.krNode.FindBestIPv6NodeAddress()
-		}
-		if bestIPForFamily == nil {
-			return fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
-				"IP family: %s", dst.String())
-		}
-		route = &netlink.Route{
-			LinkIndex: link.Attrs().Index,
-			Src:       bestIPForFamily,
-			Dst:       dst,
-			Protocol:  routes.ZebraOriginator,
-		}
-	case sameSubnet:
-		// if the nextHop is within the same subnet, add a route for the destination so that traffic can bet routed
-		// at layer 2 and minimize the need to traverse a router
-		// First check that destination and nexthop are in the same IP family
-		dstIsIPv4 := dst.IP.To4() != nil
-		gwIsIPv4 := nextHop.To4() != nil
-		if dstIsIPv4 != gwIsIPv4 {
-			return fmt.Errorf("not able to add route as destination %s and gateway %s are not in the same IP family - "+
-				"this shouldn't ever happen from IPs that kube-router advertises, but if it does report it as a bug",
-				dst.IP, nextHop)
-		}
-		route = &netlink.Route{
-			Dst:      dst,
-			Gw:       nextHop,
-			Protocol: routes.ZebraOriginator,
-		}
-	default:
-		// otherwise, let BGP do its thing, nothing to do here
-		return nil
-	}
-
-	// Alright, everything is in place, and we have our route configured, let's add it to the host's routing table
-	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nextHop)
-	nrc.routeSyncer.AddInjectedRoute(dst, route)
-	// Immediately sync the local route table regardless of timer
-	nrc.routeSyncer.SyncLocalRouteTable()
-	return nil
-}
-
-func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, error) {
-	var peerConnected bool
-	peerFunc := func(peer *gobgpapi.Peer) {
-		if peer.Conf.NeighborAddress == peerIP && peer.State.SessionState == gobgpapi.PeerState_ESTABLISHED {
-			peerConnected = true
-		}
-	}
-	err := nrc.bgpServer.ListPeer(context.Background(), &gobgpapi.ListPeerRequest{
-		Address: peerIP,
-	}, peerFunc)
-	if err != nil {
-		return false, fmt.Errorf("unable to list peers to see if tunnel & routes need to be removed: %v", err)
-	}
-
-	return peerConnected, nil
 }
 
 // Cleanup performs the cleanup of configurations done
@@ -1288,7 +1129,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpServerStarted = false
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
-	nrc.routeSyncer = routes.NewRouteSyncer(kubeRouterConfig.InjectedRoutesSyncPeriod)
+	nrc.routeSyncer = NewRouteSyncer(kubeRouterConfig.InjectedRoutesSyncPeriod)
 
 	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldTime.Seconds()
 	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {
@@ -1377,8 +1218,10 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.advertiseLoadBalancerIP = kubeRouterConfig.AdvertiseLoadBalancerIP
 	nrc.advertisePodCidr = kubeRouterConfig.AdvertiseNodePodCidr
 	nrc.autoMTU = kubeRouterConfig.AutoMTU
-	nrc.enableOverlays = kubeRouterConfig.EnableOverlay
-	nrc.overlayType = kubeRouterConfig.OverlayType
+	nrc.overlayConfig = pkg.OverlayConfig{
+		EnableOverlay: kubeRouterConfig.EnableOverlay,
+		OverlayType:   kubeRouterConfig.OverlayType,
+	}
 	overlayEncap, ok := tunnels.ParseEncapType(kubeRouterConfig.OverlayEncap)
 	if !ok {
 		return nil, fmt.Errorf("unknown --overlay-encap option '%s' selected, unable to continue", overlayEncap)

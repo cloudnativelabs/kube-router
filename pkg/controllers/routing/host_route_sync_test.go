@@ -1,4 +1,4 @@
-package routes
+package routing
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	gobgp "github.com/osrg/gobgp/v3/pkg/server"
 	"github.com/stretchr/testify/assert"
@@ -60,7 +61,7 @@ func (mnl *mockNetlink) mockDestinationDelete(destinationSubnet *net.IPNet) erro
 	return nil
 }
 
-func (mnl *mockNetlink) waitForSyncLocalRouteToAcquireLock(syncer RouteSyncer) {
+func (mnl *mockNetlink) waitForSyncLocalRouteToAcquireLock(syncer pkg.RouteSyncer) {
 	// Launch syncLocalRouteTable in a separate goroutine so that we can try to inject a route into the map while it
 	// is syncing. Then wait on the wait group so that we know that syncLocalRouteTable has a hold on the lock when
 	// we try to use it in addInjectedRoute() below

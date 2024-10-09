@@ -1,4 +1,4 @@
-package routes
+package routing
 
 import (
 	"context"
@@ -6,6 +6,9 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
 
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	gobgp "github.com/osrg/gobgp/v3/pkg/server"
@@ -41,14 +44,6 @@ func (b BGPListError) Unwrap() error {
 	return b.err
 }
 
-// RouteSyncer is an interface that defines the methods needed to sync routes to the kernel's routing table
-type RouteSyncer interface {
-	AddInjectedRoute(dst *net.IPNet, route *netlink.Route)
-	DelInjectedRoute(dst *net.IPNet)
-	Run(stopCh <-chan struct{}, wg *sync.WaitGroup)
-	SyncLocalRouteTable()
-}
-
 // RouteSync is a struct that holds all of the information needed for syncing routes to the kernel's routing table
 type RouteSync struct {
 	routeTableStateMap       map[string]*netlink.Route
@@ -75,7 +70,7 @@ func (rs *RouteSync) DelInjectedRoute(dst *net.IPNet) {
 	if _, ok := rs.routeTableStateMap[dst.String()]; ok {
 		klog.V(3).Infof("Removing route for destination: %s", dst)
 		delete(rs.routeTableStateMap, dst.String())
-		err := DeleteByDestination(dst)
+		err := routes.DeleteByDestination(dst)
 		if err != nil {
 			klog.Errorf("Failed to cleanup routes: %v", err)
 		}
@@ -87,17 +82,16 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 		routeMap := make(map[string]*netlink.Route, 0)
 		for _, p := range path {
 			klog.V(3).Infof("Path: %v", p)
-			/*
-			dst, nh, err := routing.ParseBGPPath(p)
+			dst, nh, err := bgp.ParsePath(p)
 			if err != nil {
 				klog.Warningf("Failed to parse BGP path, not failing so as to not block updating paths that are "+
 					"valid: %v", err)
 			}
 			routeMap[dst.String()] = &netlink.Route{
-				Dst: dst,
-				Gw:  nh,
-				Protocol: ZebraOriginator,
-			}*/
+				Dst:      dst,
+				Gw:       nh,
+				Protocol: routes.ZebraOriginator,
+			}
 		}
 		return routeMap
 	}
@@ -130,7 +124,6 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 			return nil
 		}
 	}
-
 
 	return nil
 }
@@ -186,7 +179,7 @@ func NewRouteSyncer(syncPeriod time.Duration) *RouteSync {
 
 	// We substitute the RouteR* functions here so that we can easily monkey patch it in our unit tests
 	rs.routeReplacer = netlink.RouteReplace
-	rs.routeDeleter = DeleteByDestination
+	rs.routeDeleter = routes.DeleteByDestination
 	rs.routeAdder = netlink.RouteAdd
 
 	return &rs
