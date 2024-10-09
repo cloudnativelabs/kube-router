@@ -9,10 +9,6 @@ import (
 	"strings"
 )
 
-const (
-	noIPsSpecifiedErrorMsg = "no IP ranges specified"
-)
-
 type cniNetworkConfig struct {
 	FilePath string
 	Conf     *Conf
@@ -86,15 +82,8 @@ func (c *cniNetworkConfig) IsConfList() bool {
 // getPodCIDRsMapFromCNISpec gets pod CIDR allocated to the node as a map from CNI spec file and returns it
 func (c *cniNetworkConfig) getPodCIDRsMapFromCNISpec() (map[string]*net.IPNet, error) {
 	podCIDRs := make(map[string]*net.IPNet)
-	var err error
 
 	ipamConfig := c.getBridgePlugin().IPAM
-	if err != nil {
-		if err.Error() != noIPsSpecifiedErrorMsg {
-			return nil, err
-		}
-		return nil, nil
-	}
 
 	// Parse ranges from ipamConfig
 	if ipamConfig != nil && len(ipamConfig.Ranges) > 0 {

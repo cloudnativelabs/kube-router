@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"os"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,10 +86,8 @@ func Test_GetNodeObject(t *testing.T) {
 			defer os.Unsetenv("NODE_NAME")
 
 			_, err = GetNodeObject(clientset, testcase.hostnameOverride)
-			if !reflect.DeepEqual(err, testcase.err) {
-				t.Logf("actual error: %v", err)
-				t.Logf("expected error: %v", testcase.err)
-				t.Error("did not get expected error")
+			if testcase.err != nil {
+				assert.EqualError(t, err, testcase.err.Error())
 			}
 		})
 	}
@@ -316,7 +313,7 @@ func Test_GetNodeIPv6Addrs(t *testing.T) {
 		err      error
 	}{
 		{
-			"node with internal and external IPv4 addresses",
+			"node with internal and external IPv4 and external IPv6 addresses",
 			&apiv1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
@@ -342,7 +339,7 @@ func Test_GetNodeIPv6Addrs(t *testing.T) {
 			nil,
 		},
 		{
-			"node with only internal IPv4 address",
+			"node with only internal IPv4 and IPv6 addresses",
 			&apiv1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
@@ -368,7 +365,7 @@ func Test_GetNodeIPv6Addrs(t *testing.T) {
 			nil,
 		},
 		{
-			"node with only external IPv4 address",
+			"node with only external IPv4 & internal IPv6 address",
 			&apiv1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
@@ -390,7 +387,7 @@ func Test_GetNodeIPv6Addrs(t *testing.T) {
 			nil,
 		},
 		{
-			"node with no IPv4 addresses",
+			"node with no IPv6 addresses",
 			&apiv1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
