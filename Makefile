@@ -191,6 +191,7 @@ gofmt: ## Tells you what files need to be gofmt'd.
 
 gofmt-fix: ## Fixes files that need to be gofmt'd.
 	gofmt -s -w $(shell find . -not \( \( -wholename '*/vendor/*' \) -prune \) -name '*.go')
+	goimports -w $(shell find . -not \( \( -wholename '*/vendor/*' \) -prune \) -name '*.go')
 
 # List of all file_moq.go files which would need to be regenerated
 # from file.go if changed
