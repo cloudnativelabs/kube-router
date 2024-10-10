@@ -35,7 +35,6 @@ type KubeRouter struct {
 
 // NewKubeRouterDefault returns a KubeRouter object
 func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error) {
-
 	var clientconfig *rest.Config
 	var err error
 	version.PrintVersion(true)
@@ -53,6 +52,8 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 		}
 	}
 
+	clientconfig.Timeout = config.KubeClientTimeout
+	klog.V(1).Infof("Using timeout %s for calls to api server.", clientconfig.Timeout.String())
 	clientset, err := kubernetes.NewForConfig(clientconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
@@ -179,7 +180,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunServiceProxy {
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
-			svcInformer, epSliceInformer, podInformer, &ipsetMutex)
+			svcInformer, epSliceInformer, podInformer, nodeInformer, &ipsetMutex)
 		if err != nil {
 			return fmt.Errorf("failed to create network services controller: %v", err)
 		}

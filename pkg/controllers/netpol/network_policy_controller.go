@@ -204,6 +204,7 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 			klog.Infof("Shutting down network policies controller")
 			return
 		case <-t.C:
+			healthcheck.SendHeartBeat(healthChan, "NPC")
 		}
 	}
 }
@@ -220,7 +221,6 @@ func (npc *NetworkPolicyController) RequestFullSync() {
 
 // Sync synchronizes iptables to desired state of network policies
 func (npc *NetworkPolicyController) fullPolicySync() {
-
 	var err error
 	var networkPoliciesInfo []networkPolicyInfo
 	npc.mu.Lock()

@@ -503,7 +503,7 @@ func startInformersForServiceProxy(nsc *NetworkServicesController, clientset kub
 	informerFactory.WaitForCacheSync(nil)
 
 	nsc.svcLister = svcInformer.GetIndexer()
-	nsc.epSliceLister = epInformer.GetIndexer()
+	nsc.epLister = epInformer.GetIndexer()
 	nsc.podLister = podInformer.GetIndexer()
 }
 

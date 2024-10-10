@@ -17,12 +17,16 @@ import (
 	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
 
 const (
 	ipv4NetMaskBits = 32
 	ipv6NetMaskBits = 128
+
+	WeightedRoundRobin      string = "wrr"
+	WeightedLeastConnection string = "wlc"
 )
 
 // LinuxNetworking interface contains all linux networking subsystem calls
@@ -406,6 +410,20 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 			ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
 	}
 	return nil
+}
+
+func (nsc *NetworkServicesController) newNodeEventHandler() cache.ResourceEventHandler {
+	return cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			nsc.OnNodeUpdate(obj)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			nsc.OnNodeUpdate(newObj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			nsc.OnNodeUpdate(obj)
+		},
+	}
 }
 
 // For DSR it is required that we dont assign the VIP to any interface to avoid martian packets

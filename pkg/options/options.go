@@ -31,6 +31,7 @@ type KubeRouterConfig struct {
 	ClusterAsn                     uint
 	ClusterIPCIDRs                 []string
 	DisableSrcDstCheck             bool
+	EgressIPAnnotation             string
 	EnableCNI                      bool
 	EnableiBGP                     bool
 	EnableIPv4                     bool
@@ -51,6 +52,7 @@ type KubeRouterConfig struct {
 	IpvsGracefulTermination        bool
 	IpvsPermitAll                  bool
 	IpvsSyncPeriod                 time.Duration
+	KubeClientTimeout              time.Duration
 	Kubeconfig                     string
 	LoadBalancerCIDRs              []string
 	LoadBalancerDefaultClass       bool
@@ -60,11 +62,13 @@ type KubeRouterConfig struct {
 	MetricsEnabled                 bool
 	MetricsPath                    string
 	MetricsPort                    uint16
+	NodeDefaultWeight              uint16
 	NodePortBindOnAllIP            bool
 	NodePortRange                  string
-	OverlayType                    string
+	NodeWeightAnnotation           string
 	OverlayEncap                   string
 	OverlayEncapPort               uint16
+	OverlayType                    string
 	OverrideNextHop                bool
 	PeerASNs                       []uint
 	PeerMultihopTTL                uint8
@@ -75,9 +79,9 @@ type KubeRouterConfig struct {
 	RouterID                       string
 	RoutesSyncPeriod               time.Duration
 	RunFirewall                    bool
+	RunLoadBalancer                bool
 	RunRouter                      bool
 	RunServiceProxy                bool
-	RunLoadBalancer                bool
 	RuntimeEndpoint                string
 	Version                        bool
 	VLevel                         string
@@ -100,6 +104,7 @@ func NewKubeRouterConfig() *KubeRouterConfig {
 		NodePortRange:                  "30000-32767",
 		OverlayType:                    "subnet",
 		RoutesSyncPeriod:               5 * time.Minute,
+		KubeClientTimeout:              1 * time.Minute,
 		InjectedRoutesSyncPeriod:       60 * time.Second,
 	}
 }
@@ -139,10 +144,13 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.DisableSrcDstCheck, "disable-source-dest-check", true,
 		"Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be "+
 			"set some other way.")
-	fs.BoolVar(&s.EnableCNI, "enable-cni", true,
-		"Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin.")
+	fs.StringVar(&s.EgressIPAnnotation, "pod-egress-ip-annotation", "kube-router.io/pod.egress.ip",
+		"Node annotation to determine the ip to use for pod egress. "+
+			"If no annotation is found on the node, the pod source ip will be masqueraded to the node ip if pod egress is enabled.")
 	fs.BoolVar(&s.EnableiBGP, "enable-ibgp", true,
 		"Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers")
+	fs.BoolVar(&s.EnableCNI, "enable-cni", true,
+		"Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin.")
 	fs.BoolVar(&s.EnableIPv4, "enable-ipv4", true, "Enables IPv4 support")
 	fs.BoolVar(&s.EnableIPv6, "enable-ipv6", false, "Enables IPv6 support")
 	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,
@@ -178,6 +186,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.StringVar(&s.Kubeconfig, "kubeconfig", s.Kubeconfig,
 		"Path to kubeconfig file with authorization information (the master location is set by the master flag).")
+	fs.DurationVar(&s.KubeClientTimeout, "client-timeout", s.KubeClientTimeout,
+		"Timeout for kubernetes client calls (e.g. '5s', '1m', '2h22m'). Must be greater than 0.")
 	fs.BoolVar(&s.LoadBalancerDefaultClass, "loadbalancer-default-class", true,
 		"Handle loadbalancer services without a class")
 	fs.StringSliceVar(&s.LoadBalancerCIDRs, "loadbalancer-ip-range", s.LoadBalancerCIDRs,
@@ -190,10 +200,14 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The address of the Kubernetes API server (overrides any value in kubeconfig).")
 	fs.StringVar(&s.MetricsPath, "metrics-path", "/metrics", "Prometheus metrics path")
 	fs.Uint16Var(&s.MetricsPort, "metrics-port", 0, "Prometheus metrics port, (Default 0, Disabled)")
+	fs.Uint16Var(&s.NodeDefaultWeight, "node-default-weight", 1, "Default weight of a node, Default 1")
 	fs.BoolVar(&s.NodePortBindOnAllIP, "nodeport-bindon-all-ip", false,
 		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,
 		"Each node in the cluster will setup BGP peering with rest of the nodes.")
+	fs.StringVar(&s.NodeWeightAnnotation, "node-weight-annotation", "kube-router.io/node.weight",
+		"Node annotation to determine the endpoint's weight based on the node it is running on. "+
+			"If no annotation is found the \"node-default-weight\" will be used. Default \"kube-router.io/node.weight\"")
 	fs.StringVar(&s.OverlayEncap, "overlay-encap", "ipip",
 		"Valid encapsulation types are \"ipip\" or \"fou\" "+
 			"(if set to \"fou\", the udp port can be specified via \"overlay-encap-port\")")

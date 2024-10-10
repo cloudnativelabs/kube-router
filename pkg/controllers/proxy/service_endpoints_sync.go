@@ -21,8 +21,7 @@ import (
 
 // sync the ipvs service and server details configured to reflect the desired state of Kubernetes services
 // and endpoints as learned from services and endpoints information from the api server
-func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap,
-	endpointsInfoMap endpointSliceInfoMap) error {
+func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInfoMap, endpointsInfoMap endpointSliceInfoMap) error {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
@@ -115,8 +114,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		// First we check to see if this is a local service and that it has any active endpoints, if it doesn't there
 		// isn't any use doing any of the below work, let's save some compute cycles and break fast
 		if svc.local && !hasActiveEndpoints(endpoints) {
-			klog.V(1).Infof("Skipping setting up ClusterIP service %s/%s as it does not have active endpoints",
-				svc.namespace, svc.name)
+			klog.V(1).Infof("Skipping setting up ClusterIP service %s/%s as it does not have active endpoints", svc.namespace, svc.name)
 			continue
 		}
 
@@ -182,8 +180,7 @@ func (nsc *NetworkServicesController) addIPVSService(ipvsSvcs []*ipvs.Service, s
 	return ipvsSvcs, svcID, ipvsService
 }
 
-func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endpointSliceInfo,
-	svcEndpointMap map[string][]string, svc *serviceInfo, svcID string, ipvsSvc *ipvs.Service, vip net.IP) {
+func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endpointSliceInfo, svcEndpointMap map[string][]string, svc *serviceInfo, svcID string, ipvsSvc *ipvs.Service, vip net.IP) {
 	var family v1.IPFamily
 	if vip.To4() != nil {
 		family = v1.IPv4Protocol
@@ -197,6 +194,7 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		// 2) Service is a local service, but has no active endpoints on this node
 		// 3) Service is a local service, has active endpoints on this node, and this endpoint is one of them
 		if svc.local && !endpoint.isLocal {
+			klog.V(1).Infof("Skipping service %s/%s as it does not have active endpoints\n", svc.namespace, svc.name)
 			continue
 		}
 		var syscallINET uint16
@@ -530,13 +528,13 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svc *serviceI
 			AddressFamily:   syscallINET,
 			ConnectionFlags: ipvs.ConnectionFlagTunnel,
 			Port:            uint16(endpoint.port),
-			Weight:          1,
+			Weight:          endpoint.weight,
 		}
 
 		// add the destination for the IPVS service for this external IP
-		if err = nsc.ln.ipvsAddServer(ipvsExternalIPSvc, &dst); err != nil {
-			return fmt.Errorf("unable to add destination %s to externalIP service %s: %v",
-				endpoint.ip, externalIP, err)
+		err = nsc.ln.ipvsAddServer(ipvsExternalIPSvc, &dst)
+		if err != nil {
+			return fmt.Errorf("unable to add destination %s to externalIP service %s: %v", endpoint.ip, externalIP, err)
 		}
 
 		// add the external IP to a virtual interface inside the pod so that the pod can receive it
@@ -557,19 +555,15 @@ func (nsc *NetworkServicesController) setupForDSR(serviceInfoMap serviceInfoMap)
 	if err != nil {
 		return errors.New("Failed setup PBR for DSR due to: " + err.Error())
 	}
-	klog.V(1).Infof("Custom routing table %s required for Direct Server Return is setup as expected.",
-		customDSRRouteTableName)
+	klog.V(1).Infof("Custom routing table %s required for Direct Server Return is setup as expected.", customDSRRouteTableName)
 
 	klog.V(1).Infof("Setting up custom route table required to add routes for external IP's.")
 	err = nsc.ln.setupRoutesForExternalIPForDSR(serviceInfoMap, nsc.isIPv4Capable, nsc.isIPv6Capable)
 	if err != nil {
-		klog.Errorf("failed setup custom routing table required to add routes for external IP's due to: %v",
-			err)
-		return fmt.Errorf("failed setup custom routing table required to add routes for external IP's due to: %v",
-			err)
+		klog.Errorf("failed setup custom routing table required to add routes for external IP's due to: %v", err)
+		return fmt.Errorf("failed setup custom routing table required to add routes for external IP's due to: %v", err)
 	}
-	klog.V(1).Infof("Custom routing table required for Direct Server Return (%s) is setup as expected.",
-		externalIPRouteTableName)
+	klog.V(1).Infof("Custom routing table required for Direct Server Return (%s) is setup as expected.", externalIPRouteTableName)
 	return nil
 }
 
