@@ -903,6 +903,7 @@ func Test_getVIPsForService(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			for _, serviceAdvertisedIP := range test.serviceAdvertisedIPs {
 				endpoints := serviceAdvertisedIP.endpoints
 				clientset := fake.NewSimpleClientset()
