@@ -38,6 +38,7 @@ type LoadBalancerController struct {
 	clientset    kubernetes.Interface
 	isDefault    bool
 	syncPeriod   time.Duration
+	unitTestWG   *sync.WaitGroup
 }
 
 func getNamespace() (namespace string, err error) {
@@ -346,6 +347,12 @@ func appendIngressIP(svc *v1core.Service, ip net.IP) {
 }
 
 func (lbc *LoadBalancerController) updateService(svc *v1core.Service, ips ...net.IP) {
+	// This is only non-nil during certain unit tests that need to understand when this goroutine is finished to remove
+	// chance of race conditions
+	if lbc.unitTestWG != nil {
+		defer lbc.unitTestWG.Done()
+	}
+
 	if lbc.clientset == nil {
 		panic("clientset")
 	}
@@ -399,6 +406,11 @@ func (lbc *LoadBalancerController) allocateService(svc *v1core.Service) error {
 		return errors.New("unable to allocate dual-stack addresses: " + err.Error())
 	}
 
+	// This is only non-nil during certain unit tests that need to understand when this goroutine is finished to remove
+	// chance of race conditions
+	if lbc.unitTestWG != nil {
+		lbc.unitTestWG.Add(1)
+	}
 	go lbc.updateService(svc, ipv4, ipv6)
 	return nil
 }
