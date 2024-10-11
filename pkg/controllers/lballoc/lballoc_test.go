@@ -3,6 +3,7 @@ package lballoc
 import (
 	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -572,7 +573,8 @@ func TestAppendIngressIP(t *testing.T) {
 
 func TestAllocateService(t *testing.T) {
 	mlbc := &LoadBalancerController{
-		clientset: fake.NewSimpleClientset(),
+		clientset:  fake.NewSimpleClientset(),
+		unitTestWG: &sync.WaitGroup{},
 	}
 	ir4, ir6 := makeIPRanges("127.127.127.127/30", "ffff::/80")
 	mlbc.ipv4Ranges = ir4
@@ -586,6 +588,7 @@ func TestAllocateService(t *testing.T) {
 		t.Fatalf("expected %v, got %s", nil, err)
 	}
 
+	mlbc.unitTestWG.Wait()
 	svc = makeTestService()
 	mlbc.ipv4Ranges = newipRanges(nil)
 	fp := v1core.IPFamilyPolicyRequireDualStack
