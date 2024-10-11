@@ -20,6 +20,9 @@ var (
 		"192.168.0.1": "192.168.0.0/24",
 		"10.255.0.1":  "10.255.0.0/16",
 	}
+	testRoute = map[string]string{
+		"192.168.0.1": "192.168.0.0/24",
+	}
 	_, testAddRouteIPNet, _ = net.ParseCIDR("192.168.1.0/24")
 	testAddRouteRoute       = testGenerateRoute("192.168.1.0/24", "192.168.1.1")
 )
@@ -146,7 +149,7 @@ func Test_syncLocalRouteTable(t *testing.T) {
 
 		// Create a route replacer and seed it with some routes to iterate over
 		syncer := NewRouteSyncer(15 * time.Second)
-		syncer.routeTableStateMap = testGenerateRouteMap(testRoutes)
+		syncer.routeTableStateMap = testGenerateRouteMap(testRoute)
 
 		// Replace the netlink.RouteReplace function with our own mock function that includes a WaitGroup for syncing
 		// and an artificial pause and won't interact with the OS
@@ -212,25 +215,28 @@ func Test_routeSyncer_run(t *testing.T) {
 		// Setup routeSyncer to run 10 times a second
 		syncer := NewRouteSyncer(100 * time.Millisecond)
 		myNetLink := mockNetlink{}
+		myNetLink.pause = 0
+		myNetLink.wg = &sync.WaitGroup{}
 		syncer.routeReplacer = myNetLink.mockRouteAction
-		syncer.routeTableStateMap = testGenerateRouteMap(testRoutes)
+		syncer.routeTableStateMap = testGenerateRouteMap(testRoute)
 		stopCh := make(chan struct{})
 		wg := sync.WaitGroup{}
 
 		// For a sanity check that the currentRoute on the mock object is nil to start with as we'll rely on this later
 		assert.Nil(t, myNetLink.currentRoute, "currentRoute should be nil when the syncer hasn't run")
 
+		myNetLink.wg.Add(1)
 		syncer.Run(stopCh, &wg)
 
-		time.Sleep(110 * time.Millisecond)
-
+		timedOut := waitTimeout(myNetLink.wg, 110*time.Millisecond)
+		assert.False(t, timedOut, "Run should have not timed out and instead should have added a route")
 		assert.NotNil(t, myNetLink.currentRoute,
 			"the syncer should have run by now and populated currentRoute")
 
 		// Simulate a shutdown
 		close(stopCh)
 		// WaitGroup should close out before our timeout
-		timedOut := waitTimeout(&wg, 110*time.Millisecond)
+		timedOut = waitTimeout(&wg, 110*time.Millisecond)
 
 		assert.False(t, timedOut, "WaitGroup should have marked itself as done instead of timing out")
 	})
