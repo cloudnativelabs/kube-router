@@ -85,18 +85,16 @@ type NodeAware interface {
 // GetNodeIPv4Addrs returns the node's IPv4 addresses as defined by the Kubernetes Node Object.
 func (n *KRNode) GetNodeIPv4Addrs() []net.IP {
 	var nodeIPs []net.IP
-	for _, ip := range n.NodeIPv4Addrs {
-		nodeIPs = append(nodeIPs, ip...)
-	}
+	nodeIPs = append(nodeIPs, n.NodeIPv4Addrs[apiv1.NodeInternalIP]...)
+	nodeIPs = append(nodeIPs, n.NodeIPv4Addrs[apiv1.NodeExternalIP]...)
 	return nodeIPs
 }
 
 // GetNodeIPv6Addrs returns the node's IPv6 addresses as defined by the Kubernetes Node Object.
 func (n *KRNode) GetNodeIPv6Addrs() []net.IP {
 	var nodeIPs []net.IP
-	for _, ip := range n.NodeIPv6Addrs {
-		nodeIPs = append(nodeIPs, ip...)
-	}
+	nodeIPs = append(nodeIPs, n.NodeIPv6Addrs[apiv1.NodeInternalIP]...)
+	nodeIPs = append(nodeIPs, n.NodeIPv6Addrs[apiv1.NodeExternalIP]...)
 	return nodeIPs
 }
 
@@ -196,12 +194,10 @@ func (n *LocalKRNode) GetNodeMTU() (int, error) {
 // Node Object.
 func (n *KRNode) GetNodeIPAddrs() []net.IP {
 	var nodeIPs []net.IP
-	for _, ip := range n.NodeIPv4Addrs {
-		nodeIPs = append(nodeIPs, ip...)
-	}
-	for _, ip := range n.NodeIPv6Addrs {
-		nodeIPs = append(nodeIPs, ip...)
-	}
+	ipv4IPs := n.GetNodeIPv4Addrs()
+	nodeIPs = append(nodeIPs, ipv4IPs...)
+	ipv6IPs := n.GetNodeIPv6Addrs()
+	nodeIPs = append(nodeIPs, ipv6IPs...)
 	return nodeIPs
 }
 
