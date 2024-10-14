@@ -15,7 +15,7 @@ const (
 )
 
 // ServiceForEndpoints given Endpoint object return Service API object if it exists
-func ServiceForEndpoints(ci *cache.Indexer, ep *v1core.Endpoints) (interface{}, bool, error) {
+func ServiceForEndpoints(ci *cache.Indexer, ep *v1core.Endpoints) (*v1core.Service, bool, error) {
 	key, err := cache.MetaNamespaceKeyFunc(ep)
 	if err != nil {
 		return nil, false, err
@@ -31,7 +31,12 @@ func ServiceForEndpoints(ci *cache.Indexer, ep *v1core.Endpoints) (interface{}, 
 		return nil, false, nil
 	}
 
-	return item, true, nil
+	svc, ok := item.(*v1core.Service)
+	if !ok {
+		return nil, false, fmt.Errorf("expected type *v1core.Service, got %T", svc)
+	}
+
+	return svc, true, nil
 }
 
 // ServiceNameforEndpointSlice returns the name of the service that created the EndpointSlice for a given EndpointSlice
@@ -93,7 +98,7 @@ func ServiceNameforEndpointSlice(es *discovery.EndpointSlice) (string, error) {
 }
 
 // ServiceForEndpoints given EndpointSlice object return Service API object if it exists
-func ServiceForEndpointSlice(ci *cache.Indexer, es *discovery.EndpointSlice) (interface{}, bool, error) {
+func ServiceForEndpointSlice(ci *cache.Indexer, es *discovery.EndpointSlice) (*v1core.Service, bool, error) {
 	svcName, err := ServiceNameforEndpointSlice(es)
 	if err != nil {
 		return nil, false, err
@@ -112,7 +117,12 @@ func ServiceForEndpointSlice(ci *cache.Indexer, es *discovery.EndpointSlice) (in
 		return nil, false, nil
 	}
 
-	return item, true, nil
+	svc, ok := item.(*v1core.Service)
+	if !ok {
+		return nil, false, fmt.Errorf("invalid type for service, expected *v1.Service, got %T", svc)
+	}
+
+	return svc, true, nil
 }
 
 // ServiceIsHeadless decides whether or not the this service is a headless service which is often useful to kube-router

@@ -508,17 +508,23 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 		klog.Errorf("failed to register monitor global routing table callback due to : " + err.Error())
 	}
 }
+
 func (nrc *NetworkRoutingController) getPodCidr() (string, error) {
-	cidr, err := utils.GetPodCidrFromNodeSpec(nrc.clientset, nrc.hostnameOverride)
+	node, err := nrc.clientset.CoreV1().Nodes().Get(context.TODO(), nrc.hostnameOverride, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("get node: %w", err)
+	}
+	cidr, err := utils.GetPodCidrFromNodeSpec(node)
 	if err != nil {
 		klog.Errorf("Failed to get pod cidr using api server, trying to parse cni config file: %s", err.Error())
-		cidrIP, err := utils.GetPodCidrFromCniSpec(nrc.cniConfFile)
-		if err != nil {
-			return "", err
-		} else {
-			klog.V(3).Infof("Found cidr in cni config file: %s", cidrIP.String())
-		}
-		cidr = cidrIP.String()
+		// TODO(Pavel): handle reading pod CIDR from CNI conf file
+		// cidrIP, err := utils.GetPodCidrFromCniSpec(nrc.cniConfFile)
+		// if err != nil {
+		return "", err
+		// } else {
+		// 	klog.V(3).Infof("Found cidr in cni config file: %s", cidrIP.String())
+		// }
+		// cidr = cidrIP.String()
 	}
 
 	return cidr, nil
