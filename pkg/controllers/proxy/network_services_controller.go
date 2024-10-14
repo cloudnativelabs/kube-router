@@ -1156,11 +1156,12 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 					klog.V(2).Infof("Processing %+v", addr)
 					nodeWeight := nsc.defaultNodeWeight
 					var nodeInfo *nodeInfo
-					if addr.NodeName != nil {
-						nodeInfo = nsc.nodesMap[*addr.NodeName]
+					// TODO(Pavel): confirm if this logic is correct
+					if ep.NodeName != nil {
+						nodeInfo = nsc.nodesMap[*ep.NodeName]
 					}
-					if nodeInfo == nil && len(addr.IP) > 0 {
-						nodeInfo = nsc.nodesMap[addr.IP]
+					if nodeInfo == nil && len(addr) > 0 {
+						nodeInfo = nsc.nodesMap[addr]
 					}
 					if nodeInfo != nil {
 						nodeWeight = nodeInfo.weight
