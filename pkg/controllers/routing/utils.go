@@ -1,27 +1,16 @@
 package routing
 
 import (
-	"bufio"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
-	"errors"
 	"fmt"
-	"hash/fnv"
 	"net"
-	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
-	"github.com/osrg/gobgp/v3/pkg/packet/bgp"
-	"github.com/vishvananda/netlink/nl"
+
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-
-	"github.com/vishvananda/netlink"
 )
 
 // Used for processing Annotations that may contain multiple items
@@ -121,142 +110,6 @@ func statementsEqualByName(a, b []*gobgpapi.Statement) bool {
 	return true
 }
 
-// generateRouterID will generate a router ID based upon the user's configuration (or lack there of) and the node's
-// primary IP address if the user has not specified. If the user has configured the router ID as "generate" then we
-// will generate a router ID based upon fnv hashing the node's primary IP address.
-func generateRouterID(nodeIPAware utils.NodeIPAware, configRouterID string) (string, error) {
-	switch {
-	case configRouterID == "generate":
-		h := fnv.New32a()
-		h.Write(nodeIPAware.GetPrimaryNodeIP())
-		hs := h.Sum32()
-		gip := make(net.IP, 4)
-		binary.BigEndian.PutUint32(gip, hs)
-		return gip.String(), nil
-	case configRouterID != "":
-		return configRouterID, nil
-	}
-
-	if nodeIPAware.GetPrimaryNodeIP().To4() == nil {
-		return "", errors.New("router-id must be specified when primary node IP is an IPv6 address")
-	}
-	return configRouterID, nil
-}
-
-// generateTunnelName will generate a name for a tunnel interface given a node IP
-// Since linux restricts interface names to 15 characters, we take the sha-256 of the node IP after removing
-// non-entropic characters like '.' and ':', and then use the first 12 bytes of it. This allows us to cater to both
-// long IPv4 addresses and much longer IPv6 addresses.
-func generateTunnelName(nodeIP string) string {
-	// remove dots from an IPv4 address
-	strippedIP := strings.ReplaceAll(nodeIP, ".", "")
-	// remove colons from an IPv6 address
-	strippedIP = strings.ReplaceAll(strippedIP, ":", "")
-
-	h := sha256.New()
-	h.Write([]byte(strippedIP))
-	sum := h.Sum(nil)
-
-	return "tun-" + fmt.Sprintf("%x", sum)[0:11]
-}
-
-// validateCommunity takes in a string and attempts to parse a BGP community out of it in a way that is similar to
-// gobgp (internal/pkg/table/policy.go:ParseCommunity()). If it is not able to parse the community information it
-// returns an error.
-func validateCommunity(arg string) error {
-	_, err := strconv.ParseUint(arg, 10, bgpCommunityMaxSize)
-	if err == nil {
-		return nil
-	}
-
-	_regexpCommunity := regexp.MustCompile(`(\d+):(\d+)`)
-	elems := _regexpCommunity.FindStringSubmatch(arg)
-	if len(elems) == 3 {
-		if _, err := strconv.ParseUint(elems[1], 10, bgpCommunityMaxPartSize); err == nil {
-			if _, err = strconv.ParseUint(elems[2], 10, bgpCommunityMaxPartSize); err == nil {
-				return nil
-			}
-		}
-	}
-	for _, v := range bgp.WellKnownCommunityNameMap {
-		if arg == v {
-			return nil
-		}
-	}
-	return fmt.Errorf("failed to parse %s as community", arg)
-}
-
-// parseBGPNextHop takes in a GoBGP Path and parses out the destination's next hop from its attributes. If it
-// can't parse a next hop IP from the GoBGP Path, it returns an error.
-func parseBGPNextHop(path *gobgpapi.Path) (net.IP, error) {
-	for _, pAttr := range path.GetPattrs() {
-		unmarshalNew, err := pAttr.UnmarshalNew()
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal path attribute: %s", err)
-		}
-		switch t := unmarshalNew.(type) {
-		case *gobgpapi.NextHopAttribute:
-			// This is the primary way that we receive NextHops and happens when both the client and the server exchange
-			// next hops on the same IP family that they negotiated BGP on
-			nextHopIP := net.ParseIP(t.NextHop)
-			if nextHopIP != nil && (nextHopIP.To4() != nil || nextHopIP.To16() != nil) {
-				return nextHopIP, nil
-			}
-			return nil, fmt.Errorf("invalid nextHop address: %s", t.NextHop)
-		case *gobgpapi.MpReachNLRIAttribute:
-			// in the case where the server and the client are exchanging next-hops that don't relate to their primary
-			// IP family, we get MpReachNLRIAttribute instead of NextHopAttributes
-			// TODO: here we only take the first next hop, at some point in the future it would probably be best to
-			// consider multiple next hops
-			nextHopIP := net.ParseIP(t.NextHops[0])
-			if nextHopIP != nil && (nextHopIP.To4() != nil || nextHopIP.To16() != nil) {
-				return nextHopIP, nil
-			}
-			return nil, fmt.Errorf("invalid nextHop address: %s", t.NextHops[0])
-		}
-	}
-	return nil, fmt.Errorf("could not parse next hop received from GoBGP for path: %s", path)
-}
-
-// parseBGPPath takes in a GoBGP Path and parses out the destination subnet and the next hop from its attributes.
-// If successful, it will return the destination of the BGP path as a subnet form and the next hop. If it
-// can't parse the destination or the next hop IP, it returns an error.
-func parseBGPPath(path *gobgpapi.Path) (*net.IPNet, net.IP, error) {
-	nextHop, err := parseBGPNextHop(path)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	nlri := path.GetNlri()
-	var prefix gobgpapi.IPAddressPrefix
-	err = nlri.UnmarshalTo(&prefix)
-	if err != nil {
-		return nil, nil, fmt.Errorf("invalid nlri in advertised path")
-	}
-	dstSubnet, err := netlink.ParseIPNet(prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen))
-	if err != nil {
-		return nil, nil, fmt.Errorf("couldn't parse IP subnet from nlri advertised path")
-	}
-	return dstSubnet, nextHop, nil
-}
-
-// deleteRoutesByDestination attempts to safely find all routes based upon its destination subnet and delete them
-func deleteRoutesByDestination(destinationSubnet *net.IPNet) error {
-	routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
-		Dst: destinationSubnet, Protocol: zebraRouteOriginator,
-	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
-	if err != nil {
-		return fmt.Errorf("failed to get routes from netlink: %v", err)
-	}
-	for i, r := range routes {
-		klog.V(2).Infof("Found route to remove: %s", r.String())
-		if err = netlink.RouteDel(&routes[i]); err != nil {
-			return fmt.Errorf("failed to remove route due to %v", err)
-		}
-	}
-	return nil
-}
-
 // getPodCIDRsFromAllNodeSources gets the pod CIDRs for all available sources on a given node in a specific order. The
 // order of preference is:
 //  1. From the kube-router.io/pod-cidr annotation (preserves backwards compatibility)
@@ -330,82 +183,4 @@ func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet u
 	}
 	err = fmt.Errorf("could not convert IP to IPv4 or IPv6, unable to find subnet for: %s", vip)
 	return
-}
-
-// fouPortAndProtoExist checks to see if the given FoU port is already configured on the system via iproute2
-// tooling for the given protocol
-//
-// fou show, shows both IPv4 and IPv6 ports in the same show command, they look like:
-// port 5556 gue
-// port 5556 gue -6
-// where the only thing that distinguishes them is the -6 or not on the end
-// WARNING we're parsing a CLI tool here not an API, this may break at some point in the future
-func fouPortAndProtoExist(port uint16, isIPv6 bool) bool {
-	const ipRoute2IPv6Prefix = "-6"
-	strPort := strconv.FormatInt(int64(port), 10)
-	fouArgs := make([]string, 0)
-	klog.V(2).Infof("Checking FOU Port and Proto... %s - %t", strPort, isIPv6)
-
-	if isIPv6 {
-		fouArgs = append(fouArgs, ipRoute2IPv6Prefix)
-	}
-	fouArgs = append(fouArgs, "fou", "show")
-
-	out, err := exec.Command("ip", fouArgs...).CombinedOutput()
-	// iproute2 returns an error if no fou configuration exists
-	if err != nil {
-		return false
-	}
-
-	strOut := string(out)
-	klog.V(2).Infof("Combined output of ip fou show: %s", strOut)
-	scanner := bufio.NewScanner(strings.NewReader(strOut))
-
-	// loop over all lines of output
-	for scanner.Scan() {
-		scannedLine := scanner.Text()
-		// if the output doesn't contain our port at all, then continue
-		if !strings.Contains(scannedLine, strPort) {
-			continue
-		}
-
-		// if this is IPv6 port and it has the correct IPv6 suffix (see example above) then return true
-		if isIPv6 && strings.HasSuffix(scannedLine, ipRoute2IPv6Prefix) {
-			return true
-		}
-
-		// if this is not IPv6 and it does not have an IPv6 suffix (see example above) then return true
-		if !isIPv6 && !strings.HasSuffix(scannedLine, ipRoute2IPv6Prefix) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// linkFOUEnabled checks to see whether the given link has FoU (Foo over Ethernet) enabled on it, specifically since
-// kube-router only works with GUE (Generic UDP Encapsulation) we look for that and not just FoU in general. If the
-// linkName is enabled with FoU GUE then we return true, otherwise false
-//
-// Output for a FoU Enabled GUE tunnel looks like:
-// ipip ipip remote <ip> local <ip> dev <dev> ttl 225 pmtudisc encap gue encap-sport auto encap-dport 5555 ...
-// Output for a normal IPIP tunnel looks like:
-// ipip ipip remote <ip> local <ip> dev <dev> ttl inherit ...
-func linkFOUEnabled(linkName string) bool {
-	const fouEncapEnabled = "encap gue"
-	cmdArgs := []string{"-details", "link", "show", linkName}
-
-	out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
-
-	if err != nil {
-		klog.Warningf("recevied an error while trying to look at the link details of %s, this shouldn't have happened",
-			linkName)
-		return false
-	}
-
-	if strings.Contains(string(out), fouEncapEnabled) {
-		return true
-	}
-
-	return false
 }

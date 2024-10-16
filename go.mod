@@ -3,7 +3,7 @@ module github.com/cloudnativelabs/kube-router/v2
 require (
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/coreos/go-iptables v0.8.0
-	github.com/docker/docker v27.2.1+incompatible
+	github.com/docker/docker v27.3.1+incompatible
 	github.com/hashicorp/go-version v1.7.0
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
@@ -14,8 +14,8 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/vishvananda/netlink v1.3.0
 	github.com/vishvananda/netns v0.0.4
-	golang.org/x/net v0.29.0
-	golang.org/x/sys v0.25.0
+	golang.org/x/net v0.30.0
+	golang.org/x/sys v0.26.0
 	google.golang.org/grpc v1.67.1
 	google.golang.org/protobuf v1.34.2
 	k8s.io/api v0.31.1
@@ -97,8 +97,8 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/oauth2 v0.22.0 // indirect
-	golang.org/x/term v0.24.0 // indirect
-	golang.org/x/text v0.18.0 // indirect
+	golang.org/x/term v0.25.0 // indirect
+	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
