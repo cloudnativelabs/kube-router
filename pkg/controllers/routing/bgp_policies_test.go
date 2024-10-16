@@ -31,7 +31,6 @@ type PolicyTestCase struct {
 	customImportRejectDefinedSet *gobgpapi.DefinedSet
 	exportPolicyStatements       []*gobgpapi.Statement
 	importPolicyStatements       []*gobgpapi.Statement
-	addPolicyErr                 error
 	startBGPServerErr            error
 }
 
@@ -170,7 +169,6 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			[]*gobgpapi.Statement{},
-			nil,
 			nil,
 		},
 		{
@@ -415,7 +413,6 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			nil,
-			nil,
 		},
 		{
 			"has nodes, services with external peers",
@@ -620,7 +617,6 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			nil,
-			nil,
 		},
 		{
 			"has nodes, services with external peers and iBGP disabled",
@@ -807,7 +803,6 @@ func Test_AddPolicies(t *testing.T) {
 					},
 				},
 			},
-			nil,
 			nil,
 		},
 		{
@@ -1019,7 +1014,6 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			nil,
-			nil,
 		},
 		{
 			"only prepends AS when both node annotations are present",
@@ -1228,7 +1222,6 @@ func Test_AddPolicies(t *testing.T) {
 					},
 				},
 			},
-			nil,
 			fmt.Errorf("both %s and %s must be set", pathPrependASNAnnotation, pathPrependRepeatNAnnotation),
 		},
 		{
@@ -1444,7 +1437,6 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			nil,
-			nil,
 		},
 	}
 
@@ -1490,15 +1482,9 @@ func Test_AddPolicies(t *testing.T) {
 			informerFactory := informers.NewSharedInformerFactory(testcase.nrc.clientset, 0)
 			nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 			testcase.nrc.nodeLister = nodeInformer.GetIndexer()
-			err = testcase.nrc.AddPolicies()
-			if !reflect.DeepEqual(err, testcase.addPolicyErr) {
-				t.Logf("expected err when invoking AddPolicies(): %v", testcase.addPolicyErr)
-				t.Logf("actual err from AddPolicies() received: %v", err)
-				t.Error("unexpected error")
-			}
-			// If we expect AddPolicies() to fail we should stop here as there is no point in further evaluating policies
-			if testcase.addPolicyErr != nil {
-				return
+			if err := testcase.nrc.AddPolicies(); err != nil {
+				// If AddPolicies() failed we should stop here as there is no point in further evaluating policies
+				t.Fatalf("unexpected error when invoking AddPolicies(): %v", err)
 			}
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(),

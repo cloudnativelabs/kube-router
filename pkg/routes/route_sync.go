@@ -1,4 +1,4 @@
-package routing
+package routes
 
 import (
 	"net"
@@ -9,7 +9,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-type routeSyncer struct {
+// RouteSync is a struct that holds all of the information needed for syncing routes to the kernel's routing table
+type RouteSync struct {
 	routeTableStateMap       map[string]*netlink.Route
 	injectedRoutesSyncPeriod time.Duration
 	mutex                    sync.Mutex
@@ -17,7 +18,7 @@ type routeSyncer struct {
 }
 
 // addInjectedRoute adds a route to the route map that is regularly synced to the kernel's routing table
-func (rs *routeSyncer) addInjectedRoute(dst *net.IPNet, route *netlink.Route) {
+func (rs *RouteSync) AddInjectedRoute(dst *net.IPNet, route *netlink.Route) {
 	rs.mutex.Lock()
 	defer rs.mutex.Unlock()
 	klog.V(3).Infof("Adding route for destination: %s", dst)
@@ -25,7 +26,7 @@ func (rs *routeSyncer) addInjectedRoute(dst *net.IPNet, route *netlink.Route) {
 }
 
 // delInjectedRoute delete a route from the route map that is regularly synced to the kernel's routing table
-func (rs *routeSyncer) delInjectedRoute(dst *net.IPNet) {
+func (rs *RouteSync) DelInjectedRoute(dst *net.IPNet) {
 	rs.mutex.Lock()
 	defer rs.mutex.Unlock()
 	if _, ok := rs.routeTableStateMap[dst.String()]; ok {
@@ -35,7 +36,7 @@ func (rs *routeSyncer) delInjectedRoute(dst *net.IPNet) {
 }
 
 // syncLocalRouteTable iterates over the local route state map and syncs all routes to the kernel's routing table
-func (rs *routeSyncer) syncLocalRouteTable() {
+func (rs *RouteSync) SyncLocalRouteTable() {
 	rs.mutex.Lock()
 	defer rs.mutex.Unlock()
 	klog.V(2).Infof("Running local route table synchronization")
@@ -49,7 +50,7 @@ func (rs *routeSyncer) syncLocalRouteTable() {
 }
 
 // run starts a goroutine that calls syncLocalRouteTable on interval injectedRoutesSyncPeriod
-func (rs *routeSyncer) run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (rs *RouteSync) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	// Start route synchronization routine
 	wg.Add(1)
 	go func(stopCh <-chan struct{}, wg *sync.WaitGroup) {
@@ -59,7 +60,7 @@ func (rs *routeSyncer) run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-t.C:
-				rs.syncLocalRouteTable()
+				rs.SyncLocalRouteTable()
 			case <-stopCh:
 				klog.Infof("Shutting down local route synchronization")
 				return
@@ -68,10 +69,10 @@ func (rs *routeSyncer) run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	}(stopCh, wg)
 }
 
-// newRouteSyncer creates a new routeSyncer that, when run, will sync routes kept in its local state table every
+// NewRouteSyncer creates a new routeSyncer that, when run, will sync routes kept in its local state table every
 // syncPeriod
-func newRouteSyncer(syncPeriod time.Duration) *routeSyncer {
-	rs := routeSyncer{}
+func NewRouteSyncer(syncPeriod time.Duration) *RouteSync {
+	rs := RouteSync{}
 	rs.routeTableStateMap = make(map[string]*netlink.Route)
 	rs.injectedRoutesSyncPeriod = syncPeriod
 	rs.mutex = sync.Mutex{}

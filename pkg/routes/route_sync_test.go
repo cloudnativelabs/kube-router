@@ -1,4 +1,4 @@
-package routing
+package routes
 
 import (
 	"net"
@@ -55,13 +55,13 @@ func (mnl *mockNetlink) mockRouteReplace(route *netlink.Route) error {
 }
 
 func Test_syncLocalRouteTable(t *testing.T) {
-	prepSyncLocalTest := func() (*mockNetlink, *routeSyncer) {
+	prepSyncLocalTest := func() (*mockNetlink, *RouteSync) {
 		// Create myNetlink so that it will wait 200 milliseconds on routeReplace and artificially hold its lock
 		myNetlink := mockNetlink{}
 		myNetlink.pause = time.Millisecond * 200
 
 		// Create a route replacer and seed it with some routes to iterate over
-		syncer := newRouteSyncer(15 * time.Second)
+		syncer := NewRouteSyncer(15 * time.Second)
 		syncer.routeTableStateMap = generateTestRouteMap(testRoutes)
 
 		// Replace the netlink.RouteReplace function with our own mock function that includes a WaitGroup for syncing
@@ -71,13 +71,13 @@ func Test_syncLocalRouteTable(t *testing.T) {
 		return &myNetlink, syncer
 	}
 
-	waitForSyncLocalRouteToAcquireLock := func(myNetlink *mockNetlink, syncer *routeSyncer) {
+	waitForSyncLocalRouteToAcquireLock := func(myNetlink *mockNetlink, syncer *RouteSync) {
 		// Launch syncLocalRouteTable in a separate goroutine so that we can try to inject a route into the map while it
 		// is syncing. Then wait on the wait group so that we know that syncLocalRouteTable has a hold on the lock when
 		// we try to use it in addInjectedRoute() below
 		myNetlink.wg = &sync.WaitGroup{}
 		myNetlink.wg.Add(1)
-		go syncer.syncLocalRouteTable()
+		go syncer.SyncLocalRouteTable()
 
 		// Now we know that the syncLocalRouteTable() is paused on our artificial wait we added above
 		myNetlink.wg.Wait()
@@ -94,7 +94,7 @@ func Test_syncLocalRouteTable(t *testing.T) {
 		// By measuring how much time it takes to inject the route we can understand whether addInjectedRoute waited
 		// for the lock to be returned or not
 		start := time.Now()
-		syncer.addInjectedRoute(testAddRouteIPNet, testAddRouteRoute)
+		syncer.AddInjectedRoute(testAddRouteIPNet, testAddRouteRoute)
 		duration := time.Since(start)
 
 		// We give ourselves a bit of leeway here, and say that if we were forced to wait for at least 190 milliseconds
@@ -111,7 +111,7 @@ func Test_syncLocalRouteTable(t *testing.T) {
 		// By measuring how much time it takes to inject the route we can understand whether addInjectedRoute waited
 		// for the lock to be returned or not
 		start := time.Now()
-		syncer.delInjectedRoute(testAddRouteIPNet)
+		syncer.DelInjectedRoute(testAddRouteIPNet)
 		duration := time.Since(start)
 
 		// We give ourselves a bit of leeway here, and say that if we were forced to wait for at least 190 milliseconds
@@ -141,7 +141,7 @@ func Test_routeSyncer_run(t *testing.T) {
 
 	t.Run("Ensure that run goroutine shuts down correctly on stop", func(t *testing.T) {
 		// Setup routeSyncer to run 10 times a second
-		syncer := newRouteSyncer(100 * time.Millisecond)
+		syncer := NewRouteSyncer(100 * time.Millisecond)
 		myNetLink := mockNetlink{}
 		syncer.routeReplacer = myNetLink.mockRouteReplace
 		syncer.routeTableStateMap = generateTestRouteMap(testRoutes)
@@ -151,7 +151,7 @@ func Test_routeSyncer_run(t *testing.T) {
 		// For a sanity check that the currentRoute on the mock object is nil to start with as we'll rely on this later
 		assert.Nil(t, myNetLink.currentRoute, "currentRoute should be nil when the syncer hasn't run")
 
-		syncer.run(stopCh, &wg)
+		syncer.Run(stopCh, &wg)
 
 		time.Sleep(110 * time.Millisecond)
 
