@@ -37,7 +37,7 @@ func GenerateRouterID(nodeIPAware utils.NodeIPAware, configRouterID string) (str
 	if nodeIPAware.GetPrimaryNodeIP().To4() == nil {
 		return "", errors.New("router-id must be specified when primary node IP is an IPv6 address")
 	}
-	return configRouterID, nil
+	return nodeIPAware.GetPrimaryNodeIP().String(), nil
 }
 
 // ValidateCommunity takes in a string and attempts to parse a BGP community out of it in a way that is similar to
