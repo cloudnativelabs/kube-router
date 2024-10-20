@@ -41,7 +41,11 @@ func NewRemoteRuntimeService(endpoint string, connectionTimeout time.Duration) (
 
 	klog.V(4).Infof("[RuntimeService] got endpoint %s (proto=%s, path=%s)", endpoint, proto, addr)
 
-	if proto != "unix" {
+	if proto == "unix" {
+		// Every since grpc.DialContext was deprecated, we no longer get the passthrough resolver for free, so we need
+		// to add it manually. See: https://github.com/grpc/grpc-go/issues/1846 for more context
+		addr = "passthrough:///" + addr
+	} else {
 		return nil, errors.New("[RuntimeService] only unix socket is currently supported")
 	}
 
