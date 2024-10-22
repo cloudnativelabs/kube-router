@@ -428,9 +428,6 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			klog.Infof("Shutting down network routes controller")
 			return
 		case <-t.C:
-			if err == nil {
-				healthcheck.SendHeartBeat(healthChan, "NRC")
-			}
 		}
 	}
 }

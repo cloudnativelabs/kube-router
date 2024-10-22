@@ -204,7 +204,6 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 			klog.Infof("Shutting down network policies controller")
 			return
 		case <-t.C:
-			healthcheck.SendHeartBeat(healthChan, "NPC")
 		}
 	}
 }
