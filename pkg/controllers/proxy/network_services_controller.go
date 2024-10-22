@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -23,7 +22,6 @@ import (
 	"github.com/vishvananda/netlink"
 	v1 "k8s.io/api/core/v1"
 	discovery "k8s.io/api/discovery/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
@@ -813,31 +811,11 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(es *discovery.EndpointSl
 		return
 	}
 
-	ep, err := nsc.client.CoreV1().Endpoints(es.Namespace).Get(context.TODO(), es.Name, metav1.GetOptions{})
-	if err != nil {
-		klog.V(1).ErrorS(err, "Error fetching endpoints for service: %s/%s", es.Namespace, es.Name)
-		return
-	}
-
 	// build new service and endpoints map to reflect the change
-	nsc.buildAndSyncEndpoints(ep, nil)
-
-	// TODO(pavel): clean below comments
-
-	// newServiceMap := nsc.buildServicesInfo()
-	// newEndpointsMap := nsc.buildEndpointSliceInfo()
-
-	// if !endpointsMapsEquivalent(newEndpointsMap, nsc.endpointsMap) {
-	// 	nsc.endpointsMap = newEndpointsMap
-	// 	nsc.serviceMap = newServiceMap
-	// 	klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", es.Namespace, es.Name)
-	// 	nsc.sync(synctypeIpvs)
-	// } else {
-	// 	klog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", es.Namespace, es.Name)
-	// }
+	nsc.buildAndSyncEndpoints(es, nil)
 }
 
-func (nsc *NetworkServicesController) buildAndSyncEndpoints(ep *v1.Endpoints, node *v1.Node) {
+func (nsc *NetworkServicesController) buildAndSyncEndpoints(es *discovery.EndpointSlice, node *v1.Node) {
 	if len(nsc.nodesMap) == 0 {
 		klog.V(1).Info("Skipping building and syncing of endpoints because node info map is not populated yet")
 		return
@@ -848,15 +826,15 @@ func (nsc *NetworkServicesController) buildAndSyncEndpoints(ep *v1.Endpoints, no
 	if len(newEndpointsMap) != len(nsc.endpointsMap) || !reflect.DeepEqual(newEndpointsMap, nsc.endpointsMap) {
 		nsc.endpointsMap = newEndpointsMap
 		nsc.serviceMap = newServiceMap
-		if ep != nil {
-			klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", ep.Namespace, ep.Name)
+		if es != nil {
+			klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", es.Namespace, es.Name)
 		} else if node != nil {
 			klog.V(1).Infof("Syncing IPVS services sync for update to node: %s", node.Name)
 		}
 		nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 	} else {
-		if ep != nil {
-			klog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", ep.Namespace, ep.Name)
+		if es != nil {
+			klog.V(1).Infof("Skipping IPVS services sync on endpoint: %s/%s update as nothing changed", es.Namespace, es.Name)
 		} else if node != nil {
 			klog.V(1).Infof("Skipping IPVS services sync on node: %s update as nothing changed", node.Name)
 		}
