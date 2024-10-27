@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/lballoc"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/proxy"
@@ -85,7 +86,7 @@ func (kr *KubeRouter) Run() error {
 		os.Exit(0)
 	}
 
-	healthChan := make(chan *healthcheck.ControllerHeartbeat, healthControllerChannelLength)
+	healthChan := make(chan *pkg.ControllerHeartbeat, healthControllerChannelLength)
 	defer close(healthChan)
 	stopCh := make(chan struct{})
 

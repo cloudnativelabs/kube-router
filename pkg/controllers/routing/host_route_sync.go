@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
 
@@ -199,7 +200,7 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 }
 
 // syncLocalRouteTable iterates over the local route state map and syncs all routes to the kernel's routing table
-func (rs *RouteSync) SyncLocalRouteTable() {
+func (rs *RouteSync) SyncLocalRouteTable() error {
 	rs.mutex.Lock()
 	defer rs.mutex.Unlock()
 	klog.V(2).Infof("Running local route table synchronization")
@@ -207,13 +208,14 @@ func (rs *RouteSync) SyncLocalRouteTable() {
 		klog.V(3).Infof("Syncing route: %s -> %s via %s", route.Src, route.Dst, route.Gw)
 		err := rs.routeReplacer(route)
 		if err != nil {
-			klog.Errorf("Route could not be replaced due to : " + err.Error())
+			return err
 		}
 	}
+	return nil
 }
 
 // run starts a goroutine that calls syncLocalRouteTable on interval injectedRoutesSyncPeriod
-func (rs *RouteSync) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
+func (rs *RouteSync) Run(healthChan chan<- *pkg.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	// Start route synchronization routine
 	wg.Add(1)
 	go func(stopCh <-chan struct{}, wg *sync.WaitGroup) {
@@ -225,7 +227,14 @@ func (rs *RouteSync) Run(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 		for {
 			select {
 			case <-t1.C:
-				rs.SyncLocalRouteTable()
+				err := rs.SyncLocalRouteTable()
+				if err != nil {
+					klog.Errorf("Route could not be replaced due to : " + err.Error())
+				}
+				// Some of our unit tests send a nil health channel
+				if nil != healthChan {
+					healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompHostRouteSync)
+				}
 			case <-t2.C:
 				err := rs.checkCacheAgainstBGP()
 				if err != nil {

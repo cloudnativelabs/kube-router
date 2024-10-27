@@ -128,8 +128,7 @@ func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) error {
 	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", subnet, gw)
 	lr.RouteSyncer.AddInjectedRoute(subnet, route)
 	// Immediately sync the local route table regardless of timer
-	lr.RouteSyncer.SyncLocalRouteTable()
-	return nil
+	return lr.RouteSyncer.SyncLocalRouteTable()
 }
 
 func shouldCreateTunnel(oc pkg.OverlayConfig, sameSubnet bool) bool {

@@ -4,17 +4,46 @@ import (
 	"context"
 	"net"
 	"sync"
+	"time"
 
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	"github.com/vishvananda/netlink"
 )
 
+const (
+	HeartBeatCompNetworkRoutesController = iota
+	HeartBeatCompLoadBalancerController
+	HeartBeatCompNetworkPolicyController
+	HeartBeatCompNetworkServicesController
+	HeartBeatCompHairpinController
+	HeartBeatCompHostRouteSync
+	HeartBeatCompMetricsController
+)
+
+var (
+	HeartBeatCompNames = map[int]string{
+		HeartBeatCompNetworkRoutesController:   "NetworkRoutesController",
+		HeartBeatCompLoadBalancerController:    "LoadBalancerController",
+		HeartBeatCompNetworkPolicyController:   "NetworkPolicyController",
+		HeartBeatCompNetworkServicesController: "NetworkServicesController",
+		HeartBeatCompHairpinController:         "HairpinController",
+		HeartBeatCompHostRouteSync:             "HostRouteSync",
+		HeartBeatCompMetricsController:         "MetricsController",
+	}
+)
+
+// ControllerHeartbeat is the structure to hold the heartbeats sent by controllers
+type ControllerHeartbeat struct {
+	Component     int
+	LastHeartBeat time.Time
+}
+
 // RouteSyncer is an interface that defines the methods needed to sync routes to the kernel's routing table
 type RouteSyncer interface {
 	AddInjectedRoute(dst *net.IPNet, route *netlink.Route)
 	DelInjectedRoute(dst *net.IPNet)
-	Run(stopCh <-chan struct{}, wg *sync.WaitGroup)
-	SyncLocalRouteTable()
+	Run(healthChan chan<- *ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup)
+	SyncLocalRouteTable() error
 	AddBGPPathLister(pl BGPPathLister)
 }
 

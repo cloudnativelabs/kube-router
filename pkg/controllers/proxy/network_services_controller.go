@@ -227,7 +227,7 @@ type endpointSliceInfo struct {
 type endpointSliceInfoMap map[string][]endpointSliceInfo
 
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
-func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat,
+func (nsc *NetworkServicesController) Run(healthChan chan<- *pkg.ControllerHeartbeat,
 	stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	t := time.NewTicker(nsc.syncPeriod)
 	defer t.Stop()
@@ -341,7 +341,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			}
 
 		case perform := <-nsc.syncChan:
-			healthcheck.SendHeartBeat(healthChan, "NSC")
+			healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompNetworkServicesController)
 			switch perform {
 			case synctypeAll:
 				klog.V(1).Info("Performing requested full sync of services")
@@ -366,18 +366,18 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				nsc.mu.Unlock()
 			}
 			if err == nil {
-				healthcheck.SendHeartBeat(healthChan, "NSC")
+				healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompNetworkServicesController)
 			}
 
 		case <-t.C:
 			klog.V(1).Info("Performing periodic sync of ipvs services")
-			healthcheck.SendHeartBeat(healthChan, "NSC")
+			healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompNetworkServicesController)
 			err := nsc.doSync()
 			if err != nil {
 				klog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
 				klog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
 			} else {
-				healthcheck.SendHeartBeat(healthChan, "NSC")
+				healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompNetworkServicesController)
 			}
 		}
 	}

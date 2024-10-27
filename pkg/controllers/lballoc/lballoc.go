@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	v1core "k8s.io/api/core/v1"
@@ -432,7 +433,7 @@ func (lbc *LoadBalancerController) allocator() {
 	}
 }
 
-func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat,
+func (lbc *LoadBalancerController) Run(healthChan chan<- *pkg.ControllerHeartbeat,
 	stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	isLeader := false
 	isLeaderChan := make(chan bool)
@@ -461,7 +462,7 @@ func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.Controller
 			}
 		case <-timer.C:
 			timer.Reset(time.Minute)
-			healthcheck.SendHeartBeat(healthChan, "LBC")
+			healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompLoadBalancerController)
 			if isLeader {
 				go lbc.walkServices()
 			}

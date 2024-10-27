@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/vishvananda/netns"
@@ -27,7 +28,7 @@ type hairpinController struct {
 }
 
 func (hpc *hairpinController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup,
-	healthChan chan<- *healthcheck.ControllerHeartbeat) {
+	healthChan chan<- *pkg.ControllerHeartbeat) {
 	defer wg.Done()
 	klog.Infof("Starting hairping controller (handles setting hairpin_mode for veth interfaces)")
 
@@ -54,7 +55,7 @@ func (hpc *hairpinController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup,
 					endpointIP, err)
 			}
 		case <-t.C:
-			healthcheck.SendHeartBeat(healthChan, "HPC")
+			healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompHairpinController)
 		}
 	}
 }

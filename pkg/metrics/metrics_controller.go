@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/version"
@@ -211,18 +212,21 @@ var (
 	})
 	// HostRoutesSyncedGauge Number of routes currently synced to the system
 	HostRoutesSyncedGauge = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "host_routes_synced",
-		Help: "Number of routes currently synced to the system",
+		Namespace: namespace,
+		Name:      "host_routes_synced",
+		Help:      "Number of routes currently synced to the system",
 	})
-	// HostRoutesOutOfSyncAddedCounter Total number of routes added by checkCacheAgainstBGP
+	// HostRoutesStaleAddedCounter Total number of routes added by checkCacheAgainstBGP
 	HostRoutesStaleAddedCounter = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "host_routes_stale_added_total",
-		Help: "Total number of stale cached host routes needing to be added",
+		Namespace: namespace,
+		Name:      "host_routes_uncached_added_total",
+		Help:      "Total number of uncached host routes needing to be added",
 	})
-	// HostRoutesOutOfSyncRemovedCounter Total number of routes removed by checkCacheAgainstBGP
+	// HostRoutesStaleRemovedCounter Total number of routes removed by checkCacheAgainstBGP
 	HostRoutesStaleRemovedCounter = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "host_routes_stale_removed_total",
-		Help: "Total number of stale cached host routes needing to be removed",
+		Namespace: namespace,
+		Name:      "host_routes_stale_removed_total",
+		Help:      "Total number of stale cached host routes needing to be removed",
 	})
 )
 
@@ -240,7 +244,7 @@ func Handler() http.Handler {
 }
 
 // Run prometheus metrics controller
-func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
+func (mc *Controller) Run(healthChan chan<- *pkg.ControllerHeartbeat, stopCh <-chan struct{},
 	wg *sync.WaitGroup) {
 	t := time.NewTicker(metricsControllerTickTime)
 	defer wg.Done()
@@ -266,7 +270,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 		}
 	}()
 	for {
-		healthcheck.SendHeartBeat(healthChan, "MC")
+		healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompMetricsController)
 		select {
 		case <-stopCh:
 			klog.Infof("Shutting down metrics controller")

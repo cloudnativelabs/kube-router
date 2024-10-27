@@ -145,7 +145,7 @@ type NetworkRoutingController struct {
 }
 
 // Run runs forever until we are notified on stop channel
-func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
+func (nrc *NetworkRoutingController) Run(healthChan chan<- *pkg.ControllerHeartbeat, stopCh <-chan struct{},
 	wg *sync.WaitGroup) {
 	var err error
 	if nrc.enableCNI {
@@ -322,7 +322,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 
 	// Start route syncer
 	nrc.routeSyncer.AddBGPPathLister(nrc.bgpServer)
-	nrc.routeSyncer.Run(stopCh, wg)
+	nrc.routeSyncer.Run(healthChan, stopCh, wg)
 
 	// Watch for BGP Updates
 	go nrc.watchBgpUpdates(nrc.routerInjector)
@@ -388,7 +388,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		}
 
 		if err == nil {
-			healthcheck.SendHeartBeat(healthChan, "NRC")
+			healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompNetworkRoutesController)
 		} else {
 			klog.Errorf("Error during periodic sync in network routing controller. Error: " + err.Error())
 			klog.Errorf("Skipping sending heartbeat from network routing controller as periodic sync failed.")
