@@ -144,6 +144,18 @@ func (rs *RouteSync) convertPathsToRouteMap(path []*gobgpapi.Path) map[string]*n
 	for _, p := range path {
 		klog.V(3).Infof("Path: %v", p)
 
+		// Leave out withdraw paths from the map, we don't need to worry about tracking them because we are going to
+		// delete any routes not found in the map we're returning anyway
+		if p.IsWithdraw {
+			klog.V(3).Infof("Path is a withdrawal, skipping: %s", p)
+			continue
+		}
+
+		// Leave out paths that are not the best path, as we only consider the best paths in kube-router
+		if !p.Best {
+			klog.V(3).Infof("Path is not the best path, skipping: %s", p)
+			continue
+		}
 
 		// Seems like a valid path, let's parse it
 		dst, nh, err := bgp.ParsePath(p)
