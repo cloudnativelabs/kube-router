@@ -139,36 +139,32 @@ func (rs *RouteSync) checkState(authoritativeState map[string]*netlink.Route) ([
 	return routesToAdd, routesToChange, routesToDelete
 }
 
-func (rs *RouteSync) checkCacheAgainstBGP() error {
-	convertPathsToRouteMap := func(path []*gobgpapi.Path) map[string]*netlink.Route {
-		routeMap := make(map[string]*netlink.Route, 0)
-		for _, p := range path {
-			klog.V(3).Infof("Path: %v", p)
+func (rs *RouteSync) convertPathsToRouteMap(path []*gobgpapi.Path) map[string]*netlink.Route {
+	routeMap := make(map[string]*netlink.Route, 0)
+	for _, p := range path {
+		klog.V(3).Infof("Path: %v", p)
 
-			// Leave out withdraw paths from the map, we don't need to worry about tracking them because we are going to
-			// delete any routes not found in the map we're returning anyway
-			if p.IsWithdraw {
-				klog.V(3).Infof("Path is a withdrawal, skipping")
-				continue
-			}
 
-			// Seems like a valid path, let's parse it
-			dst, nh, err := bgp.ParsePath(p)
-			if err != nil {
-				klog.Warningf("Failed to parse BGP path, not failing so as to not block updating paths that are "+
-					"valid: %v", err)
-			}
-
-			// Add path to our map
-			routeMap[dst.String()] = &netlink.Route{
-				Dst:      dst,
-				Gw:       nh,
-				Protocol: routes.ZebraOriginator,
-			}
+		// Seems like a valid path, let's parse it
+		dst, nh, err := bgp.ParsePath(p)
+		if err != nil {
+			klog.Warningf("Failed to parse BGP path, not failing so as to not block updating paths that are "+
+				"valid: %v", err)
 		}
 
-		return routeMap
+		// Add path to our map
+		routeMap[dst.String()] = &netlink.Route{
+			Dst:      dst,
+			Gw:       nh,
+			Protocol: routes.ZebraOriginator,
+		}
 	}
+
+	return routeMap
+}
+
+func (rs *RouteSync) checkCacheAgainstBGP() error {
+	klog.V(2).Info("Initiating route cache update")
 
 	// During startup, it is possible for this function to possibly be called before the BGP server has been set on it,
 	// in this case, return BGPServerUnsetError
@@ -193,7 +189,7 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 	}
 
 	// Convert all paths to a map of routes, this serves as our authoritative source of truth for what routes should be
-	bgpRoutes := convertPathsToRouteMap(allPaths)
+	bgpRoutes := rs.convertPathsToRouteMap(allPaths)
 
 	// Check the state of the routes against the authoritative source of truth
 	routesToAdd, routesToChange, routesToDelete := rs.checkState(bgpRoutes)
@@ -231,6 +227,7 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 		metrics.HostRoutesStaleRemovedCounter.Inc()
 	}
 
+	klog.V(2).Info("Finished route cache update")
 	return nil
 }
 
