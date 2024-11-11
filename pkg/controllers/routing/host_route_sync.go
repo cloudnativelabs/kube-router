@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -83,20 +84,41 @@ func (rs *RouteSync) DelInjectedRoute(dst *net.IPNet) {
 	}
 }
 
-func (rs *RouteSync) checkState(authoritativeState map[string]*netlink.Route) ([]*netlink.Route, []*netlink.Route) {
+func (rs *RouteSync) checkState(authoritativeState map[string]*netlink.Route) ([]*netlink.Route,
+	[]*netlink.Route, []*netlink.Route) {
 	// While we're iterating over the state map, we should hold the mutex to prevent any other operations from
 	// interfering with the state map
 	rs.mutex.Lock()
 	defer rs.mutex.Unlock()
 
 	routesToAdd := make([]*netlink.Route, 0)
+	routesToChange := make([]*netlink.Route, 0)
 	routesToDelete := make([]*netlink.Route, 0)
+
+	routeEquals := func(route1, route2 *netlink.Route) bool {
+		if !route1.Dst.IP.Equal(route2.Dst.IP) {
+			return false
+		}
+		if !bytes.Equal(route1.Dst.Mask, route2.Dst.Mask) {
+			return false
+		}
+		if !route1.Gw.Equal(route2.Gw) {
+			return false
+		}
+		return true
+	}
 
 	// Compare the routes source of truth from BGP to the routes in our state, searching for any routes that might be
 	// missing from the state and adding them if they are missing
 	for dst, route := range authoritativeState {
-		if _, ok := rs.routeTableStateMap[dst]; ok {
-			klog.V(3).Infof("Route already exists for destination: %s", dst)
+		if cachedRoute, ok := rs.routeTableStateMap[dst]; ok {
+			// Check to see if the cached route is the same as the authoritative route
+			if routeEquals(route, cachedRoute) {
+				klog.V(2).Infof("Route already exists for destination: %s - (%s)", dst, route)
+				continue
+			}
+
+			routesToChange = append(routesToChange, route)
 			continue
 		}
 
@@ -107,14 +129,14 @@ func (rs *RouteSync) checkState(authoritativeState map[string]*netlink.Route) ([
 	// missing from BGP and deleting them if they are missing
 	for dst, route := range rs.routeTableStateMap {
 		if _, ok := authoritativeState[dst]; ok {
-			klog.V(3).Infof("Route already exists for destination: %s", dst)
+			klog.V(2).Infof("Route already exists for destination: %s - (%s)", dst, route)
 			continue
 		}
 
 		routesToDelete = append(routesToDelete, route)
 	}
 
-	return routesToAdd, routesToDelete
+	return routesToAdd, routesToChange, routesToDelete
 }
 
 func (rs *RouteSync) checkCacheAgainstBGP() error {
@@ -174,7 +196,7 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 	bgpRoutes := convertPathsToRouteMap(allPaths)
 
 	// Check the state of the routes against the authoritative source of truth
-	routesToAdd, routesToDelete := rs.checkState(bgpRoutes)
+	routesToAdd, routesToChange, routesToDelete := rs.checkState(bgpRoutes)
 
 	// Add missing routes
 	for _, route := range routesToAdd {
@@ -184,6 +206,19 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 			klog.Errorf("Failed to inject route: %v", err)
 		}
 		metrics.HostRoutesStaleAddedCounter.Inc()
+	}
+
+	for _, route := range routesToChange {
+		klog.Infof("Found route from BGP that was different than state, updating: %s", route)
+		err := rs.routeDeleter(route.Dst)
+		if err != nil {
+			klog.Errorf("Failed to delete route: %v", err)
+		}
+		err = rs.routeInjector.InjectRoute(route.Dst, route.Gw)
+		if err != nil {
+			klog.Errorf("Failed to inject route: %v", err)
+		}
+		metrics.HostRoutesStaleUpdatedCounter.Inc()
 	}
 
 	// Delete routes that are no longer in the authoritative source of truth
@@ -277,7 +312,7 @@ func NewRouteSyncer(ri pkg.RouteInjector, syncPeriod time.Duration, registerMetr
 	// Register metrics
 	if registerMetrics {
 		prometheus.MustRegister(metrics.HostRoutesSyncedGauge, metrics.HostRoutesStaleAddedCounter,
-			metrics.HostRoutesStaleRemovedCounter)
+			metrics.HostRoutesStaleRemovedCounter, metrics.HostRoutesStaleUpdatedCounter)
 	}
 
 	return &rs

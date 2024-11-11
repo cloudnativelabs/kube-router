@@ -228,6 +228,12 @@ var (
 		Name:      "host_routes_stale_removed_total",
 		Help:      "Total number of stale cached host routes needing to be removed",
 	})
+	// HostRouteStaleUpdatedCounter Total number of routes removed by checkCacheAgainstBGP
+	HostRoutesStaleUpdatedCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "host_routes_stale_updated_total",
+		Help:      "Total number of stale cached host routes needing to be updated",
+	})
 )
 
 // Controller Holds settings for the metrics controller
