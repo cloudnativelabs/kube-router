@@ -1325,7 +1325,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 
 	// Create a new route syncer instance
-	nrc.routeSyncer = NewRouteSyncer(linuxRouter, kubeRouterConfig.InjectedRoutesSyncPeriod,
+	nrc.routeSyncer = NewRouteSyncer(linuxRouter, nrc.krNode, kubeRouterConfig.InjectedRoutesSyncPeriod,
 		kubeRouterConfig.MetricsEnabled)
 
 	// Assign the newly created RouteSyncer to the LinuxRouter

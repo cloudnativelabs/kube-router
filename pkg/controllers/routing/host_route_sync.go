@@ -53,6 +53,7 @@ type RouteSync struct {
 	routeTableStateMap map[string]*netlink.Route
 	routeSyncPeriod    time.Duration
 	mutex              sync.Mutex
+	nia                pkg.NodeIPAware
 	routeReplacer      func(route *netlink.Route) error
 	routeDeleter       func(destinationSubnet *net.IPNet) error
 	routeAdder         func(route *netlink.Route) error
@@ -162,6 +163,13 @@ func (rs *RouteSync) convertPathsToRouteMap(path []*gobgpapi.Path) map[string]*n
 		if err != nil {
 			klog.Warningf("Failed to parse BGP path, not failing so as to not block updating paths that are "+
 				"valid: %v", err)
+		}
+
+		// When we list paths in this way we'll also get our own paths (e.g. when we are our own next hop), leave these
+		// ones out so that we don't create unneeded routes
+		if nh.Equal(rs.nia.GetPrimaryNodeIP()) {
+			klog.V(3).Infof("Path is to our own node, skipping: %s", p)
+			continue
 		}
 
 		// Add path to our map
@@ -306,9 +314,11 @@ func (rs *RouteSync) AddBGPPathLister(pl pkg.BGPPathLister) {
 
 // NewRouteSyncer creates a new routeSyncer that, when run, will sync routes kept in its local state table every
 // syncPeriod
-func NewRouteSyncer(ri pkg.RouteInjector, syncPeriod time.Duration, registerMetrics bool) *RouteSync {
+func NewRouteSyncer(ri pkg.RouteInjector, nia pkg.NodeIPAware, syncPeriod time.Duration,
+	registerMetrics bool) *RouteSync {
 	rs := RouteSync{}
 	rs.routeTableStateMap = make(map[string]*netlink.Route)
+	rs.nia = nia
 	rs.routeSyncPeriod = syncPeriod
 	rs.mutex = sync.Mutex{}
 
