@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	gobgp "github.com/osrg/gobgp/v3/pkg/server"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,6 @@ var (
 type testCaseRoute struct {
 	dst  string
 	mask uint32
-	gw   string
 	nh   string
 }
 type testCaseBGPRoute struct {
@@ -113,7 +113,7 @@ func testCreateRoutes(routes []testCaseRoute) []testCaseBGPRoute {
 
 		convertedRoutes[idx] = testCaseBGPRoute{
 			dst:   dst,
-			route: testGenerateRoute(route.dst, route.gw),
+			route: testGenerateRoute(route.dst, route.nh),
 			path: &gobgpapi.Path{
 				Family: family,
 				Nlri:   nlri,
@@ -139,8 +139,8 @@ func testGenerateRoute(dstCIDR string, dstGateway string) *netlink.Route {
 
 func testGenerateRouteMap(inputRouteMap map[string]string) map[string]*netlink.Route {
 	testRoutes := make(map[string]*netlink.Route)
-	for gw, dst := range inputRouteMap {
-		testRoutes[dst] = testGenerateRoute(dst, gw)
+	for nh, dst := range inputRouteMap {
+		testRoutes[dst] = testGenerateRoute(dst, nh)
 	}
 	return testRoutes
 }
@@ -151,9 +151,12 @@ func Test_syncLocalRouteTable(t *testing.T) {
 		myNetlink := mockNetlink{}
 		myInjector := routes.MockLinuxRouter{}
 		myNetlink.pause = time.Millisecond * 200
+		myNode := utils.KRNode{
+			PrimaryIP: net.ParseIP("192.168.100.1"),
+		}
 
 		// Create a route replacer and seed it with some routes to iterate over
-		syncer := NewRouteSyncer(&myInjector, 15*time.Second, false)
+		syncer := NewRouteSyncer(&myInjector, &myNode, 15*time.Second, false)
 		syncer.routeTableStateMap = testGenerateRouteMap(testRoute)
 
 		// Replace the netlink.RouteReplace function with our own mock function that includes a WaitGroup for syncing
@@ -198,7 +201,7 @@ func Test_syncLocalRouteTable(t *testing.T) {
 	})
 }
 
-func Test_routeSyncer_run(t *testing.T) {
+func Test_routeSync_run(t *testing.T) {
 	// Taken from:https://stackoverflow.com/questions/32840687/timeout-for-waitgroup-wait
 	// waitTimeout waits for the waitgroup for the specified max timeout.
 	// Returns true if waiting timed out.
@@ -218,8 +221,11 @@ func Test_routeSyncer_run(t *testing.T) {
 
 	t.Run("Ensure that run goroutine shuts down correctly on stop", func(t *testing.T) {
 		myInjector := routes.MockLinuxRouter{}
+		myNode := utils.KRNode{
+			PrimaryIP: net.ParseIP("192.168.100.1"),
+		}
 		// Setup routeSyncer to run 10 times a second
-		syncer := NewRouteSyncer(&myInjector, 100*time.Millisecond, false)
+		syncer := NewRouteSyncer(&myInjector, &myNode, 100*time.Millisecond, false)
 		myNetLink := mockNetlink{}
 		myNetLink.pause = 0
 		myNetLink.wg = &sync.WaitGroup{}
@@ -248,35 +254,249 @@ func Test_routeSyncer_run(t *testing.T) {
 	})
 }
 
-func Test_routeSyncer_checkAgainstBGPCache(t *testing.T) {
+func Test_routeSync_checkState(t *testing.T) {
+	// Create test routes
+	dst1 := &net.IPNet{IP: net.ParseIP("10.0.0.0"), Mask: net.CIDRMask(24, 32)}
+	dst2 := &net.IPNet{IP: net.ParseIP("10.0.1.0"), Mask: net.CIDRMask(24, 32)}
+	dst3 := &net.IPNet{IP: net.ParseIP("10.0.2.0"), Mask: net.CIDRMask(24, 32)}
+
+	route1 := &netlink.Route{
+		Dst: dst1,
+		Gw:  net.ParseIP("192.168.1.1"),
+	}
+	route1Modified := &netlink.Route{
+		Dst: dst1,
+		Gw:  net.ParseIP("192.168.1.2"), // Different gateway
+	}
+	route2 := &netlink.Route{
+		Dst: dst2,
+		Gw:  net.ParseIP("192.168.1.1"),
+	}
+	route3 := &netlink.Route{
+		Dst: dst3,
+		Gw:  net.ParseIP("192.168.1.1"),
+	}
+
+	testCases := []struct {
+		name               string
+		stateMap           map[string]*netlink.Route
+		authoritativeState map[string]*netlink.Route
+		expectedAdd        []*netlink.Route
+		expectedChange     []*netlink.Route
+		expectedDelete     []*netlink.Route
+	}{
+		{
+			name:               "empty state",
+			stateMap:           map[string]*netlink.Route{},
+			authoritativeState: map[string]*netlink.Route{dst1.String(): route1},
+			expectedAdd:        []*netlink.Route{route1},
+			expectedChange:     []*netlink.Route{},
+			expectedDelete:     []*netlink.Route{},
+		},
+		{
+			name: "route needs update",
+			stateMap: map[string]*netlink.Route{
+				dst1.String(): route1,
+			},
+			authoritativeState: map[string]*netlink.Route{
+				dst1.String(): route1Modified,
+			},
+			expectedAdd:    []*netlink.Route{},
+			expectedChange: []*netlink.Route{route1Modified},
+			expectedDelete: []*netlink.Route{},
+		},
+		{
+			name: "route needs deletion",
+			stateMap: map[string]*netlink.Route{
+				dst1.String(): route1,
+				dst2.String(): route2,
+			},
+			authoritativeState: map[string]*netlink.Route{
+				dst1.String(): route1,
+			},
+			expectedAdd:    []*netlink.Route{},
+			expectedChange: []*netlink.Route{},
+			expectedDelete: []*netlink.Route{route2},
+		},
+		{
+			name: "multiple operations",
+			stateMap: map[string]*netlink.Route{
+				dst1.String(): route1,
+				dst2.String(): route2,
+			},
+			authoritativeState: map[string]*netlink.Route{
+				dst1.String(): route1Modified,
+				dst3.String(): route3,
+			},
+			expectedAdd:    []*netlink.Route{route3},
+			expectedChange: []*netlink.Route{route1Modified},
+			expectedDelete: []*netlink.Route{route2},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rs := &RouteSync{
+				routeTableStateMap: tc.stateMap,
+				mutex:              sync.Mutex{},
+			}
+
+			add, change, delete := rs.checkState(tc.authoritativeState)
+
+			assert.ElementsMatch(t, tc.expectedAdd, add, "Added routes don't match for test case %s", tc.name)
+			assert.ElementsMatch(t, tc.expectedChange, change, "Changed routes don't match for test case %s", tc.name)
+			assert.ElementsMatch(t, tc.expectedDelete, delete, "Deleted routes don't match for test case %s", tc.name)
+		})
+	}
+}
+
+func Test_routeSync_convertPathsToRouteMap(t *testing.T) {
+	// Setup
+	rs := &RouteSync{
+		nia: &utils.KRNode{
+			PrimaryIP: net.ParseIP("10.0.0.1"),
+		},
+	}
+
+	tests := []struct {
+		name     string
+		paths    []*gobgpapi.Path
+		expected map[string]*netlink.Route
+	}{
+		{
+			name: "valid best path",
+			paths: func() []*gobgpapi.Path {
+				nlri, _ := apb.New(&gobgpapi.IPAddressPrefix{
+					Prefix:    "192.168.1.0",
+					PrefixLen: 24,
+				})
+				nextHop, _ := apb.New(&gobgpapi.NextHopAttribute{
+					NextHop: "172.16.0.1",
+				})
+				origin, _ := apb.New(&gobgpapi.OriginAttribute{
+					Origin: 0,
+				})
+				return []*gobgpapi.Path{{
+					Best:   true,
+					Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+					Nlri:   nlri,
+					Pattrs: []*apb.Any{origin, nextHop},
+				}}
+			}(),
+			expected: map[string]*netlink.Route{
+				"192.168.1.0/24": {
+					Dst:      &net.IPNet{IP: net.ParseIP("192.168.1.0"), Mask: net.CIDRMask(24, 32)},
+					Gw:       net.ParseIP("172.16.0.1"),
+					Protocol: routes.ZebraOriginator,
+				},
+			},
+		},
+		{
+			name: "non-best path should be ignored",
+			paths: func() []*gobgpapi.Path {
+				nlri, _ := apb.New(&gobgpapi.IPAddressPrefix{
+					Prefix:    "192.168.1.0",
+					PrefixLen: 24,
+				})
+				nextHop, _ := apb.New(&gobgpapi.NextHopAttribute{
+					NextHop: "172.16.0.1",
+				})
+				origin, _ := apb.New(&gobgpapi.OriginAttribute{
+					Origin: 0,
+				})
+				return []*gobgpapi.Path{{
+					Best:   false,
+					Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+					Nlri:   nlri,
+					Pattrs: []*apb.Any{origin, nextHop},
+				}}
+			}(),
+			expected: map[string]*netlink.Route{},
+		},
+		{
+			name: "withdraw path should be ignored",
+			paths: func() []*gobgpapi.Path {
+				nlri, _ := apb.New(&gobgpapi.IPAddressPrefix{
+					Prefix:    "192.168.1.0",
+					PrefixLen: 24,
+				})
+				nextHop, _ := apb.New(&gobgpapi.NextHopAttribute{
+					NextHop: "172.16.0.1",
+				})
+				origin, _ := apb.New(&gobgpapi.OriginAttribute{
+					Origin: 0,
+				})
+				return []*gobgpapi.Path{{
+					Best:       true,
+					IsWithdraw: true,
+					Family:     &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+					Nlri:       nlri,
+					Pattrs:     []*apb.Any{origin, nextHop},
+				}}
+			}(),
+			expected: map[string]*netlink.Route{},
+		},
+		{
+			name: "path to own node should be ignored",
+			paths: func() []*gobgpapi.Path {
+				nlri, _ := apb.New(&gobgpapi.IPAddressPrefix{
+					Prefix:    "192.168.1.0",
+					PrefixLen: 24,
+				})
+				nextHop, _ := apb.New(&gobgpapi.NextHopAttribute{
+					NextHop: "10.0.0.1", // Same as node IP
+				})
+				origin, _ := apb.New(&gobgpapi.OriginAttribute{
+					Origin: 0,
+				})
+				return []*gobgpapi.Path{{
+					Best:   true,
+					Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+					Nlri:   nlri,
+					Pattrs: []*apb.Any{origin, nextHop},
+				}}
+			}(),
+			expected: map[string]*netlink.Route{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := rs.convertPathsToRouteMap(tt.paths)
+			assert.Equal(t, tt.expected, result, "Route map doesn't match for test case %s", tt.name)
+		})
+	}
+}
+
+func Test_routeSync_checkAgainstBGPCache(t *testing.T) {
 
 	testRoutes := []testCaseRoute{
 		{
 			dst:  "10.0.0.2/32",
 			mask: 32,
-			gw:   "10.0.0.1",
 			nh:   "192.168.1.1",
 		},
 		{
 			dst:  "2001:db8:1::2/128",
 			mask: 128,
-			gw:   "2001:db8:1::1",
 			nh:   "2001:db8:2::1",
 		},
 	}
 	createTestRouteMap := func(routes []testCaseRoute) map[string]string {
 		testRouteMap := make(map[string]string, 0)
 		for _, rt := range routes {
-			testRouteMap[rt.gw] = rt.dst
+			testRouteMap[rt.nh] = rt.dst
 		}
 		return testRouteMap
 	}
 
 	testSetup := func() (*mockNetlink, *routes.MockLinuxRouter, *RouteSync) {
 		myInjector := routes.MockLinuxRouter{}
-
+		myNode := utils.KRNode{
+			PrimaryIP: net.ParseIP("192.168.100.1"),
+		}
 		// Setup routeSyncer to run 10 times a second
-		syncer := NewRouteSyncer(&myInjector, 100*time.Millisecond, false)
+		syncer := NewRouteSyncer(&myInjector, &myNode, 100*time.Millisecond, false)
 		syncer.routeTableStateMap = testGenerateRouteMap(createTestRouteMap(testRoutes))
 		myNetLink := mockNetlink{}
 		syncer.routeReplacer = myNetLink.mockRouteAction
@@ -302,9 +522,11 @@ func Test_routeSyncer_checkAgainstBGPCache(t *testing.T) {
 
 	t.Run("Ensure proper error when BGP Server is Unset", func(t *testing.T) {
 		myInjector := routes.MockLinuxRouter{}
-
+		myNode := utils.KRNode{
+			PrimaryIP: net.ParseIP("192.168.100.1"),
+		}
 		// Setup routeSyncer to run 10 times a second
-		syncer := NewRouteSyncer(&myInjector, 100*time.Millisecond, false)
+		syncer := NewRouteSyncer(&myInjector, &myNode, 100*time.Millisecond, false)
 		err := syncer.checkCacheAgainstBGP()
 		assert.NotNil(t, err, "Expected an error when BGP server is unset")
 		assert.IsType(t, BGPPathListerUnsetError{}, err, "Expected an BGPServerUnsetError error")
