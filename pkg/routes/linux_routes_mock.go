@@ -12,7 +12,11 @@ type MockLinuxRouter struct {
 }
 
 // Implement the InjectRoute method
-func (m *MockLinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) error {
+func (m *MockLinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) (bool, error) {
 	args := m.Called(subnet, gw)
-	return args.Error(0)
+	err := args.Error(0)
+	if err != nil {
+		return false, err
+	}
+	return true, args.Error(0)
 }

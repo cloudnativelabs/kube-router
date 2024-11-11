@@ -117,7 +117,7 @@ type NodeAware interface {
 }
 
 type RouteInjector interface {
-	InjectRoute(subnet *net.IPNet, gw net.IP) error
+	InjectRoute(subnet *net.IPNet, gw net.IP) (bool, error)
 }
 
 type BGPPathLister interface {

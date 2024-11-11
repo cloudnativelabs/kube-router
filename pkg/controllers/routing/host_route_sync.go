@@ -216,12 +216,14 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 
 	// Add missing routes
 	for _, route := range routesToAdd {
-		klog.Infof("Found route from BGP that did not exist in state, adding to state: %s", route)
-		err := rs.routeInjector.InjectRoute(route.Dst, route.Gw)
+		routeAdded, err := rs.routeInjector.InjectRoute(route.Dst, route.Gw)
 		if err != nil {
 			klog.Errorf("Failed to inject route: %v", err)
 		}
-		metrics.HostRoutesStaleAddedCounter.Inc()
+		if routeAdded {
+			klog.Infof("Found route from BGP that did not exist in state, adding to state: %s", route)
+			metrics.HostRoutesStaleAddedCounter.Inc()
+		}
 	}
 
 	for _, route := range routesToChange {
@@ -230,7 +232,7 @@ func (rs *RouteSync) checkCacheAgainstBGP() error {
 		if err != nil {
 			klog.Errorf("Failed to delete route: %v", err)
 		}
-		err = rs.routeInjector.InjectRoute(route.Dst, route.Gw)
+		_, err = rs.routeInjector.InjectRoute(route.Dst, route.Gw)
 		if err != nil {
 			klog.Errorf("Failed to inject route: %v", err)
 		}
@@ -256,8 +258,8 @@ func (rs *RouteSync) SyncLocalRouteTable() error {
 	rs.mutex.Lock()
 	defer rs.mutex.Unlock()
 	klog.V(2).Infof("Running local route table synchronization")
-	for _, route := range rs.routeTableStateMap {
-		klog.V(3).Infof("Syncing route: %s -> %s via %s", route.Src, route.Dst, route.Gw)
+	for key, route := range rs.routeTableStateMap {
+		klog.V(3).Infof("Syncing route(key: %s): %s -> %s via %s", key, route.Src, route.Dst, route.Gw)
 		err := rs.routeReplacer(route)
 		if err != nil {
 			return err

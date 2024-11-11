@@ -50,5 +50,6 @@ func (ph *PathHandler) Changed(path *gobgpapi.Path) error {
 
 	// If this is not a withdraw, then we need to process the route. This takes care of creating any necessary tunnels,
 	// and adding any necessary host routes depending on the user's config
-	return ph.RouteInjector.InjectRoute(dst, nextHop)
+	_, err = ph.RouteInjector.InjectRoute(dst, nextHop)
+	return err
 }

@@ -40,7 +40,7 @@ type LinuxRouter struct {
 	OverlayConfig pkg.OverlayConfig
 }
 
-func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) error {
+func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) (bool, error) {
 	var route *netlink.Route
 	var err error
 	var link netlink.Link
@@ -75,7 +75,7 @@ func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) error {
 	if shouldCreateTunnel(lr.OverlayConfig, sameSubnet) {
 		link, err = lr.Tunneler.SetupOverlayTunnel(tunnelName, gw, subnet)
 		if err != nil {
-			return err
+			return false, err
 		}
 	} else {
 		// knowing that a tunnel shouldn't exist for this route, check to see if there are any lingering tunnels /
@@ -94,7 +94,7 @@ func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) error {
 			bestIPForFamily = lr.NodeIPA.FindBestIPv6NodeAddress()
 		}
 		if bestIPForFamily == nil {
-			return fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
+			return false, fmt.Errorf("not able to find an appropriate configured IP address on node for destination "+
 				"IP family: %s", subnet.String())
 		}
 		route = &netlink.Route{
@@ -110,7 +110,7 @@ func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) error {
 		dstIsIPv4 := subnet.IP.To4() != nil
 		gwIsIPv4 := gw.To4() != nil
 		if dstIsIPv4 != gwIsIPv4 {
-			return fmt.Errorf("not able to add route as destination %s and gateway %s are not in the same IP family - "+
+			return false, fmt.Errorf("not able to add route as destination %s and gateway %s are not in the same IP family - "+
 				"this shouldn't ever happen from IPs that kube-router advertises, but if it does report it as a bug",
 				subnet.IP, gw)
 		}
@@ -121,14 +121,14 @@ func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) error {
 		}
 	default:
 		// otherwise, let BGP do its thing, nothing to do here
-		return nil
+		return false, nil
 	}
 
 	// Alright, everything is in place, and we have our route configured, let's add it to the host's routing table
 	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", subnet, gw)
 	lr.RouteSyncer.AddInjectedRoute(subnet, route)
 	// Immediately sync the local route table regardless of timer
-	return lr.RouteSyncer.SyncLocalRouteTable()
+	return true, lr.RouteSyncer.SyncLocalRouteTable()
 }
 
 func shouldCreateTunnel(oc pkg.OverlayConfig, sameSubnet bool) bool {
