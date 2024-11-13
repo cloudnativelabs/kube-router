@@ -13,7 +13,8 @@ FROM ${RUNTIME_BASE}
 
 RUN apk add --no-cache \
       iptables \
-      ip6tables \
+      iptables-legacy \
+      # ip6tables \
       ipset \
       iproute2 \
       ipvsadm \

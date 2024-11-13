@@ -1206,9 +1206,12 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 		var args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ",
 			"-m", "comment", "--comment", "", "-j", "SNAT", "--to-source", primaryIP}
 
-		if iptablesCmdHandler.HasRandomFully() {
-			args = append(args, "--random-fully")
-		}
+		// Since kernel 5.0 --random behaves exactly like --random-fully; and
+		// we also get errors with the current version of iptables:
+		// 		iptables v1.8.10 (nf_tables): unknown option "--random-fully"
+		// if iptablesCmdHandler.HasRandomFully() {
+		// 	args = append(args, "--random-fully")
+		// }
 
 		if nsc.masqueradeAll {
 			err := iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
@@ -1235,9 +1238,9 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 			args = []string{"-m", "ipvs", "--ipvs", "--vdir", "ORIGINAL", "--vmethod", "MASQ",
 				"-m", "comment", "--comment", "", "!", "-s", cidr, "!", "-d", cidr,
 				"-j", "SNAT", "--to-source", primaryIP}
-			if iptablesCmdHandler.HasRandomFully() {
-				args = append(args, "--random-fully")
-			}
+			// if iptablesCmdHandler.HasRandomFully() {
+			// 	args = append(args, "--random-fully")
+			// }
 
 			err := iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 			if err != nil {
@@ -1477,7 +1480,10 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 }
 
 func (nsc *NetworkServicesController) deleteHairpinIptablesRules(family v1.IPFamily) error {
-	iptablesCmdHandler := nsc.iptablesCmdHandlers[family]
+	iptablesCmdHandler, ok := nsc.iptablesCmdHandlers[family]
+	if !ok {
+		return nil
+	}
 
 	// TODO: Factor out this code
 	chains, err := iptablesCmdHandler.ListChains("nat")

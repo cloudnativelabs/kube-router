@@ -111,9 +111,9 @@ func (nrc *NetworkRoutingController) createPodEgressRules() error {
 		}
 
 		for _, args := range podEgressArgs {
-			if iptablesCmdHandler.HasRandomFully() {
-				args = append(args, "--random-fully")
-			}
+			// if iptablesCmdHandler.HasRandomFully() {
+			// 	args = append(args, "--random-fully")
+			// }
 
 			err := iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 			if err != nil {
@@ -145,9 +145,9 @@ func (nrc *NetworkRoutingController) deletePodEgressRules() error {
 		}
 
 		for _, args := range podEgressArgs {
-			if iptablesCmdHandler.HasRandomFully() {
-				args = append(args, "--random-fully")
-			}
+			// if iptablesCmdHandler.HasRandomFully() {
+			// 	args = append(args, "--random-fully")
+			// }
 
 			exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 			if err != nil {
