@@ -171,6 +171,11 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 		advIPPrefixList := make([]*gobgpapi.Prefix, 0)
 		advIps, _, _ := nrc.getAllVIPs()
 
+		// add pod egress ip to allow advertisements
+		if nrc.egressIP != nil {
+			advIps = append(advIps, nrc.egressIP.String())
+		}
+
 		for _, ipStr := range advIps {
 			ip := net.ParseIP(ipStr)
 			if ip == nil {
