@@ -80,6 +80,7 @@ func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) (bool, error) {
 	} else {
 		// knowing that a tunnel shouldn't exist for this route, check to see if there are any lingering tunnels /
 		// routes that need to be cleaned up.
+		lr.RouteSyncer.DelInjectedRoute(subnet)
 		lr.Tunneler.CleanupTunnel(subnet, tunnelName)
 	}
 
@@ -120,7 +121,8 @@ func (lr *LinuxRouter) InjectRoute(subnet *net.IPNet, gw net.IP) (bool, error) {
 			Protocol: ZebraOriginator,
 		}
 	default:
-		// otherwise, let BGP do its thing, nothing to do here
+		// otherwise, let BGP do its thing, nothing to do here, ensure that any remaining routes are cleaned up
+		lr.RouteSyncer.DelInjectedRoute(subnet)
 		return false, nil
 	}
 
