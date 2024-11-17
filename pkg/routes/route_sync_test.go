@@ -61,7 +61,7 @@ func Test_syncLocalRouteTable(t *testing.T) {
 		myNetlink.pause = time.Millisecond * 200
 
 		// Create a route replacer and seed it with some routes to iterate over
-		syncer := NewRouteSyncer(15 * time.Second)
+		syncer := NewRouteSyncer(15*time.Second, false)
 		syncer.routeTableStateMap = generateTestRouteMap(testRoutes)
 
 		// Replace the netlink.RouteReplace function with our own mock function that includes a WaitGroup for syncing
@@ -143,7 +143,7 @@ func Test_routeSyncer_run(t *testing.T) {
 
 	t.Run("Ensure that run goroutine shuts down correctly on stop", func(t *testing.T) {
 		// Setup routeSyncer to run 10 times a second
-		syncer := NewRouteSyncer(100 * time.Millisecond)
+		syncer := NewRouteSyncer(100*time.Millisecond, false)
 		myNetLink := mockNetlink{}
 		syncer.routeReplacer = myNetLink.mockRouteReplace
 		syncer.routeTableStateMap = generateTestRouteMap(testRoutes)
