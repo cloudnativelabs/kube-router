@@ -659,6 +659,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	} else {
 		// knowing that a tunnel shouldn't exist for this route, check to see if there are any lingering tunnels /
 		// routes that need to be cleaned up.
+		nrc.routeSyncer.DelInjectedRoute(dst)
 		tunnels.CleanupTunnel(dst, tunnelName)
 	}
 
@@ -700,6 +701,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 		}
 	default:
 		// otherwise, let BGP do its thing, nothing to do here
+		nrc.routeSyncer.DelInjectedRoute(dst)
 		return nil
 	}
 
