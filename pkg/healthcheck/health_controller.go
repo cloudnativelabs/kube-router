@@ -24,6 +24,7 @@ const (
 	NetworkServicesController
 	HairpinController
 	MetricsController
+	RouteSyncController
 )
 
 var (
@@ -34,6 +35,7 @@ var (
 		NetworkServicesController: "NetworkServicesController",
 		HairpinController:         "HairpinController",
 		MetricsController:         "MetricsController",
+		RouteSyncController:       "RouteSyncController",
 	}
 )
 
@@ -66,6 +68,8 @@ type HealthStats struct {
 	NetworkServicesControllerAliveTTL time.Duration
 	HairpinControllerAlive            time.Time
 	HairpinControllerAliveTTL         time.Duration
+	RouteSyncControllerAlive          time.Time
+	RouteSyncControllerAliveTTL       time.Duration
 }
 
 // SendHeartBeat sends a heartbeat on the passed channel
@@ -139,6 +143,12 @@ func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
 		}
 		hc.Status.NetworkRoutingControllerAlive = beat.LastHeartBeat
 
+	case RouteSyncController:
+		if hc.Status.RouteSyncControllerAliveTTL == 0 {
+			hc.Status.RouteSyncControllerAliveTTL = time.Since(hc.Status.RouteSyncControllerAlive)
+		}
+		hc.Status.RouteSyncControllerAlive = beat.LastHeartBeat
+
 	case NetworkPolicyController:
 		if hc.Status.NetworkPolicyControllerAliveTTL == 0 {
 			hc.Status.NetworkPolicyControllerAliveTTL = time.Since(hc.Status.NetworkPolicyControllerAlive)
@@ -175,6 +185,11 @@ func (hc *HealthController) CheckHealth() bool {
 		if time.Since(hc.Status.NetworkRoutingControllerAlive) >
 			hc.Config.RoutesSyncPeriod+hc.Status.NetworkRoutingControllerAliveTTL+graceTime {
 			klog.Error("Network Routing Controller heartbeat missed")
+			health = false
+		}
+		if time.Since(hc.Status.RouteSyncControllerAlive) >
+			hc.Config.InjectedRoutesSyncPeriod+hc.Status.RouteSyncControllerAliveTTL+graceTime {
+			klog.Error("Routes Sync Controller heartbeat missed")
 			health = false
 		}
 	}
@@ -261,6 +276,7 @@ func (hc *HealthController) SetAlive() {
 	hc.Status.NetworkRoutingControllerAlive = now
 	hc.Status.NetworkServicesControllerAlive = now
 	hc.Status.HairpinControllerAlive = now
+	hc.Status.RouteSyncControllerAlive = now
 }
 
 // NewHealthController creates a new health controller and returns a reference to it

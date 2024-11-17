@@ -73,8 +73,8 @@ const (
 type RouteSyncer interface {
 	AddInjectedRoute(dst *net.IPNet, route *netlink.Route)
 	DelInjectedRoute(dst *net.IPNet)
-	Run(stopCh <-chan struct{}, wg *sync.WaitGroup)
-	SyncLocalRouteTable()
+	Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup)
+	SyncLocalRouteTable() error
 }
 
 // PolicyBasedRouting is an interface that defines the methods needed to enable/disable policy based routing
@@ -310,7 +310,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	klog.Infof("Starting network route controller")
 
 	// Start route syncer
-	nrc.routeSyncer.Run(stopCh, wg)
+	nrc.routeSyncer.Run(healthChan, stopCh, wg)
 
 	// Wait till we are ready to launch BGP server
 	for {
@@ -709,8 +709,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	klog.V(2).Infof("Inject route: '%s via %s' from peer to routing table", dst, nextHop)
 	nrc.routeSyncer.AddInjectedRoute(dst, route)
 	// Immediately sync the local route table regardless of timer
-	nrc.routeSyncer.SyncLocalRouteTable()
-	return nil
+	return nrc.routeSyncer.SyncLocalRouteTable()
 }
 
 func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, error) {
