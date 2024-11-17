@@ -77,7 +77,9 @@ func Test_syncLocalRouteTable(t *testing.T) {
 		// we try to use it in addInjectedRoute() below
 		myNetlink.wg = &sync.WaitGroup{}
 		myNetlink.wg.Add(1)
-		go syncer.SyncLocalRouteTable()
+		go func() {
+			_ = syncer.SyncLocalRouteTable()
+		}()
 
 		// Now we know that the syncLocalRouteTable() is paused on our artificial wait we added above
 		myNetlink.wg.Wait()
@@ -151,7 +153,7 @@ func Test_routeSyncer_run(t *testing.T) {
 		// For a sanity check that the currentRoute on the mock object is nil to start with as we'll rely on this later
 		assert.Nil(t, myNetLink.currentRoute, "currentRoute should be nil when the syncer hasn't run")
 
-		syncer.Run(stopCh, &wg)
+		syncer.Run(nil, stopCh, &wg)
 
 		time.Sleep(110 * time.Millisecond)
 
