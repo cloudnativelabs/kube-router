@@ -461,7 +461,7 @@ func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.Controller
 			}
 		case <-timer.C:
 			timer.Reset(time.Minute)
-			healthcheck.SendHeartBeat(healthChan, "LBC")
+			healthcheck.SendHeartBeat(healthChan, healthcheck.LoadBalancerController)
 			if isLeader {
 				go lbc.walkServices()
 			}

@@ -54,7 +54,7 @@ func (hpc *hairpinController) Run(stopCh <-chan struct{}, wg *sync.WaitGroup,
 					endpointIP, err)
 			}
 		case <-t.C:
-			healthcheck.SendHeartBeat(healthChan, "HPC")
+			healthcheck.SendHeartBeat(healthChan, healthcheck.HairpinController)
 		}
 	}
 }
