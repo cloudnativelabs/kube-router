@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	"k8s.io/klog/v2"
 )
@@ -26,6 +28,7 @@ type RouteSync struct {
 	injectedRoutesSyncPeriod time.Duration
 	mutex                    sync.Mutex
 	routeReplacer            func(route *netlink.Route) error
+	metricsEnabled           bool
 }
 
 // addInjectedRoute adds a route to the route map that is regularly synced to the kernel's routing table
@@ -34,6 +37,10 @@ func (rs *RouteSync) AddInjectedRoute(dst *net.IPNet, route *netlink.Route) {
 	defer rs.mutex.Unlock()
 	klog.V(3).Infof("Adding route for destination: %s", dst)
 	rs.routeTableStateMap[dst.String()] = route
+	if rs.metricsEnabled {
+		metrics.ControllerHostRoutesAdded.Inc()
+		metrics.ControllerHostRoutesSynced.Set(float64(len(rs.routeTableStateMap)))
+	}
 }
 
 // delInjectedRoute delete a route from the route map that is regularly synced to the kernel's routing table
@@ -44,10 +51,21 @@ func (rs *RouteSync) DelInjectedRoute(dst *net.IPNet) {
 		klog.V(3).Infof("Removing route for destination: %s", dst)
 		delete(rs.routeTableStateMap, dst.String())
 	}
+	if rs.metricsEnabled {
+		metrics.ControllerHostRoutesRemoved.Inc()
+		metrics.ControllerHostRoutesSynced.Set(float64(len(rs.routeTableStateMap)))
+	}
 }
 
 // syncLocalRouteTable iterates over the local route state map and syncs all routes to the kernel's routing table
 func (rs *RouteSync) SyncLocalRouteTable() error {
+	if rs.metricsEnabled {
+		startSyncTime := time.Now()
+		defer func(startTime time.Time) {
+			runTime := time.Since(startTime)
+			metrics.ControllerHostRoutesSyncTime.Observe(runTime.Seconds())
+		}(startSyncTime)
+	}
 	rs.mutex.Lock()
 	defer rs.mutex.Unlock()
 	klog.V(2).Infof("Running local route table synchronization")
@@ -60,6 +78,9 @@ func (rs *RouteSync) SyncLocalRouteTable() error {
 				err:   err,
 			}
 		}
+	}
+	if rs.metricsEnabled {
+		metrics.ControllerHostRoutesSynced.Set(float64(len(rs.routeTableStateMap)))
 	}
 	return nil
 }
@@ -94,12 +115,20 @@ func (rs *RouteSync) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, sto
 
 // NewRouteSyncer creates a new routeSyncer that, when run, will sync routes kept in its local state table every
 // syncPeriod
-func NewRouteSyncer(syncPeriod time.Duration) *RouteSync {
+func NewRouteSyncer(syncPeriod time.Duration, registerMetrics bool) *RouteSync {
 	rs := RouteSync{}
 	rs.routeTableStateMap = make(map[string]*netlink.Route)
 	rs.injectedRoutesSyncPeriod = syncPeriod
 	rs.mutex = sync.Mutex{}
 	// We substitute the RouteReplace function here so that we can easily monkey patch it in our unit tests
 	rs.routeReplacer = netlink.RouteReplace
+	rs.metricsEnabled = registerMetrics
+
+	// Register Metrics
+	if registerMetrics {
+		prometheus.MustRegister(metrics.ControllerHostRoutesSynced, metrics.ControllerHostRoutesSyncTime,
+			metrics.ControllerHostRoutesAdded, metrics.ControllerHostRoutesRemoved)
+	}
+
 	return &rs
 }

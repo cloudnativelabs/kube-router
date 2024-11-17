@@ -209,6 +209,30 @@ var (
 		Name:      "controller_policy_ipsets",
 		Help:      "Active policy ipsets",
 	})
+	// ControllerHostRoutesSyncTime Time it took for the host routes controller to sync to the system
+	ControllerHostRoutesSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "host_routes_sync_time",
+		Help:      "Time it took for the host routes controller to sync to the system",
+	})
+	// ControllerHostRoutesSynced Number of host routes currently synced to the system
+	ControllerHostRoutesSynced = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "host_routes_synced",
+		Help:      "Count of host routes currently synced to the system",
+	})
+	// ControllerHostRoutesSynced Number of host routes added to the system
+	ControllerHostRoutesAdded = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "host_routes_added",
+		Help:      "Total count of host routes added to the system",
+	})
+	// ControllerHostRoutesSynced Number of host routes removed to the system
+	ControllerHostRoutesRemoved = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "host_routes_removed",
+		Help:      "Total count of host routes removed to the system",
+	})
 )
 
 // Controller Holds settings for the metrics controller
