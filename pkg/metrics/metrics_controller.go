@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/version"
@@ -209,6 +210,30 @@ var (
 		Name:      "controller_policy_ipsets",
 		Help:      "Active policy ipsets",
 	})
+	// HostRoutesSyncedGauge Number of routes currently synced to the system
+	HostRoutesSyncedGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "host_routes_synced",
+		Help:      "Number of routes currently synced to the system",
+	})
+	// HostRoutesStaleAddedCounter Total number of routes added by checkCacheAgainstBGP
+	HostRoutesStaleAddedCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "host_routes_uncached_added_total",
+		Help:      "Total number of uncached host routes needing to be added",
+	})
+	// HostRoutesStaleRemovedCounter Total number of routes removed by checkCacheAgainstBGP
+	HostRoutesStaleRemovedCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "host_routes_stale_removed_total",
+		Help:      "Total number of stale cached host routes needing to be removed",
+	})
+	// HostRouteStaleUpdatedCounter Total number of routes removed by checkCacheAgainstBGP
+	HostRoutesStaleUpdatedCounter = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "host_routes_stale_updated_total",
+		Help:      "Total number of stale cached host routes needing to be updated",
+	})
 )
 
 // Controller Holds settings for the metrics controller
@@ -225,7 +250,7 @@ func Handler() http.Handler {
 }
 
 // Run prometheus metrics controller
-func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
+func (mc *Controller) Run(healthChan chan<- *pkg.ControllerHeartbeat, stopCh <-chan struct{},
 	wg *sync.WaitGroup) {
 	t := time.NewTicker(metricsControllerTickTime)
 	defer wg.Done()
@@ -251,7 +276,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 		}
 	}()
 	for {
-		healthcheck.SendHeartBeat(healthChan, "MC")
+		healthcheck.SendHeartBeat(healthChan, pkg.HeartBeatCompMetricsController)
 		select {
 		case <-stopCh:
 			klog.Infof("Shutting down metrics controller")

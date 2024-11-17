@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
-	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/vishvananda/netlink"
 	"k8s.io/klog/v2"
 )
@@ -75,19 +75,13 @@ func ParseEncapPort(encapPort uint16) (EncapPort, error) {
 	return port, nil
 }
 
-type Tunneler interface {
-	SetupOverlayTunnel(tunnelName string, nextHop net.IP, nextHopSubnet *net.IPNet) (netlink.Link, error)
-	EncapType() EncapType
-	EncapPort() EncapPort
-}
-
 type OverlayTunnel struct {
-	krNode    utils.NodeIPAware
+	krNode    pkg.NodeIPAware
 	encapPort EncapPort
 	encapType EncapType
 }
 
-func NewOverlayTunnel(krNode utils.NodeIPAware, encapType EncapType, encapPort EncapPort) *OverlayTunnel {
+func NewOverlayTunnel(krNode pkg.NodeIPAware, encapType EncapType, encapPort EncapPort) *OverlayTunnel {
 	return &OverlayTunnel{
 		krNode:    krNode,
 		encapPort: encapPort,
@@ -95,12 +89,12 @@ func NewOverlayTunnel(krNode utils.NodeIPAware, encapType EncapType, encapPort E
 	}
 }
 
-func (o *OverlayTunnel) EncapType() EncapType {
-	return o.encapType
+func (o *OverlayTunnel) EncapType() string {
+	return string(o.encapType)
 }
 
-func (o *OverlayTunnel) EncapPort() EncapPort {
-	return o.encapPort
+func (o *OverlayTunnel) EncapPort() uint16 {
+	return uint16(o.encapPort)
 }
 
 // setupOverlayTunnel attempts to create a tunnel link and corresponding routes for IPIP based overlay networks
@@ -243,6 +237,17 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 	}
 
 	return link, nil
+}
+
+// CleanupTunnel removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer
+// needed. All errors are logged only, as we want to attempt to perform all cleanup actions regardless of their success
+func (o *OverlayTunnel) CleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
+	CleanupTunnel(destinationSubnet, tunnelName)
+}
+
+// GenerateTunnelName will generate a name for a tunnel interface given a node IP
+func (o *OverlayTunnel) GenerateTunnelName(nodeIP string) string {
+	return GenerateTunnelName(nodeIP)
 }
 
 // cleanupTunnel removes any traces of tunnels / routes that were setup by nrc.setupOverlayTunnel() and are no longer

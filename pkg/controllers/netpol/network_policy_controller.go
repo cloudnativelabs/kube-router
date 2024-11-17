@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
@@ -63,7 +64,7 @@ var (
 
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	krNode                      utils.NodeIPAndFamilyAware
+	krNode                      pkg.NodeIPAndFamilyAware
 	serviceClusterIPRanges      []net.IPNet
 	serviceExternalIPRanges     []net.IPNet
 	serviceLoadBalancerIPRanges []net.IPNet
@@ -71,7 +72,7 @@ type NetworkPolicyController struct {
 	mu                          sync.Mutex
 	syncPeriod                  time.Duration
 	MetricsEnabled              bool
-	healthChan                  chan<- *healthcheck.ControllerHeartbeat
+	healthChan                  chan<- *pkg.ControllerHeartbeat
 	fullSyncRequestChan         chan struct{}
 	ipsetMutex                  *sync.Mutex
 
@@ -153,7 +154,7 @@ type protocol2eps map[string]numericPort2eps
 type namedPort2eps map[string]protocol2eps
 
 // Run runs forever till we receive notification on stopCh
-func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
+func (npc *NetworkPolicyController) Run(healthChan chan<- *pkg.ControllerHeartbeat, stopCh <-chan struct{},
 	wg *sync.WaitGroup) {
 	t := time.NewTicker(npc.syncPeriod)
 	defer t.Stop()
@@ -241,7 +242,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		}
 	}
 
-	healthcheck.SendHeartBeat(npc.healthChan, "NPC")
+	healthcheck.SendHeartBeat(npc.healthChan, pkg.HeartBeatCompNetworkPolicyController)
 	start := time.Now()
 	syncVersion := strconv.FormatInt(start.UnixNano(), syncVersionBase)
 	defer func() {

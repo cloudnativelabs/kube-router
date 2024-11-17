@@ -133,8 +133,9 @@ func getServiceObject(obj interface{}) (svc *v1core.Service) {
 }
 
 func (nrc *NetworkRoutingController) handleServiceUpdate(svcOld, svcNew *v1core.Service) {
+	klog.V(2).Infof("Handling update for service: %s", svcNew)
 	if !nrc.bgpServerStarted {
-		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
+		klog.V(1).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
 			svcNew.Namespace, svcNew.Name)
 		return
 	}
@@ -156,9 +157,9 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svcOld, svcNew *v1core.
 }
 
 func (nrc *NetworkRoutingController) handleServiceDelete(oldSvc *v1core.Service) {
-
+	klog.V(2).Infof("Handling delete for service: %s", oldSvc)
 	if !nrc.bgpServerStarted {
-		klog.V(3).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
+		klog.V(1).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
 			oldSvc.Namespace, oldSvc.Name)
 		return
 	}

@@ -140,7 +140,7 @@ docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSW
 
 push: container docker-login ## Pushes a Docker container image to a registry.
 	@echo Starting kube-router container image push.
-	$(DOCKER) push "$(REGISTRY_DEV):$(IMG_TAG)"
+	$(DOCKER) push "$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))"
 	@echo Finished kube-router container image push.
 
 push-manifest:

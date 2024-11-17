@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"golang.org/x/net/context"
 	"k8s.io/klog/v2"
@@ -17,12 +18,6 @@ const (
 	defaultGraceTimeDuration = time.Duration(1500) * time.Millisecond
 	healthControllerTickTime = 5000 * time.Millisecond
 )
-
-// ControllerHeartbeat is the structure to hold the heartbeats sent by controllers
-type ControllerHeartbeat struct {
-	Component     string
-	LastHeartBeat time.Time
-}
 
 // HealthController reports the health of the controller loops as a http endpoint
 type HealthController struct {
@@ -47,12 +42,14 @@ type HealthStats struct {
 	NetworkServicesControllerAliveTTL time.Duration
 	HairpinControllerAlive            time.Time
 	HairpinControllerAliveTTL         time.Duration
+	HostRouteSyncAlive                time.Time
+	HostRouteSyncAliveTTL             time.Duration
 }
 
 // SendHeartBeat sends a heartbeat on the passed channel
-func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
-	heartbeat := ControllerHeartbeat{
-		Component:     controller,
+func SendHeartBeat(channel chan<- *pkg.ControllerHeartbeat, component int) {
+	heartbeat := pkg.ControllerHeartbeat{
+		Component:     component,
 		LastHeartBeat: time.Now(),
 	}
 	channel <- &heartbeat
@@ -87,46 +84,52 @@ func (hc *HealthController) Handler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // HandleHeartbeat handles received heartbeats on the health channel
-func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
-	klog.V(3).Infof("Received heartbeat from %s", beat.Component)
+func (hc *HealthController) HandleHeartbeat(beat *pkg.ControllerHeartbeat) {
+	klog.V(3).Infof("Received heartbeat from %s", pkg.HeartBeatCompNames[beat.Component])
 
 	hc.Status.Lock()
 	defer hc.Status.Unlock()
 
-	switch {
+	switch beat.Component {
 	// The first heartbeat will set the initial gracetime the controller has to report in, A static time is added as
 	// well when checking to allow for load variation in sync time
-	case beat.Component == "LBC":
+	case pkg.HeartBeatCompLoadBalancerController:
 		if hc.Status.LoadBalancerControllerAliveTTL == 0 {
 			hc.Status.LoadBalancerControllerAliveTTL = time.Since(hc.Status.LoadBalancerControllerAlive)
 		}
 		hc.Status.LoadBalancerControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "NSC":
+	case pkg.HeartBeatCompNetworkServicesController:
 		if hc.Status.NetworkServicesControllerAliveTTL == 0 {
 			hc.Status.NetworkServicesControllerAliveTTL = time.Since(hc.Status.NetworkServicesControllerAlive)
 		}
 		hc.Status.NetworkServicesControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "HPC":
+	case pkg.HeartBeatCompHairpinController:
 		if hc.Status.HairpinControllerAliveTTL == 0 {
 			hc.Status.HairpinControllerAliveTTL = time.Since(hc.Status.HairpinControllerAlive)
 		}
 		hc.Status.HairpinControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "NRC":
+	case pkg.HeartBeatCompNetworkRoutesController:
 		if hc.Status.NetworkRoutingControllerAliveTTL == 0 {
 			hc.Status.NetworkRoutingControllerAliveTTL = time.Since(hc.Status.NetworkRoutingControllerAlive)
 		}
 		hc.Status.NetworkRoutingControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "NPC":
+	case pkg.HeartBeatCompHostRouteSync:
+		if hc.Status.HostRouteSyncAliveTTL == 0 {
+			hc.Status.HostRouteSyncAliveTTL = time.Since(hc.Status.HostRouteSyncAlive)
+		}
+		hc.Status.HostRouteSyncAlive = beat.LastHeartBeat
+
+	case pkg.HeartBeatCompNetworkPolicyController:
 		if hc.Status.NetworkPolicyControllerAliveTTL == 0 {
 			hc.Status.NetworkPolicyControllerAliveTTL = time.Since(hc.Status.NetworkPolicyControllerAlive)
 		}
 		hc.Status.NetworkPolicyControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "MC":
+	case pkg.HeartBeatCompMetricsController:
 		hc.Status.MetricsControllerAlive = beat.LastHeartBeat
 	}
 }
@@ -158,6 +161,11 @@ func (hc *HealthController) CheckHealth() bool {
 			klog.Error("Network Routing Controller heartbeat missed")
 			health = false
 		}
+		if time.Since(hc.Status.HostRouteSyncAlive) >
+			hc.Config.InjectedRoutesSyncPeriod+hc.Status.HostRouteSyncAliveTTL+graceTime {
+			klog.Error("Host Route Sync Controller heartbeat missed")
+			health = false
+		}
 	}
 
 	if hc.Config.RunServiceProxy {
@@ -166,6 +174,7 @@ func (hc *HealthController) CheckHealth() bool {
 			klog.Error("NetworkService Controller heartbeat missed")
 			health = false
 		}
+		// !!!! The HAIRPIN controller is not currently used as it is handled in the CNI plugin !!!!
 		// if time.Since(hc.Status.HairpinControllerAlive) >
 		// 	HPCSyncPeriod+hc.Status.HairpinControllerAliveTTL+graceTime {
 		//	klog.Error("Hairpin Controller heartbeat missed")
@@ -214,7 +223,7 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 }
 
 // RunCheck starts the HealthController's check
-func (hc *HealthController) RunCheck(healthChan <-chan *ControllerHeartbeat, stopCh <-chan struct{},
+func (hc *HealthController) RunCheck(healthChan <-chan *pkg.ControllerHeartbeat, stopCh <-chan struct{},
 	wg *sync.WaitGroup) {
 	t := time.NewTicker(healthControllerTickTime)
 	defer wg.Done()
@@ -242,6 +251,7 @@ func (hc *HealthController) SetAlive() {
 	hc.Status.NetworkRoutingControllerAlive = now
 	hc.Status.NetworkServicesControllerAlive = now
 	hc.Status.HairpinControllerAlive = now
+	hc.Status.HostRouteSyncAlive = now
 }
 
 // NewHealthController creates a new health controller and returns a reference to it

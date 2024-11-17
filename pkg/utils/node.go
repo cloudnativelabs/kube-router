@@ -37,51 +37,6 @@ type LocalKRNode struct {
 	linkQ             LocalLinkQuerier
 }
 
-// NodeIPAware is an interface that provides methods to get the node's IP addresses in various data structures.
-type NodeIPAware interface {
-	FindBestIPv4NodeAddress() net.IP
-	FindBestIPv6NodeAddress() net.IP
-	GetNodeIPv4Addrs() []net.IP
-	GetNodeIPv6Addrs() []net.IP
-	GetNodeIPAddrs() []net.IP
-	GetPrimaryNodeIP() net.IP
-}
-
-// NodeInterfaceAware is an interface that provides methods to get the node's interface name, MTU, and subnet. This
-// interface is a collection of functions that are only available if you are running on the node itself, as kube-router
-// determines this by looking at the node's interfaces and parsing the address data there. If you attempt to call these
-// functions on a remote node, they will return nil or an error.
-type NodeInterfaceAware interface {
-	GetNodeInterfaceName() string
-	GetNodeMTU() (int, error)
-}
-
-// NodeFamilyAware is an interface that provides methods to check if a node is IPv4 or IPv6 capable.
-type NodeFamilyAware interface {
-	IsIPv4Capable() bool
-	IsIPv6Capable() bool
-}
-
-// NodeNameAware is an interface that provides a method to get the node's name.
-type NodeNameAware interface {
-	GetNodeName() string
-}
-
-// NodeIPAndFamilyAware is an interface that combines the NodeIPAware and NodeFamilyAware interfaces.
-type NodeIPAndFamilyAware interface {
-	NodeIPAware
-	NodeFamilyAware
-}
-
-// NodeAware is an interface that combines the NodeIPAware, NodeInterfaceAware, NodeFamilyAware, and NodeNameAware
-// interfaces.
-type NodeAware interface {
-	NodeIPAware
-	NodeInterfaceAware
-	NodeFamilyAware
-	NodeNameAware
-}
-
 // GetNodeIPv4Addrs returns the node's IPv4 addresses as defined by the Kubernetes Node Object.
 func (n *KRNode) GetNodeIPv4Addrs() []net.IP {
 	var nodeIPs []net.IP
