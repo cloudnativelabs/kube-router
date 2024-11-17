@@ -391,7 +391,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		}
 
 		if err == nil {
-			healthcheck.SendHeartBeat(healthChan, "NRC")
+			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkRoutesController)
 		} else {
 			klog.Errorf("Error during periodic sync in network routing controller. Error: " + err.Error())
 			klog.Errorf("Skipping sending heartbeat from network routing controller as periodic sync failed.")

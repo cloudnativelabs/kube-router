@@ -251,7 +251,7 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 		}
 	}()
 	for {
-		healthcheck.SendHeartBeat(healthChan, "MC")
+		healthcheck.SendHeartBeat(healthChan, healthcheck.MetricsController)
 		select {
 		case <-stopCh:
 			klog.Infof("Shutting down metrics controller")

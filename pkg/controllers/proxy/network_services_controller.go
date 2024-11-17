@@ -340,7 +340,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			}
 
 		case perform := <-nsc.syncChan:
-			healthcheck.SendHeartBeat(healthChan, "NSC")
+			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
 			switch perform {
 			case synctypeAll:
 				klog.V(1).Info("Performing requested full sync of services")
@@ -365,18 +365,18 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				nsc.mu.Unlock()
 			}
 			if err == nil {
-				healthcheck.SendHeartBeat(healthChan, "NSC")
+				healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
 			}
 
 		case <-t.C:
 			klog.V(1).Info("Performing periodic sync of ipvs services")
-			healthcheck.SendHeartBeat(healthChan, "NSC")
+			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
 			err := nsc.doSync()
 			if err != nil {
 				klog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
 				klog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
 			} else {
-				healthcheck.SendHeartBeat(healthChan, "NSC")
+				healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
 			}
 		}
 	}

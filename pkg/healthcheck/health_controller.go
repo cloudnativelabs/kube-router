@@ -16,11 +16,30 @@ const (
 	HPCSyncPeriod            = time.Duration(HPCStaticSyncInterval) * time.Second
 	defaultGraceTimeDuration = time.Duration(1500) * time.Millisecond
 	healthControllerTickTime = 5000 * time.Millisecond
+
+	// Defined health checks
+	NetworkRoutesController = iota
+	LoadBalancerController
+	NetworkPolicyController
+	NetworkServicesController
+	HairpinController
+	MetricsController
+)
+
+var (
+	HeartBeatCompNames = map[int]string{
+		NetworkRoutesController:   "NetworkRoutesController",
+		LoadBalancerController:    "LoadBalancerController",
+		NetworkPolicyController:   "NetworkPolicyController",
+		NetworkServicesController: "NetworkServicesController",
+		HairpinController:         "HairpinController",
+		MetricsController:         "MetricsController",
+	}
 )
 
 // ControllerHeartbeat is the structure to hold the heartbeats sent by controllers
 type ControllerHeartbeat struct {
-	Component     string
+	Component     int
 	LastHeartBeat time.Time
 }
 
@@ -50,9 +69,9 @@ type HealthStats struct {
 }
 
 // SendHeartBeat sends a heartbeat on the passed channel
-func SendHeartBeat(channel chan<- *ControllerHeartbeat, controller string) {
+func SendHeartBeat(channel chan<- *ControllerHeartbeat, component int) {
 	heartbeat := ControllerHeartbeat{
-		Component:     controller,
+		Component:     component,
 		LastHeartBeat: time.Now(),
 	}
 	channel <- &heartbeat
@@ -88,45 +107,45 @@ func (hc *HealthController) Handler(w http.ResponseWriter, _ *http.Request) {
 
 // HandleHeartbeat handles received heartbeats on the health channel
 func (hc *HealthController) HandleHeartbeat(beat *ControllerHeartbeat) {
-	klog.V(3).Infof("Received heartbeat from %s", beat.Component)
+	klog.V(3).Infof("Received heartbeat from %s", HeartBeatCompNames[beat.Component])
 
 	hc.Status.Lock()
 	defer hc.Status.Unlock()
 
-	switch {
+	switch beat.Component {
 	// The first heartbeat will set the initial gracetime the controller has to report in, A static time is added as
 	// well when checking to allow for load variation in sync time
-	case beat.Component == "LBC":
+	case LoadBalancerController:
 		if hc.Status.LoadBalancerControllerAliveTTL == 0 {
 			hc.Status.LoadBalancerControllerAliveTTL = time.Since(hc.Status.LoadBalancerControllerAlive)
 		}
 		hc.Status.LoadBalancerControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "NSC":
+	case NetworkServicesController:
 		if hc.Status.NetworkServicesControllerAliveTTL == 0 {
 			hc.Status.NetworkServicesControllerAliveTTL = time.Since(hc.Status.NetworkServicesControllerAlive)
 		}
 		hc.Status.NetworkServicesControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "HPC":
+	case HairpinController:
 		if hc.Status.HairpinControllerAliveTTL == 0 {
 			hc.Status.HairpinControllerAliveTTL = time.Since(hc.Status.HairpinControllerAlive)
 		}
 		hc.Status.HairpinControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "NRC":
+	case NetworkRoutesController:
 		if hc.Status.NetworkRoutingControllerAliveTTL == 0 {
 			hc.Status.NetworkRoutingControllerAliveTTL = time.Since(hc.Status.NetworkRoutingControllerAlive)
 		}
 		hc.Status.NetworkRoutingControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "NPC":
+	case NetworkPolicyController:
 		if hc.Status.NetworkPolicyControllerAliveTTL == 0 {
 			hc.Status.NetworkPolicyControllerAliveTTL = time.Since(hc.Status.NetworkPolicyControllerAlive)
 		}
 		hc.Status.NetworkPolicyControllerAlive = beat.LastHeartBeat
 
-	case beat.Component == "MC":
+	case MetricsController:
 		hc.Status.MetricsControllerAlive = beat.LastHeartBeat
 	}
 }

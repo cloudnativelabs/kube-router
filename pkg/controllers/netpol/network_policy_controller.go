@@ -241,7 +241,7 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		}
 	}
 
-	healthcheck.SendHeartBeat(npc.healthChan, "NPC")
+	healthcheck.SendHeartBeat(npc.healthChan, healthcheck.NetworkPolicyController)
 	start := time.Now()
 	syncVersion := strconv.FormatInt(start.UnixNano(), syncVersionBase)
 	defer func() {
