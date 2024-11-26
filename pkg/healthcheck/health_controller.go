@@ -220,11 +220,17 @@ func (hc *HealthController) CheckHealth() bool {
 // RunServer starts the HealthController's server
 func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	mux := http.NewServeMux()
+
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(int(hc.HealthPort)),
-		Handler:           http.DefaultServeMux,
-		ReadHeaderTimeout: 5 * time.Second}
-	http.HandleFunc("/healthz", hc.Handler)
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	mux.HandleFunc("/healthz", hc.Handler)
+
 	if hc.Config.HealthPort > 0 {
 		hc.HTTPEnabled = true
 		go func() {

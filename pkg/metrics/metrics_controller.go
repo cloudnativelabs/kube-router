@@ -260,13 +260,15 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 	DefaultRegisterer.MustRegister(BuildInfo)
 	DefaultRegisterer.MustRegister(ControllerIpvsMetricsExportTime)
 
+	mux := http.NewServeMux()
+
 	srv := &http.Server{
 		Addr:              mc.MetricsAddr + ":" + strconv.Itoa(int(mc.MetricsPort)),
-		Handler:           http.DefaultServeMux,
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second}
 
 	// add prometheus handler on metrics path
-	http.Handle(mc.MetricsPath, Handler())
+	mux.Handle(mc.MetricsPath, Handler())
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
