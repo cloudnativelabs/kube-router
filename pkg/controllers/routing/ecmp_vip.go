@@ -484,7 +484,7 @@ func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service,
 
 	// If:
 	// - We are assessing the clusterIP of the service (the internally facing VIP)
-	// - The service has an internal traffic policy of "local" or the service has the service.local annotation on it
+	// - The service has an internal traffic policy of "local"
 	// - The service doesn't have any endpoints on the node we're executing on
 	// Then: return false
 	// We handle spec.internalTrafficPolicy different because it was introduced in v1.26 and may not be available in all
@@ -493,8 +493,7 @@ func (nrc *NetworkRoutingController) shouldAdvertiseService(svc *v1core.Service,
 	if svc.Spec.InternalTrafficPolicy != nil {
 		serIntTrafPol = *svc.Spec.InternalTrafficPolicy == v1core.ServiceInternalTrafficPolicyLocal
 	}
-	intLocalPol := (serIntTrafPol || svc.Annotations[svcLocalAnnotation] == "true")
-	if isClusterIP && intLocalPol && !hasLocalEndpoints {
+	if isClusterIP && serIntTrafPol && !hasLocalEndpoints {
 		return false, nil
 	}
 

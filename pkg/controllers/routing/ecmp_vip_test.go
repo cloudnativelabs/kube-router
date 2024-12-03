@@ -620,8 +620,8 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					service:       getClusterSvc(),
 					endpoints:     getNoLocalAddressesEPs(),
-					advertisedIPs: []string{},
-					withdrawnIPs:  []string{"10.0.0.1"},
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{},
 					annotations: map[string]string{
 						svcLocalAnnotation: "true",
 					},
@@ -629,8 +629,8 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					service:       getExternalSvc(),
 					endpoints:     getNoLocalAddressesEPs(),
-					advertisedIPs: []string{},
-					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1"},
 					annotations: map[string]string{
 						svcLocalAnnotation: "true",
 					},
@@ -638,8 +638,8 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					service:       getNodePortSvc(),
 					endpoints:     getNoLocalAddressesEPs(),
-					advertisedIPs: []string{},
-					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1"},
 					annotations: map[string]string{
 						svcLocalAnnotation: "true",
 					},
@@ -647,8 +647,8 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					service:       getLoadBalancerSvc(),
 					endpoints:     getNoLocalAddressesEPs(),
-					advertisedIPs: []string{},
-					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1", "10.0.255.1", "10.0.255.2"},
 					annotations: map[string]string{
 						svcLocalAnnotation: "true",
 					},
@@ -672,8 +672,8 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					service:       getClusterSvc(),
 					endpoints:     getNoLocalAddressesEPs(),
-					advertisedIPs: []string{},
-					withdrawnIPs:  []string{"10.0.0.1"},
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{},
 					annotations: map[string]string{
 						svcLocalAnnotation: "true",
 					},
@@ -681,8 +681,8 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					service:       getExternalSvc(),
 					endpoints:     getNoLocalAddressesEPs(),
-					advertisedIPs: []string{},
-					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1"},
 					annotations: map[string]string{
 						svcLocalAnnotation: "true",
 					},
@@ -690,8 +690,8 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					service:       getNodePortSvc(),
 					endpoints:     getNoLocalAddressesEPs(),
-					advertisedIPs: []string{},
-					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1"},
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1"},
 					annotations: map[string]string{
 						svcLocalAnnotation: "true",
 					},
@@ -699,8 +699,8 @@ func Test_getVIPsForService(t *testing.T) {
 				{
 					service:       getLoadBalancerSvc(),
 					endpoints:     getNoLocalAddressesEPs(),
-					advertisedIPs: []string{},
-					withdrawnIPs:  []string{"10.0.0.1", "1.1.1.1", "10.0.255.1", "10.0.255.2"},
+					advertisedIPs: []string{"10.0.0.1"},
+					withdrawnIPs:  []string{"1.1.1.1", "10.0.255.1", "10.0.255.2"},
 					annotations: map[string]string{
 						svcLocalAnnotation: "true",
 					},
