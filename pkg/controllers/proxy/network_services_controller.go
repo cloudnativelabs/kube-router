@@ -978,10 +978,11 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			svcInfo.extTrafficPolicy = &svc.Spec.ExternalTrafficPolicy
 
 			// The kube-router.io/service.local annotation has the ability to override the internal and external traffic
-			// policy that is set in the spec. In this case we set both to local when the annotation is true so that
-			// previous functionality of the annotation is best preserved.
+			// policy that is set in the spec. Previously, when this was active set both to local when the annotation is
+			// true so that previous functionality of the annotation is best preserved. However, this has proved to not
+			// be a good fit for ClusterIP traffic, so we retain cluster for internal traffic policy.
 			if svc.ObjectMeta.Annotations[svcLocalAnnotation] == "true" {
-				intTrafficPolicyLocal := v1.ServiceInternalTrafficPolicyLocal
+				intTrafficPolicyLocal := v1.ServiceInternalTrafficPolicyCluster
 				extTrafficPolicyLocal := v1.ServiceExternalTrafficPolicyLocal
 				svcInfo.intTrafficPolicy = &intTrafficPolicyLocal
 				svcInfo.extTrafficPolicy = &extTrafficPolicyLocal
