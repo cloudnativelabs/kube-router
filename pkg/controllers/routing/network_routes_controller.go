@@ -160,7 +160,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 	}
 
 	klog.V(1).Info("Populating ipsets.")
-	err = nrc.syncNodeIPSets(nrc.krNode)
+	err = nrc.syncNodeIPSets()
 	if err != nil {
 		klog.Errorf("Failed initial ipset setup: %s", err)
 	}
@@ -353,7 +353,7 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		// Update ipset entries
 		if nrc.enablePodEgress || nrc.enableOverlays {
 			klog.V(1).Info("Syncing ipsets")
-			err = nrc.syncNodeIPSets(nrc.krNode)
+			err = nrc.syncNodeIPSets()
 			if err != nil {
 				klog.Errorf("Error synchronizing ipsets: %s", err.Error())
 			}
@@ -788,7 +788,7 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	klog.Infof("Successfully cleaned the NetworkRoutesController configuration done by kube-router")
 }
 
-func (nrc *NetworkRoutingController) syncNodeIPSets(nodeIPAware utils.NodeIPAware) error {
+func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 	var err error
 	start := time.Now()
 	defer func() {
@@ -810,16 +810,16 @@ func (nrc *NetworkRoutingController) syncNodeIPSets(nodeIPAware utils.NodeIPAwar
 	currentPodCidrs := make(map[v1core.IPFamily][][]string)
 	currentNodeIPs := make(map[v1core.IPFamily][][]string)
 	for _, obj := range nodes {
-		node := obj.(*v1core.Node)
-		podCIDRs := getPodCIDRsFromAllNodeSources(node)
+		n := obj.(*v1core.Node)
+		podCIDRs := getPodCIDRsFromAllNodeSources(n)
 		if len(podCIDRs) < 1 {
-			klog.Warningf("Couldn't determine any Pod CIDRs for the %v node, skipping", node.Name)
+			klog.Warningf("Couldn't determine any Pod CIDRs for the %v node, skipping", n.Name)
 			continue
 		}
 		for _, cidr := range podCIDRs {
 			ip, _, err := net.ParseCIDR(cidr)
 			if err != nil {
-				klog.Warningf("Wasn't able to parse pod CIDR %s for node %s, skipping", cidr, node.Name)
+				klog.Warningf("Wasn't able to parse pod CIDR %s for node %s, skipping", cidr, n.Name)
 			}
 			if ip.To4() != nil {
 				currentPodCidrs[v1core.IPv4Protocol] = append(currentPodCidrs[v1core.IPv4Protocol],
@@ -831,10 +831,15 @@ func (nrc *NetworkRoutingController) syncNodeIPSets(nodeIPAware utils.NodeIPAwar
 		}
 
 		var ipv4Addrs, ipv6Addrs [][]string
-		for _, nodeIPv4 := range nodeIPAware.GetNodeIPv4Addrs() {
+		nrk, err := utils.NewRemoteKRNode(n)
+		if err != nil {
+			klog.Errorf("failed to create remote node object for node %s: %v", n.Name, err)
+			continue
+		}
+		for _, nodeIPv4 := range nrk.GetNodeIPv4Addrs() {
 			ipv4Addrs = append(ipv4Addrs, []string{nodeIPv4.String(), utils.OptionTimeout, "0"})
 		}
-		for _, nodeIPv6 := range nodeIPAware.GetNodeIPv6Addrs() {
+		for _, nodeIPv6 := range nrk.GetNodeIPv6Addrs() {
 			ipv6Addrs = append(ipv6Addrs, []string{nodeIPv6.String(), utils.OptionTimeout, "0"})
 		}
 		currentNodeIPs[v1core.IPv4Protocol] = append(currentNodeIPs[v1core.IPv4Protocol], ipv4Addrs...)
