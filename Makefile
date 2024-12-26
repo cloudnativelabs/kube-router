@@ -32,7 +32,7 @@ GOBGP_VERSION=v3.29.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v2.5.0
 MOQ_VERSION=v0.5.1
-CNI_VERSION=v1.4.0
+CNI_VERSION=v1.6.2
 UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
