@@ -26,7 +26,7 @@ BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 # Do not bump past Alpine 3.18 until upstream netfilter problems in iptables v1.8.10 are resolved. See:
 # https://github.com/cloudnativelabs/kube-router/issues/1676
 RUNTIME_BASE?=alpine:3.21
-DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.56.2
+DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.63.4
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.39.0
 GOBGP_VERSION=v3.29.0
 QEMU_IMAGE?=multiarch/qemu-user-static
