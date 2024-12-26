@@ -231,7 +231,6 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		switch family {
 		case v1.IPv4Protocol:
 			if endpoint.isIPv6 {
-				//nolint:goconst // don't need to make error messages a constant
 				klog.V(3).Infof("not adding endpoint %s to service %s with VIP %s because families don't "+
 					"match", endpoint.ip, svc.name, vip)
 				continue
