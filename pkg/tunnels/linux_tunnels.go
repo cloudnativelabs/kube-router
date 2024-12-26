@@ -256,7 +256,7 @@ func CleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
 	klog.V(1).Infof("Cleaning up any lingering tunnel interfaces named: %s", tunnelName)
 	if link, err := netlink.LinkByName(tunnelName); err == nil {
 		if err = netlink.LinkDel(link); err != nil {
-			klog.Errorf("Failed to delete tunnel link for the node due to " + err.Error())
+			klog.Errorf("failed to delete tunnel link for the node due to %v", err)
 		}
 	}
 }
