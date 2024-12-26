@@ -304,7 +304,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	// https://github.com/cloudnativelabs/kube-router/issues/282
 	err = nsc.setupIpvsFirewall()
 	if err != nil {
-		klog.Fatalf("error setting up ipvs firewall: %s" + err.Error())
+		klog.Fatalf("error setting up ipvs firewall: %v", err.Error())
 	}
 	nsc.ProxyFirewallSetup.Broadcast()
 
@@ -347,7 +347,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				klog.V(1).Info("Performing requested full sync of services")
 				err = nsc.doSync()
 				if err != nil {
-					klog.Errorf("Error during full sync in network service controller. Error: " + err.Error())
+					klog.Errorf("error during full sync in network service controller. Error: %v", err)
 				}
 			case synctypeIpvs:
 				// We call the component pieces of doSync() here because for methods that send this on the channel they
@@ -357,11 +357,11 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				nsc.mu.Lock()
 				err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
 				if err != nil {
-					klog.Errorf("Error during ipvs sync in network service controller. Error: " + err.Error())
+					klog.Errorf("error during ipvs sync in network service controller. Error: %v", err)
 				}
 				err = nsc.syncHairpinIptablesRules()
 				if err != nil {
-					klog.Errorf("Error syncing hairpin iptables rules: %s", err.Error())
+					klog.Errorf("error syncing hairpin iptables rules: %v", err)
 				}
 				nsc.mu.Unlock()
 			}
@@ -374,7 +374,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
 			err := nsc.doSync()
 			if err != nil {
-				klog.Errorf("Error during periodic ipvs sync in network service controller. Error: " + err.Error())
+				klog.Errorf("error during periodic ipvs sync in network service controller. Error: %v", err.Error())
 				klog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
 			} else {
 				healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
@@ -1822,7 +1822,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 	} else {
 		err = netlink.LinkDel(dummyVipInterface)
 		if err != nil {
-			klog.Errorf("Could not delete dummy interface " + KubeDummyIf + " due to " + err.Error())
+			klog.Errorf("could not delete dummy interface %s due to: %v", KubeDummyIf, err.Error())
 			return
 		}
 	}

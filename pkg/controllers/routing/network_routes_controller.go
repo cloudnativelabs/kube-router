@@ -394,8 +394,8 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		if err == nil {
 			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkRoutesController)
 		} else {
-			klog.Errorf("Error during periodic sync in network routing controller. Error: " + err.Error())
-			klog.Errorf("Skipping sending heartbeat from network routing controller as periodic sync failed.")
+			klog.Errorf("error during periodic sync in network routing controller. Error: %v", err)
+			klog.Errorf("skipping sending heartbeat from network routing controller as periodic sync failed.")
 		}
 
 		select {
@@ -461,7 +461,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 					}
 					klog.V(2).Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
 					if err := nrc.injectRoute(path); err != nil {
-						klog.Errorf("Failed to inject routes due to: " + err.Error())
+						klog.Errorf("failed to inject routes due to: %v", err)
 					}
 				}
 			}
@@ -477,7 +477,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 		},
 	}, pathWatch)
 	if err != nil {
-		klog.Errorf("failed to register monitor global routing table callback due to : " + err.Error())
+		klog.Errorf("failed to register monitor global routing table callback due to: %v", err)
 	}
 }
 
@@ -521,7 +521,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 			},
 		})
 		if err != nil {
-			return fmt.Errorf(err.Error())
+			return err
 		}
 		klog.V(1).Infof("Response from adding path: %s", response)
 	}
@@ -567,7 +567,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 				},
 			})
 			if err != nil {
-				return fmt.Errorf(err.Error())
+				return err
 			}
 			klog.V(1).Infof("Response from adding path: %s", response)
 		}
@@ -778,11 +778,11 @@ func (nrc *NetworkRoutingController) Cleanup() {
 	for _, ipset := range nrc.ipSetHandlers {
 		err = ipset.Save()
 		if err != nil {
-			klog.Errorf("Failed to clean up ipsets: " + err.Error())
+			klog.Errorf("failed to clean up ipsets: %v", err)
 		}
 		err = ipset.DestroyAllWithin()
 		if err != nil {
-			klog.Warningf("Error deleting ipset: %s", err.Error())
+			klog.Warningf("error deleting ipset: %v", err)
 		}
 	}
 
@@ -1074,7 +1074,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	if err := nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global}); err != nil {
-		return errors.New("failed to start BGP server due to : " + err.Error())
+		return fmt.Errorf("failed to start BGP server due to: %v", err)
 	}
 
 	go nrc.watchBgpUpdates()

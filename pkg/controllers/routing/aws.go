@@ -35,7 +35,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		providerID := strings.Replace(node.Spec.ProviderID, "///", "//", 1)
 		URL, err := url.Parse(providerID)
 		if err != nil {
-			klog.Errorf("Failed to parse URL for providerID " + providerID + " : " + err.Error())
+			klog.Errorf("failed to parse URL for providerID %s: %v", providerID, err)
 			return
 		}
 		instanceID := URL.Path
@@ -45,7 +45,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		metadataClient := ec2metadata.New(sess)
 		region, err := metadataClient.Region()
 		if err != nil {
-			klog.Errorf("Failed to disable source destination check due to: " + err.Error())
+			klog.Errorf("failed to disable source destination check due to: %v", err)
 			return
 		}
 		sess.Config.Region = aws.String(region)
@@ -66,9 +66,9 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 					"disabling src-dst check.")
 				return
 			}
-			klog.Errorf("Failed to disable source destination check due to: %v", err.Error())
+			klog.Errorf("failed to disable source destination check due to: %v", err)
 		} else {
-			klog.Infof("Disabled source destination check for the instance: " + instanceID)
+			klog.Infof("disabled source destination check for the instance: %s", instanceID)
 		}
 
 		// to prevent EC2 rejecting API call due to API throttling give a delay between the calls
