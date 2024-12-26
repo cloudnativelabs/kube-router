@@ -192,7 +192,6 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 				fouArgs = append(fouArgs, "fou", "add", "port", strFormattedEncapPort, "gue")
 				out, err := exec.Command("ip", fouArgs...).CombinedOutput()
 				if err != nil {
-					//nolint:goconst // don't need to make error messages a constant
 					return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
 						"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
 				}

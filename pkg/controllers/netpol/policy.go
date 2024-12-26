@@ -229,7 +229,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 					}
 					npc.ipSetHandlers[ipFamily].RefreshSet(namedPortIPSetName, setEntries, utils.TypeHashIP)
 
-					//nolint:goconst // don't need to make error messages a constant
 					comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
 						policy.name + " namespace " + policy.namespace
 					if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcPodIPSetName, namedPortIPSetName,
@@ -256,7 +255,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 		// with specified port (if any) and protocol
 		if ingressRule.matchAllSource && !ingressRule.matchAllPorts {
 			for _, portProtocol := range ingressRule.ports {
-				//nolint:goconst // don't need to make error messages a constant
 				comment := "rule to ACCEPT traffic from all sources to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				if err := npc.appendRuleToPolicyChain(policyChainName, comment, "", targetDestPodIPSetName,
@@ -302,7 +300,6 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 
 			if !ingressRule.matchAllPorts {
 				for _, portProtocol := range ingressRule.ports {
-					//nolint:goconst // don't need to make error messages a constant
 					comment := "rule to ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
 					if err := npc.appendRuleToPolicyChain(policyChainName, comment, srcIPBlockIPSetName,
@@ -413,7 +410,6 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 		// with specified port (if any) and protocol
 		if egressRule.matchAllDestinations && !egressRule.matchAllPorts {
 			for _, portProtocol := range egressRule.ports {
-				//nolint:goconst // don't need to make error messages a constant
 				comment := "rule to ACCEPT traffic from source pods to all destinations selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
 				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
