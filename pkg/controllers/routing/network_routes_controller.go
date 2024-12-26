@@ -14,6 +14,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/ccoveille/go-safecast"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
@@ -1060,11 +1061,16 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		localAddressList = append(localAddressList, addr)
 	}
 
+	intBGPPort, err := safecast.ToInt32(nrc.bgpPort)
+	if err != nil {
+		return fmt.Errorf("failed to convert BGP port to int32: %v", err)
+	}
+
 	global := &gobgpapi.Global{
 		Asn:             nodeAsnNumber,
 		RouterId:        nrc.routerID,
 		ListenAddresses: localAddressList,
-		ListenPort:      int32(nrc.bgpPort),
+		ListenPort:      intBGPPort,
 	}
 
 	if err := nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global}); err != nil {
@@ -1402,13 +1408,23 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	// Convert ints to uint32s
 	peerASNs := make([]uint32, 0)
 	for _, i := range kubeRouterConfig.PeerASNs {
-		peerASNs = append(peerASNs, uint32(i))
+		ui, err := safecast.ToUint32(i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert Peer ASNs to uint32: %s", err)
+		}
+
+		peerASNs = append(peerASNs, ui)
 	}
 
 	// Convert uints to uint16s
 	peerPorts := make([]uint32, 0)
 	for _, i := range kubeRouterConfig.PeerPorts {
-		peerPorts = append(peerPorts, uint32(i))
+		ui, err := safecast.ToUint32(i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert Peer Port to uint32: %s", err)
+		}
+
+		peerPorts = append(peerPorts, ui)
 	}
 
 	// PeerPasswords as cli params take precedence over password file

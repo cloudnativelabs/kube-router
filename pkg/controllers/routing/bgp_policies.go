@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ccoveille/go-safecast"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -135,10 +136,14 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 				if cidrLen < 0 || cidrLen > cidrMax {
 					return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
 				}
+				uCIDRLen, err := safecast.ToUint32(cidrLen)
+				if err != nil {
+					return fmt.Errorf("failed to convert CIDR length to uint32: %v", err)
+				}
 				prefixes = append(prefixes, &gobgpapi.Prefix{
 					IpPrefix:      cidr,
-					MaskLengthMin: uint32(cidrLen),
-					MaskLengthMax: uint32(cidrLen),
+					MaskLengthMin: uCIDRLen,
+					MaskLengthMax: uCIDRLen,
 				})
 			}
 			podCidrDefinedSet := &gobgpapi.DefinedSet{
@@ -318,7 +323,13 @@ func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
 			prefix := new(gobgpapi.Prefix)
 			prefix.IpPrefix = ipNet.String()
 			mask, _ := ipNet.Mask.Size()
-			prefix.MaskLengthMin = uint32(mask)
+
+			uIntMask, err := safecast.ToUint32(mask)
+			if err != nil {
+				return fmt.Errorf("failed to convert mask to uint32: %v", err)
+			}
+
+			prefix.MaskLengthMin = uIntMask
 			prefix.MaskLengthMax = uint32(ipv4MaskMinBits)
 			prefixes = append(prefixes, prefix)
 		}

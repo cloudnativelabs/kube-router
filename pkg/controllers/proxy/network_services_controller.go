@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ccoveille/go-safecast"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
@@ -731,16 +732,20 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		protocol = convertSvcProtoToSysCallProto(svc.protocol)
 		for _, ipvsSvc := range ipvsSvcs {
 
+			uPort, err := safecast.ToUint16(svc.port)
+			if err != nil {
+				klog.Errorf("failed to convert port %d to uint16: %v", svc.port, err)
+			}
 			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
 			case svc.clusterIP.String():
-				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+				if protocol == ipvsSvc.Protocol && uPort == ipvsSvc.Port {
 					pushMetric = true
 					svcVip = svc.clusterIP.String()
 				} else {
 					pushMetric = false
 				}
 			case nsc.krNode.GetPrimaryNodeIP().String():
-				if protocol == ipvsSvc.Protocol && uint16(svc.port) == ipvsSvc.Port {
+				if protocol == ipvsSvc.Protocol && uPort == ipvsSvc.Port {
 					pushMetric = true
 					svcVip = nsc.krNode.GetPrimaryNodeIP().String()
 				} else {
@@ -1541,14 +1546,21 @@ func ipvsDestinationString(d *ipvs.Destination) string {
 	return fmt.Sprintf("%s:%v (Family: %s, Weight: %v)", d.Address, d.Port, family, d.Weight)
 }
 
-func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) {
+func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) error {
 	if p {
+		uTimeout, err := safecast.ToUint32(timeout)
+		if err != nil {
+			return fmt.Errorf("failed to convert timeout to uint32: %v", err)
+		}
+
 		svc.Flags |= ipvsPersistentFlagHex
-		svc.Timeout = uint32(timeout)
+		svc.Timeout = uTimeout
 	} else {
 		svc.Flags &^= ipvsPersistentFlagHex
 		svc.Timeout = 0
 	}
+
+	return nil
 }
 
 func ipvsSetSchedFlags(svc *ipvs.Service, s schedFlags) {
