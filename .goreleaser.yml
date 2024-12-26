@@ -41,4 +41,4 @@ archives:
       - Documentation*
 
 snapshot:
-  name_template: SNAPSHOT-{{ .Commit }}
+  version_template: SNAPSHOT-{{ .Commit }}
