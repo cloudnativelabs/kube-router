@@ -32,10 +32,10 @@ func NewFakeLocalLinkQuerier(addrStrings []string, mtus []int) *FakeLocalLinkQue
 		ip := net.ParseIP(addr)
 		var netMask net.IPMask
 		if ip.To4() != nil {
-			//nolint:gomnd // Hardcoded value is used for testing purposes
+			//nolint:mnd // Hardcoded value is used for testing purposes
 			netMask = net.CIDRMask(24, 32)
 		} else {
-			//nolint:gomnd // Hardcoded value is used for testing purposes
+			//nolint:mnd // Hardcoded value is used for testing purposes
 			netMask = net.CIDRMask(64, 128)
 		}
 		ipNet := &net.IPNet{
