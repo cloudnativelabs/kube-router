@@ -146,7 +146,6 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 	}
 
 	for ipFamily, ipset := range npc.ipSetHandlers {
-		ipFamily := ipFamily
 		restoreStart := time.Now()
 		err := ipset.Restore()
 		restoreEndTime := time.Since(restoreStart)
