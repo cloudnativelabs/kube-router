@@ -597,7 +597,6 @@ func (nsc *NetworkServicesController) cleanupIpvsFirewall() {
 		}
 
 		for _, ipSetName := range []string{localIPsIPSetName, serviceIPsIPSetName, serviceIPPortsSetName} {
-			ipSetName := ipSetName
 			if _, ok := ipSetHandler.Sets()[ipSetName]; ok {
 				err = ipSetHandler.Destroy(ipSetName)
 				if err != nil {
