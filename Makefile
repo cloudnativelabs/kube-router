@@ -31,7 +31,7 @@ DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.39.0
 GOBGP_VERSION=v3.29.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v2.5.0
-MOQ_VERSION=v0.3.4
+MOQ_VERSION=v0.5.1
 CNI_VERSION=v1.4.0
 UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
