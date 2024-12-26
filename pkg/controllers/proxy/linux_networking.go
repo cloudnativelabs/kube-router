@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ccoveille/go-safecast"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/cri"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/docker/docker/client"
@@ -265,10 +266,18 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 			vip, svc.Address, protocol, svc.Protocol, port, svc.Port)
 		if vip.Equal(svc.Address) && protocol == svc.Protocol && port == svc.Port {
 			klog.V(2).Info("Service matched VIP")
+			ptim, err := safecast.ToUint32(persistentTimeout)
+			if err != nil {
+				return svcs, nil, fmt.Errorf("failed to convert persistent timeout to uint32: %v", err)
+			}
 			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
 				(!persistent && (svc.Flags&ipvsPersistentFlagHex) != 0) ||
-				svc.Timeout != uint32(persistentTimeout) {
-				ipvsSetPersistence(svc, persistent, persistentTimeout)
+				svc.Timeout != ptim {
+				err = ipvsSetPersistence(svc, persistent, persistentTimeout)
+				if err != nil {
+					return svcs, nil, fmt.Errorf("failed to set persistence for service %s due to: %v",
+						ipvsServiceString(svc), err)
+				}
 
 				err = ln.ipvsUpdateService(svc)
 				if err != nil {
@@ -323,7 +332,11 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 		Netmask:       ipMask,
 	}
 
-	ipvsSetPersistence(&svc, persistent, persistentTimeout)
+	err = ipvsSetPersistence(&svc, persistent, persistentTimeout)
+	if err != nil {
+		return svcs, nil, fmt.Errorf("failed to set persistence for service %s due to: %v",
+			ipvsServiceString(&svc), err)
+	}
 	ipvsSetSchedFlags(&svc, flags)
 
 	klog.V(1).Infof("%s didn't match any existing IPVS services, creating a new IPVS service",
@@ -356,13 +369,17 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uin
 		if fwMark == svc.FWMark {
 			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
 				(!persistent && (svc.Flags&ipvsPersistentFlagHex) != 0) {
-				ipvsSetPersistence(svc, persistent, persistentTimeout)
+				err := ipvsSetPersistence(svc, persistent, persistentTimeout)
+				if err != nil {
+					return nil, fmt.Errorf("failed to set persistence for service %s due to: %v",
+						ipvsServiceString(svc), err)
+				}
 
 				if changedIpvsSchedFlags(svc, flags) {
 					ipvsSetSchedFlags(svc, flags)
 				}
 
-				err := ln.ipvsUpdateService(svc)
+				err = ln.ipvsUpdateService(svc)
 				if err != nil {
 					return nil, fmt.Errorf("failed to update persistence flags for service %s due to %v",
 						ipvsServiceString(svc), err)
@@ -419,10 +436,13 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uin
 		SchedName:     ipvs.RoundRobin,
 	}
 
-	ipvsSetPersistence(&svc, persistent, persistentTimeout)
+	err := ipvsSetPersistence(&svc, persistent, persistentTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set persistence for service %s due to: %v", ipvsServiceString(&svc), err)
+	}
 	ipvsSetSchedFlags(&svc, flags)
 
-	err := ln.ipvsNewService(&svc)
+	err = ln.ipvsNewService(&svc)
 	if err != nil {
 		return nil, err
 	}
