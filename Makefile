@@ -17,7 +17,7 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
-DOCKER_BUILD_IMAGE?=golang:1.22.3-alpine3.18
+DOCKER_BUILD_IMAGE?=golang:1.23.6-alpine3.21
 ## These variables are used by the Dockerfile as the bases for building and creating the runtime container
 ## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
 GO_CACHE?=$(shell go env GOCACHE)
@@ -25,7 +25,7 @@ GO_MOD_CACHE?=$(shell go env GOMODCACHE)
 BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 # Do not bump past Alpine 3.18 until upstream netfilter problems in iptables v1.8.10 are resolved. See:
 # https://github.com/cloudnativelabs/kube-router/issues/1676
-RUNTIME_BASE?=alpine:3.18
+RUNTIME_BASE?=alpine:3.21
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v1.56.2
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.39.0
 GOBGP_VERSION=v3.29.0
