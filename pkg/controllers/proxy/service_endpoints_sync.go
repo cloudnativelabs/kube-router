@@ -824,7 +824,7 @@ func (nsc *NetworkServicesController) cleanupDSRService(fwMark uint32) error {
 		mangleTableRulesDump := bytes.Buffer{}
 		var mangleTableRules []string
 		if err := utils.SaveInto(iptablesBinary, "mangle", &mangleTableRulesDump); err != nil {
-			klog.Errorf("Failed to run iptables-save: %s" + err.Error())
+			klog.Errorf("failed to run iptables-save: %v", err)
 		} else {
 			mangleTableRules = strings.Split(mangleTableRulesDump.String(), "\n")
 		}
