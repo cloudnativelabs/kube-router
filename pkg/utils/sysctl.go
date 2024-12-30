@@ -29,13 +29,18 @@ type SysctlError struct {
 	additionalInfo string
 	err            error
 	option         string
+	hasValue       bool
 	value          int
 	fatal          bool
 }
 
 // Error return the error as string
 func (e *SysctlError) Error() string {
-	return fmt.Sprintf("Sysctl %s=%d : %s (%s)", e.option, e.value, e.err, e.additionalInfo)
+	value := ""
+	if e.hasValue {
+		value = fmt.Sprintf("=%d", e.value)
+	}
+	return fmt.Sprintf("Sysctl %s%s : %s (%s)", e.option, value, e.err, e.additionalInfo)
 }
 
 // IsFatal was the error fatal and reason to exit kube-router
@@ -48,6 +53,39 @@ func (e *SysctlError) Unwrap() error {
 	return e.err
 }
 
+func sysctlStat(path string, hasValue bool, value int) (string, *SysctlError) {
+	sysctlPath := fmt.Sprintf("/proc/sys/%s", path)
+	if _, err := os.Stat(sysctlPath); err != nil {
+		if os.IsNotExist(err) {
+			return sysctlPath, &SysctlError{
+				"option not found, Does your kernel version support this feature?",
+				err, path, hasValue, value, false}
+		}
+		return sysctlPath, &SysctlError{"path existed, but could not be stat'd", err, path, hasValue, value, true}
+	}
+	return sysctlPath, nil
+}
+
+// GetSysctlSingleTemplate gets a sysctl value by first formatting the PathTemplate parameter with the substitute string
+// and then getting the sysctl value and converting it into a string
+func GetSysctlSingleTemplate(pathTemplate string, substitute string) (string, *SysctlError) {
+	actualPath := fmt.Sprintf(pathTemplate, substitute)
+	return GetSysctl(actualPath)
+}
+
+// GetSysctl gets a sysctl value
+func GetSysctl(path string) (string, *SysctlError) {
+	sysctlPath, err := sysctlStat(path, false, 0)
+	if err != nil {
+		return "", err
+	}
+	buf, readErr := os.ReadFile(sysctlPath)
+	if readErr != nil {
+		return "", &SysctlError{"path could not be read", err, path, false, 0, true}
+	}
+	return string(buf), nil
+}
+
 // SetSysctlSingleTemplate sets a sysctl value by first formatting the PathTemplate parameter with the substitute string
 // and then setting the sysctl to the value parameter
 func SetSysctlSingleTemplate(pathTemplate string, substitute string, value int) *SysctlError {
@@ -57,18 +95,13 @@ func SetSysctlSingleTemplate(pathTemplate string, substitute string, value int) 
 
 // SetSysctl sets a sysctl value
 func SetSysctl(path string, value int) *SysctlError {
-	sysctlPath := fmt.Sprintf("/proc/sys/%s", path)
-	if _, err := os.Stat(sysctlPath); err != nil {
-		if os.IsNotExist(err) {
-			return &SysctlError{
-				"option not found, Does your kernel version support this feature?",
-				err, path, value, false}
-		}
-		return &SysctlError{"path existed, but could not be stat'd", err, path, value, true}
-	}
-	err := os.WriteFile(sysctlPath, []byte(strconv.Itoa(value)), 0640)
+	sysctlPath, err := sysctlStat(path, true, value)
 	if err != nil {
-		return &SysctlError{"path could not be set", err, path, value, true}
+		return err
+	}
+	writeErr := os.WriteFile(sysctlPath, []byte(strconv.Itoa(value)), 0640)
+	if writeErr != nil {
+		return &SysctlError{"path could not be set", err, path, true, value, true}
 	}
 	return nil
 }

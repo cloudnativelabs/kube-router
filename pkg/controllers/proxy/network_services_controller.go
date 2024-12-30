@@ -286,10 +286,24 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	setSysCtlAndCheckError(utils.IPv4ConfAllArpAnnounce, arpAnnounceUseBestLocalAddress)
 
-	// Ensure rp_filter=2 for DSR capability, see:
+	// Only override rp_filter if it is set to 1, as enabling it from 0 to 2 can cause issues with some network configurations
+	rpFilter := false
+	for _, ifname := range []string{"all", "kube-bridge", nsc.krNode.GetNodeInterfaceName()} {
+		rpFilterValue, err := utils.GetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, ifname)
+		if err != nil {
+			klog.Errorf("failed to get rp_filter value for %s: %s", ifname, err.Error())
+			continue
+		}
+		if strings.TrimSpace(rpFilterValue) == "1" {
+			rpFilter = true
+			break
+		}
+	}
+
+	// Ensure rp_filter=2 (or leave 0 untouched) for DSR capability, see:
 	// * https://access.redhat.com/solutions/53031
 	// * https://github.com/cloudnativelabs/kube-router/pull/1651#issuecomment-2072851683
-	if nsc.krNode.IsIPv4Capable() {
+	if nsc.krNode.IsIPv4Capable() && rpFilter {
 		sysctlErr := utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "all", 2)
 		if sysctlErr != nil {
 			if sysctlErr.IsFatal() {
