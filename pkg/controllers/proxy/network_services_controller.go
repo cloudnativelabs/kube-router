@@ -225,6 +225,15 @@ type endpointSliceInfo struct {
 // map of all endpoints, with unique service id(namespace name, service name, port) as key
 type endpointSliceInfoMap map[string][]endpointSliceInfo
 
+func checkRPFilter1(ifname string) bool {
+	rpFilterValue, err := utils.GetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, ifname)
+	if err != nil {
+		klog.Errorf("failed to get rp_filter value for %s: %s", ifname, err.Error())
+		return false
+	}
+	return strings.TrimSpace(rpFilterValue) == "1"
+}
+
 // Run periodically sync ipvs configuration to reflect desired state of services and endpoints
 func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat,
 	stopCh <-chan struct{}, wg *sync.WaitGroup) {
@@ -286,16 +295,22 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 	// https://github.com/kubernetes/kubernetes/pull/70530/files
 	setSysCtlAndCheckError(utils.IPv4ConfAllArpAnnounce, arpAnnounceUseBestLocalAddress)
 
-	// Ensure rp_filter=2 for DSR capability, see:
+	// Ensure rp_filter=2 (or leave 0 untouched) for DSR capability, see:
 	// * https://access.redhat.com/solutions/53031
 	// * https://github.com/cloudnativelabs/kube-router/pull/1651#issuecomment-2072851683
+	// Only override rp_filter if it is set to 1, as enabling it from 0 to 2 can cause issues
+	// with some network configurations which use reverse routing
 	if nsc.krNode.IsIPv4Capable() {
-		sysctlErr := utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, "all", 2)
-		if sysctlErr != nil {
-			if sysctlErr.IsFatal() {
-				klog.Fatal(sysctlErr.Error())
-			} else {
-				klog.Error(sysctlErr.Error())
+		for _, ifname := range []string{"all", "kube-bridge", "kube-dummy-if", nsc.krNode.GetNodeInterfaceName()} {
+			if checkRPFilter1(ifname) {
+				sysctlErr := utils.SetSysctlSingleTemplate(utils.IPv4ConfRPFilterTemplate, ifname, 2)
+				if sysctlErr != nil {
+					if sysctlErr.IsFatal() {
+						klog.Fatal(sysctlErr.Error())
+					} else {
+						klog.Error(sysctlErr.Error())
+					}
+				}
 			}
 		}
 	}
