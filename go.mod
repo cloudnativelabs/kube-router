@@ -7,7 +7,7 @@ require (
 	github.com/hashicorp/go-version v1.7.0
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.36.1
+	github.com/onsi/gomega v1.36.2
 	github.com/osrg/gobgp/v3 v3.29.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/spf13/pflag v1.0.5
@@ -17,7 +17,7 @@ require (
 	golang.org/x/net v0.33.0
 	golang.org/x/sys v0.28.0
 	google.golang.org/grpc v1.69.2
-	google.golang.org/protobuf v1.36.0
+	google.golang.org/protobuf v1.36.1
 	k8s.io/api v0.31.3
 	k8s.io/apimachinery v0.31.3
 	k8s.io/client-go v0.31.3
