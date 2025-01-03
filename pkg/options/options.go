@@ -89,7 +89,7 @@ type KubeRouterConfig struct {
 }
 
 func NewKubeRouterConfig() *KubeRouterConfig {
-	//nolint:gomnd // Here we are specifying the names of the literals which is very similar to constant behavior
+	//nolint:mnd // Here we are specifying the names of the literals which is very similar to constant behavior
 	return &KubeRouterConfig{
 		BGPGracefulRestartDeferralTime: 360 * time.Second,
 		BGPGracefulRestartTime:         90 * time.Second,

@@ -135,6 +135,10 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		if err != nil {
 			return fmt.Errorf("failed creating dummy interface: %v", err)
 		}
+		sPort, err := utils.IntToUInt16(svc.port)
+		if err != nil {
+			return fmt.Errorf("failed to convert service port to uint16: %v", err)
+		}
 
 		for family, famClusIPs := range clusterIPs {
 			var nodeIP string
@@ -159,7 +163,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 
 				// create IPVS service for the service to be exposed through the cluster ip
 				ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc, clusterIP,
-					protocol, uint16(svc.port))
+					protocol, sPort)
 				// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
 				if svcID == "" {
 					// not logging an error here because it was already logged in the addIPVSService function
@@ -226,7 +230,6 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		switch family {
 		case v1.IPv4Protocol:
 			if endpoint.isIPv6 {
-				//nolint:goconst // don't need to make error messages a constant
 				klog.V(3).Infof("not adding endpoint %s to service %s with VIP %s because families don't "+
 					"match", endpoint.ip, svc.name, vip)
 				continue
@@ -241,13 +244,19 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 			syscallINET = syscall.AF_INET6
 		}
 
+		ePort, err := utils.IntToUInt16(endpoint.port)
+		if err != nil {
+			klog.Errorf("failed to convert endpoint port to uint16: %v", err)
+			continue
+		}
+
 		dst := ipvs.Destination{
 			Address:       eIP,
 			AddressFamily: syscallINET,
-			Port:          uint16(endpoint.port),
+			Port:          ePort,
 			Weight:        1,
 		}
-		err := nsc.ln.ipvsAddServer(ipvsSvc, &dst)
+		err = nsc.ln.ipvsAddServer(ipvsSvc, &dst)
 		if err != nil {
 			klog.Errorf("encountered error adding endpoint to service: %v", err)
 			continue
@@ -282,6 +291,11 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 			continue
 		}
 
+		nPort, err := utils.IntToUInt16(svc.nodePort)
+		if err != nil {
+			return fmt.Errorf("failed to convert node port to uint16: %v", err)
+		}
+
 		var svcID string
 		var ipvsSvc *ipvs.Service
 		if nsc.nodeportBindOnAllIP {
@@ -312,7 +326,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 				for _, addr := range addrs {
 
 					ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc, addr,
-						protocol, uint16(svc.nodePort))
+						protocol, nPort)
 					// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
 					if svcID == "" {
 						continue
@@ -322,7 +336,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 			}
 		} else {
 			ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc,
-				nsc.krNode.GetPrimaryNodeIP(), protocol, uint16(svc.nodePort))
+				nsc.krNode.GetPrimaryNodeIP(), protocol, nPort)
 			// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
 			if svcID == "" {
 				continue
@@ -416,6 +430,11 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 		return fmt.Errorf("failed get list of IPVS services due to: %v", err)
 	}
 
+	sPort, err := utils.IntToUInt16(svc.port)
+	if err != nil {
+		return fmt.Errorf("failed to convert service port to uint16: %v", err)
+	}
+
 	// ensure director with vip assigned
 	err = nsc.ln.ipAddrAdd(dummyVipInterface, externalIP.String(), nodeIP.String(), true)
 	if err != nil && err.Error() != IfaceHasAddr {
@@ -424,8 +443,7 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 	}
 
 	// create IPVS service for the service to be exposed through the external ip
-	_, svcID, ipvsExternalIPSvc = nsc.addIPVSService(ipvsSvcs, svcEndpointMap, svc, externalIP, protocol,
-		uint16(svc.port))
+	_, svcID, ipvsExternalIPSvc = nsc.addIPVSService(ipvsSvcs, svcEndpointMap, svc, externalIP, protocol, sPort)
 	if svcID == "" {
 		return fmt.Errorf("failed to create ipvs service for external ip: %s", externalIP)
 	}
@@ -510,7 +528,12 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 		return fmt.Errorf("failed to generate FW mark")
 	}
 
-	ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(ipvsSvcs, fwMark, sysFamily, protocol, uint16(svcIn.port),
+	sInPort, err := utils.IntToUInt16(svcIn.port)
+	if err != nil {
+		return fmt.Errorf("failed to convert serviceIn port to uint16: %v", err)
+	}
+
+	ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(ipvsSvcs, fwMark, sysFamily, protocol, sInPort,
 		svcIn.sessionAffinity, svcIn.sessionAffinityTimeoutSeconds, svcIn.scheduler, svcIn.flags)
 	if err != nil {
 		return fmt.Errorf("failed to create IPVS service for FWMark service: %d (external IP: %s) due to: %s",
@@ -570,12 +593,17 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 			syscallINET = syscall.AF_INET6
 		}
 
+		ePort, err := utils.IntToUInt16(endpoint.port)
+		if err != nil {
+			return fmt.Errorf("failed to convert endpoint port to uint16: %v", err)
+		}
+
 		// create the basic IPVS destination record
 		dst := ipvs.Destination{
 			Address:         eIP,
 			AddressFamily:   syscallINET,
 			ConnectionFlags: ipvs.ConnectionFlagTunnel,
-			Port:            uint16(endpoint.port),
+			Port:            ePort,
 			Weight:          1,
 		}
 
@@ -794,7 +822,7 @@ func (nsc *NetworkServicesController) cleanupDSRService(fwMark uint32) error {
 		mangleTableRulesDump := bytes.Buffer{}
 		var mangleTableRules []string
 		if err := utils.SaveInto(iptablesBinary, "mangle", &mangleTableRulesDump); err != nil {
-			klog.Errorf("Failed to run iptables-save: %s" + err.Error())
+			klog.Errorf("failed to run iptables-save: %v", err)
 		} else {
 			mangleTableRules = strings.Split(mangleTableRulesDump.String(), "\n")
 		}

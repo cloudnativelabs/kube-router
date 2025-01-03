@@ -25,7 +25,7 @@ FROM ${RUNTIME_BASE}
 
 RUN apk add --no-cache \
       iptables \
-      ip6tables \
+      iptables-legacy \
       ipset \
       iproute2 \
       ipvsadm \
@@ -36,6 +36,11 @@ RUN apk add --no-cache \
     mkdir -p /usr/local/share/bash-completion && \
     curl -L -o /usr/local/share/bash-completion/bash-completion \
         https://raw.githubusercontent.com/scop/bash-completion/master/bash_completion
+
+COPY ./build/apks /apks
+
+RUN apk add --allow-untrusted /apks/*.apk && \
+    rm -rf /apks
 
 COPY build/image-assets/bashrc /root/.bashrc
 COPY build/image-assets/profile /root/.profile
