@@ -3,9 +3,9 @@
 ## Preparing for the release
 
 * Ensure that the Golang release used is still supported. Definition happens currently in
-  [Github Workflow](.github/workflow/ci.yml).
+  [Github Workflow](.github/workflow/ci.yml) and [Makefile](Makefile).
 * Ensure that the Alpine version used in container builds is still supported. Definition happens currently in
-  [Github Workflow](.github/workflow/ci.yml).
+  [Github Workflow](.github/workflow/ci.yml) and [Makefile](Makefile).
 * Ensure that Golang dependencies are updated.
   `go list -mod=mod -u -m -f '{{.}}{{if .Indirect}} IAMINDIRECT{{end}}' all | grep -v IAMINDIRECT` lists possible
   updates.
@@ -13,6 +13,10 @@
   in [Makefile](Makefile) and [go.mod](go.mod).
 * Ensure that the Kubernetes object definitions do not contain deprecated object types. Definition currently is in
   kube-router's [Daemonset](daemonset) folder.
+* Ensure GitHub actions are updated:
+```sh
+dependabot update github_actions cloudnativelabs/kube-router
+```
 
 ## New major/minor release
 
