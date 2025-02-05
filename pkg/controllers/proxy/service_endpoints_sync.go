@@ -221,7 +221,7 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 			Address:       eIP,
 			AddressFamily: syscallINET,
 			Port:          uint16(endpoint.port),
-			Weight:        1,
+			Weight:        endpoint.weight,
 		}
 		err := nsc.ln.ipvsAddServer(ipvsSvc, &dst)
 		if err != nil {
