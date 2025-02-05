@@ -116,8 +116,8 @@ Usage of kube-router:
       --peer-router-passwords strings                 Password for authenticating against the BGP peer defined with "--peer-router-ips".
       --peer-router-passwords-file string             Path to file containing password for authenticating against the BGP peer defined with "--peer-router-ips". --peer-router-passwords will be preferred if both are set.
       --peer-router-ports uints                       The remote port of the external BGP to which all nodes will peer. If not set, default BGP port (179) will be used. (default [])
+      --pod-egress-ip-annotation string               Node annotation to determine the ip to use for pod egress. If no annotation is found on the node, the pod source ip will be masqueraded to the node ip if pod egress is enabled. (default "kube-router.io/pod.egress.ip")
       --router-id string                              BGP router-id. Must be specified in a ipv6 only cluster, "generate" can be specified to generate the router id.
-      --pod-egress-ip-annotation string Node annotation to determine the ip to use for pod egress. If no annotation is found on the node, the pod source ip will be masqueraded to the node ip if pod egress is enabled. (default "kube-router.io/pod.egress.ip")
       --routes-sync-period duration                   The delay between route updates and advertisements (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --run-firewall                                  Enables Network Policy -- sets up iptables to provide ingress firewall for pods. (default true)
       --run-loadbalancer                              Enable loadbalancer address allocator
@@ -134,33 +134,33 @@ Usage of kube-router:
 ## requirements
 
 - Kube-router need to access kubernetes API server to get information on pods, services, endpoints, network policies
-  etc. The very minimum information it requires is the details on where to access the kubernetes API server. This
-  information can be passed as:
+   etc. The very minimum information it requires is the details on where to access the kubernetes API server. This
+   information can be passed as:
 
 ```sh
 kube-router --master=http://192.168.1.99:8080/` or `kube-router --kubeconfig=<path to kubeconfig file>
 ```
 
 - If you run kube-router as agent on the node, ipset package must be installed on each of the nodes (when run as
-  daemonset, container image is prepackaged with ipset)
+   daemonset, container image is prepackaged with ipset)
 
 - If you choose to use kube-router for pod-to-pod network connectivity then Kubernetes controller manager need to be
-  configured to allocate pod CIDRs by passing `--allocate-node-cidrs=true` flag and providing a `cluster-cidr` (i.e. by
-  passing --cluster-cidr=10.1.0.0/16 for e.g.)
+   configured to allocate pod CIDRs by passing `--allocate-node-cidrs=true` flag and providing a `cluster-cidr` (i.e. by
+   passing --cluster-cidr=10.1.0.0/16 for e.g.)
 
 - If you choose to run kube-router as daemonset in Kubernetes version below v1.15, both kube-apiserver and kubelet must
-  be run with `--allow-privileged=true` option. In later Kubernetes versions, only kube-apiserver must be run with
-  `--allow-privileged=true` option and if PodSecurityPolicy admission controller is enabled, you should create
-  PodSecurityPolicy, allowing privileged kube-router pods.
-  - Additionally, when run in daemonset mode, it is highly recommended that you keep netfilter related userspace host
-    tooling like `iptables`, `ipset`, and `ipvsadm` in sync with the versions that are distributed by Alpine inside the
-    kube-router container. This will help avoid conflicts that can potentially arise when both the host's userspace and
-    kube-router's userspace tooling modifies netfilter kernel definitions. See:
-    https://github.com/cloudnativelabs/kube-router/issues/1370 for more information.
+   be run with `--allow-privileged=true` option. In later Kubernetes versions, only kube-apiserver must be run with
+   `--allow-privileged=true` option and if PodSecurityPolicy admission controller is enabled, you should create
+   PodSecurityPolicy, allowing privileged kube-router pods.
+   - Additionally, when run in daemonset mode, it is highly recommended that you keep netfilter related userspace host
+   tooling like `iptables`, `ipset`, and `ipvsadm` in sync with the versions that are distributed by Alpine inside the
+   kube-router container. This will help avoid conflicts that can potentially arise when both the host's userspace and
+   kube-router's userspace tooling modifies netfilter kernel definitions. See:
+   https://github.com/cloudnativelabs/kube-router/issues/1370 for more information.
 
 - If you choose to use kube-router for pod-to-pod network connecitvity then Kubernetes cluster must be configured to use
-  CNI network plugins. On each node CNI conf file is expected to be present as /etc/cni/net.d/10-kuberouter.conf
-  `bridge` CNI plugin and `host-local` for IPAM should be used. A sample conf file that can be downloaded as
+   CNI network plugins. On each node CNI conf file is expected to be present as /etc/cni/net.d/10-kuberouter.conf
+   `bridge` CNI plugin and `host-local` for IPAM should be used. A sample conf file that can be downloaded as
 
 ```sh
 wget -O /etc/cni/net.d/10-kuberouter.conf https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/cni/10-kuberouter.conf`

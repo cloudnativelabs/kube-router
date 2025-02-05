@@ -386,10 +386,13 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		nrc.advertiseVIPs(toAdvertise)
 		nrc.withdrawVIPs(toWithdraw)
 
-		//advertise external egress IP if there is one configured
+		// advertise external egress IP if there is one configured
 		if nrc.egressIP != nil {
 			klog.V(1).Infof("Performing periodic sync of pod egress IP")
-			nrc.bgpAdvertiseVIP(nrc.egressIP.String())
+			err = nrc.bgpAdvertiseVIP(nrc.egressIP.String())
+			if err != nil {
+				klog.Errorf("Failed to advertise egress ip %s: %s, continuing", nrc.egressIP.String(), err.Error())
+			}
 			err = nrc.addEgressIP()
 			if err != nil {
 				klog.Errorf("Failed to assign egress ip %s to egress interface: %s, continuing", nrc.egressIP.String(), err.Error())
@@ -1784,7 +1787,7 @@ func (nrc *NetworkRoutingController) addEgressIP() error {
 }
 
 func (nrc *NetworkRoutingController) delEgressIP() error {
-	//remove the whole dummy interface used to attach the egress ip to
+	// remove the whole dummy interface used to attach the egress ip to
 	egressIf, err := netlink.LinkByName(EGRES_INTERFACE)
 
 	if err != nil {
