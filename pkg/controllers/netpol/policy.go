@@ -98,6 +98,13 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 		}
 	}()
 
+	for _, ipset := range npc.ipSetHandlers {
+		err := ipset.Save()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	// run through all network policies
 	for _, policy := range networkPoliciesInfo {
 		currentPodIPs := make(map[api.IPFamily][]string)
