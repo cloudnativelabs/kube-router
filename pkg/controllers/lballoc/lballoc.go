@@ -155,7 +155,7 @@ func (lbc *LoadBalancerController) runLeaderElection(ctx context.Context, isLead
 	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
 		Lock:            lbc.lock,
 		ReleaseOnCancel: true,
-		LeaseDuration:   15 * time.Second, //nolint:gomnd // No reason for a 15 second constant
+		LeaseDuration:   15 * time.Second, //nolint:mnd // No reason for a 15 second constant
 		RenewDeadline:   10 * time.Second,
 		RetryPeriod:     2 * time.Second,
 		Callbacks: leaderelection.LeaderCallbacks{

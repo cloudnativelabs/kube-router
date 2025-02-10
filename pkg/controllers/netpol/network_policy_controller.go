@@ -308,7 +308,6 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	}
 
 	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
-		ipFamily := ipFamily
 		restoreStart := time.Now()
 		err := iptablesSaveRestore.Restore("filter", npc.filterTableRules[ipFamily].Bytes())
 		restoreEndTime := time.Since(restoreStart)
@@ -855,7 +854,6 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	// Validate that ClusterIP service range type matches the configuration
 	if config.EnableIPv4 && !config.EnableIPv6 {
 		if !netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[0]) {
-			//nolint:goconst // we don't care about abstracting an error message
 			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
 				"IPv4 is enabled but only IPv6 address is provided")
 		}

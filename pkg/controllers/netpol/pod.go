@@ -82,7 +82,6 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		for ipFamily, filterTableRules := range npc.filterTableRules {
 			_, err := getPodIPForFamily(pod, ipFamily)
 			if err != nil {
-				//nolint:goconst // don't need to make error messages a constant
 				klog.V(2).Infof("unable to get address for pod: %s -- skipping drop rules for pod "+
 					"(this is normal for pods that are not dual-stack)", err.Error())
 				continue

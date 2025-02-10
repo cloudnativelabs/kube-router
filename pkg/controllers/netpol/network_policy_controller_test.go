@@ -574,7 +574,7 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 		}
 		for ipFamily, filterTableRules := range krNetPol.filterTableRules {
 			for _, np := range netpols {
-				fmt.Printf(np.policyType)
+				fmt.Print(np.policyType)
 				if np.policyType == kubeEgressPolicyType || np.policyType == kubeBothPolicyType {
 					err = krNetPol.processEgressRules(np, "", nil, "1", ipFamily)
 					if err != nil {
