@@ -2,13 +2,14 @@ module github.com/cloudnativelabs/kube-router/v2
 
 require (
 	github.com/aws/aws-sdk-go v1.55.6
+	github.com/ccoveille/go-safecast v1.5.0
 	github.com/coreos/go-iptables v0.8.0
 	github.com/docker/docker v27.5.1+incompatible
 	github.com/hashicorp/go-version v1.7.0
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.36.2
-	github.com/osrg/gobgp/v3 v3.29.0
+	github.com/osrg/gobgp/v3 v3.35.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/spf13/pflag v1.0.6
 	github.com/stretchr/testify v1.10.0
@@ -29,7 +30,6 @@ require (
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/ccoveille/go-safecast v1.5.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -115,5 +115,4 @@ require (
 )
 
 go 1.22.0
-
-toolchain go1.22.3
+toolchain go1.23.6
