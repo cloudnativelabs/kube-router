@@ -122,6 +122,7 @@ type NetworkRoutingController struct {
 	bgpServerStarted               bool
 	bgpHoldtime                    float64
 	bgpPort                        uint32
+	goBGPAdminPort                 uint16
 	bgpRRClient                    bool
 	bgpRRServer                    bool
 	bgpClusterID                   string
@@ -1017,7 +1018,8 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	if grpcServer {
 		nrc.bgpServer = gobgp.NewBgpServer(
 			gobgp.GrpcListenAddress(net.JoinHostPort(nrc.krNode.GetPrimaryNodeIP().String(),
-				"50051") + "," + "127.0.0.1:50051"))
+				strconv.FormatUint(uint64(nrc.goBGPAdminPort), 10)) + "," +
+				fmt.Sprintf("127.0.0.1:%d", nrc.goBGPAdminPort)))
 	} else {
 		nrc.bgpServer = gobgp.NewBgpServer()
 	}
@@ -1404,6 +1406,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.CNIFirewallSetup = sync.NewCond(&sync.Mutex{})
 
 	nrc.bgpPort = kubeRouterConfig.BGPPort
+	nrc.goBGPAdminPort = kubeRouterConfig.GoBGPAdminPort
 
 	// Convert ints to uint32s
 	peerASNs := make([]uint32, 0)
