@@ -1,15 +1,18 @@
 package routing
 
 import (
+	"context"
+	"errors"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 	"k8s.io/klog/v2"
 
 	v1core "k8s.io/api/core/v1"
@@ -41,30 +44,34 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		instanceID := URL.Path
 		instanceID = strings.Trim(instanceID, "/")
 
-		sess, _ := session.NewSession(aws.NewConfig().WithMaxRetries(awsMaxRetries))
-		metadataClient := ec2metadata.New(sess)
-		region, err := metadataClient.Region()
+		cfg, _ := config.LoadDefaultConfig(context.TODO(),
+			config.WithRetryMaxAttempts(awsMaxRetries))
+		metadataClient := imds.NewFromConfig(cfg)
+		region, err := metadataClient.GetRegion(context.TODO(), &imds.GetRegionInput{})
 		if err != nil {
 			klog.Errorf("failed to disable source destination check due to: %v", err)
 			return
 		}
-		sess.Config.Region = aws.String(region)
-		ec2Client := ec2.New(sess)
-		_, err = ec2Client.ModifyInstanceAttribute(
+		cfg.Region = region.Region
+		ec2Client := ec2.NewFromConfig(cfg)
+		_, err = ec2Client.ModifyInstanceAttribute(context.TODO(),
 			&ec2.ModifyInstanceAttributeInput{
 				InstanceId: aws.String(instanceID),
-				SourceDestCheck: &ec2.AttributeBooleanValue{
+				SourceDestCheck: &types.AttributeBooleanValue{
 					Value: aws.Bool(false),
 				},
 			},
 		)
 		if err != nil {
-			awsErr := err.(awserr.Error)
-			if awsErr.Code() == "UnauthorizedOperation" {
-				nrc.ec2IamAuthorized = false
-				klog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping " +
-					"disabling src-dst check.")
-				return
+			var apiErr smithy.APIError
+			if errors.As(err, &apiErr) {
+				if apiErr.ErrorCode() == "UnauthorizedOperation" {
+					nrc.ec2IamAuthorized = false
+					klog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping "+
+						"disabling src-dst check. %v", apiErr.ErrorMessage())
+					return
+
+				}
 			}
 			klog.Errorf("failed to disable source destination check due to: %v", err)
 		} else {
