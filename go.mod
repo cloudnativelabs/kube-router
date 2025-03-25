@@ -2,7 +2,7 @@ module github.com/cloudnativelabs/kube-router/v2
 
 require (
 	github.com/aws/aws-sdk-go v1.55.6
-	github.com/ccoveille/go-safecast v1.5.0
+	github.com/ccoveille/go-safecast v1.6.1
 	github.com/coreos/go-iptables v0.8.0
 	github.com/docker/docker v28.0.1+incompatible
 	github.com/hashicorp/go-version v1.7.0
