@@ -167,7 +167,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.GlobalHairpinMode, "hairpin-mode", false,
 		"Add iptables rules for every Service Endpoint to support hairpin traffic.")
 	fs.Uint16Var(&s.GoBGPAdminPort, "gobgp-admin-port", defaultGoBGPAdminPort,
-		"Port to connect to GoBGP for administrative purposes.")
+		"Port to connect to GoBGP for administrative purposes. Setting this to 0 will disable the GoBGP gRPC server.")
 	fs.Uint16Var(&s.HealthPort, "health-port", defaultHealthCheckPort, "Health check port, 0 = Disabled")
 	fs.BoolVarP(&s.HelpRequested, "help", "h", false,
 		"Print usage information.")

@@ -1015,7 +1015,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		}
 	}
 
-	if grpcServer {
+	if grpcServer && nrc.goBGPAdminPort != 0 {
 		nrc.bgpServer = gobgp.NewBgpServer(
 			gobgp.GrpcListenAddress(net.JoinHostPort(nrc.krNode.GetPrimaryNodeIP().String(),
 				strconv.FormatUint(uint64(nrc.goBGPAdminPort), 10)) + "," +
