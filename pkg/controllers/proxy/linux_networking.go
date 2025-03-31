@@ -157,7 +157,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: parsedIP, Mask: netMask}, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrAdd(iface, naddr)
 	if err != nil && err.Error() != IfaceHasAddr {
-		klog.Errorf("failed to assign cluster ip %s to dummy interface: %s", naddr.IPNet.IP.String(), err.Error())
+		klog.Errorf("failed to assign cluster ip %s to dummy interface: %s", naddr.IP.String(), err.Error())
 		return err
 	}
 
@@ -522,8 +522,8 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 				err)
 		}
 
-		if !(strings.Contains(string(out), externalIPRouteTableName) ||
-			strings.Contains(string(out), externalIPRouteTableID)) {
+		if !strings.Contains(string(out), externalIPRouteTableName) &&
+			!strings.Contains(string(out), externalIPRouteTableID) {
 			err = runIPCommandsWithArgs(ipArgs, "rule", "add", "prio", "32765", "from", "all", "lookup",
 				externalIPRouteTableID).Run()
 			if err != nil {

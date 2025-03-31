@@ -941,36 +941,36 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 				targetPort:          port.TargetPort.String(),
 				protocol:            strings.ToLower(string(port.Protocol)),
 				nodePort:            int(port.NodePort),
-				name:                svc.ObjectMeta.Name,
-				namespace:           svc.ObjectMeta.Namespace,
+				name:                svc.Name,
+				namespace:           svc.Namespace,
 				externalIPs:         make([]string, len(svc.Spec.ExternalIPs)),
 				intTrafficPolicy:    &intClusterPolicyDefault,
 				extTrafficPolicy:    &extClusterPolicyDefault,
 				healthCheckNodePort: int(svc.Spec.HealthCheckNodePort),
 			}
-			dsrMethod, ok := svc.ObjectMeta.Annotations[svcDSRAnnotation]
+			dsrMethod, ok := svc.Annotations[svcDSRAnnotation]
 			if ok {
 				svcInfo.directServerReturn = true
 				svcInfo.directServerReturnMethod = dsrMethod
 			}
 			svcInfo.scheduler = ipvs.RoundRobin
-			schedulingMethod, ok := svc.ObjectMeta.Annotations[svcSchedulerAnnotation]
+			schedulingMethod, ok := svc.Annotations[svcSchedulerAnnotation]
 			if ok {
-				switch {
-				case schedulingMethod == ipvs.RoundRobin:
+				switch schedulingMethod {
+				case ipvs.RoundRobin:
 					svcInfo.scheduler = ipvs.RoundRobin
-				case schedulingMethod == ipvs.LeastConnection:
+				case ipvs.LeastConnection:
 					svcInfo.scheduler = ipvs.LeastConnection
-				case schedulingMethod == ipvs.DestinationHashing:
+				case ipvs.DestinationHashing:
 					svcInfo.scheduler = ipvs.DestinationHashing
-				case schedulingMethod == ipvs.SourceHashing:
+				case ipvs.SourceHashing:
 					svcInfo.scheduler = ipvs.SourceHashing
-				case schedulingMethod == IpvsMaglevHashing:
+				case IpvsMaglevHashing:
 					svcInfo.scheduler = IpvsMaglevHashing
 				}
 			}
 
-			flags, ok := svc.ObjectMeta.Annotations[svcSchedFlagsAnnotation]
+			flags, ok := svc.Annotations[svcSchedFlagsAnnotation]
 			if ok && svcInfo.scheduler == IpvsMaglevHashing {
 				svcInfo.flags = parseSchedFlags(flags)
 			}
@@ -990,9 +990,9 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 				// https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/v1/defaults.go#L106
 				svcInfo.sessionAffinityTimeoutSeconds = *svc.Spec.SessionAffinityConfig.ClientIP.TimeoutSeconds
 			}
-			_, svcInfo.hairpin = svc.ObjectMeta.Annotations[svcHairpinAnnotation]
-			_, svcInfo.hairpinExternalIPs = svc.ObjectMeta.Annotations[svcHairpinExternalIPsAnnotation]
-			_, svcInfo.skipLbIps = svc.ObjectMeta.Annotations[svcSkipLbIpsAnnotation]
+			_, svcInfo.hairpin = svc.Annotations[svcHairpinAnnotation]
+			_, svcInfo.hairpinExternalIPs = svc.Annotations[svcHairpinExternalIPsAnnotation]
+			_, svcInfo.skipLbIps = svc.Annotations[svcSkipLbIpsAnnotation]
 			svcInfo.intTrafficPolicy = svc.Spec.InternalTrafficPolicy
 			svcInfo.extTrafficPolicy = &svc.Spec.ExternalTrafficPolicy
 
@@ -1000,7 +1000,7 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			// policy that is set in the spec. Previously, when this was active set both to local when the annotation is
 			// true so that previous functionality of the annotation is best preserved. However, this has proved to not
 			// be a good fit for ClusterIP traffic, so we retain cluster for internal traffic policy.
-			if svc.ObjectMeta.Annotations[svcLocalAnnotation] == "true" {
+			if svc.Annotations[svcLocalAnnotation] == "true" {
 				intTrafficPolicyLocal := v1.ServiceInternalTrafficPolicyCluster
 				extTrafficPolicyLocal := v1.ServiceExternalTrafficPolicyLocal
 				svcInfo.intTrafficPolicy = &intTrafficPolicyLocal

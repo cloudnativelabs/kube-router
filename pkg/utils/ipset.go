@@ -535,26 +535,26 @@ func buildIPSetRestore(ipset *IPSet) string {
 			//nolint:gosec // we don't use this hash in a sensitive capacity, so we don't care that its weak
 			hash := sha1.Sum([]byte("tmp:" + setOptions))
 			tmpSetName = tmpIPSetPrefix + base32.StdEncoding.EncodeToString(hash[:10])
-			ipSetRestore.WriteString(fmt.Sprintf("create %s %s\n", tmpSetName, setOptions))
+			fmt.Fprintf(ipSetRestore, "create %s %s\n", tmpSetName, setOptions)
 			// just in case we are starting up after a crash, we should flush the TMP ipset to be safe if it
 			// already existed, so we do not pollute other ipsets:
-			ipSetRestore.WriteString(fmt.Sprintf("flush %s\n", tmpSetName))
+			fmt.Fprintf(ipSetRestore, "flush %s\n", tmpSetName)
 			tmpSets[setOptions] = tmpSetName
 		}
 
 		for _, entry := range set.Entries {
 			// add entries to the tmp set:
-			ipSetRestore.WriteString(fmt.Sprintf("add %s %s\n", tmpSetName, strings.Join(entry.Options, " ")))
+			fmt.Fprintf(ipSetRestore, "add %s %s\n", tmpSetName, strings.Join(entry.Options, " "))
 		}
 
 		// now create the actual IPSet (this is a noop if it already exists, because we run with -exists):
-		ipSetRestore.WriteString(fmt.Sprintf("create %s %s\n", set.Name, setOptions))
+		fmt.Fprintf(ipSetRestore, "create %s %s\n", set.Name, setOptions)
 
 		// now that both exist, we can swap them:
-		ipSetRestore.WriteString(fmt.Sprintf("swap %s %s\n", tmpSetName, set.Name))
+		fmt.Fprintf(ipSetRestore, "swap %s %s\n", tmpSetName, set.Name)
 
 		// empty the tmp set (which is actually the old one now):
-		ipSetRestore.WriteString(fmt.Sprintf("flush %s\n", tmpSetName))
+		fmt.Fprintf(ipSetRestore, "flush %s\n", tmpSetName)
 	}
 
 	setsToDestroy := make([]string, 0, len(tmpSets))
@@ -565,7 +565,7 @@ func buildIPSetRestore(ipset *IPSet) string {
 	sort.Strings(setsToDestroy)
 	for _, tmpSetName := range setsToDestroy {
 		// finally, destroy the tmp sets.
-		ipSetRestore.WriteString(fmt.Sprintf("destroy %s\n", tmpSetName))
+		fmt.Fprintf(ipSetRestore, "destroy %s\n", tmpSetName)
 	}
 
 	return ipSetRestore.String()

@@ -59,7 +59,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		// we are rr-client peer only with rr-server
 		if nrc.bgpRRClient {
-			if _, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; !ok {
+			if _, ok := node.Annotations[rrServerAnnotation]; !ok {
 				continue
 			}
 		}
@@ -67,7 +67,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		// if node full mesh is not requested then just peer with nodes with same ASN
 		// (run iBGP among same ASN peers)
 		if !nrc.bgpFullMeshMode {
-			nodeasn, ok := node.ObjectMeta.Annotations[nodeASNAnnotation]
+			nodeasn, ok := node.Annotations[nodeASNAnnotation]
 			if !ok {
 				klog.Infof("Not peering with the Node %s as ASN number of the node is unknown.",
 					targetNode.GetPrimaryNodeIP().String())
@@ -94,7 +94,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		if targetNodeIsIPv4 != sourceNodeIsIPv4 {
 			klog.Warningf("Not peering with Node %s as it's primary IP (%s) uses a different protocol than "+
-				"our primary IP (%s)", node.ObjectMeta.Name, targetNode.GetPrimaryNodeIP(),
+				"our primary IP (%s)", node.Name, targetNode.GetPrimaryNodeIP(),
 				nrc.krNode.GetPrimaryNodeIP())
 			continue
 		}
@@ -159,7 +159,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 		// we are rr-server peer with other rr-client with reflection enabled
 		if nrc.bgpRRServer {
-			if _, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
+			if _, ok := node.Annotations[rrClientAnnotation]; ok {
 				// add rr options with clusterId
 				n.RouteReflector = &gobgpapi.RouteReflector{
 					RouteReflectorClient:    true,
@@ -313,11 +313,11 @@ func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []str
 	}
 
 	for i := 0; i < len(ips); i++ {
-		if !((asns[i] >= 1 && asns[i] <= 23455) ||
-			(asns[i] >= 23457 && asns[i] <= 63999) ||
-			(asns[i] >= 64512 && asns[i] <= 65534) ||
-			(asns[i] >= 131072 && asns[i] <= 4199999999) ||
-			(asns[i] >= 4200000000 && asns[i] <= 4294967294)) {
+		if (asns[i] < 1 || asns[i] > 23455) &&
+			(asns[i] < 23457 || asns[i] > 63999) &&
+			(asns[i] < 64512 || asns[i] > 65534) &&
+			(asns[i] < 131072 || asns[i] > 4199999999) &&
+			(asns[i] < 4200000000 || asns[i] > 4294967294) {
 			return nil, fmt.Errorf("reserved ASN number \"%d\" for global BGP peer",
 				asns[i])
 		}

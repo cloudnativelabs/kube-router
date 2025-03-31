@@ -80,7 +80,7 @@ func (kr *KubeRouter) Run() error {
 	var ipsetMutex sync.Mutex
 	var wg sync.WaitGroup
 
-	if !(kr.Config.RunFirewall || kr.Config.RunServiceProxy || kr.Config.RunRouter) {
+	if !kr.Config.RunFirewall && !kr.Config.RunServiceProxy && !kr.Config.RunRouter {
 		klog.Info("Router, Firewall or Service proxy functionality must be specified. Exiting!")
 		os.Exit(0)
 	}

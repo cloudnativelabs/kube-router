@@ -877,7 +877,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 				netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[1])
 			ipv6Provided := netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[0]) ||
 				netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[1])
-			if !(ipv4Provided && ipv6Provided) {
+			if !ipv4Provided || !ipv6Provided {
 				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
 					"dual-stack is enabled, both IPv4 and IPv6 addresses should be provided")
 			}

@@ -56,7 +56,7 @@ func Test_isPodUpdateNetPolRelevant(t *testing.T) {
 	})
 	t.Run("Pod Label change should be detected as NetworkPolicy relevant", func(t *testing.T) {
 		newPod := fakePod.DeepCopy()
-		newPod.ObjectMeta.Labels = map[string]string{"bar": "foo"}
+		newPod.Labels = map[string]string{"bar": "foo"}
 		assert.True(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
 	})
 	t.Run("Pod Host IP change should be detected as NetworkPolicy relevant", func(t *testing.T) {
@@ -71,7 +71,7 @@ func Test_isPodUpdateNetPolRelevant(t *testing.T) {
 	})
 	t.Run("Pod Name change should NOT be detected as NetworkPolicy relevant", func(t *testing.T) {
 		newPod := fakePod.DeepCopy()
-		newPod.ObjectMeta.Name = "otherpod"
+		newPod.Name = "otherpod"
 		assert.False(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
 	})
 }

@@ -181,7 +181,7 @@ func (n *LocalKRNode) GetNodeMTU() (int, error) {
 			return 0, errors.New("failed to get list of addr")
 		}
 		for _, addr := range addresses {
-			if addr.IPNet.IP.Equal(n.PrimaryIP) {
+			if addr.IP.Equal(n.PrimaryIP) {
 				linkMTU := link.Attrs().MTU
 				return linkMTU, nil
 			}
@@ -368,7 +368,7 @@ func GetNodeSubnet(nodeIP net.IP, linkQ LocalLinkQuerier) (net.IPNet, string, er
 			return net.IPNet{}, "", errors.New("failed to get list of addrs")
 		}
 		for _, addr := range addresses {
-			if addr.IPNet.IP.Equal(nodeIP) {
+			if addr.IP.Equal(nodeIP) {
 				return *addr.IPNet, link.Attrs().Name, nil
 			}
 		}
