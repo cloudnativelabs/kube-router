@@ -329,9 +329,9 @@ func (npc *NetworkPolicyController) getLocalPods(localPods map[string]podInfo, n
 		localPods[pod.Status.PodIP] = podInfo{
 			ip:        pod.Status.PodIP,
 			ips:       pod.Status.PodIPs,
-			name:      pod.ObjectMeta.Name,
-			namespace: pod.ObjectMeta.Namespace,
-			labels:    pod.ObjectMeta.Labels}
+			name:      pod.Name,
+			namespace: pod.Namespace,
+			labels:    pod.Labels}
 	}
 }
 

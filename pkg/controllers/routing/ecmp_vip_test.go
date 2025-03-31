@@ -911,7 +911,7 @@ func Test_getVIPsForService(t *testing.T) {
 
 				// Take care of adding annotations
 				if serviceAdvertisedIP.annotations != nil {
-					serviceAdvertisedIP.service.ObjectMeta.Annotations = serviceAdvertisedIP.annotations
+					serviceAdvertisedIP.service.Annotations = serviceAdvertisedIP.annotations
 				}
 
 				if serviceAdvertisedIP.internalTrafficPolicy != nil {
@@ -924,8 +924,8 @@ func Test_getVIPsForService(t *testing.T) {
 
 				// Take care of adding endpoints if needed for test
 				if endpoints != nil {
-					endpoints.ObjectMeta.Name = serviceAdvertisedIP.service.Name
-					endpoints.ObjectMeta.Namespace = serviceAdvertisedIP.service.Namespace
+					endpoints.Name = serviceAdvertisedIP.service.Name
+					endpoints.Namespace = serviceAdvertisedIP.service.Namespace
 					if _, err := clientset.CoreV1().Endpoints(endpoints.GetObjectMeta().GetNamespace()).Create(
 						context.Background(), endpoints, metav1.CreateOptions{}); err != nil {
 						t.Fatalf("failed to create endpoints for test: %v", err)

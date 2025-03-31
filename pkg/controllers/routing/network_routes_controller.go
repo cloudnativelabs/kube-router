@@ -920,7 +920,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	if nrc.bgpFullMeshMode {
 		nodeAsnNumber = nrc.defaultNodeAsnNumber
 	} else {
-		nodeasn, ok := node.ObjectMeta.Annotations[nodeASNAnnotation]
+		nodeasn, ok := node.Annotations[nodeASNAnnotation]
 		if !ok {
 			return errors.New("could not find ASN number for the node. " +
 				"Node needs to be annotated with ASN number details to start BGP server")
@@ -934,7 +934,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		nrc.nodeAsnNumber = nodeAsnNumber
 	}
 
-	if clusterid, ok := node.ObjectMeta.Annotations[rrServerAnnotation]; ok {
+	if clusterid, ok := node.Annotations[rrServerAnnotation]; ok {
 		klog.Infof("Found rr.server for the node to be %s from the node annotation", clusterid)
 		_, err := strconv.ParseUint(clusterid, 0, routeReflectorMaxID)
 		if err != nil {
@@ -944,7 +944,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		}
 		nrc.bgpClusterID = clusterid
 		nrc.bgpRRServer = true
-	} else if clusterid, ok := node.ObjectMeta.Annotations[rrClientAnnotation]; ok {
+	} else if clusterid, ok := node.Annotations[rrClientAnnotation]; ok {
 		klog.Infof("Found rr.client for the node to be %s from the node annotation", clusterid)
 		_, err := strconv.ParseUint(clusterid, 0, routeReflectorMaxID)
 		if err != nil {
@@ -956,8 +956,8 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		nrc.bgpRRClient = true
 	}
 
-	if prependASN, okASN := node.ObjectMeta.Annotations[pathPrependASNAnnotation]; okASN {
-		prependRepeatN, okRepeatN := node.ObjectMeta.Annotations[pathPrependRepeatNAnnotation]
+	if prependASN, okASN := node.Annotations[pathPrependASNAnnotation]; okASN {
+		prependRepeatN, okRepeatN := node.Annotations[pathPrependRepeatNAnnotation]
 
 		if !okRepeatN {
 			return fmt.Errorf("both %s and %s must be set", pathPrependASNAnnotation, pathPrependRepeatNAnnotation)
@@ -979,7 +979,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	var nodeCommunities []string
-	nodeBGPCommunitiesAnnotation, ok := node.ObjectMeta.Annotations[nodeCommunitiesAnnotation]
+	nodeBGPCommunitiesAnnotation, ok := node.Annotations[nodeCommunitiesAnnotation]
 	if !ok {
 		klog.V(1).Info("Did not find any BGP communities on current node's annotations. " +
 			"Not exporting communities.")
@@ -1001,7 +1001,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	// Get Custom Import Reject CIDRs from annotations
-	nodeBGPCustomImportRejectAnnotation, ok := node.ObjectMeta.Annotations[nodeCustomImportRejectAnnotation]
+	nodeBGPCustomImportRejectAnnotation, ok := node.Annotations[nodeCustomImportRejectAnnotation]
 	if !ok {
 		klog.V(1).Info("Did not find any node.bgp.customimportreject on current node's annotations. " +
 			"Skip configuring it.")
@@ -1085,7 +1085,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	// else attempt to get peers from node specific BGP annotations.
 	if len(nrc.globalPeerRouters) == 0 {
 		// Get Global Peer Router ASN configs
-		nodeBgpPeerAsnsAnnotation, ok := node.ObjectMeta.Annotations[peerASNAnnotation]
+		nodeBgpPeerAsnsAnnotation, ok := node.Annotations[peerASNAnnotation]
 		if !ok {
 			klog.Infof("Could not find BGP peer info for the node in the node annotations so " +
 				"skipping configuring peer.")
@@ -1103,7 +1103,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		}
 
 		// Get Global Peer Router IP Address configs
-		nodeBgpPeersAnnotation, ok := node.ObjectMeta.Annotations[peerIPAnnotation]
+		nodeBgpPeersAnnotation, ok := node.Annotations[peerIPAnnotation]
 		if !ok {
 			klog.Infof("Could not find BGP peer info for the node in the node annotations " +
 				"so skipping configuring peer.")
@@ -1121,7 +1121,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		}
 
 		// Get Global Peer Router ASN configs
-		nodeBgpPeerPortsAnnotation, ok := node.ObjectMeta.Annotations[peerPortAnnotation]
+		nodeBgpPeerPortsAnnotation, ok := node.Annotations[peerPortAnnotation]
 		// Default to default BGP port if port annotation is not found
 		var peerPorts = make([]uint32, 0)
 		if ok {
@@ -1138,7 +1138,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 		// Get Global Peer Router Password configs
 		var peerPasswords []string
-		nodeBGPPasswordsAnnotation, ok := node.ObjectMeta.Annotations[peerPasswordAnnotation]
+		nodeBGPPasswordsAnnotation, ok := node.Annotations[peerPasswordAnnotation]
 		if !ok {
 			klog.Infof("Could not find BGP peer password info in the node's annotations. Assuming no passwords.")
 		} else {
@@ -1155,7 +1155,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 		// Get Global Peer Router LocalIP configs
 		var peerLocalIPs []string
-		nodeBGPPeerLocalIPs, ok := node.ObjectMeta.Annotations[peerLocalIPAnnotation]
+		nodeBGPPeerLocalIPs, ok := node.Annotations[peerLocalIPAnnotation]
 		if !ok {
 			klog.Infof("Could not find BGP peer local ip info in the node's annotations. Assuming node IP.")
 		} else {
@@ -1377,8 +1377,8 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 
 	if kubeRouterConfig.ClusterAsn != 0 {
-		if !((kubeRouterConfig.ClusterAsn >= 64512 && kubeRouterConfig.ClusterAsn <= 65535) ||
-			(kubeRouterConfig.ClusterAsn >= 4200000000 && kubeRouterConfig.ClusterAsn <= 4294967294)) {
+		if (kubeRouterConfig.ClusterAsn < 64512 || kubeRouterConfig.ClusterAsn > 65535) &&
+			(kubeRouterConfig.ClusterAsn < 4200000000 || kubeRouterConfig.ClusterAsn > 4294967294) {
 			return nil, errors.New("invalid ASN number for cluster ASN")
 		}
 		nrc.defaultNodeAsnNumber = uint32(kubeRouterConfig.ClusterAsn)
@@ -1456,7 +1456,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		return nil, fmt.Errorf("error processing Global Peer Router configs: %s", err)
 	}
 
-	bgpLocalAddressListAnnotation, ok := node.ObjectMeta.Annotations[bgpLocalAddressAnnotation]
+	bgpLocalAddressListAnnotation, ok := node.Annotations[bgpLocalAddressAnnotation]
 	if !ok {
 		if nrc.krNode.IsIPv4Capable() {
 			nrc.localAddressList = append(nrc.localAddressList, nrc.krNode.FindBestIPv4NodeAddress().String())

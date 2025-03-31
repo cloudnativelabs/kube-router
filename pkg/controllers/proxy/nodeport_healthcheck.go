@@ -153,7 +153,7 @@ func (npHandler *nphcHandler) Handler(w http.ResponseWriter, r *http.Request) {
 
 	if endpointsOnNode && numActiveEndpoints > 0 {
 		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(fmt.Sprintf("%d Service Endpoints found\n", numActiveEndpoints)))
+		_, err := fmt.Fprintf(w, "%d Service Endpoints found\n", numActiveEndpoints)
 		if err != nil {
 			klog.Errorf("failed to write body: %s", err)
 		}

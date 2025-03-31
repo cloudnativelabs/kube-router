@@ -550,9 +550,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 					continue
 				}
 				newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ips: matchingPod.Status.PodIPs,
-					name:      matchingPod.ObjectMeta.Name,
-					namespace: matchingPod.ObjectMeta.Namespace,
-					labels:    matchingPod.ObjectMeta.Labels}
+					name:      matchingPod.Name,
+					namespace: matchingPod.Namespace,
+					labels:    matchingPod.Labels}
 				npc.grabNamedPortFromPod(matchingPod, &namedPort2IngressEps)
 			}
 		}
@@ -587,9 +587,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 							}
 							ingressRule.srcPods = append(ingressRule.srcPods,
 								podInfo{ips: peerPod.Status.PodIPs,
-									name:      peerPod.ObjectMeta.Name,
-									namespace: peerPod.ObjectMeta.Namespace,
-									labels:    peerPod.ObjectMeta.Labels})
+									name:      peerPod.Name,
+									namespace: peerPod.Namespace,
+									labels:    peerPod.Labels})
 						}
 					}
 					peerIPBlock := npc.evalIPBlockPeer(peer)
@@ -661,9 +661,9 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 							}
 							egressRule.dstPods = append(egressRule.dstPods,
 								podInfo{ips: peerPod.Status.PodIPs,
-									name:      peerPod.ObjectMeta.Name,
-									namespace: peerPod.ObjectMeta.Namespace,
-									labels:    peerPod.ObjectMeta.Labels})
+									name:      peerPod.Name,
+									namespace: peerPod.Namespace,
+									labels:    peerPod.Labels})
 							npc.grabNamedPortFromPod(peerPod, &namedPort2EgressEps)
 						}
 
