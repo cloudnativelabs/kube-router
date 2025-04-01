@@ -4,7 +4,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.9
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.30
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.209.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.211.0
 	github.com/aws/smithy-go v1.22.3
 	github.com/ccoveille/go-safecast v1.6.1
 	github.com/coreos/go-iptables v0.8.0
@@ -129,4 +129,4 @@ require (
 
 go 1.23.0
 
-toolchain go1.23.6
+toolchain go1.24.1
