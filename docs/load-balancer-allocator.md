@@ -83,4 +83,4 @@ When running the controller outside a pod, both `POD_NAME` and `POD_NAMESPACE` m
 
 ## Notes
 
-It's not possible to specify the addresses for the load balancer services. A externalIP service can be used instead.
+If it is not possible to specify the addresses for the load balancer services, an [externalIP service](https://kubernetes.io/docs/concepts/services-networking/service/#external-ips) can be used instead.
