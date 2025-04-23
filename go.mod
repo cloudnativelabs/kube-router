@@ -8,7 +8,7 @@ require (
 	github.com/aws/smithy-go v1.22.3
 	github.com/ccoveille/go-safecast v1.6.1
 	github.com/coreos/go-iptables v0.8.0
-	github.com/docker/docker v28.0.1+incompatible
+	github.com/docker/docker v28.1.1+incompatible
 	github.com/hashicorp/go-version v1.7.0
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
@@ -77,6 +77,7 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/term v0.0.0-20221205130635-1aeaba878587 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
