@@ -107,7 +107,6 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 	// Delete VIP addition to "local" rt table also, fail silently if not found (DSR special case)
 	// #nosec G204
 	nRoute := &netlink.Route{
-		Type:      unix.RTN_LOCAL,
 		Dst:       &net.IPNet{IP: parsedIP, Mask: netMask},
 		LinkIndex: iface.Attrs().Index,
 		Table:     syscall.RT_TABLE_LOCAL,
@@ -178,7 +177,6 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 		return err
 	}
 	nRoute := &netlink.Route{
-		Type:      unix.RTN_LOCAL,
 		Dst:       ipPrefix,
 		LinkIndex: kubeDummyLink.Attrs().Index,
 		Table:     syscall.RT_TABLE_LOCAL,
@@ -506,7 +504,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 				"error please report because something has gone very wrong) due to: %v", ipv4DefaultRoute, err)
 		}
 		nRoute := &netlink.Route{
-			Type:      unix.RTN_LOCAL,
+			Family:    nFamily,
 			Dst:       defaultRouteCIDR,
 			LinkIndex: loNetLink.Attrs().Index,
 			Table:     customDSRRouteTableID,
@@ -528,7 +526,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 				"error please report because something has gone very wrong) due to: %v", ipv6DefaultRoute, err)
 		}
 		nRoute := &netlink.Route{
-			Type:      unix.RTN_LOCAL,
+			Family:    nFamily,
 			Dst:       defaultRouteCIDR,
 			LinkIndex: loNetLink.Attrs().Index,
 			Table:     customDSRRouteTableID,
