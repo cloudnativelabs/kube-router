@@ -37,6 +37,7 @@ func RouteTableAdd(tableNumber int, tableName string) error {
 			continue
 		}
 		rtTablesLoc = possibleLoc
+		break
 	}
 	if rtTablesLoc == "" {
 		return fmt.Errorf("did not find rt_tables in any of the expected locations: %s", rtTablesFileName)
