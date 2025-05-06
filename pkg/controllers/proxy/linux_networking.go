@@ -507,9 +507,11 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 		}
 		nRoute := &netlink.Route{
 			Type:      unix.RTN_LOCAL,
+			Family:    nFamily,
 			Dst:       defaultRouteCIDR,
 			LinkIndex: loNetLink.Attrs().Index,
 			Table:     customDSRRouteTableID,
+			Scope:     unix.RT_SCOPE_HOST,
 		}
 		routes, err := netlink.RouteListFiltered(nFamily, nRoute, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
 		if err != nil || len(routes) < 1 {
@@ -529,9 +531,11 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 		}
 		nRoute := &netlink.Route{
 			Type:      unix.RTN_LOCAL,
+			Family:    nFamily,
 			Dst:       defaultRouteCIDR,
 			LinkIndex: loNetLink.Attrs().Index,
 			Table:     customDSRRouteTableID,
+			Scope:     unix.RT_SCOPE_HOST,
 		}
 		routes, err := netlink.RouteListFiltered(nFamily, nRoute, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
 		if err != nil || len(routes) < 1 {
