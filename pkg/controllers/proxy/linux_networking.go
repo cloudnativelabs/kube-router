@@ -572,11 +572,12 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 				"error please report because something has gone very wrong) due to: %v", err)
 		}
 
-		nRule := &netlink.Rule{
-			Priority: defaultDSRPolicyRulePriority,
-			Src:      defaultPrefixCIDR,
-			Table:    externalIPRouteTableID,
-		}
+		nRule := netlink.NewRule()
+		nRule.Family = nFamily
+		nRule.Priority = defaultDSRPolicyRulePriority
+		nRule.Src = defaultPrefixCIDR
+		nRule.Table = externalIPRouteTableID
+
 		rules, err := netlink.RuleListFiltered(nFamily, nRule,
 			netlink.RT_FILTER_TABLE|netlink.RT_FILTER_SRC|netlink.RT_FILTER_PRIORITY)
 		if err != nil {
@@ -587,10 +588,10 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		if len(rules) < 1 {
 			err = netlink.RuleAdd(nRule)
 			if err != nil {
-				klog.Infof("Failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` due to %v",
-					err)
-				return fmt.Errorf("failed to add policy rule `ip rule add prio 32765 from all lookup external_ip` "+
-					"due to %v", err)
+				klog.Infof("Failed to add policy rule (equivalent to `ip rule add prio %d from %s lookup "+
+					"%d`) due to %v", defaultDSRPolicyRulePriority, defaultPrefixCIDR, externalIPRouteTableID, err)
+				return fmt.Errorf("failed to add policy rule (equivalent to `ip rule add prio %d from %s lookup "+
+					"%d`) due to %v", defaultDSRPolicyRulePriority, defaultPrefixCIDR, externalIPRouteTableID, err)
 			}
 		}
 
