@@ -46,11 +46,11 @@ func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 		return fmt.Errorf("failed to parse CIDR: %s", err.Error())
 	}
 
-	nRule := &netlink.Rule{
-		Family: ipFamily,
-		Src:    nSrc,
-		Table:  CustomTableID,
-	}
+	nRule := netlink.NewRule()
+	nRule.Family = ipFamily
+	nRule.Src = nSrc
+	nRule.Table = CustomTableID
+
 	rules, err := netlink.RuleListFiltered(ipFamily, nRule, netlink.RT_FILTER_SRC)
 	if err != nil {
 		return fmt.Errorf("failed to list rules: %s", err.Error())

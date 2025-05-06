@@ -1747,11 +1747,11 @@ func routeVIPTrafficToDirector(fwmark string, family v1.IPFamily) error {
 		return fmt.Errorf("failed to convert fwmark to uint32: %v", err)
 	}
 
-	nRule := &netlink.Rule{
-		Mark:     uFWMark,
-		Table:    customDSRRouteTableID,
-		Priority: defaultTrafficDirectorRulePriority,
-	}
+	nRule := netlink.NewRule()
+	nRule.Family = nFamily
+	nRule.Mark = uFWMark
+	nRule.Table = customDSRRouteTableID
+	nRule.Priority = defaultTrafficDirectorRulePriority
 
 	routes, err := netlink.RuleListFiltered(nFamily, nRule, netlink.RT_FILTER_MARK|netlink.RT_FILTER_TABLE)
 	if err != nil {
@@ -1762,7 +1762,7 @@ func routeVIPTrafficToDirector(fwmark string, family v1.IPFamily) error {
 		err = netlink.RuleAdd(nRule)
 		if err != nil {
 			return fmt.Errorf("failed to add policy rule to lookup traffic to VIP through the custom "+
-				"routing table due to %v", err)
+				"routing table due to: %v", err)
 		}
 	}
 
