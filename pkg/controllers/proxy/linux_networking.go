@@ -631,13 +631,18 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 
 		// check if there are any pbr in externalIPRouteTableID for external IP's
-		routes, err := netlink.RouteList(nil, nFamily)
+		nRoute := &netlink.Route{
+			Family: nFamily,
+			Table:  externalIPRouteTableID,
+		}
+		routes, err := netlink.RouteListFiltered(nFamily, nRoute, netlink.RT_FILTER_TABLE)
 		if err != nil {
 			return fmt.Errorf("failed to list route for external IP's due to: %s", err)
 		}
 		for idx, route := range routes {
 			ip := route.Dst.IP.String()
 			if !activeExternalIPs[ip] {
+				klog.Infof("Deleting route: %+v in custom route table for external IP's as it is not active", route)
 				err = netlink.RouteDel(&routes[idx])
 				if err != nil {
 					klog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s",
