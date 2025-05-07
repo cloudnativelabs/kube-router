@@ -23,10 +23,8 @@ import (
 )
 
 const (
-	ipv4NetMaskBits  = 32
-	ipv4DefaultRoute = "0.0.0.0/0"
-	ipv6NetMaskBits  = 128
-	ipv6DefaultRoute = "::/0"
+	ipv4NetMaskBits = 32
+	ipv6NetMaskBits = 128
 
 	// TODO: it's bad to rely on eth0 here. While this is inside the container's namespace and is determined by the
 	// container runtime and so far we've been able to count on this being reliably set to eth0, it is possible that
@@ -500,10 +498,10 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 
 	if setupIPv4 {
 		nFamily := netlink.FAMILY_V4
-		_, defaultRouteCIDR, err := net.ParseCIDR(ipv4DefaultRoute)
-		if err != nil {
+		defaultRouteCIDR := utils.GetDefaultIPv4Route()
+		if defaultRouteCIDR == nil {
 			return fmt.Errorf("failed to parse default (%s) route (this is statically defined, so if you see this "+
-				"error please report because something has gone very wrong) due to: %v", ipv4DefaultRoute, err)
+				"error please report because something has gone very wrong)", defaultRouteCIDR)
 		}
 		nRoute := &netlink.Route{
 			Type:      unix.RTN_LOCAL,
@@ -524,10 +522,10 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 
 	if setupIPv6 {
 		nFamily := netlink.FAMILY_V6
-		_, defaultRouteCIDR, err := net.ParseCIDR(ipv6DefaultRoute)
-		if err != nil {
+		defaultRouteCIDR := utils.GetDefaultIPv6Route()
+		if defaultRouteCIDR == nil {
 			return fmt.Errorf("failed to parse default (%s) route (this is statically defined, so if you see this "+
-				"error please report because something has gone very wrong) due to: %v", ipv6DefaultRoute, err)
+				"error please report because something has gone very wrong)", defaultRouteCIDR)
 		}
 		nRoute := &netlink.Route{
 			Type:      unix.RTN_LOCAL,
@@ -562,14 +560,14 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 
 	setupIPRulesAndRoutes := func(isIPv6 bool) error {
 		nFamily := netlink.FAMILY_V4
-		_, defaultPrefixCIDR, err := net.ParseCIDR(ipv4DefaultRoute)
+		defaultPrefixCIDR := utils.GetDefaultIPv4Route()
 		if isIPv6 {
 			nFamily = netlink.FAMILY_V6
-			_, defaultPrefixCIDR, err = net.ParseCIDR(ipv6DefaultRoute)
+			defaultPrefixCIDR = utils.GetDefaultIPv6Route()
 		}
-		if err != nil {
-			return fmt.Errorf("failed to parse default route (this is statically defined, so if you see this "+
-				"error please report because something has gone very wrong) due to: %v", err)
+		if defaultPrefixCIDR == nil {
+			return fmt.Errorf("failed to parse default route (this is statically defined, so if you see this " +
+				"error please report because something has gone very wrong)")
 		}
 
 		nRule := netlink.NewRule()
