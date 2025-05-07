@@ -278,8 +278,8 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 // create a defined set to represent just the host default route
 func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
 	for setName, defaultRoute := range map[string]string{
-		defaultRouteSet:   "0.0.0.0/0",
-		defaultRouteSetV6: "::/0",
+		defaultRouteSet:   utils.IPv4DefaultRoute,
+		defaultRouteSetV6: utils.IPv6DefaultRoute,
 	} {
 		currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(setName, gobgpapi.DefinedType_PREFIX)
 		if err != nil {
