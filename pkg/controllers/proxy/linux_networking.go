@@ -576,14 +576,27 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		nRule.Src = defaultPrefixCIDR
 		nRule.Table = externalIPRouteTableID
 
+		// It would be better if we could filter by src, but it's not actually set by iproute2 when netlink receives it
+		// back. Instead, a rule.Src that is set to 0.0.0.0/0 or ::/0 will come back as nil. So if we filter by src, we
+		// will not find any rules.
 		rules, err := netlink.RuleListFiltered(nFamily, nRule,
-			netlink.RT_FILTER_TABLE|netlink.RT_FILTER_SRC|netlink.RT_FILTER_PRIORITY)
+			netlink.RT_FILTER_TABLE|netlink.RT_FILTER_PRIORITY)
 		if err != nil {
 			return fmt.Errorf("failed to list rule for external IP's and verify if `ip rule add prio 32765 from all "+
 				"lookup external_ip` exists due to: %v", err)
 		}
 
-		if len(rules) < 1 {
+		klog.V(2).Infof("rules found: %d", len(rules))
+		defaultRuleFound := false
+		for _, rule := range rules {
+			klog.V(2).Infof("rule: %+v", rule)
+			// If the rule.Src is nil, it means that the rule is a default route rule (0.0.0.0/0 or ::/0)
+			if rule.Src == nil {
+				defaultRuleFound = true
+			}
+		}
+
+		if !defaultRuleFound {
 			err = netlink.RuleAdd(nRule)
 			if err != nil {
 				klog.Infof("Failed to add policy rule (equivalent to `ip rule add prio %d from %s lookup "+

@@ -51,9 +51,34 @@ func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 	nRule.Src = nSrc
 	nRule.Table = CustomTableID
 
-	rules, err := netlink.RuleListFiltered(ipFamily, nRule, netlink.RT_FILTER_SRC)
+	// If the rule that we are abstracting has either the src or dst set to a default route, then we need to handle it
+	// differently. For more information, see: https://github.com/vishvananda/netlink/issues/1080
+	// TODO: If the above issue is resolved, some of the below logic can be removed
+	rules := make([]netlink.Rule, 0)
+	isDefaultRoute, err := utils.IsDefaultRoute(nSrc)
 	if err != nil {
-		return fmt.Errorf("failed to list rules: %s", err.Error())
+		return fmt.Errorf("failed to check if CIDR is a default route: %v", err)
+	}
+
+	if isDefaultRoute {
+		var tmpRules []netlink.Rule
+		tmpRules, err = netlink.RuleListFiltered(ipFamily, nRule, netlink.RT_FILTER_TABLE)
+		if err != nil {
+			return fmt.Errorf("failed to list rules: %s", err.Error())
+		}
+
+		// Check if one or more of the rules returned are a default route rule
+		for _, rule := range tmpRules {
+			// If the rule has no src, then it is a default route rule which is the match criteria for the rule
+			if rule.Src == nil {
+				rules = append(rules, rule)
+			}
+		}
+	} else {
+		rules, err = netlink.RuleListFiltered(ipFamily, nRule, netlink.RT_FILTER_SRC|netlink.RT_FILTER_TABLE)
+		if err != nil {
+			return fmt.Errorf("failed to list rules: %s", err.Error())
+		}
 	}
 
 	if ipOp == PBRRuleDel && len(rules) > 0 {
