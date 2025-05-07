@@ -1753,7 +1753,8 @@ func routeVIPTrafficToDirector(fwmark string, family v1.IPFamily) error {
 	nRule.Table = customDSRRouteTableID
 	nRule.Priority = defaultTrafficDirectorRulePriority
 
-	routes, err := netlink.RuleListFiltered(nFamily, nRule, netlink.RT_FILTER_MARK|netlink.RT_FILTER_TABLE)
+	routes, err := netlink.RuleListFiltered(nFamily, nRule,
+		netlink.RT_FILTER_MARK|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_PRIORITY)
 	if err != nil {
 		return fmt.Errorf("failed to verify if `ip rule` exists due to: %v", err)
 	}
