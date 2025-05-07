@@ -47,37 +47,6 @@ func CloseCloserDisregardError(handler io.Closer) {
 	_ = handler.Close()
 }
 
-// ContainsIPv4Address checks a given string array to see if it contains a valid IPv4 address within it
-func ContainsIPv4Address(addrs []string) bool {
-	for _, addr := range addrs {
-		ip := net.ParseIP(addr)
-		if ip == nil {
-			continue
-		}
-		if ip.To4() != nil {
-			return true
-		}
-	}
-	return false
-}
-
-// ContainsIPv6Address checks a given string array to see if it contains a valid IPv6 address within it
-func ContainsIPv6Address(addrs []string) bool {
-	for _, addr := range addrs {
-		ip := net.ParseIP(addr)
-		if ip == nil {
-			continue
-		}
-		if ip.To4() != nil {
-			continue
-		}
-		if ip.To16() != nil {
-			return true
-		}
-	}
-	return false
-}
-
 // SliceContainsString checks to see if needle is contained within haystack, returns true if found, otherwise
 // returns false
 func SliceContainsString(needle string, haystack []string) bool {
