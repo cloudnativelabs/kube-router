@@ -41,12 +41,26 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 	var err error
 	version.PrintVersion(true)
 	version.PrintVersionMessages(true)
-	// Use out of cluster config if the URL or kubeconfig have been specified. Otherwise use incluster config.
-	if len(config.Master) != 0 || len(config.Kubeconfig) != 0 {
+	// Use out of cluster config if the kubeconfig has been specified. Otherwise use incluster config.
+	if len(config.Kubeconfig) != 0 {
 		clientconfig, err = clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build configuration from CLI: %v", err)
 		}
+	} else if len(config.Master) != 0 {
+		// InClusterConfig() fails with ErrNotInCluster if these are unset.
+		os.Setenv("KUBERNETES_SERVICE_HOST", " ")
+		os.Setenv("KUBERNETES_SERVICE_PORT", " ")
+
+		clientconfig, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("unable to initialize inclusterconfig: %v", err)
+		}
+
+		os.Setenv("KUBERNETES_SERVICE_HOST", "")
+		os.Setenv("KUBERNETES_SERVICE_PORT", "")
+
+		clientconfig.Host = config.Master
 	} else {
 		clientconfig, err = rest.InClusterConfig()
 		if err != nil {
