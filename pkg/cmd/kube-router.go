@@ -42,6 +42,7 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 	version.PrintVersion(true)
 	version.PrintVersionMessages(true)
 	// Use out of cluster config if the kubeconfig has been specified. Otherwise use incluster config.
+	//nolint:gocritic // An if-elseif-else is more readable than a switch in this case.
 	if len(config.Kubeconfig) != 0 {
 		clientconfig, err = clientcmd.BuildConfigFromFlags(config.Master, config.Kubeconfig)
 		if err != nil {
