@@ -33,6 +33,7 @@ const (
 	KubeDummyIf       = "kube-dummy-if"
 	KubeTunnelIfv4    = "kube-tunnel-if"
 	KubeTunnelIfv6    = "kube-tunnel-v6"
+	KubeBridgeIf      = "kube-bridge"
 	IfaceNotFound     = "Link not found"
 	IfaceHasAddr      = "file exists"
 	IfaceHasNoAddr    = "cannot assign requested address"
@@ -42,11 +43,13 @@ const (
 	IpvsSvcFSched2    = "flag-2"
 	IpvsSvcFSched3    = "flag-3"
 
-	customDSRRouteTableID    = "78"
-	customDSRRouteTableName  = "kube-router-dsr"
-	externalIPRouteTableID   = "79"
-	externalIPRouteTableName = "external_ip"
-	kubeRouterProxyName      = "kube-router"
+	customDSRRouteTableID              = 78
+	customDSRRouteTableName            = "kube-router-dsr"
+	externalIPRouteTableID             = 79
+	externalIPRouteTableName           = "external_ip"
+	kubeRouterProxyName                = "kube-router"
+	defaultTrafficDirectorRulePriority = 32764
+	defaultDSRPolicyRulePriority       = 32765
 
 	// Taken from https://github.com/torvalds/linux/blob/master/include/uapi/linux/ip_vs.h#L21
 	ipvsPersistentFlagHex = 0x0001
@@ -1727,24 +1730,38 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 // For DSR it is required that we dont assign the VIP to any interface to avoid martian packets
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 // routeVIPTrafficToDirector: setups policy routing so that FWMARKed packets are delivered locally
-func routeVIPTrafficToDirector(fwmark string, family v1.IPFamily) error {
-	ipArgs := make([]string, 0)
+func routeVIPTrafficToDirector(fwmark uint32, family v1.IPFamily) error {
+	nFamily := netlink.FAMILY_V4
 	if family == v1.IPv6Protocol {
-		ipArgs = append(ipArgs, "-6")
+		nFamily = netlink.FAMILY_V6
 	}
 
-	out, err := runIPCommandsWithArgs(ipArgs, "rule", "list").Output()
+	nRule := netlink.NewRule()
+	nRule.Mark = fwmark
+	nRule.Table = customDSRRouteTableID
+	nRule.Priority = defaultTrafficDirectorRulePriority
+
+	routes, err := netlink.RuleListFiltered(nFamily, nRule,
+		netlink.RT_FILTER_MARK|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_PRIORITY)
 	if err != nil {
-		return errors.New("Failed to verify if `ip rule` exists due to: " + err.Error())
+		return fmt.Errorf("failed to verify if `ip rule` exists due to: %v", err)
 	}
-	if !strings.Contains(string(out), fwmark+" ") {
-		err = runIPCommandsWithArgs(ipArgs, "rule", "add", "prio", "32764", "fwmark", fwmark, "table",
-			customDSRRouteTableID).Run()
+
+	if len(routes) < 1 {
+		klog.V(1).Infof("adding policy rule (%s) to lookup traffic to VIP through the custom routing table", nRule)
+		err = netlink.RuleAdd(nRule)
 		if err != nil {
-			return errors.New("Failed to add policy rule to lookup traffic to VIP through the custom " +
-				" routing table due to " + err.Error())
+			return fmt.Errorf("failed to add policy rule to lookup traffic to VIP through the custom "+
+				"routing table due to %v", err)
+		}
+	} else {
+		klog.V(1).Infof("policy rule (%s) for mark %d already exists, skipping", nRule, fwmark)
+		klog.V(1).Info("Routes Found:")
+		for _, route := range routes {
+			klog.V(1).Infof("Route: %+v with mark %d", route, route.Mark)
 		}
 	}
+
 	return nil
 }
 

@@ -228,14 +228,15 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 	// Now that the tunnel link exists, we need to add a route to it, so the node knows where to send traffic bound for
 	// this interface
 	//nolint:gocritic // we understand that we are appending to a new slice
-	cmdArgs := append(ipBase, "route", "list", "table", routes.CustomTableID)
+	cmdArgs := append(ipBase, "route", "list", "table", strconv.Itoa(routes.CustomTableID))
 	out, err = exec.Command("ip", cmdArgs...).CombinedOutput()
 	// This used to be "dev "+tunnelName+" scope" but this isn't consistent with IPv6's output, so we changed it to just
 	// "dev "+tunnelName, but at this point I'm unsure if there was a good reason for adding scope on before, so that's
 	// why this comment is here.
 	if err != nil || !strings.Contains(string(out), "dev "+tunnelName) {
 		//nolint:gocritic // we understand that we are appending to a new slice
-		cmdArgs = append(ipBase, "route", "add", nextHop.String(), "dev", tunnelName, "table", routes.CustomTableID)
+		cmdArgs = append(ipBase, "route", "add", nextHop.String(), "dev", tunnelName, "table",
+			strconv.Itoa(routes.CustomTableID))
 		if out, err = exec.Command("ip", cmdArgs...).CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
 		}
