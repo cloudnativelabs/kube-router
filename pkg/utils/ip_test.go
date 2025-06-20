@@ -292,3 +292,53 @@ func TestIP_IsPrivate(t *testing.T) {
 		})
 	}
 }
+
+func TestGetSingleIPNet(t *testing.T) {
+	tests := []struct {
+		name     string
+		ip       net.IP
+		expected *net.IPNet
+	}{
+		{
+			name: "IPv4 address",
+			ip:   net.IPv4(192, 168, 1, 1),
+			expected: &net.IPNet{
+				IP:   net.IPv4(192, 168, 1, 1),
+				Mask: net.CIDRMask(32, 32),
+			},
+		},
+		{
+			name: "IPv4-mapped IPv6 address",
+			ip:   net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 192, 168, 1, 1},
+			expected: &net.IPNet{
+				IP:   net.IP{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 192, 168, 1, 1},
+				Mask: net.CIDRMask(32, 32),
+			},
+		},
+		{
+			name: "IPv6 address",
+			ip:   net.IPv6loopback,
+			expected: &net.IPNet{
+				IP:   net.IPv6loopback,
+				Mask: net.CIDRMask(128, 128),
+			},
+		},
+		{
+			name: "Another IPv6 address",
+			ip:   net.IP{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+			expected: &net.IPNet{
+				IP:   net.IP{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+				Mask: net.CIDRMask(128, 128),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetSingleIPNet(tt.ip)
+			require.NotNil(t, result)
+			assert.True(t, tt.expected.IP.Equal(result.IP))
+			assert.Equal(t, tt.expected.Mask, result.Mask)
+		})
+	}
+}
