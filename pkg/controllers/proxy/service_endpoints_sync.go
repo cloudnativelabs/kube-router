@@ -557,7 +557,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 	}
 
 	// do policy routing to deliver the packet locally so that IPVS can pick the packet
-	err = routeVIPTrafficToDirector("0x"+fmt.Sprintf("%x", fwMark), family)
+	err = routeVIPTrafficToDirector(fwMark, family)
 	if err != nil {
 		return fmt.Errorf("failed to setup ip rule to lookup traffic to external IP: %s through custom "+
 			"route table due to %v", externalIP, err)

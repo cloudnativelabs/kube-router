@@ -1730,26 +1730,15 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 // For DSR it is required that we dont assign the VIP to any interface to avoid martian packets
 // http://www.austintek.com/LVS/LVS-HOWTO/HOWTO/LVS-HOWTO.routing_to_VIP-less_director.html
 // routeVIPTrafficToDirector: setups policy routing so that FWMARKed packets are delivered locally
-func routeVIPTrafficToDirector(fwmark string, family v1.IPFamily) error {
+func routeVIPTrafficToDirector(fwmark uint32, family v1.IPFamily) error {
 	nFamily := netlink.FAMILY_V4
 	if family == v1.IPv6Protocol {
 		nFamily = netlink.FAMILY_V6
 	}
 
-	iFWMark, err := strconv.Atoi(fwmark)
-	if err != nil {
-		return fmt.Errorf("failed to convert fwmark to integer due to: %v", err)
-	}
-
-	// Convert to uint32 safely
-	uFWMark, err := safecast.ToUint32(iFWMark)
-	if err != nil {
-		return fmt.Errorf("failed to convert fwmark to uint32: %v", err)
-	}
-
 	nRule := netlink.NewRule()
 	nRule.Family = nFamily
-	nRule.Mark = uFWMark
+	nRule.Mark = fwmark
 	nRule.Table = customDSRRouteTableID
 	nRule.Priority = defaultTrafficDirectorRulePriority
 
