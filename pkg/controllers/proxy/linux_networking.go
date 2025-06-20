@@ -23,9 +23,6 @@ import (
 )
 
 const (
-	ipv4NetMaskBits = 32
-	ipv6NetMaskBits = 128
-
 	// TODO: it's bad to rely on eth0 here. While this is inside the container's namespace and is determined by the
 	// container runtime and so far we've been able to count on this being reliably set to eth0, it is possible that
 	// this may shift sometime in the future with a different runtime. It would be better to find a reliable way to
@@ -65,7 +62,6 @@ type netlinkCalls interface {
 }
 
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP string) error {
-	var netMask net.IPMask
 	parsedIP := net.ParseIP(ip)
 	parsedNodeIP := net.ParseIP(nodeIP)
 	if parsedIP.To4() != nil {
@@ -73,8 +69,6 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		if parsedNodeIP.To4() == nil {
 			return fmt.Errorf("nodeIP %s does not match family for VIP IP: %s, unable to proceed", ip, nodeIP)
 		}
-
-		netMask = net.CIDRMask(ipv4NetMaskBits, ipv4NetMaskBits)
 	} else {
 		// If the IP family of the NodeIP and the VIP IP don't match, we can't proceed
 		if parsedNodeIP.To4() != nil {
@@ -85,11 +79,9 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 			klog.V(2).Infof("Ignoring link-local IP address: %s", ip)
 			return nil
 		}
-
-		netMask = net.CIDRMask(ipv6NetMaskBits, ipv6NetMaskBits)
 	}
 
-	naddr := &netlink.Addr{IPNet: &net.IPNet{IP: parsedIP, Mask: netMask}, Scope: syscall.RT_SCOPE_LINK}
+	naddr := &netlink.Addr{IPNet: utils.GetSingleIPNet(parsedIP), Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrDel(iface, naddr)
 	if err != nil {
 		if err.Error() != IfaceHasNoAddr {
@@ -106,7 +98,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 	// #nosec G204
 	nRoute := &netlink.Route{
 		Type:      unix.RTN_LOCAL,
-		Dst:       &net.IPNet{IP: parsedIP, Mask: netMask},
+		Dst:       utils.GetSingleIPNet(parsedIP),
 		LinkIndex: iface.Attrs().Index,
 		Table:     syscall.RT_TABLE_LOCAL,
 		Protocol:  unix.RTPROT_KERNEL,
@@ -132,7 +124,6 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 // to kube-dummy-if. Also when DSR is used, used to assign VIP to dummy interface
 // inside the container.
 func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
-	var netMask net.IPMask
 	var isIPv6 bool
 	parsedIP := net.ParseIP(ip)
 	parsedNodeIP := net.ParseIP(nodeIP)
@@ -141,20 +132,16 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 		if addRoute && parsedNodeIP.To4() == nil {
 			return fmt.Errorf("nodeIP %s does not match family for VIP IP: %s, unable to proceed", ip, nodeIP)
 		}
-
-		netMask = net.CIDRMask(ipv4NetMaskBits, ipv4NetMaskBits)
 		isIPv6 = false
 	} else {
 		// If we're supposed to add a route and the IP family of the NodeIP and the VIP IP don't match, we can't proceed
 		if addRoute && parsedNodeIP.To4() != nil {
 			return fmt.Errorf("nodeIP %s does not match family for VIP IP: %s, unable to proceed", ip, nodeIP)
 		}
-
-		netMask = net.CIDRMask(ipv6NetMaskBits, ipv6NetMaskBits)
 		isIPv6 = true
 	}
 
-	ipPrefix := &net.IPNet{IP: parsedIP, Mask: netMask}
+	ipPrefix := utils.GetSingleIPNet(parsedIP)
 	naddr := &netlink.Addr{IPNet: ipPrefix, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrAdd(iface, naddr)
 	if err != nil && err.Error() != IfaceHasAddr {
@@ -196,7 +183,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 	// create the source route below. See: https://github.com/cloudnativelabs/kube-router/issues/1698
 	if isIPv6 {
 		nRoute := &netlink.Route{
-			Dst:   &net.IPNet{IP: parsedIP, Mask: netMask},
+			Dst:   utils.GetSingleIPNet(parsedIP),
 			Table: unix.RT_TABLE_UNSPEC,
 		}
 		routes, err := netlink.RouteListFiltered(netlink.FAMILY_V6, nRoute,
@@ -327,10 +314,10 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 	var ipMask uint32
 	if vip.To4() != nil {
 		ipvsFamily = syscall.AF_INET
-		ipMask = uint32(ipv4NetMaskBits)
+		ipMask = utils.GetIPv4NetMaxMaskBits()
 	} else {
 		ipvsFamily = syscall.AF_INET6
-		ipMask = uint32(ipv6NetMaskBits)
+		ipMask = utils.GetIPv6NetMaxMaskBits()
 	}
 	svc := ipvs.Service{
 		Address:       vip,
@@ -370,9 +357,9 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uin
 	var netmaskForFamily uint32
 	switch family {
 	case syscall.AF_INET:
-		netmaskForFamily = ipv4NetMaskBits
+		netmaskForFamily = utils.GetIPv4NetMaxMaskBits()
 	case syscall.AF_INET6:
-		netmaskForFamily = ipv6NetMaskBits
+		netmaskForFamily = utils.GetIPv6NetMaxMaskBits()
 	}
 	for _, svc := range svcs {
 		if fwMark == svc.FWMark {

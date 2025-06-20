@@ -9,7 +9,36 @@ import (
 const (
 	IPv4DefaultRoute = "0.0.0.0/0"
 	IPv6DefaultRoute = "::/0"
+
+	ipv4NetMaskBits = 32
+	ipv6NetMaskBits = 128
 )
+
+// GetSingleIPNet returns an IPNet object that represents a subnet containing a single IP address for a given IP address
+// with proper handling for IPv4 and IPv6 addresses.
+func GetSingleIPNet(ip net.IP) *net.IPNet {
+	if ip.To4() != nil {
+		return &net.IPNet{
+			IP:   ip,
+			Mask: net.CIDRMask(ipv4NetMaskBits, ipv4NetMaskBits),
+		}
+	} else {
+		return &net.IPNet{
+			IP:   ip,
+			Mask: net.CIDRMask(ipv6NetMaskBits, ipv6NetMaskBits),
+		}
+	}
+}
+
+// GetIPv4NetMaxMaskBits returns the maximum mask bits for an IPv4 address
+func GetIPv4NetMaxMaskBits() uint32 {
+	return ipv4NetMaskBits
+}
+
+// GetIPv6NetMaxMaskBits returns the maximum mask bits for an IPv6 address
+func GetIPv6NetMaxMaskBits() uint32 {
+	return ipv6NetMaskBits
+}
 
 // ContainsIPv4Address checks a given string array to see if it contains a valid IPv4 address within it
 func ContainsIPv4Address(addrs []string) bool {
