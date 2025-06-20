@@ -1749,10 +1749,17 @@ func routeVIPTrafficToDirector(fwmark uint32, family v1.IPFamily) error {
 	}
 
 	if len(routes) < 1 {
+		klog.V(1).Infof("adding policy rule (%s) to lookup traffic to VIP through the custom routing table", nRule)
 		err = netlink.RuleAdd(nRule)
 		if err != nil {
 			return fmt.Errorf("failed to add policy rule to lookup traffic to VIP through the custom "+
 				"routing table due to: %v", err)
+		}
+	} else {
+		klog.V(1).Infof("policy rule (%s) for mark %d already exists, skipping", nRule, fwmark)
+		klog.V(1).Info("Routes Found:")
+		for _, route := range routes {
+			klog.V(1).Infof("Route: %+v with mark %d", route, route.Mark)
 		}
 	}
 
