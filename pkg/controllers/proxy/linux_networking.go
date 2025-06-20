@@ -105,19 +105,38 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		Scope:     syscall.RT_SCOPE_HOST,
 		Src:       parsedNodeIP,
 	}
-	err = netlink.RouteDel(nRoute)
+	routes, err := netlink.RouteListFiltered(netlink.FAMILY_ALL, nRoute,
+		netlink.RT_FILTER_TYPE|netlink.RT_FILTER_DST|netlink.RT_FILTER_OIF|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_SRC)
 	if err != nil {
-		if !strings.Contains(err.Error(), "no such process") {
-			klog.Errorf("Failed to delete route to service VIP %s configured on %s. Error: %v",
-				ip, iface.Attrs().Name, err)
-		} else {
-			klog.Warningf("got a No such process error while trying to remove route: %v (this is not normally bad "+
-				"enough to stop processing)", err)
-			return nil
-		}
+		return fmt.Errorf("failed to list filtered routes for route %s: %v", nRoute, err)
 	}
 
-	return err
+	// Let the user know if we found more than 1 route that matched a single route filter
+	if len(routes) > 1 {
+		klog.Warning("Found more than 1 route that matched a single route filter, this is not expected, please " +
+			"report this upstream as a bug if you see this message along with the information below:")
+		for _, route := range routes {
+			klog.Infof("Found route: %s", route)
+		}
+		klog.Warningf("Continuing with deletion of the route we know about: %s", nRoute)
+	}
+
+	// If we found one or no routes, this is expected, so we can proceed with the action
+	if len(routes) > 0 {
+		klog.V(1).Infof("Found %d routes for interface %s, deleting them...", len(routes), iface.Attrs().Name)
+		err = netlink.RouteDel(nRoute)
+		if err != nil {
+			if !strings.Contains(err.Error(), "no such process") {
+				return fmt.Errorf("failed to delete route %s: %v", nRoute, err)
+			}
+			klog.Warningf("got a No such process error while trying to remove route %s: %v (this is not normally bad "+
+				"enough to stop processing)", nRoute, err)
+		}
+	} else {
+		klog.V(1).Infof("No routes found for %s, skipping deletion", nRoute)
+	}
+
+	return nil
 }
 
 // utility method to assign an IP to an interface. Mainly used to assign service VIP's
