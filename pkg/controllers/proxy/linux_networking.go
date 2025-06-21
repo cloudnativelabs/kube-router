@@ -62,6 +62,7 @@ type netlinkCalls interface {
 }
 
 func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP string) error {
+	var nFamily int
 	parsedIP := net.ParseIP(ip)
 	parsedNodeIP := net.ParseIP(nodeIP)
 	if parsedIP.To4() != nil {
@@ -69,6 +70,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		if parsedNodeIP.To4() == nil {
 			return fmt.Errorf("nodeIP %s does not match family for VIP IP: %s, unable to proceed", ip, nodeIP)
 		}
+		nFamily = netlink.FAMILY_V4
 	} else {
 		// If the IP family of the NodeIP and the VIP IP don't match, we can't proceed
 		if parsedNodeIP.To4() != nil {
@@ -79,18 +81,32 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 			klog.V(2).Infof("Ignoring link-local IP address: %s", ip)
 			return nil
 		}
+		nFamily = netlink.FAMILY_V6
 	}
 
 	naddr := &netlink.Addr{IPNet: utils.GetSingleIPNet(parsedIP), Scope: syscall.RT_SCOPE_LINK}
-	err := netlink.AddrDel(iface, naddr)
+	addrList, err := netlink.AddrList(iface, nFamily)
+	nIfaceHasAddr := false
 	if err != nil {
-		if err.Error() != IfaceHasNoAddr {
-			klog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
-				ip, iface.Attrs().Name, err.Error())
-			return err
-		} else {
-			klog.Warningf("got an IfaceHasNoAddr error while trying to delete address %s from netlink %s: %v (this "+
-				"is not normally bad enough to stop processing)", ip, iface.Attrs().Name, err)
+		return fmt.Errorf("failed to list addresses for interface %s due to: %v", iface.Attrs().Name, err)
+	}
+	for _, addr := range addrList {
+		if addr.IP.Equal(parsedIP) {
+			nIfaceHasAddr = true
+			break
+		}
+	}
+	if nIfaceHasAddr {
+		err := netlink.AddrDel(iface, naddr)
+		if err != nil {
+			if err.Error() != IfaceHasNoAddr {
+				klog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
+					ip, iface.Attrs().Name, err.Error())
+				return err
+			} else {
+				klog.Warningf("got an IfaceHasNoAddr error while trying to delete address %s from netlink %s: %v (this "+
+					"is not normally bad enough to stop processing)", ip, iface.Attrs().Name, err)
+			}
 		}
 	}
 
