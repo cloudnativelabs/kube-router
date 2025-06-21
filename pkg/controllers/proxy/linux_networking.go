@@ -19,6 +19,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
 
@@ -582,9 +583,11 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 
 	setupIPRulesAndRoutes := func(isIPv6 bool) error {
 		nFamily := netlink.FAMILY_V4
+		kFamily := v1.IPv4Protocol
 		defaultPrefixCIDR := utils.GetDefaultIPv4Route()
 		if isIPv6 {
 			nFamily = netlink.FAMILY_V6
+			kFamily = v1.IPv6Protocol
 			defaultPrefixCIDR = utils.GetDefaultIPv6Route()
 		}
 		if defaultPrefixCIDR == nil {
@@ -635,19 +638,21 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 
 		activeExternalIPs := make(map[string]bool)
 		for _, svc := range serviceInfoMap {
-			for _, externalIP := range svc.externalIPs {
+			externalIPs := getAllExternalIPs(svc, true)
+			for _, externalIP := range externalIPs[kFamily] {
 				// Verify the DSR annotation exists
 				if !svc.directServerReturn {
 					klog.V(1).Infof("Skipping service %s/%s as it does not have DSR annotation",
 						svc.namespace, svc.name)
 					continue
 				}
+				klog.V(2).Infof("DSR annotation exists for Service %s/%s, proceeding with route for: %s",
+					svc.namespace, svc.name, externalIP)
 
-				activeExternalIPs[externalIP] = true
+				activeExternalIPs[externalIP.String()] = true
 
-				nDstIP := net.ParseIP(externalIP)
 				nRoute := &netlink.Route{
-					Dst:       utils.GetSingleIPNet(nDstIP),
+					Dst:       utils.GetSingleIPNet(externalIP),
 					LinkIndex: kubeBridgeLink.Attrs().Index,
 					Table:     externalIPRouteTableID,
 				}
