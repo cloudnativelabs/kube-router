@@ -1,7 +1,11 @@
+// Package tunnels provides functionality for setting up and managing overlay tunnels in Linux.
+// It includes support for both IPIP and FOU (Foo over Ethernet) encapsulation types.
+//
+// As much functionality as possible is done via the netlink library, however, FOU tunnels require using the iproute2
+// user space tooling since they are not currently supported by the netlink library.
 package tunnels
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"fmt"
 	"net"
@@ -31,6 +35,14 @@ const (
 	// The maximum and minimum port numbers for encap ports
 	maxPort = uint16(65535)
 	minPort = uint16(1024)
+
+	// Unix tunnel encap types, unfortunately, these are not understood by the netlink library, so we need to use
+	// our own enums which as far as I can tell come from here:
+	// https://github.com/iproute2/iproute2/blob/e6a170a9d4e75d206631da77e469813279c12134/include/uapi/linux/if_tunnel.h#L84-L89
+	UnixTunnelEncapTypeNone uint16 = 0
+	UnixTunnelEncapTypeFOU  uint16 = 1
+	UnixTunnelEncapTypeGUE  uint16 = 2
+	UnixTunnelEncapTypeMPLS uint16 = 3
 )
 
 var (
@@ -106,7 +118,6 @@ func (o *OverlayTunnel) EncapPort() EncapPort {
 // setupOverlayTunnel attempts to create a tunnel link and corresponding routes for IPIP based overlay networks
 func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 	nextHopSubnet *net.IPNet) (netlink.Link, error) {
-	var out []byte
 	link, err := netlink.LinkByName(tunnelName)
 
 	var bestIPForFamily net.IP
@@ -142,8 +153,14 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 
 		switch o.encapType {
 		case EncapTypeIPIP:
-			if linkFOUEnabled(tunnelName) {
-				klog.Infof("Was configured to use ipip tunnels, but found existing fou tunnels in place, cleaning up")
+			if fouEnabled, err := linkFOUEnabled(tunnelName); err != nil || fouEnabled {
+				if err != nil {
+					klog.Errorf("failed to check if fou is enabled on the link %s: %v, going to try to clean up and "+
+						"recreate the tunnel", tunnelName, err)
+				} else {
+					klog.Infof("Was configured to use ipip tunnels, but found existing fou tunnels in place, " +
+						"cleaning up")
+				}
 				recreate = true
 
 				// Even though we are setup for IPIP tunels we have existing tunnels that are FoU tunnels, remove them
@@ -163,56 +180,95 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 				}
 			}
 		case EncapTypeFOU:
-			if !linkFOUEnabled(tunnelName) {
-				klog.Infof("Was configured to use fou tunnels, but found existing ipip tunnels in place, cleaning up")
+			if fouEnabled, err := linkFOUEnabled(tunnelName); err != nil || !fouEnabled {
+				if err != nil {
+					klog.Errorf("failed to check if fou is enabled on the link %s: %v, going to try to clean up and "+
+						"recreate the tunnel", tunnelName, err)
+				} else {
+					klog.Infof("Was configured to use fou tunnels, but found existing ipip tunnels in place, " +
+						"cleaning up")
+				}
 				recreate = true
 				// Even though we are setup for FoU tunels we have existing tunnels that are IPIP tunnels, remove them
 				// so that we can recreate them as IPIP
 				CleanupTunnel(nextHopSubnet, tunnelName)
 			}
+		default:
+			return nil, fmt.Errorf("unknown tunnel encapsulation was passed: %s, unable to continue with overlay "+
+				"setup", o.encapType)
 		}
 	}
 
 	// an error here indicates that the tunnel didn't exist, so we need to create it, if it already exists there's
 	// nothing to do here
 	if err != nil || recreate {
-		klog.Infof("Creating tunnel %s of type %s with encap %s for destination %s",
-			tunnelName, fouLinkType, o.encapType, nextHop.String())
-		cmdArgs := ipBase
+		klog.Infof("Creating tunnel %s with encap %s for destination %s",
+			tunnelName, o.encapType, nextHop.String())
+
 		switch o.encapType {
 		case EncapTypeIPIP:
-			// Plain IPIP tunnel without any encapsulation
-			cmdArgs = append(cmdArgs, "tunnel", "add", tunnelName, "mode", ipipMode, "local", bestIPForFamily.String(),
-				"remote", nextHop.String())
+			// Create plain IPIP tunnel using netlink
+			var tunnelLink netlink.Link
+			if isIPv6 {
+				tunnelLink = &netlink.Ip6tnl{
+					LinkAttrs: netlink.LinkAttrs{Name: tunnelName},
+					Local:     bestIPForFamily,
+					Remote:    nextHop,
+				}
+			} else {
+				tunnelLink = &netlink.Iptun{
+					LinkAttrs: netlink.LinkAttrs{Name: tunnelName},
+					Local:     bestIPForFamily,
+					Remote:    nextHop,
+				}
+			}
+
+			if err := netlink.LinkAdd(tunnelLink); err != nil {
+				return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
+					"Failed to create tunnel interface %s. error: %v", nextHop, tunnelName, err)
+			}
 
 		case EncapTypeFOU:
 			// Ensure that the FOU tunnel port is set correctly
 			if !fouPortAndProtoExist(o.encapPort, isIPv6) {
-				fouArgs := ipBase
-				fouArgs = append(fouArgs, "fou", "add", "port", strFormattedEncapPort, "gue")
-				out, err := exec.Command("ip", fouArgs...).CombinedOutput()
-				if err != nil {
+				// Create FOU port using netlink
+				var family int
+				if isIPv6 {
+					family = netlink.FAMILY_V6
+				} else {
+					family = netlink.FAMILY_V4
+				}
+
+				fouPort := &netlink.Fou{
+					Family:    family,
+					Port:      int(o.encapPort),
+					EncapType: netlink.FOU_ENCAP_GUE,
+				}
+
+				if err := netlink.FouAdd(*fouPort); err != nil {
 					return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
-						"Failed to set FoU tunnel port - error: %s, output: %s", tunnelName, err, string(out))
+						"Failed to set FoU tunnel port - error: %v", nextHop, err)
 				}
 			}
 
-			// Prep IPIP tunnel for FOU encapsulation
+			// For FOU tunnels, we still need to use exec.Command because the netlink library doesn't support ipip &
+			// ip6ip6 secondary encapsulation modes on links. It does support GUE, but until it supports secondary
+			// encapsulation modes, we need to use the iproute2 tooling to create the tunnel.
+			cmdArgs := ipBase
 			cmdArgs = append(cmdArgs, "link", "add", "name", tunnelName, "type", fouLinkType, "remote", nextHop.String(),
 				"local", bestIPForFamily.String(), "ttl", "225", "encap", "gue", "encap-sport", "auto", "encap-dport",
 				strFormattedEncapPort, "mode", ipipMode)
 
+			klog.V(2).Infof("Executing the following command to create tunnel: ip %s", cmdArgs)
+			out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
+			if err != nil {
+				return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
+					"Failed to create tunnel interface %s. error: %s, output: %s",
+					nextHop, tunnelName, err, string(out))
+			}
 		default:
 			return nil, fmt.Errorf("unknown tunnel encapsulation was passed: %s, unable to continue with overlay "+
 				"setup", o.encapType)
-		}
-
-		klog.V(2).Infof("Executing the following command to create tunnel: ip %s", cmdArgs)
-		out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
-				"Failed to create tunnel interface %s. error: %s, output: %s",
-				nextHop, tunnelName, err, string(out))
 		}
 
 		link, err = netlink.LinkByName(tunnelName)
@@ -227,19 +283,33 @@ func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 
 	// Now that the tunnel link exists, we need to add a route to it, so the node knows where to send traffic bound for
 	// this interface
-	//nolint:gocritic // we understand that we are appending to a new slice
-	cmdArgs := append(ipBase, "route", "list", "table", strconv.Itoa(routes.CustomTableID))
-	out, err = exec.Command("ip", cmdArgs...).CombinedOutput()
-	// This used to be "dev "+tunnelName+" scope" but this isn't consistent with IPv6's output, so we changed it to just
-	// "dev "+tunnelName, but at this point I'm unsure if there was a good reason for adding scope on before, so that's
-	// why this comment is here.
-	if err != nil || !strings.Contains(string(out), "dev "+tunnelName) {
-		//nolint:gocritic // we understand that we are appending to a new slice
-		cmdArgs = append(ipBase, "route", "add", nextHop.String(), "dev", tunnelName, "table",
-			strconv.Itoa(routes.CustomTableID))
-		if out, err = exec.Command("ip", cmdArgs...).CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("failed to add route in custom route table, err: %s, output: %s", err, string(out))
+	var routeFamily int
+	if isIPv6 {
+		routeFamily = netlink.FAMILY_V6
+	} else {
+		routeFamily = netlink.FAMILY_V4
+	}
+
+	// Check if route already exists in the custom table
+	route := &netlink.Route{
+		Family:    routeFamily,
+		LinkIndex: link.Attrs().Index,
+		Table:     routes.CustomTableID,
+		Dst:       utils.GetSingleIPNet(nextHop),
+	}
+	routeList, err := netlink.RouteListFiltered(routeFamily, route,
+		netlink.RT_FILTER_OIF|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_DST)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list routes in custom table: %v", err)
+	}
+
+	if len(routeList) < 1 {
+		// Add route to the custom table
+		if err = netlink.RouteAdd(route); err != nil {
+			return nil, fmt.Errorf("failed to add route in custom route table, err: %v", err)
 		}
+	} else {
+		klog.V(2).Infof("Route for %s already exists in custom table", nextHop.String())
 	}
 
 	return link, nil
@@ -284,48 +354,25 @@ func GenerateTunnelName(nodeIP string) string {
 
 // fouPortAndProtoExist checks to see if the given FoU port is already configured on the system via iproute2
 // tooling for the given protocol
-//
-// fou show, shows both IPv4 and IPv6 ports in the same show command, they look like:
-// port 5556 gue
-// port 5556 gue -6
-// where the only thing that distinguishes them is the -6 or not on the end
-// WARNING we're parsing a CLI tool here not an API, this may break at some point in the future
 func fouPortAndProtoExist(port EncapPort, isIPv6 bool) bool {
 	const ipRoute2IPv6Prefix = "-6"
 	strPort := strconv.FormatInt(int64(port), 10)
-	fouArgs := make([]string, 0)
 	klog.V(2).Infof("Checking FOU Port and Proto... %s - %t", strPort, isIPv6)
 
+	nFamily := netlink.FAMILY_V4
 	if isIPv6 {
-		fouArgs = append(fouArgs, ipRoute2IPv6Prefix)
+		nFamily = netlink.FAMILY_V6
 	}
-	fouArgs = append(fouArgs, "fou", "show")
 
-	out, err := exec.Command("ip", fouArgs...).CombinedOutput()
-	// iproute2 returns an error if no fou configuration exists
+	fList, err := netlink.FouList(nFamily)
 	if err != nil {
+		klog.Errorf("failed to list fou ports: %v", err)
 		return false
 	}
 
-	strOut := string(out)
-	klog.V(2).Infof("Combined output of ip fou show: %s", strOut)
-	scanner := bufio.NewScanner(strings.NewReader(strOut))
-
-	// loop over all lines of output
-	for scanner.Scan() {
-		scannedLine := scanner.Text()
-		// if the output doesn't contain our port at all, then continue
-		if !strings.Contains(scannedLine, strPort) {
-			continue
-		}
-
-		// if this is IPv6 port and it has the correct IPv6 suffix (see example above) then return true
-		if isIPv6 && strings.HasSuffix(scannedLine, ipRoute2IPv6Prefix) {
-			return true
-		}
-
-		// if this is not IPv6 and it does not have an IPv6 suffix (see example above) then return true
-		if !isIPv6 && !strings.HasSuffix(scannedLine, ipRoute2IPv6Prefix) {
+	for _, fou := range fList {
+		klog.V(2).Infof("Found fou port: %s", fou)
+		if fou.Port == int(port) && fou.Family == nFamily {
 			return true
 		}
 	}
@@ -336,26 +383,29 @@ func fouPortAndProtoExist(port EncapPort, isIPv6 bool) bool {
 // linkFOUEnabled checks to see whether the given link has FoU (Foo over Ethernet) enabled on it, specifically since
 // kube-router only works with GUE (Generic UDP Encapsulation) we look for that and not just FoU in general. If the
 // linkName is enabled with FoU GUE then we return true, otherwise false
-//
-// Output for a FoU Enabled GUE tunnel looks like:
-// ipip ipip remote <ip> local <ip> dev <dev> ttl 225 pmtudisc encap gue encap-sport auto encap-dport 5555 ...
-// Output for a normal IPIP tunnel looks like:
-// ipip ipip remote <ip> local <ip> dev <dev> ttl inherit ...
-func linkFOUEnabled(linkName string) bool {
-	const fouEncapEnabled = "encap gue"
-	cmdArgs := []string{"-details", "link", "show", linkName}
-
-	out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
-
+func linkFOUEnabled(linkName string) (bool, error) {
+	const gueEncapType = "gue"
+	link, err := netlink.LinkByName(linkName)
 	if err != nil {
-		klog.Warningf("recevied an error while trying to look at the link details of %s, this shouldn't have happened",
-			linkName)
-		return false
+		return false, fmt.Errorf("failed to get link by name: %v", err)
 	}
 
-	if strings.Contains(string(out), fouEncapEnabled) {
-		return true
+	switch link := link.(type) {
+	case *netlink.Iptun:
+		klog.V(2).Infof("Link %s is an IPTun with encap type: %d and encap dport: %d",
+			linkName, link.EncapType, link.EncapDport)
+		if link.EncapType == UnixTunnelEncapTypeGUE {
+			return true, nil
+		}
+	case *netlink.Ip6tnl:
+		klog.V(2).Infof("Link %s is an IP6Tun with encap type: %d and encap dport: %d",
+			linkName, link.EncapType, link.EncapDport)
+		if link.EncapType == UnixTunnelEncapTypeGUE {
+			return true, nil
+		}
+	default:
+		return false, fmt.Errorf("Link %s is not an IPTun or IP6Tun, this is not expected", linkName)
 	}
 
-	return false
+	return false, nil
 }
