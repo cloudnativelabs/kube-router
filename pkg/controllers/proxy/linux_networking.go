@@ -640,6 +640,8 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		for _, svc := range serviceInfoMap {
 			externalIPs := getAllExternalIPs(svc, true)
 			for _, externalIP := range externalIPs[kFamily] {
+				klog.V(2).Infof("Looking at adding route for Service %s/%s externalIP: %s", svc.namespace, svc.name,
+					externalIP)
 				// Verify the DSR annotation exists
 				if !svc.directServerReturn {
 					klog.V(1).Infof("Skipping service %s/%s as it does not have DSR annotation",
@@ -669,7 +671,11 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 							externalIP, err)
 						continue
 					}
+					klog.V(2).Infof("Successfully added route for %s in custom route table for external IP's",
+						externalIP)
+					continue
 				}
+				klog.V(2).Infof("Route for %s in custom route table for external IP's already exists", externalIP)
 			}
 		}
 
