@@ -19,7 +19,6 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
 
@@ -583,11 +582,11 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 
 	setupIPRulesAndRoutes := func(isIPv6 bool) error {
 		nFamily := netlink.FAMILY_V4
-		kFamily := v1.IPv4Protocol
+		// kFamily := v1.IPv4Protocol
 		defaultPrefixCIDR := utils.GetDefaultIPv4Route()
 		if isIPv6 {
 			nFamily = netlink.FAMILY_V6
-			kFamily = v1.IPv6Protocol
+			// kFamily = v1.IPv6Protocol
 			defaultPrefixCIDR = utils.GetDefaultIPv6Route()
 		}
 		if defaultPrefixCIDR == nil {
@@ -631,7 +630,11 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 			}
 		}
 
-		kubeBridgeLink, err := netlink.LinkByName(KubeBridgeIf)
+		// Commenting this out for now as it seems to be causing more issues than it solves. This was originally added
+		// in PR #210 - https://github.com/cloudnativelabs/kube-router/pull/210/files to supposedly help with martian
+		// packets, but when enabled it seems to cause issues with service routing from the node to an external IP
+		// service from the local node to an non-local traffic policy service.
+		/* kubeBridgeLink, err := netlink.LinkByName(KubeBridgeIf)
 		if err != nil {
 			return fmt.Errorf("failed to get kube-bridge interface due to %v", err)
 		}
@@ -677,7 +680,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 				}
 				klog.V(2).Infof("Route for %s in custom route table for external IP's already exists", externalIP)
 			}
-		}
+		} */
 
 		// check if there are any pbr in externalIPRouteTableID for external IP's
 		nRoute := &netlink.Route{
@@ -690,14 +693,12 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 		for idx, route := range routes {
 			ip := route.Dst.IP.String()
-			if !activeExternalIPs[ip] {
-				klog.Infof("Deleting route: %+v in custom route table for external IP's as it is not active", route)
-				err = netlink.RouteDel(&routes[idx])
-				if err != nil {
-					klog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s",
-						ip, err)
-					continue
-				}
+			klog.Infof("Deleting route: %+v in custom route table for external IP's as it is not active", route)
+			err = netlink.RouteDel(&routes[idx])
+			if err != nil {
+				klog.Errorf("Failed to del route for %v in custom route table for external IP's due to: %s",
+					ip, err)
+				continue
 			}
 		}
 
