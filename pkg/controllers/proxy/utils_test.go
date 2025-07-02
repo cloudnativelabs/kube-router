@@ -201,14 +201,14 @@ func TestIsValidKubeRouterServiceArtifact(t *testing.T) {
 	}
 
 	nsc := &NetworkServicesController{
-		krNode: krNode,
-		serviceMap: map[string]*serviceInfo{
-			"service1": service1,
-			"service2": service2,
-			"service3": service3,
-		},
+		krNode:              krNode,
 		nodeportBindOnAllIP: false,
 	}
+	nsc.setServiceMap(map[string]*serviceInfo{
+		"service1": service1,
+		"service2": service2,
+		"service3": service3,
+	})
 
 	tests := []struct {
 		address  net.IP
