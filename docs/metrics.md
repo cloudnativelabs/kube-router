@@ -19,12 +19,11 @@ Metrics options:
 
 To enable kube-router metrics, start kube-router with `--metrics-port` and provide a port over 0
 
-Metrics is generally exported at the same rate as the sync period for each service.
+Metrics is generally exported at the same rate as the sync period for each service. Service metrics are exported real-time.
 
 The default values unless other specified is
 
 * iptables-sync-period - `1 min``
-* ipvs-sync-period - `1 min``
 * routes-sync-period - `1 min``
 
 By enabling

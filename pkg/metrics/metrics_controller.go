@@ -21,6 +21,13 @@ const (
 	namespace                 = "kube_router"
 )
 
+func newDesc(name, help string, variableLabels []string) *prometheus.Desc {
+	return prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", name),
+		help, variableLabels, nil,
+	)
+}
+
 var (
 	// DefaultRegisterer and DefaultGatherer are the implementations of the
 	// prometheus Registerer and Gatherer interfaces that all metrics operations
@@ -38,72 +45,76 @@ var (
 		Name:      "build_info",
 		Help:      "Expose version and other build information",
 	}, []string{"goversion", "version"})
+
+	// serviceLabels holds labels for service metrics
+	serviceLabels = []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"}
+
 	// ServiceTotalConn Total incoming connections made
-	ServiceTotalConn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_total_connections",
-		Help:      "Total incoming connections made",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServiceTotalConn = newDesc(
+		"service_total_connections",
+		"Total incoming connections made",
+		serviceLabels,
+	)
 	// ServicePacketsIn Total incoming packets
-	ServicePacketsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_packets_in",
-		Help:      "Total incoming packets",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServicePacketsIn = newDesc(
+		"service_packets_in",
+		"Total incoming packets",
+		serviceLabels,
+	)
 	// ServicePacketsOut Total outgoing packets
-	ServicePacketsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_packets_out",
-		Help:      "Total outgoing packets",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServicePacketsOut = newDesc(
+		"service_packets_out",
+		"Total outgoing packets",
+		serviceLabels,
+	)
 	// ServiceBytesIn Total incoming bytes
-	ServiceBytesIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_bytes_in",
-		Help:      "Total incoming bytes",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServiceBytesIn = newDesc(
+		"service_bytes_in",
+		"Total incoming bytes",
+		serviceLabels,
+	)
 	// ServiceBytesOut Total outgoing bytes
-	ServiceBytesOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_bytes_out",
-		Help:      "Total outgoing bytes",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServiceBytesOut = newDesc(
+		"service_bytes_out",
+		"Total outgoing bytes",
+		serviceLabels,
+	)
 	// ServicePpsIn Incoming packets per second
-	ServicePpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_pps_in",
-		Help:      "Incoming packets per second",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServicePpsIn = newDesc(
+		"service_pps_in",
+		"Incoming packets per second",
+		serviceLabels,
+	)
 	// ServicePpsOut Outgoing packets per second
-	ServicePpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_pps_out",
-		Help:      "Outgoing packets per second",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServicePpsOut = newDesc(
+		"service_pps_out",
+		"Outgoing packets per second",
+		serviceLabels,
+	)
 	// ServiceCPS Service connections per second
-	ServiceCPS = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_cps",
-		Help:      "Service connections per second",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServiceCPS = newDesc(
+		"service_cps",
+		"Service connections per second",
+		serviceLabels,
+	)
 	// ServiceBpsIn Incoming bytes per second
-	ServiceBpsIn = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_bps_in",
-		Help:      "Incoming bytes per second",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServiceBpsIn = newDesc(
+		"service_bps_in",
+		"Incoming bytes per second",
+		serviceLabels,
+	)
 	// ServiceBpsOut Outgoing bytes per second
-	ServiceBpsOut = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "service_bps_out",
-		Help:      "Outgoing bytes per second",
-	}, []string{"svc_namespace", "service_name", "service_vip", "protocol", "port"})
+	ServiceBpsOut = newDesc(
+		"service_bps_out",
+		"Outgoing bytes per second",
+		serviceLabels,
+	)
 	// ControllerIpvsServices Number of ipvs services in the instance
-	ControllerIpvsServices = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "controller_ipvs_services",
-		Help:      "Number of ipvs services in the instance",
-	})
+	ControllerIpvsServices = newDesc(
+		"controller_ipvs_services",
+		"Number of ipvs services in the instance",
+		nil,
+	)
 	// ControllerIptablesSyncTime Time it took for controller to sync iptables
 	ControllerIptablesSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
