@@ -10,8 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/ccoveille/go-safecast"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
@@ -115,7 +117,7 @@ type NetworkServicesController struct {
 	krNode              utils.NodeAware
 	syncPeriod          time.Duration
 	mu                  sync.Mutex
-	serviceMap          serviceInfoMap
+	serviceMap          unsafe.Pointer
 	endpointsMap        endpointSliceInfoMap
 	podCidr             string
 	excludedCidrs       []net.IPNet
@@ -373,7 +375,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
 				klog.V(1).Info("Performing requested sync of ipvs services")
 				nsc.mu.Lock()
-				err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+				err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 				if err != nil {
 					klog.Errorf("error during ipvs sync in network service controller. Error: %v", err)
 				}
@@ -420,21 +422,21 @@ func (nsc *NetworkServicesController) doSync() error {
 		klog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
 	}
 
-	nsc.serviceMap = nsc.buildServicesInfo()
+	nsc.setServiceMap(nsc.buildServicesInfo())
 	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
 	err = nsc.syncHairpinIptablesRules()
 	if err != nil {
 		klog.Errorf("Error syncing hairpin iptables rules: %s", err.Error())
 	}
 
-	err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+	err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 	if err != nil {
 		klog.Errorf("Error syncing IPVS services: %s", err.Error())
 		return err
 	}
 
 	if nsc.MetricsEnabled {
-		err = nsc.publishMetrics(nsc.serviceMap)
+		err = nsc.publishMetrics(nsc.getServiceMap())
 		if err != nil {
 			klog.Errorf("Error publishing metrics: %v", err)
 			return err
@@ -845,7 +847,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(es *discovery.EndpointSl
 
 	if !endpointsMapsEquivalent(newEndpointsMap, nsc.endpointsMap) {
 		nsc.endpointsMap = newEndpointsMap
-		nsc.serviceMap = newServiceMap
+		nsc.setServiceMap(newServiceMap)
 		klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", es.Namespace, es.Name)
 		nsc.sync(synctypeIpvs)
 	} else {
@@ -881,9 +883,10 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *v1.Service) {
 	newServiceMap := nsc.buildServicesInfo()
 	newEndpointsMap := nsc.buildEndpointSliceInfo()
 
-	if len(newServiceMap) != len(nsc.serviceMap) || !reflect.DeepEqual(newServiceMap, nsc.serviceMap) {
+	oldServiceMap := nsc.getServiceMap()
+	if len(newServiceMap) != len(oldServiceMap) || !reflect.DeepEqual(newServiceMap, oldServiceMap) {
 		nsc.endpointsMap = newEndpointsMap
-		nsc.serviceMap = newServiceMap
+		nsc.setServiceMap(newServiceMap)
 		klog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
 		nsc.sync(synctypeIpvs)
 	} else {
@@ -1270,7 +1273,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	ipv6RulesNeeded := make(map[string][]string)
 
 	// Generate the rules that we need
-	for svcName, svcInfo := range nsc.serviceMap {
+	for svcName, svcInfo := range nsc.getServiceMap() {
 		if nsc.globalHairpin || svcInfo.hairpin {
 			// If this service doesn't have any active & local endpoints on this node, then skip it as only local
 			// endpoints matter for hairpinning
@@ -2050,7 +2053,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.gracefulTermination = config.IpvsGracefulTermination
 	nsc.globalHairpin = config.GlobalHairpinMode
 
-	nsc.serviceMap = make(serviceInfoMap)
+	nsc.setServiceMap(make(serviceInfoMap))
 	nsc.endpointsMap = make(endpointSliceInfoMap)
 	nsc.client = clientset
 
@@ -2143,4 +2146,12 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.nphc = NewNodePortHealthCheck()
 
 	return &nsc, nil
+}
+
+func (nsc *NetworkServicesController) setServiceMap(serviceMap serviceInfoMap) {
+	atomic.StorePointer(&nsc.serviceMap, unsafe.Pointer(&serviceMap))
+}
+
+func (nsc *NetworkServicesController) getServiceMap() serviceInfoMap {
+	return *(*serviceInfoMap)(atomic.LoadPointer(&nsc.serviceMap))
 }
