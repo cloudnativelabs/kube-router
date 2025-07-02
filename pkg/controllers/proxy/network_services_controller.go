@@ -22,6 +22,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/moby/ipvs"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	v1 "k8s.io/api/core/v1"
 	discovery "k8s.io/api/discovery/v1"
@@ -127,7 +128,6 @@ type NetworkServicesController struct {
 	client              kubernetes.Interface
 	nodeportBindOnAllIP bool
 	MetricsEnabled      bool
-	metricsMap          map[string][]string
 	ln                  LinuxNetworking
 	readyForUpdates     bool
 	ProxyFirewallSetup  *sync.Cond
@@ -435,13 +435,6 @@ func (nsc *NetworkServicesController) doSync() error {
 		return err
 	}
 
-	if nsc.MetricsEnabled {
-		err = nsc.publishMetrics(nsc.getServiceMap())
-		if err != nil {
-			klog.Errorf("Error publishing metrics: %v", err)
-			return err
-		}
-	}
 	return nil
 }
 
@@ -727,7 +720,21 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	return nil
 }
 
-func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
+func (*NetworkServicesController) Describe(ch chan<- *prometheus.Desc) {
+	ch <- metrics.ServiceBpsIn
+	ch <- metrics.ServiceBpsOut
+	ch <- metrics.ServiceBytesIn
+	ch <- metrics.ServiceBytesOut
+	ch <- metrics.ServiceCPS
+	ch <- metrics.ServicePacketsIn
+	ch <- metrics.ServicePacketsOut
+	ch <- metrics.ServicePpsIn
+	ch <- metrics.ServicePpsOut
+	ch <- metrics.ServiceTotalConn
+	ch <- metrics.ControllerIpvsServices
+}
+
+func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
@@ -737,13 +744,21 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		}
 	}()
 
-	ipvsSvcs, err := nsc.ln.ipvsGetServices()
+	ipvsHandle, err := ipvs.New("")
 	if err != nil {
-		return errors.New("Failed to list IPVS services: " + err.Error())
+		klog.Errorf("failed to initialize ipvs handle: %v", err)
+		return
+	}
+	defer ipvsHandle.Close()
+
+	ipvsSvcs, err := ipvsHandle.GetServices()
+	if err != nil {
+		klog.Errorf("failed to list IPVS services: %v", err)
+		return
 	}
 
 	klog.V(1).Info("Publishing IPVS metrics")
-	for _, svc := range serviceInfoMap {
+	for _, svc := range nsc.getServiceMap() {
 		var protocol uint16
 		var pushMetric bool
 		var svcVip string
@@ -788,24 +803,84 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 					strconv.Itoa(svc.port),
 				}
 
-				key := generateIPPortID(svcVip, svc.protocol, strconv.Itoa(svc.port))
-				nsc.metricsMap[key] = labelValues
-				// these same metrics should be deleted when the service is deleted.
-				metrics.ServiceBpsIn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.BPSIn))
-				metrics.ServiceBpsOut.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.BPSOut))
-				metrics.ServiceBytesIn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.BytesIn))
-				metrics.ServiceBytesOut.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.BytesOut))
-				metrics.ServiceCPS.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.CPS))
-				metrics.ServicePacketsIn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.PacketsIn))
-				metrics.ServicePacketsOut.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.PacketsOut))
-				metrics.ServicePpsIn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.PPSIn))
-				metrics.ServicePpsOut.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.PPSOut))
-				metrics.ServiceTotalConn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.Connections))
-				metrics.ControllerIpvsServices.Set(float64(len(ipvsSvcs)))
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServiceBpsIn,
+					prometheus.GaugeValue,
+					float64(ipvsSvc.Stats.BPSIn),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServiceBpsOut,
+					prometheus.GaugeValue,
+					float64(ipvsSvc.Stats.BPSOut),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServiceBytesIn,
+					prometheus.CounterValue,
+					float64(ipvsSvc.Stats.BytesIn),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServiceBytesOut,
+					prometheus.CounterValue,
+					float64(ipvsSvc.Stats.BytesOut),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServiceCPS,
+					prometheus.GaugeValue,
+					float64(ipvsSvc.Stats.CPS),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServicePacketsIn,
+					prometheus.CounterValue,
+					float64(ipvsSvc.Stats.PacketsIn),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServicePacketsOut,
+					prometheus.CounterValue,
+					float64(ipvsSvc.Stats.PacketsOut),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServicePpsIn,
+					prometheus.GaugeValue,
+					float64(ipvsSvc.Stats.PPSIn),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServicePpsOut,
+					prometheus.GaugeValue,
+					float64(ipvsSvc.Stats.PPSOut),
+					labelValues...,
+				)
+
+				ch <- prometheus.MustNewConstMetric(
+					metrics.ServiceTotalConn,
+					prometheus.CounterValue,
+					float64(ipvsSvc.Stats.Connections),
+					labelValues...,
+				)
 			}
 		}
 	}
-	return nil
+
+	ch <- prometheus.MustNewConstMetric(
+		metrics.ControllerIpvsServices,
+		prometheus.GaugeValue,
+		float64(len(ipvsSvcs)),
+	)
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
@@ -2027,23 +2102,13 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
-	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex, metricsMap: make(map[string][]string),
+	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex,
 		fwMarkMap: map[uint32]string{}}
 
 	if config.MetricsEnabled {
 		// Register the metrics for this controller
-		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIpvsServices)
+		metrics.DefaultRegisterer.MustRegister(&nsc)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIpvsServicesSyncTime)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBpsIn)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBpsOut)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBytesIn)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBytesOut)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceCPS)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServicePacketsIn)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServicePacketsOut)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServicePpsIn)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServicePpsOut)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceTotalConn)
 		nsc.MetricsEnabled = true
 	}
 
