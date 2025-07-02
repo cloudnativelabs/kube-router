@@ -156,7 +156,7 @@ var _ = Describe("NetworkServicesController", func() {
 		waitForListerWithTimeoutG(nsc.svcLister, time.Second*10)
 		waitForListerWithTimeoutG(nsc.epSliceLister, time.Second*10)
 
-		nsc.serviceMap = nsc.buildServicesInfo()
+		nsc.setServiceMap(nsc.buildServicesInfo())
 		nsc.endpointsMap = nsc.buildEndpointSliceInfo()
 	})
 	Context("service no endpoints with externalIPs", func() {
@@ -185,7 +185,7 @@ var _ = Describe("NetworkServicesController", func() {
 				schedFlags{})
 			_, fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, 0, "rr",
 				schedFlags{true, true, false})
-			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
@@ -204,7 +204,7 @@ var _ = Describe("NetworkServicesController", func() {
 			Expect(
 				mockedLinuxNetworking.setupRoutesForExternalIPForDSRCalls()).To(
 				ContainElement(
-					struct{ In1 serviceInfoMap }{In1: nsc.serviceMap}))
+					struct{ In1 serviceInfoMap }{In1: nsc.getServiceMap()}))
 		})
 		It("Should have called ipAddrAdd for ClusterIP and ExternalIPs", func() {
 			Expect((func() []string {
@@ -267,7 +267,7 @@ var _ = Describe("NetworkServicesController", func() {
 			}
 		})
 		JustBeforeEach(func() {
-			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
@@ -334,7 +334,7 @@ var _ = Describe("NetworkServicesController", func() {
 			}
 		})
 		JustBeforeEach(func() {
-			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
@@ -395,7 +395,7 @@ var _ = Describe("NetworkServicesController", func() {
 			}
 		})
 		JustBeforeEach(func() {
-			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())
@@ -463,7 +463,7 @@ var _ = Describe("NetworkServicesController", func() {
 			}
 		})
 		JustBeforeEach(func() {
-			syncErr = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 		})
 		It("Should have called syncIpvsServices OK", func() {
 			Expect(syncErr).To(Succeed())

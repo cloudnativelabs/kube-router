@@ -124,7 +124,7 @@ func (nsc *NetworkServicesController) lookupServiceByFWMark(fwMark uint32) (stri
 // isValidKubeRouterServiceArtifact looks up a service by its clusterIP, externalIP, or loadBalancerIP. It returns
 // truthy
 func (nsc *NetworkServicesController) isValidKubeRouterServiceArtifact(address net.IP, nodePort int) (bool, error) {
-	for _, svc := range nsc.serviceMap {
+	for _, svc := range nsc.getServiceMap() {
 		for _, clIP := range svc.clusterIPs {
 			if net.ParseIP(clIP).Equal(address) {
 				return true, nil
