@@ -757,123 +757,107 @@ func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	klog.V(1).Info("Publishing IPVS metrics")
+	serviceMap := map[string]*serviceInfo{}
 	for _, svc := range nsc.getServiceMap() {
-		var protocol uint16
-		var pushMetric bool
-		var svcVip string
-
-		protocol = convertSvcProtoToSysCallProto(svc.protocol)
-		for _, ipvsSvc := range ipvsSvcs {
-
-			uPort, err := safecast.ToUint16(svc.port)
-			if err != nil {
-				klog.Errorf("failed to convert port %d to uint16: %v", svc.port, err)
-			}
-			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
-			case svc.clusterIP.String():
-				if protocol == ipvsSvc.Protocol && uPort == ipvsSvc.Port {
-					pushMetric = true
-					svcVip = svc.clusterIP.String()
-				} else {
-					pushMetric = false
-				}
-			case nsc.krNode.GetPrimaryNodeIP().String():
-				if protocol == ipvsSvc.Protocol && uPort == ipvsSvc.Port {
-					pushMetric = true
-					svcVip = nsc.krNode.GetPrimaryNodeIP().String()
-				} else {
-					pushMetric = false
-				}
-			default:
-				svcVip = ""
-				pushMetric = false
-			}
-
-			if pushMetric {
-
-				klog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)",
-					svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
-
-				labelValues := []string{
-					svc.namespace,
-					svc.name,
-					svcVip,
-					svc.protocol,
-					strconv.Itoa(svc.port),
-				}
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServiceBpsIn,
-					prometheus.GaugeValue,
-					float64(ipvsSvc.Stats.BPSIn),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServiceBpsOut,
-					prometheus.GaugeValue,
-					float64(ipvsSvc.Stats.BPSOut),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServiceBytesIn,
-					prometheus.CounterValue,
-					float64(ipvsSvc.Stats.BytesIn),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServiceBytesOut,
-					prometheus.CounterValue,
-					float64(ipvsSvc.Stats.BytesOut),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServiceCPS,
-					prometheus.GaugeValue,
-					float64(ipvsSvc.Stats.CPS),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServicePacketsIn,
-					prometheus.CounterValue,
-					float64(ipvsSvc.Stats.PacketsIn),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServicePacketsOut,
-					prometheus.CounterValue,
-					float64(ipvsSvc.Stats.PacketsOut),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServicePpsIn,
-					prometheus.GaugeValue,
-					float64(ipvsSvc.Stats.PPSIn),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServicePpsOut,
-					prometheus.GaugeValue,
-					float64(ipvsSvc.Stats.PPSOut),
-					labelValues...,
-				)
-
-				ch <- prometheus.MustNewConstMetric(
-					metrics.ServiceTotalConn,
-					prometheus.CounterValue,
-					float64(ipvsSvc.Stats.Connections),
-					labelValues...,
-				)
-			}
+		uPort, err := safecast.ToUint16(svc.port)
+		if err != nil {
+			klog.Errorf("failed to convert port %d to uint16: %v", svc.port, err)
+			continue
 		}
+		protocol := convertSvcProtoToSysCallProto(svc.protocol)
+
+		serviceMap[fmt.Sprintf("%s:%d/%d", svc.clusterIP.String(), uPort, protocol)] = svc
+		serviceMap[fmt.Sprintf("%s:%d/%d", nsc.krNode.GetPrimaryNodeIP().String(), uPort, protocol)] = svc
+	}
+
+	klog.V(1).Info("Publishing IPVS metrics")
+	for _, ipvsSvc := range ipvsSvcs {
+		svcVip := ipvsSvc.Address.String()
+		svc, ok := serviceMap[fmt.Sprintf("%s:%d/%d", svcVip, ipvsSvc.Port, ipvsSvc.Protocol)]
+		if !ok {
+			continue
+		}
+
+		klog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)",
+			svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
+
+		labelValues := []string{
+			svc.namespace,
+			svc.name,
+			svcVip,
+			svc.protocol,
+			strconv.Itoa(svc.port),
+		}
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceBpsIn,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.BPSIn),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceBpsOut,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.BPSOut),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceBytesIn,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.BytesIn),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceBytesOut,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.BytesOut),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceCPS,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.CPS),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServicePacketsIn,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.PacketsIn),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServicePacketsOut,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.PacketsOut),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServicePpsIn,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.PPSIn),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServicePpsOut,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.PPSOut),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceTotalConn,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.Connections),
+			labelValues...,
+		)
 	}
 
 	ch <- prometheus.MustNewConstMetric(
