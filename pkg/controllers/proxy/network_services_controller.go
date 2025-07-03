@@ -766,8 +766,15 @@ func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
 		}
 		protocol := convertSvcProtoToSysCallProto(svc.protocol)
 
-		serviceMap[fmt.Sprintf("%s:%d/%d", svc.clusterIP.String(), uPort, protocol)] = svc
-		serviceMap[fmt.Sprintf("%s:%d/%d", nsc.krNode.GetPrimaryNodeIP().String(), uPort, protocol)] = svc
+		for _, ip := range svc.clusterIPs {
+			serviceMap[fmt.Sprintf("%s:%d/%d", ip, uPort, protocol)] = svc
+		}
+		for _, ip := range svc.externalIPs {
+			serviceMap[fmt.Sprintf("%s:%d/%d", ip, uPort, protocol)] = svc
+		}
+		if svc.nodePort != 0 {
+			serviceMap[fmt.Sprintf("%s:%d/%d", nsc.krNode.GetPrimaryNodeIP().String(), svc.nodePort, protocol)] = svc
+		}
 	}
 
 	klog.V(1).Info("Publishing IPVS metrics")
@@ -786,7 +793,7 @@ func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
 			svc.name,
 			svcVip,
 			svc.protocol,
-			strconv.Itoa(svc.port),
+			strconv.Itoa(int(ipvsSvc.Port)),
 		}
 
 		ch <- prometheus.MustNewConstMetric(
