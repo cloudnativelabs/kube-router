@@ -734,6 +734,12 @@ func (*NetworkServicesController) Describe(ch chan<- *prometheus.Desc) {
 	ch <- metrics.ControllerIpvsServices
 }
 
+type svcMapKey struct {
+	ip       string
+	uPort    uint16
+	protocol uint16
+}
+
 func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
 	start := time.Now()
 	defer func() {
@@ -757,43 +763,53 @@ func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	serviceMap := map[string]*serviceInfo{}
+	serviceMap := map[svcMapKey]*serviceInfo{}
 	for _, svc := range nsc.getServiceMap() {
-		uPort, err := safecast.ToUint16(svc.port)
+		key := svcMapKey{}
+		key.uPort, err = safecast.ToUint16(svc.port)
 		if err != nil {
 			klog.Errorf("failed to convert port %d to uint16: %v", svc.port, err)
 			continue
 		}
-		protocol := convertSvcProtoToSysCallProto(svc.protocol)
+		key.protocol = convertSvcProtoToSysCallProto(svc.protocol)
 
 		for _, ip := range svc.clusterIPs {
-			serviceMap[fmt.Sprintf("%s:%d/%d", ip, uPort, protocol)] = svc
+			key.ip = ip
+			serviceMap[key] = svc
 		}
 		for _, ip := range svc.externalIPs {
-			serviceMap[fmt.Sprintf("%s:%d/%d", ip, uPort, protocol)] = svc
+			key.ip = ip
+			serviceMap[key] = svc
 		}
 		if svc.nodePort != 0 {
-			serviceMap[fmt.Sprintf("%s:%d/%d", nsc.krNode.GetPrimaryNodeIP().String(), svc.nodePort, protocol)] = svc
+			key.ip = nsc.krNode.GetPrimaryNodeIP().String()
+			key.uPort = uint16(svc.nodePort)
+			serviceMap[key] = svc
 		}
 	}
 
 	klog.V(1).Info("Publishing IPVS metrics")
 	for _, ipvsSvc := range ipvsSvcs {
-		svcVip := ipvsSvc.Address.String()
-		svc, ok := serviceMap[fmt.Sprintf("%s:%d/%d", svcVip, ipvsSvc.Port, ipvsSvc.Protocol)]
+		key := svcMapKey{
+			ip:       ipvsSvc.Address.String(),
+			uPort:    uint16(ipvsSvc.Port),
+			protocol: uint16(ipvsSvc.Protocol),
+		}
+
+		svc, ok := serviceMap[key]
 		if !ok {
 			continue
 		}
 
 		klog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)",
-			svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
+			svc.namespace, svc.name, key.ip, key.uPort, svc.protocol)
 
 		labelValues := []string{
 			svc.namespace,
 			svc.name,
-			svcVip,
+			key.ip,
 			svc.protocol,
-			strconv.Itoa(int(ipvsSvc.Port)),
+			strconv.Itoa(int(key.uPort)),
 		}
 
 		ch <- prometheus.MustNewConstMetric(
