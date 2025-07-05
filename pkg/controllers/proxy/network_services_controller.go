@@ -10,8 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/ccoveille/go-safecast"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
@@ -20,6 +22,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/moby/ipvs"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vishvananda/netlink"
 	v1 "k8s.io/api/core/v1"
 	discovery "k8s.io/api/discovery/v1"
@@ -115,7 +118,7 @@ type NetworkServicesController struct {
 	krNode              utils.NodeAware
 	syncPeriod          time.Duration
 	mu                  sync.Mutex
-	serviceMap          serviceInfoMap
+	serviceMap          unsafe.Pointer
 	endpointsMap        endpointSliceInfoMap
 	podCidr             string
 	excludedCidrs       []net.IPNet
@@ -125,7 +128,6 @@ type NetworkServicesController struct {
 	client              kubernetes.Interface
 	nodeportBindOnAllIP bool
 	MetricsEnabled      bool
-	metricsMap          map[string][]string
 	ln                  LinuxNetworking
 	readyForUpdates     bool
 	ProxyFirewallSetup  *sync.Cond
@@ -373,7 +375,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
 				klog.V(1).Info("Performing requested sync of ipvs services")
 				nsc.mu.Lock()
-				err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+				err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 				if err != nil {
 					klog.Errorf("error during ipvs sync in network service controller. Error: %v", err)
 				}
@@ -420,26 +422,19 @@ func (nsc *NetworkServicesController) doSync() error {
 		klog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
 	}
 
-	nsc.serviceMap = nsc.buildServicesInfo()
+	nsc.setServiceMap(nsc.buildServicesInfo())
 	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
 	err = nsc.syncHairpinIptablesRules()
 	if err != nil {
 		klog.Errorf("Error syncing hairpin iptables rules: %s", err.Error())
 	}
 
-	err = nsc.syncIpvsServices(nsc.serviceMap, nsc.endpointsMap)
+	err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 	if err != nil {
 		klog.Errorf("Error syncing IPVS services: %s", err.Error())
 		return err
 	}
 
-	if nsc.MetricsEnabled {
-		err = nsc.publishMetrics(nsc.serviceMap)
-		if err != nil {
-			klog.Errorf("Error publishing metrics: %v", err)
-			return err
-		}
-	}
 	return nil
 }
 
@@ -725,7 +720,27 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	return nil
 }
 
-func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoMap) error {
+func (*NetworkServicesController) Describe(ch chan<- *prometheus.Desc) {
+	ch <- metrics.ServiceBpsIn
+	ch <- metrics.ServiceBpsOut
+	ch <- metrics.ServiceBytesIn
+	ch <- metrics.ServiceBytesOut
+	ch <- metrics.ServiceCPS
+	ch <- metrics.ServicePacketsIn
+	ch <- metrics.ServicePacketsOut
+	ch <- metrics.ServicePpsIn
+	ch <- metrics.ServicePpsOut
+	ch <- metrics.ServiceTotalConn
+	ch <- metrics.ControllerIpvsServices
+}
+
+type svcMapKey struct {
+	ip       string
+	uPort    uint16
+	protocol uint16
+}
+
+func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
 	start := time.Now()
 	defer func() {
 		endTime := time.Since(start)
@@ -735,75 +750,144 @@ func (nsc *NetworkServicesController) publishMetrics(serviceInfoMap serviceInfoM
 		}
 	}()
 
-	ipvsSvcs, err := nsc.ln.ipvsGetServices()
+	ipvsHandle, err := ipvs.New("")
 	if err != nil {
-		return errors.New("Failed to list IPVS services: " + err.Error())
+		klog.Errorf("failed to initialize ipvs handle: %v", err)
+		return
+	}
+	defer ipvsHandle.Close()
+
+	ipvsSvcs, err := ipvsHandle.GetServices()
+	if err != nil {
+		klog.Errorf("failed to list IPVS services: %v", err)
+		return
+	}
+
+	serviceMap := map[svcMapKey]*serviceInfo{}
+	for _, svc := range nsc.getServiceMap() {
+		key := svcMapKey{}
+		key.uPort, err = safecast.ToUint16(svc.port)
+		if err != nil {
+			klog.Errorf("failed to convert port %d to uint16: %v", svc.port, err)
+			continue
+		}
+		key.protocol = convertSvcProtoToSysCallProto(svc.protocol)
+
+		for _, ip := range svc.clusterIPs {
+			key.ip = ip
+			serviceMap[key] = svc
+		}
+		for _, ip := range svc.externalIPs {
+			key.ip = ip
+			serviceMap[key] = svc
+		}
+		if svc.nodePort != 0 {
+			key.ip = nsc.krNode.GetPrimaryNodeIP().String()
+			key.uPort = uint16(svc.nodePort)
+			serviceMap[key] = svc
+		}
 	}
 
 	klog.V(1).Info("Publishing IPVS metrics")
-	for _, svc := range serviceInfoMap {
-		var protocol uint16
-		var pushMetric bool
-		var svcVip string
-
-		protocol = convertSvcProtoToSysCallProto(svc.protocol)
-		for _, ipvsSvc := range ipvsSvcs {
-
-			uPort, err := safecast.ToUint16(svc.port)
-			if err != nil {
-				klog.Errorf("failed to convert port %d to uint16: %v", svc.port, err)
-			}
-			switch svcAddress := ipvsSvc.Address.String(); svcAddress {
-			case svc.clusterIP.String():
-				if protocol == ipvsSvc.Protocol && uPort == ipvsSvc.Port {
-					pushMetric = true
-					svcVip = svc.clusterIP.String()
-				} else {
-					pushMetric = false
-				}
-			case nsc.krNode.GetPrimaryNodeIP().String():
-				if protocol == ipvsSvc.Protocol && uPort == ipvsSvc.Port {
-					pushMetric = true
-					svcVip = nsc.krNode.GetPrimaryNodeIP().String()
-				} else {
-					pushMetric = false
-				}
-			default:
-				svcVip = ""
-				pushMetric = false
-			}
-
-			if pushMetric {
-
-				klog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)",
-					svc.namespace, svc.name, svcVip, svc.port, svc.protocol)
-
-				labelValues := []string{
-					svc.namespace,
-					svc.name,
-					svcVip,
-					svc.protocol,
-					strconv.Itoa(svc.port),
-				}
-
-				key := generateIPPortID(svcVip, svc.protocol, strconv.Itoa(svc.port))
-				nsc.metricsMap[key] = labelValues
-				// these same metrics should be deleted when the service is deleted.
-				metrics.ServiceBpsIn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.BPSIn))
-				metrics.ServiceBpsOut.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.BPSOut))
-				metrics.ServiceBytesIn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.BytesIn))
-				metrics.ServiceBytesOut.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.BytesOut))
-				metrics.ServiceCPS.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.CPS))
-				metrics.ServicePacketsIn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.PacketsIn))
-				metrics.ServicePacketsOut.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.PacketsOut))
-				metrics.ServicePpsIn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.PPSIn))
-				metrics.ServicePpsOut.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.PPSOut))
-				metrics.ServiceTotalConn.WithLabelValues(labelValues...).Set(float64(ipvsSvc.Stats.Connections))
-				metrics.ControllerIpvsServices.Set(float64(len(ipvsSvcs)))
-			}
+	for _, ipvsSvc := range ipvsSvcs {
+		key := svcMapKey{
+			ip:       ipvsSvc.Address.String(),
+			uPort:    uint16(ipvsSvc.Port),
+			protocol: uint16(ipvsSvc.Protocol),
 		}
+
+		svc, ok := serviceMap[key]
+		if !ok {
+			continue
+		}
+
+		klog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)",
+			svc.namespace, svc.name, key.ip, key.uPort, svc.protocol)
+
+		labelValues := []string{
+			svc.namespace,
+			svc.name,
+			key.ip,
+			svc.protocol,
+			strconv.Itoa(int(key.uPort)),
+		}
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceBpsIn,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.BPSIn),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceBpsOut,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.BPSOut),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceBytesIn,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.BytesIn),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceBytesOut,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.BytesOut),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceCPS,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.CPS),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServicePacketsIn,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.PacketsIn),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServicePacketsOut,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.PacketsOut),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServicePpsIn,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.PPSIn),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServicePpsOut,
+			prometheus.GaugeValue,
+			float64(ipvsSvc.Stats.PPSOut),
+			labelValues...,
+		)
+
+		ch <- prometheus.MustNewConstMetric(
+			metrics.ServiceTotalConn,
+			prometheus.CounterValue,
+			float64(ipvsSvc.Stats.Connections),
+			labelValues...,
+		)
 	}
-	return nil
+
+	ch <- prometheus.MustNewConstMetric(
+		metrics.ControllerIpvsServices,
+		prometheus.GaugeValue,
+		float64(len(ipvsSvcs)),
+	)
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
@@ -845,7 +929,7 @@ func (nsc *NetworkServicesController) OnEndpointsUpdate(es *discovery.EndpointSl
 
 	if !endpointsMapsEquivalent(newEndpointsMap, nsc.endpointsMap) {
 		nsc.endpointsMap = newEndpointsMap
-		nsc.serviceMap = newServiceMap
+		nsc.setServiceMap(newServiceMap)
 		klog.V(1).Infof("Syncing IPVS services sync for update to endpoint: %s/%s", es.Namespace, es.Name)
 		nsc.sync(synctypeIpvs)
 	} else {
@@ -881,9 +965,10 @@ func (nsc *NetworkServicesController) OnServiceUpdate(svc *v1.Service) {
 	newServiceMap := nsc.buildServicesInfo()
 	newEndpointsMap := nsc.buildEndpointSliceInfo()
 
-	if len(newServiceMap) != len(nsc.serviceMap) || !reflect.DeepEqual(newServiceMap, nsc.serviceMap) {
+	oldServiceMap := nsc.getServiceMap()
+	if len(newServiceMap) != len(oldServiceMap) || !reflect.DeepEqual(newServiceMap, oldServiceMap) {
 		nsc.endpointsMap = newEndpointsMap
-		nsc.serviceMap = newServiceMap
+		nsc.setServiceMap(newServiceMap)
 		klog.V(1).Infof("Syncing IPVS services sync on update to service: %s/%s", svc.Namespace, svc.Name)
 		nsc.sync(synctypeIpvs)
 	} else {
@@ -1270,7 +1355,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 	ipv6RulesNeeded := make(map[string][]string)
 
 	// Generate the rules that we need
-	for svcName, svcInfo := range nsc.serviceMap {
+	for svcName, svcInfo := range nsc.getServiceMap() {
 		if nsc.globalHairpin || svcInfo.hairpin {
 			// If this service doesn't have any active & local endpoints on this node, then skip it as only local
 			// endpoints matter for hairpinning
@@ -2024,23 +2109,13 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		return nil, err
 	}
 
-	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex, metricsMap: make(map[string][]string),
+	nsc := NetworkServicesController{ln: ln, ipsetMutex: ipsetMutex,
 		fwMarkMap: map[uint32]string{}}
 
 	if config.MetricsEnabled {
 		// Register the metrics for this controller
-		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIpvsServices)
+		metrics.DefaultRegisterer.MustRegister(&nsc)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerIpvsServicesSyncTime)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBpsIn)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBpsOut)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBytesIn)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceBytesOut)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceCPS)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServicePacketsIn)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServicePacketsOut)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServicePpsIn)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServicePpsOut)
-		metrics.DefaultRegisterer.MustRegister(metrics.ServiceTotalConn)
 		nsc.MetricsEnabled = true
 	}
 
@@ -2050,7 +2125,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.gracefulTermination = config.IpvsGracefulTermination
 	nsc.globalHairpin = config.GlobalHairpinMode
 
-	nsc.serviceMap = make(serviceInfoMap)
+	nsc.setServiceMap(make(serviceInfoMap))
 	nsc.endpointsMap = make(endpointSliceInfoMap)
 	nsc.client = clientset
 
@@ -2143,4 +2218,12 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	nsc.nphc = NewNodePortHealthCheck()
 
 	return &nsc, nil
+}
+
+func (nsc *NetworkServicesController) setServiceMap(serviceMap serviceInfoMap) {
+	atomic.StorePointer(&nsc.serviceMap, unsafe.Pointer(&serviceMap))
+}
+
+func (nsc *NetworkServicesController) getServiceMap() serviceInfoMap {
+	return *(*serviceInfoMap)(atomic.LoadPointer(&nsc.serviceMap))
 }
