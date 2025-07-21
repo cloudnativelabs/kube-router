@@ -15,7 +15,7 @@ require (
 	github.com/onsi/gomega v1.37.0
 	github.com/osrg/gobgp/v3 v3.37.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/spf13/pflag v1.0.6
+	github.com/spf13/pflag v1.0.7
 	github.com/stretchr/testify v1.10.0
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
