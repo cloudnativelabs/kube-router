@@ -13,6 +13,7 @@ const (
 	IPv4IPVSExpireNodestConn = "net/ipv4/vs/expire_nodest_conn"
 	IPv4IPVSExpireQuiescent  = "net/ipv4/vs/expire_quiescent_template"
 	IPv4IPVSConnReuseMode    = "net/ipv4/vs/conn_reuse_mode"
+	IPv4IPVSSloppyTCP        = "net/ipv4/vs/sloppy_tcp"
 	IPv4ConfAllArpIgnore     = "net/ipv4/conf/all/arp_ignore"
 	IPv4ConfAllArpAnnounce   = "net/ipv4/conf/all/arp_announce"
 	IPv6ConfAllDisableIPv6   = "net/ipv6/conf/all/disable_ipv6"
@@ -51,6 +52,24 @@ func (e *SysctlError) IsFatal() bool {
 // Unwrap allows us to unwrap an error showing the original error
 func (e *SysctlError) Unwrap() error {
 	return e.err
+}
+
+type SysctlConfig struct {
+	name  string
+	value int8
+}
+
+func (n *SysctlConfig) CachedVal() int {
+	return int(n.value)
+}
+
+func (n *SysctlConfig) WriteVal(val int) *SysctlError {
+	err := SetSysctl(n.name, val)
+	if err != nil {
+		return err
+	}
+	n.value = int8(val)
+	return nil
 }
 
 func sysctlStat(path string, hasValue bool, value int) (string, *SysctlError) {
