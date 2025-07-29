@@ -8,7 +8,7 @@ require (
 	github.com/aws/smithy-go v1.22.4
 	github.com/ccoveille/go-safecast v1.6.1
 	github.com/coreos/go-iptables v0.8.0
-	github.com/docker/docker v28.3.2+incompatible
+	github.com/docker/docker v28.3.3+incompatible
 	github.com/hashicorp/go-version v1.7.0
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
