@@ -35,6 +35,7 @@ type LocalKRNode struct {
 	KRNode
 	NodeInterfaceName string
 	linkQ             LocalLinkQuerier
+	sloppyTCP         SysctlConfig
 }
 
 // NodeIPAware is an interface that provides methods to get the node's IP addresses in various data structures.
@@ -73,9 +74,14 @@ type NodeIPAndFamilyAware interface {
 	NodeFamilyAware
 }
 
+type NodeConfigAware interface {
+	SloppyTCP() *SysctlConfig
+}
+
 // NodeAware is an interface that combines the NodeIPAware, NodeInterfaceAware, NodeFamilyAware, and NodeNameAware
 // interfaces.
 type NodeAware interface {
+	NodeConfigAware
 	NodeIPAware
 	NodeInterfaceAware
 	NodeFamilyAware
@@ -125,6 +131,10 @@ func (n *KRNode) IsIPv6Capable() bool {
 // GetNodeName returns the node's name as defined by the Kubernetes Node Object.
 func (n *KRNode) GetNodeName() string {
 	return n.NodeName
+}
+
+func (n *LocalKRNode) SloppyTCP() *SysctlConfig {
+	return &n.sloppyTCP
 }
 
 // FindBestIPv6NodeAddress returns the best available IPv6 address for the node. If the primary IP is already an IPv6
@@ -241,6 +251,10 @@ func NewKRNode(node *apiv1.Node, linkQ LocalLinkQuerier, enableIPv4, enableIPv6 
 		},
 		linkQ:             linkQ,
 		NodeInterfaceName: nodeInterfaceName,
+		sloppyTCP: SysctlConfig{
+			name:  IPv4IPVSSloppyTCP,
+			value: 0,
+		},
 	}
 
 	return krNode, nil

@@ -400,8 +400,30 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 			}
 		}
 	}
+	nsc.setupSloppyTCP(serviceInfoMap)
 
 	return nil
+}
+
+func (nsc *NetworkServicesController) setupSloppyTCP(serviceInfoMap serviceInfoMap) {
+	enableSloppyTCP := false
+	for _, svc := range serviceInfoMap {
+		// Enable sloppy TCP if any DSR service with Maglev hashing is configured
+		if svc.directServerReturn && svc.scheduler == IpvsMaglevHashing {
+			enableSloppyTCP = true
+		}
+	}
+
+	// set sloppy_tcp to 1 if not already set
+	sloppyTCP := nsc.krNode.SloppyTCP()
+	if enableSloppyTCP && sloppyTCP.CachedVal() == 0 {
+		sysctlErr := sloppyTCP.WriteVal(1)
+		if sysctlErr != nil {
+			klog.Errorf("Failed to enable IPVS sloppy TCP: %s", sysctlErr.Error())
+		} else {
+			klog.Infof("IPVS sloppy TCP enabled")
+		}
+	}
 }
 
 // setupExternalIPForService does the basic work to setup a non-DSR based external IP for service. This includes adding
