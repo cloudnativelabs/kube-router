@@ -406,23 +406,24 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 }
 
 func (nsc *NetworkServicesController) setupSloppyTCP(serviceInfoMap serviceInfoMap) {
-	enableSloppyTCP := false
+	var sloppyTCPVal int8 = 0
 	for _, svc := range serviceInfoMap {
 		// Enable sloppy TCP if any DSR service with Maglev hashing is configured
 		if svc.directServerReturn && svc.scheduler == IpvsMaglevHashing {
-			enableSloppyTCP = true
+			sloppyTCPVal = 1
+			break
 		}
 	}
 
-	// set sloppy_tcp to 1 if not already set
+	// enable/disable sloppy_tcp sysctl based on sloppyTCPVal
 	sloppyTCP := nsc.krNode.SloppyTCP()
-	if enableSloppyTCP && sloppyTCP.CachedVal() == 0 {
-		sysctlErr := sloppyTCP.WriteVal(1)
+	if sloppyTCP.CachedVal() != sloppyTCPVal {
+		sysctlErr := sloppyTCP.WriteVal(sloppyTCPVal)
 		if sysctlErr != nil {
 			klog.Errorf("Failed to enable IPVS sloppy TCP: %s", sysctlErr.Error())
-		} else {
-			klog.Infof("IPVS sloppy TCP enabled")
+			return
 		}
+		klog.Infof("IPVS sloppy TCP set to %d", sloppyTCPVal)
 	}
 }
 

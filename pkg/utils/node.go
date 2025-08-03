@@ -251,6 +251,8 @@ func NewKRNode(node *apiv1.Node, linkQ LocalLinkQuerier, enableIPv4, enableIPv6 
 		},
 		linkQ:             linkQ,
 		NodeInterfaceName: nodeInterfaceName,
+		// Purposefully set the value of sloppyTCP to 0. This ensures the machine's sloppy_tcp setting remains
+		// unchanged when there are no services with both Maglev and DSR enabled.
 		sloppyTCP: SysctlConfig{
 			name:  IPv4IPVSSloppyTCP,
 			value: 0,
