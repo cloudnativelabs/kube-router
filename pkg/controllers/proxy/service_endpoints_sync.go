@@ -420,7 +420,7 @@ func (nsc *NetworkServicesController) setupSloppyTCP(serviceInfoMap serviceInfoM
 	if sloppyTCP.CachedVal() != sloppyTCPVal {
 		sysctlErr := sloppyTCP.WriteVal(sloppyTCPVal)
 		if sysctlErr != nil {
-			klog.Errorf("Failed to enable IPVS sloppy TCP: %s", sysctlErr.Error())
+			klog.Errorf("Failed to set IPVS sloppy TCP to %d: %s", sloppyTCPVal, sysctlErr.Error())
 			return
 		}
 		klog.Infof("IPVS sloppy TCP set to %d", sloppyTCPVal)
