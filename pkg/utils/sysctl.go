@@ -59,16 +59,16 @@ type SysctlConfig struct {
 	value int8
 }
 
-func (n *SysctlConfig) CachedVal() int {
-	return int(n.value)
+func (n *SysctlConfig) CachedVal() int8 {
+	return n.value
 }
 
-func (n *SysctlConfig) WriteVal(val int) *SysctlError {
-	err := SetSysctl(n.name, val)
+func (n *SysctlConfig) WriteVal(val int8) *SysctlError {
+	err := SetSysctl(n.name, int(val))
 	if err != nil {
 		return err
 	}
-	n.value = int8(val)
+	n.value = val
 	return nil
 }
 
