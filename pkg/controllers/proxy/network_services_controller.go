@@ -23,7 +23,7 @@ import (
 	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
 	v1 "k8s.io/api/core/v1"
-	discovery "k8s.io/api/discovery/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
@@ -720,7 +720,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 }
 
 // OnEndpointsUpdate handle change in endpoints update from the API server
-func (nsc *NetworkServicesController) OnEndpointsUpdate(es *discovery.EndpointSlice) {
+func (nsc *NetworkServicesController) OnEndpointsUpdate(es *discoveryv1.EndpointSlice) {
 
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
@@ -971,14 +971,14 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 	endpointsMap := make(endpointSliceInfoMap)
 	for _, obj := range nsc.epSliceLister.List() {
 		var isIPv4, isIPv6 bool
-		es := obj.(*discovery.EndpointSlice)
+		es := obj.(*discoveryv1.EndpointSlice)
 		klog.V(2).Infof("Building endpoint info for EndpointSlice: %s/%s", es.Namespace, es.Name)
 		switch es.AddressType {
-		case discovery.AddressTypeIPv4:
+		case discoveryv1.AddressTypeIPv4:
 			isIPv4 = true
-		case discovery.AddressTypeIPv6:
+		case discoveryv1.AddressTypeIPv6:
 			isIPv6 = true
-		case discovery.AddressTypeFQDN:
+		case discoveryv1.AddressTypeFQDN:
 			// At this point we don't handle FQDN type EndpointSlices, at some point in the future this might change
 			continue
 		default:
@@ -1793,7 +1793,7 @@ func (nsc *NetworkServicesController) newEndpointSliceEventHandler() cache.Resou
 }
 
 func (nsc *NetworkServicesController) handleEndpointSliceAdd(obj interface{}) {
-	endpoints, ok := obj.(*discovery.EndpointSlice)
+	endpoints, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", obj)
 		return
@@ -1802,12 +1802,12 @@ func (nsc *NetworkServicesController) handleEndpointSliceAdd(obj interface{}) {
 }
 
 func (nsc *NetworkServicesController) handleEndpointSliceUpdate(oldObj, newObj interface{}) {
-	_, ok := oldObj.(*discovery.EndpointSlice)
+	_, ok := oldObj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", oldObj)
 		return
 	}
-	newEndpoints, ok := newObj.(*discovery.EndpointSlice)
+	newEndpoints, ok := newObj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", newObj)
 		return
@@ -1816,14 +1816,14 @@ func (nsc *NetworkServicesController) handleEndpointSliceUpdate(oldObj, newObj i
 }
 
 func (nsc *NetworkServicesController) handleEndpointSliceDelete(obj interface{}) {
-	endpoints, ok := obj.(*discovery.EndpointSlice)
+	endpoints, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
 			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
-		if endpoints, ok = tombstone.Obj.(*discovery.EndpointSlice); !ok {
+		if endpoints, ok = tombstone.Obj.(*discoveryv1.EndpointSlice); !ok {
 			klog.Errorf("unexpected object type: %v", obj)
 			return
 		}
