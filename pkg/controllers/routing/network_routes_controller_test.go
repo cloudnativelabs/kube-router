@@ -10,8 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
+	. "github.com/onsi/ginkgo"
 	v1core "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -27,7 +30,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 		name              string
 		nrc               *NetworkRoutingController
 		existingServices  []*v1core.Service
-		existingEndpoints []*v1core.Endpoints
+		existingEndpoints []*discoveryv1.EndpointSlice
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -57,19 +60,18 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -127,19 +129,18 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -147,14 +148,13 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -162,14 +162,13 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-3",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-3",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -216,19 +215,18 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -236,14 +234,13 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -301,19 +298,18 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -321,14 +317,13 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -336,14 +331,13 @@ func Test_advertiseClusterIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-3",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-3",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -380,9 +374,9 @@ func Test_advertiseClusterIPs(t *testing.T) {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
-			err = createEndpoints(clientset, testcase.existingEndpoints)
+			err = createEndpointSlices(clientset, testcase.existingEndpoints)
 			if err != nil {
-				t.Fatalf("failed to create existing endpoints: %v", err)
+				t.Fatalf("failed to create existing endpoint slices: %v", err)
 			}
 
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
@@ -465,7 +459,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 		name              string
 		nrc               *NetworkRoutingController
 		existingServices  []*v1core.Service
-		existingEndpoints []*v1core.Endpoints
+		existingEndpoints []*discoveryv1.EndpointSlice
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -495,19 +489,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -569,19 +562,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -589,14 +581,13 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -604,14 +595,13 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-3",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-3",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -662,19 +652,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -682,14 +671,13 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -750,19 +738,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -770,14 +757,13 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -785,14 +771,13 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-3",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-3",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -835,19 +820,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -891,19 +875,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -943,19 +926,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1002,19 +984,18 @@ func Test_advertiseExternalIPs(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1076,9 +1057,9 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
-			err = createEndpoints(clientset, testcase.existingEndpoints)
+			err = createEndpointSlices(clientset, testcase.existingEndpoints)
 			if err != nil {
-				t.Fatalf("failed to create existing endpoints: %v", err)
+				t.Fatalf("failed to create existing endpoint slices: %v", err)
 			}
 
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
@@ -1134,7 +1115,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 		name              string
 		nrc               *NetworkRoutingController
 		existingServices  []*v1core.Service
-		existingEndpoints []*v1core.Endpoints
+		existingEndpoints []*discoveryv1.EndpointSlice
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -1202,19 +1183,18 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1222,14 +1202,13 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1237,14 +1216,13 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-3",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-3",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1304,19 +1282,18 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1379,7 +1356,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
-			err = createEndpoints(clientset, testcase.existingEndpoints)
+			err = createEndpointSlices(clientset, testcase.existingEndpoints)
 			if err != nil {
 				t.Fatalf("failed to create existing endpoints: %v", err)
 			}
@@ -1437,7 +1414,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 		name              string
 		nrc               *NetworkRoutingController
 		existingServices  []*v1core.Service
-		existingEndpoints []*v1core.Endpoints
+		existingEndpoints []*discoveryv1.EndpointSlice
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
@@ -1507,19 +1484,18 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1527,14 +1503,13 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1542,14 +1517,13 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-3",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-3",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1635,19 +1609,18 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					},
 				},
 			},
-			[]*v1core.Endpoints{
+			[]*discoveryv1.EndpointSlice{
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1655,14 +1628,13 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-2",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-2",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1670,14 +1642,13 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-3",
 						Namespace: "default",
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-3",
+						},
 					},
-					Subsets: []v1core.EndpointSubset{
+					Endpoints: []discoveryv1.Endpoint{
 						{
-							Addresses: []v1core.EndpointAddress{
-								{
-									IP: testNodeIPv4,
-								},
-							},
+							Addresses: []string{testNodeIPv4},
 						},
 					},
 				},
@@ -1750,9 +1721,9 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				t.Fatalf("failed to create existing services: %v", err)
 			}
 
-			err = createEndpoints(clientset, testcase.existingEndpoints)
+			err = createEndpointSlices(clientset, testcase.existingEndpoints)
 			if err != nil {
-				t.Fatalf("failed to create existing endpoints: %v", err)
+				t.Fatalf("failed to create existing endpoint slices: %v", err)
 			}
 
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
@@ -1809,7 +1780,7 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 		name             string
 		nrc              *NetworkRoutingController
 		existingService  *v1core.Service
-		existingEndpoint *v1core.Endpoints
+		existingEndpoint *discoveryv1.EndpointSlice
 		nodeHasEndpoints bool
 	}{
 		{
@@ -1836,23 +1807,22 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 					ExternalTrafficPolicy: testClusterExtTrafPol,
 				},
 			},
-			&v1core.Endpoints{
+			&discoveryv1.EndpointSlice{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "svc-1",
 					Namespace: "default",
+					Labels: map[string]string{
+						"kubernetes.io/service-name": "svc-1",
+					},
 				},
-				Subsets: []v1core.EndpointSubset{
+				Endpoints: []discoveryv1.Endpoint{
 					{
-						Addresses: []v1core.EndpointAddress{
-							{
-								IP:       "172.20.1.1",
-								NodeName: ptrToString("node-1"),
-							},
-							{
-								IP:       "172.20.1.2",
-								NodeName: ptrToString("node-2"),
-							},
-						},
+						Addresses: []string{"172.20.1.1"},
+						NodeName:  ptrToString("node-1"),
+					},
+					{
+						Addresses: []string{"172.20.1.2"},
+						NodeName:  ptrToString("node-2"),
 					},
 				},
 			},
@@ -1882,23 +1852,22 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 					ExternalTrafficPolicy: testClusterExtTrafPol,
 				},
 			},
-			&v1core.Endpoints{
+			&discoveryv1.EndpointSlice{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "svc-1",
 					Namespace: "default",
+					Labels: map[string]string{
+						"kubernetes.io/service-name": "svc-1",
+					},
 				},
-				Subsets: []v1core.EndpointSubset{
+				Endpoints: []discoveryv1.Endpoint{
 					{
-						Addresses: []v1core.EndpointAddress{
-							{
-								IP:       "172.20.1.1",
-								NodeName: ptrToString("node-2"),
-							},
-							{
-								IP:       "172.20.1.2",
-								NodeName: ptrToString("node-3"),
-							},
-						},
+						Addresses: []string{"172.20.1.1"},
+						NodeName:  ptrToString("node-2"),
+					},
+					{
+						Addresses: []string{"172.20.1.2"},
+						NodeName:  ptrToString("node-3"),
 					},
 				},
 			},
@@ -1911,7 +1880,7 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 			clientset := fake.NewSimpleClientset()
 			startInformersForRoutes(testcase.nrc, clientset)
 
-			_, err := clientset.CoreV1().Endpoints("default").Create(context.Background(), testcase.existingEndpoint, metav1.CreateOptions{})
+			_, err := clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), testcase.existingEndpoint, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("failed to create existing endpoints: %v", err)
 			}
@@ -1922,7 +1891,7 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 			}
 
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
-			waitForListerWithTimeout(testcase.nrc.epLister, time.Second*10, t)
+			waitForListerWithTimeout(testcase.nrc.epSliceLister, time.Second*10, t)
 
 			nodeHasEndpoints, err := testcase.nrc.nodeHasEndpointsForService(testcase.existingService)
 			if err != nil {
@@ -2843,10 +2812,10 @@ func createNodes(clientset kubernetes.Interface, nodes []*v1core.Node) error {
 	return nil
 }
 
-func createEndpoints(clientset kubernetes.Interface, endpoints []*v1core.Endpoints) error {
-	for _, eps := range endpoints {
-		_, err := clientset.CoreV1().Endpoints(eps.ObjectMeta.Namespace).Create(
-			context.Background(), eps, metav1.CreateOptions{})
+func createEndpointSlices(clientset kubernetes.Interface, endpointSlices []*discoveryv1.EndpointSlice) error {
+	for _, es := range endpointSlices {
+		_, err := clientset.DiscoveryV1().EndpointSlices(es.ObjectMeta.Namespace).Create(
+			context.Background(), es, metav1.CreateOptions{})
 		if err != nil {
 			return err
 		}
@@ -2855,17 +2824,29 @@ func createEndpoints(clientset kubernetes.Interface, endpoints []*v1core.Endpoin
 	return nil
 }
 
+func fatalf(format string, a ...interface{}) {
+	msg := fmt.Sprintf("FATAL: "+format+"\n", a...)
+	Fail(msg)
+}
+
 func startInformersForRoutes(nrc *NetworkRoutingController, clientset kubernetes.Interface) {
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
-	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+	epSliceInformer := informerFactory.Discovery().V1().EndpointSlices().Informer()
 	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
+
+	err := epSliceInformer.AddIndexers(map[string]cache.IndexFunc{
+		indexers.ServiceNameIndex: indexers.ServiceNameIndexFunc,
+	})
+	if err != nil {
+		fatalf("failed to add indexers to endpoint slice informer: %v", err)
+	}
 
 	go informerFactory.Start(nil)
 	informerFactory.WaitForCacheSync(nil)
 
 	nrc.svcLister = svcInformer.GetIndexer()
-	nrc.epLister = epInformer.GetIndexer()
+	nrc.epSliceLister = epSliceInformer.GetIndexer()
 	nrc.nodeLister = nodeInformer.GetIndexer()
 }
 
