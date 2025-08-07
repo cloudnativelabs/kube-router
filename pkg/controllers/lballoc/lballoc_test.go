@@ -1,6 +1,7 @@
 package lballoc
 
 import (
+	"context"
 	"errors"
 	"net"
 	"sync"
@@ -636,6 +637,10 @@ func (mf *mockInformer) AddEventHandlerWithResyncPeriod(_ cache.ResourceEventHan
 	return nil, nil
 }
 
+func (mf *mockInformer) AddEventHandlerWithOptions(_ cache.ResourceEventHandler, _ cache.HandlerOptions) (cache.ResourceEventHandlerRegistration, error) {
+	return nil, nil
+}
+
 func (mf *mockInformer) RemoveEventHandler(_ cache.ResourceEventHandlerRegistration) error {
 	return nil
 }
@@ -651,6 +656,9 @@ func (mf *mockInformer) GetController() cache.Controller {
 func (mf *mockInformer) Run(_ <-chan struct{}) {
 }
 
+func (mf *mockInformer) RunWithContext(_ context.Context) {
+}
+
 func (mf *mockInformer) HasSynced() bool {
 	return false
 }
@@ -660,6 +668,10 @@ func (mf *mockInformer) LastSyncResourceVersion() string {
 }
 
 func (mf *mockInformer) SetWatchErrorHandler(_ cache.WatchErrorHandler) error {
+	return nil
+}
+
+func (mf *mockInformer) SetWatchErrorHandlerWithContext(_ cache.WatchErrorHandlerWithContext) error {
 	return nil
 }
 
