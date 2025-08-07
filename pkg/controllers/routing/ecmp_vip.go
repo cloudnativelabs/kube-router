@@ -8,11 +8,13 @@ import (
 
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	v1core "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	"k8s.io/klog/v2"
@@ -256,7 +258,7 @@ func (nrc *NetworkRoutingController) OnServiceDelete(oldObj interface{}) {
 	nrc.tryHandleServiceDelete(oldObj, "Received event to delete service: %s/%s from watch API")
 }
 
-func (nrc *NetworkRoutingController) newEndpointsEventHandler() cache.ResourceEventHandler {
+func (nrc *NetworkRoutingController) newEndpointSliceEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			nrc.OnEndpointsAdd(obj)
@@ -287,30 +289,30 @@ func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
 
 // OnEndpointsUpdate handles the endpoint updates from the kubernetes API server
 func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
-	ep, ok := obj.(*v1core.Endpoints)
+	ep, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
-		klog.Errorf("cache indexer returned obj that is not type *v1.Endpoints")
+		klog.Errorf("cache indexer returned obj that is not type *discoveryv1.EndpointSlice")
 		return
 	}
 
-	if isEndpointsForLeaderElection(ep) {
+	if isEndpointSliceForLeaderElection(ep) {
 		return
 	}
 
-	klog.V(1).Infof("Received update to endpoint: %s/%s from watch API", ep.Namespace, ep.Name)
+	klog.V(1).Infof("Received update to endpoint slice: %s/%s from watch API", ep.Namespace, ep.Name)
 	if !nrc.bgpServerStarted {
-		klog.V(3).Infof("Skipping update to endpoint: %s/%s, controller still performing bootup full-sync",
+		klog.V(3).Infof("Skipping update to endpoint slice: %s/%s, controller still performing bootup full-sync",
 			ep.Namespace, ep.Name)
 		return
 	}
 
-	svc, exists, err := utils.ServiceForEndpoints(&nrc.svcLister, ep)
+	svc, exists, err := utils.ServiceForEndpointSlice(&nrc.svcLister, ep)
 	if err != nil {
-		klog.Errorf("failed to convert endpoints resource to service: %s", err)
+		klog.Errorf("failed to convert endpoint slice resource to service: %s", err)
 		return
 	}
 
-	// ignore updates to Endpoints object with no corresponding Service object
+	// ignore updates to EndpointSlice object with no corresponding Service object
 	if !exists {
 		return
 	}
@@ -564,44 +566,44 @@ func (nrc *NetworkRoutingController) getAllVIPsForService(svc *v1core.Service) (
 
 }
 
-func isEndpointsForLeaderElection(ep *v1core.Endpoints) bool {
+func isEndpointSliceForLeaderElection(ep *discoveryv1.EndpointSlice) bool {
 	_, isLeaderElection := ep.Annotations[resourcelock.LeaderElectionRecordAnnotationKey]
 	return isLeaderElection
 }
 
-// nodeHasEndpointsForService will get the corresponding Endpoints resource for a given Service
+// nodeHasEndpointsForService will get the corresponding EndpointSlice resource for a given Service
 // return true if any endpoint addresses has NodeName matching the node name of the route controller
 func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Service) (bool, error) {
-	// listers for endpoints and services should use the same keys since
-	// endpoint and service resources share the same object name and namespace
-	key, err := cache.MetaNamespaceKeyFunc(svc)
+	// 1. Construct the lookup key from the Service object.
+	// This key must match the format produced by ServiceNameIndexFunc (see k8s/indexers/endpointslices.go)
+	key := fmt.Sprintf("%s/%s", svc.Namespace, svc.Name)
+
+	slices, err := nrc.epSliceLister.ByIndex(indexers.ServiceNameIndex, key)
 	if err != nil {
 		return false, err
 	}
-	item, exists, err := nrc.epLister.GetByKey(key)
-	if err != nil {
-		return false, err
+
+	if len(slices) == 0 {
+		return false, fmt.Errorf("endpoint slice resource doesn't exist for service: %q", svc.Name)
 	}
 
-	if !exists {
-		return false, fmt.Errorf("endpoint resource doesn't exist for service: %q", svc.Name)
-	}
+	for _, slice := range slices {
+		es, ok := slice.(*discoveryv1.EndpointSlice)
+		if !ok {
+			return false, errors.New("failed to convert cache item to EndpointSlice type")
+		}
 
-	ep, ok := item.(*v1core.Endpoints)
-	if !ok {
-		return false, errors.New("failed to convert cache item to Endpoints type")
-	}
-
-	for _, subset := range ep.Subsets {
-		for _, address := range subset.Addresses {
-			if address.NodeName != nil {
-				if *address.NodeName == nrc.krNode.GetNodeName() {
+		for _, endpoint := range es.Endpoints {
+			if endpoint.NodeName != nil {
+				if *endpoint.NodeName == nrc.krNode.GetNodeName() {
 					return true, nil
 				}
 			} else {
-				for _, nodeIP := range nrc.krNode.GetNodeIPAddrs() {
-					if address.IP == nodeIP.String() {
-						return true, nil
+				for _, address := range endpoint.Addresses {
+					for _, nodeIP := range nrc.krNode.GetNodeIPAddrs() {
+						if address == nodeIP.String() {
+							return true, nil
+						}
 					}
 				}
 			}

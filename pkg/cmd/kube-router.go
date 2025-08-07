@@ -14,6 +14,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/proxy"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/routing"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
@@ -23,6 +24,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -111,14 +113,23 @@ func (kr *KubeRouter) Run() error {
 	wg.Add(1)
 	go hc.RunServer(stopCh, &wg)
 
+	// Setup factory and informers
 	informerFactory := informers.NewSharedInformerFactory(kr.Client, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
-	epInformer := informerFactory.Core().V1().Endpoints().Informer()
 	epSliceInformer := informerFactory.Discovery().V1().EndpointSlices().Informer()
 	podInformer := informerFactory.Core().V1().Pods().Informer()
 	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
 	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
 	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
+
+	// Add custom indexers
+	err = epSliceInformer.AddIndexers(map[string]cache.IndexFunc{
+		indexers.ServiceNameIndex: indexers.ServiceNameIndexFunc,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to add indexers to endpoint slice informer: %v", err)
+	}
+
 	informerFactory.Start(stopCh)
 
 	err = kr.CacheSyncOrTimeout(informerFactory, stopCh)
@@ -173,7 +184,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunRouter {
 		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config,
-			nodeInformer, svcInformer, epInformer, &ipsetMutex)
+			nodeInformer, svcInformer, epSliceInformer, &ipsetMutex)
 		if err != nil {
 			return fmt.Errorf("failed to create network routing controller: %v", err)
 		}
@@ -186,7 +197,7 @@ func (kr *KubeRouter) Run() error {
 		if err != nil {
 			return fmt.Errorf("failed to add ServiceEventHandler: %v", err)
 		}
-		_, err = epInformer.AddEventHandler(nrc.EndpointsEventHandler)
+		_, err = epSliceInformer.AddEventHandler(nrc.EndpointSliceEventHandler)
 		if err != nil {
 			return fmt.Errorf("failed to add EndpointsEventHandler: %v", err)
 		}
