@@ -144,13 +144,13 @@ type NetworkRoutingController struct {
 	pbr                            PolicyBasedRouter
 	tunneler                       tunnels.Tunneler
 
-	nodeLister cache.Indexer
-	svcLister  cache.Indexer
-	epLister   cache.Indexer
+	nodeLister    cache.Indexer
+	svcLister     cache.Indexer
+	epSliceLister cache.Indexer
 
-	NodeEventHandler      cache.ResourceEventHandler
-	ServiceEventHandler   cache.ResourceEventHandler
-	EndpointsEventHandler cache.ResourceEventHandler
+	NodeEventHandler          cache.ResourceEventHandler
+	ServiceEventHandler       cache.ResourceEventHandler
+	EndpointSliceEventHandler cache.ResourceEventHandler
 }
 
 // Run runs forever until we are notified on stop channel
@@ -1270,7 +1270,7 @@ func (nrc *NetworkRoutingController) setupHandlers(node *v1core.Node) error {
 func NewNetworkRoutingController(clientset kubernetes.Interface,
 	kubeRouterConfig *options.KubeRouterConfig,
 	nodeInformer cache.SharedIndexInformer, svcInformer cache.SharedIndexInformer,
-	epInformer cache.SharedIndexInformer, ipsetMutex *sync.Mutex) (*NetworkRoutingController, error) {
+	epSliceInformer cache.SharedIndexInformer, ipsetMutex *sync.Mutex) (*NetworkRoutingController, error) {
 
 	var err error
 
@@ -1488,8 +1488,8 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.svcLister = svcInformer.GetIndexer()
 	nrc.ServiceEventHandler = nrc.newServiceEventHandler()
 
-	nrc.epLister = epInformer.GetIndexer()
-	nrc.EndpointsEventHandler = nrc.newEndpointsEventHandler()
+	nrc.epSliceLister = epSliceInformer.GetIndexer()
+	nrc.EndpointSliceEventHandler = nrc.newEndpointSliceEventHandler()
 
 	nrc.nodeLister = nodeInformer.GetIndexer()
 	nrc.NodeEventHandler = nrc.newNodeEventHandler()

@@ -6,12 +6,14 @@ import (
 	"net"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/vishvananda/netlink"
 	v1core "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -104,7 +106,7 @@ func waitForListerWithTimeoutG(lister cache.Indexer, timeout time.Duration) {
 
 type TestCaseSvcEPs struct {
 	existingService  *v1core.Service
-	existingEndpoint *v1core.Endpoints
+	existingEndpoint *discoveryv1.EndpointSlice
 	nodeHasEndpoints bool
 }
 
@@ -131,7 +133,7 @@ var _ = Describe("NetworkServicesController", func() {
 	JustBeforeEach(func() {
 		clientset := fake.NewSimpleClientset()
 
-		_, err := clientset.CoreV1().Endpoints("default").Create(context.Background(), testcase.existingEndpoint, metav1.CreateOptions{})
+		_, err := clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), testcase.existingEndpoint, metav1.CreateOptions{})
 		if err != nil {
 			fatalf("failed to create existing endpoints: %v", err)
 		}
@@ -175,7 +177,7 @@ var _ = Describe("NetworkServicesController", func() {
 						},
 					},
 				},
-				&v1core.Endpoints{},
+				&discoveryv1.EndpointSlice{},
 				false,
 			}
 		})
@@ -262,7 +264,7 @@ var _ = Describe("NetworkServicesController", func() {
 						},
 					},
 				},
-				&v1core.Endpoints{},
+				&discoveryv1.EndpointSlice{},
 				false,
 			}
 		})
@@ -329,7 +331,7 @@ var _ = Describe("NetworkServicesController", func() {
 						},
 					},
 				},
-				&v1core.Endpoints{},
+				&discoveryv1.EndpointSlice{},
 				false,
 			}
 		})
@@ -390,7 +392,7 @@ var _ = Describe("NetworkServicesController", func() {
 						},
 					},
 				},
-				&v1core.Endpoints{},
+				&discoveryv1.EndpointSlice{},
 				false,
 			}
 		})
@@ -442,21 +444,26 @@ var _ = Describe("NetworkServicesController", func() {
 						},
 					},
 				},
-				&v1core.Endpoints{
+				&discoveryv1.EndpointSlice{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "svc-1",
 						Namespace: "default",
-					},
-					Subsets: []v1core.EndpointSubset{
-						{
-							Addresses: []v1core.EndpointAddress{
-								{IP: "172.20.1.1", NodeName: ptrToString("node-1")},
-								{IP: "172.20.1.2", NodeName: ptrToString("node-2")},
-							},
-							Ports: []v1core.EndpointPort{
-								{Name: "port-1", Port: 80, Protocol: "TCP"},
-							},
+						Labels: map[string]string{
+							"kubernetes.io/service-name": "svc-1",
 						},
+					},
+					Endpoints: []discoveryv1.Endpoint{
+						{
+							Addresses: []string{"172.20.1.1"},
+							NodeName:  stringToPtr("node-1"),
+						},
+						{
+							Addresses: []string{"172.20.1.2"},
+							NodeName:  stringToPtr("node-2"),
+						},
+					},
+					Ports: []discoveryv1.EndpointPort{
+						{Name: stringToPtr("port-1"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
 					},
 				},
 				true,
@@ -502,17 +509,32 @@ var _ = Describe("NetworkServicesController", func() {
 func startInformersForServiceProxy(nsc *NetworkServicesController, clientset kubernetes.Interface) {
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
-	epInformer := informerFactory.Core().V1().Endpoints().Informer()
+	epSliceInformer := informerFactory.Discovery().V1().EndpointSlices().Informer()
 	podInformer := informerFactory.Core().V1().Pods().Informer()
+
+	err := epSliceInformer.AddIndexers(map[string]cache.IndexFunc{
+		indexers.ServiceNameIndex: indexers.ServiceNameIndexFunc,
+	})
+	if err != nil {
+		fatalf("failed to add indexers to endpoint slice informer: %v", err)
+	}
 
 	go informerFactory.Start(nil)
 	informerFactory.WaitForCacheSync(nil)
 
 	nsc.svcLister = svcInformer.GetIndexer()
-	nsc.epSliceLister = epInformer.GetIndexer()
+	nsc.epSliceLister = epSliceInformer.GetIndexer()
 	nsc.podLister = podInformer.GetIndexer()
 }
 
-func ptrToString(str string) *string {
+func stringToPtr(str string) *string {
 	return &str
+}
+
+func int32ToPtr(i int32) *int32 {
+	return &i
+}
+
+func protoToPtr(proto v1core.Protocol) *v1core.Protocol {
+	return &proto
 }

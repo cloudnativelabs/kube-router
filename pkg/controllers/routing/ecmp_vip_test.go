@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	v1core "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -36,7 +37,7 @@ var (
 
 type ServiceAdvertisedIPs struct {
 	service               *v1core.Service
-	endpoints             *v1core.Endpoints
+	endpoints             *discoveryv1.EndpointSlice
 	internalTrafficPolicy *v1core.ServiceInternalTrafficPolicyType
 	externalTrafficPolicy *v1core.ServiceExternalTrafficPolicyType
 	advertisedIPs         []string
@@ -922,15 +923,18 @@ func Test_getVIPsForService(t *testing.T) {
 					serviceAdvertisedIP.service.Spec.ExternalTrafficPolicy = *serviceAdvertisedIP.externalTrafficPolicy
 				}
 
-				// Take care of adding endpoints if needed for test
+				// Take care of adding endpoint slices if needed for test
 				if endpoints != nil {
 					endpoints.Name = serviceAdvertisedIP.service.Name
 					endpoints.Namespace = serviceAdvertisedIP.service.Namespace
-					if _, err := clientset.CoreV1().Endpoints(endpoints.GetObjectMeta().GetNamespace()).Create(
-						context.Background(), endpoints, metav1.CreateOptions{}); err != nil {
-						t.Fatalf("failed to create endpoints for test: %v", err)
+					endpoints.Labels = map[string]string{
+						"kubernetes.io/service-name": serviceAdvertisedIP.service.Name,
 					}
-					waitForListerWithTimeout(test.nrc.epLister, time.Second*10, t)
+					if _, err := clientset.DiscoveryV1().EndpointSlices(endpoints.GetObjectMeta().GetNamespace()).Create(
+						context.Background(), endpoints, metav1.CreateOptions{}); err != nil {
+						t.Fatalf("failed to create endpoint slice for test: %v", err)
+					}
+					waitForListerWithTimeout(test.nrc.epSliceLister, time.Second*10, t)
 				}
 
 				svc, _ := clientset.CoreV1().Services("default").Create(context.Background(), serviceAdvertisedIP.service, metav1.CreateOptions{})
@@ -1026,80 +1030,43 @@ func getLoadBalancerSvc() *v1core.Service {
 	}
 }
 
-func getContainsLocalIPv4EPs() *v1core.Endpoints {
-	return &v1core.Endpoints{
-		Subsets: []v1core.EndpointSubset{
+func getContainsLocalIPv4EPs() *discoveryv1.EndpointSlice {
+	return &discoveryv1.EndpointSlice{
+		Endpoints: []discoveryv1.Endpoint{
 			{
-				Addresses: []v1core.EndpointAddress{
-					{
-						IP: testNodeIPv4,
-					},
-					{
-						IP: "10.1.0.2",
-					},
-				},
+				Addresses: []string{testNodeIPv4, "10.1.0.2"},
 			},
 			{
-				Addresses: []v1core.EndpointAddress{
-					{
-						IP: "10.1.1.1",
-					},
-				},
+				Addresses: []string{"10.1.1.1"},
 			},
 		},
 	}
 }
 
-func getContainsLocalIPv6EPs() *v1core.Endpoints {
-	return &v1core.Endpoints{
-		Subsets: []v1core.EndpointSubset{
+func getContainsLocalIPv6EPs() *discoveryv1.EndpointSlice {
+	return &discoveryv1.EndpointSlice{
+		Endpoints: []discoveryv1.Endpoint{
 			{
-				Addresses: []v1core.EndpointAddress{
-					{
-						IP: testNodeIPv6,
-					},
-					{
-						IP: "2001:db8:42:2::2",
-					},
-				},
+				Addresses: []string{testNodeIPv6, "2001:db8:42:2::2"},
 			},
 			{
-				Addresses: []v1core.EndpointAddress{
-					{
-						IP: "2001:db8:42:2::3",
-					},
-				},
+				Addresses: []string{"2001:db8:42:2::3"},
 			},
 		},
 	}
 }
 
-func getNoLocalAddressesEPs() *v1core.Endpoints {
-	return &v1core.Endpoints{
-		Subsets: []v1core.EndpointSubset{
+func getNoLocalAddressesEPs() *discoveryv1.EndpointSlice {
+	return &discoveryv1.EndpointSlice{
+		Endpoints: []discoveryv1.Endpoint{
 			{
-				Addresses: []v1core.EndpointAddress{
-					{
-						IP: "2001:db8:42:2::3",
-					},
-					{
-						IP: "2001:db8:42:2::2",
-					},
-				},
+				Addresses: []string{"2001:db8:42:2::3", "2001:db8:42:2::2"},
 			},
 			{
-				Addresses: []v1core.EndpointAddress{
-					{
-						IP: "2001:db8:42:2::3",
-					},
-				},
+				Addresses: []string{"2001:db8:42:2::3"},
 			},
 			{
-				Addresses: []v1core.EndpointAddress{
-					{
-						IP: "10.1.0.2",
-					},
-				},
+				Addresses: []string{"10.1.0.2"},
 			},
 		},
 	}

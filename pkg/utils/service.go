@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	v1core "k8s.io/api/core/v1"
-	discovery "k8s.io/api/discovery/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -13,26 +13,6 @@ import (
 const (
 	IPInIPHeaderLength = 20
 )
-
-// ServiceForEndpoints given Endpoint object return Service API object if it exists
-func ServiceForEndpoints(ci *cache.Indexer, ep *v1core.Endpoints) (interface{}, bool, error) {
-	key, err := cache.MetaNamespaceKeyFunc(ep)
-	if err != nil {
-		return nil, false, err
-	}
-	klog.V(2).Infof("key for looking up service from Endpoint is: %s", key)
-
-	item, exists, err := (*ci).GetByKey(key)
-	if err != nil {
-		return nil, false, err
-	}
-
-	if !exists {
-		return nil, false, nil
-	}
-
-	return item, true, nil
-}
 
 // ServiceNameforEndpointSlice returns the name of the service that created the EndpointSlice for a given EndpointSlice
 //
@@ -46,7 +26,7 @@ func ServiceForEndpoints(ci *cache.Indexer, ep *v1core.Endpoints) (interface{}, 
 //
 // We'll all through all of these and do our best to identify the service's name, if we aren't able to find any of these
 // or they disagree with each other we'll throw an error
-func ServiceNameforEndpointSlice(es *discovery.EndpointSlice) (string, error) {
+func ServiceNameforEndpointSlice(es *discoveryv1.EndpointSlice) (string, error) {
 	const serviceNameLabel = "kubernetes.io/service-name"
 	var ownerRefName, labelSvcName, generateName, finalSvcName string
 
@@ -93,7 +73,7 @@ func ServiceNameforEndpointSlice(es *discovery.EndpointSlice) (string, error) {
 }
 
 // ServiceForEndpoints given EndpointSlice object return Service API object if it exists
-func ServiceForEndpointSlice(ci *cache.Indexer, es *discovery.EndpointSlice) (interface{}, bool, error) {
+func ServiceForEndpointSlice(ci *cache.Indexer, es *discoveryv1.EndpointSlice) (interface{}, bool, error) {
 	svcName, err := ServiceNameforEndpointSlice(es)
 	if err != nil {
 		return nil, false, err
