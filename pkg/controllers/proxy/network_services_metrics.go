@@ -21,6 +21,10 @@ type metricsServiceMap map[metricsServiceMapKey]*serviceInfo
 
 // getMetricsServiceMap builds a structure suitable for quick matching services
 func (nsc *NetworkServicesController) getMetricsServiceMap() metricsServiceMap {
+	if serviceMapPtr := nsc.serviceMetricsMap.Load(); serviceMapPtr != nil {
+		return *serviceMapPtr
+	}
+
 	var err error
 	serviceMap := metricsServiceMap{}
 
@@ -51,6 +55,8 @@ func (nsc *NetworkServicesController) getMetricsServiceMap() metricsServiceMap {
 			serviceMap[key] = svc
 		}
 	}
+
+	nsc.serviceMetricsMap.Store(&serviceMap)
 
 	return serviceMap
 }
