@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/ccoveille/go-safecast"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
@@ -117,7 +116,7 @@ type NetworkServicesController struct {
 	krNode              utils.NodeAware
 	syncPeriod          time.Duration
 	mu                  sync.Mutex
-	serviceMap          unsafe.Pointer
+	serviceMap          atomic.Pointer[serviceInfoMap]
 	endpointsMap        endpointSliceInfoMap
 	podCidr             string
 	excludedCidrs       []net.IPNet
@@ -2050,9 +2049,9 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 }
 
 func (nsc *NetworkServicesController) setServiceMap(serviceMap serviceInfoMap) {
-	atomic.StorePointer(&nsc.serviceMap, unsafe.Pointer(&serviceMap))
+	nsc.serviceMap.Store(&serviceMap)
 }
 
 func (nsc *NetworkServicesController) getServiceMap() serviceInfoMap {
-	return *(*serviceInfoMap)(atomic.LoadPointer(&nsc.serviceMap))
+	return *nsc.serviceMap.Load()
 }
