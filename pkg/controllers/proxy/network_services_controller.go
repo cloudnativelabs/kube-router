@@ -117,6 +117,7 @@ type NetworkServicesController struct {
 	syncPeriod          time.Duration
 	mu                  sync.Mutex
 	serviceMap          atomic.Pointer[serviceInfoMap]
+	serviceMetricsMap   atomic.Pointer[metricsServiceMap]
 	endpointsMap        endpointSliceInfoMap
 	podCidr             string
 	excludedCidrs       []net.IPNet
@@ -2050,6 +2051,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 
 func (nsc *NetworkServicesController) setServiceMap(serviceMap serviceInfoMap) {
 	nsc.serviceMap.Store(&serviceMap)
+	nsc.serviceMetricsMap.Store(nil)
 }
 
 func (nsc *NetworkServicesController) getServiceMap() serviceInfoMap {
