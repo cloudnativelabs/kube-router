@@ -11,52 +11,21 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (*NetworkServicesController) Describe(ch chan<- *prometheus.Desc) {
-	ch <- metrics.ServiceBpsIn
-	ch <- metrics.ServiceBpsOut
-	ch <- metrics.ServiceBytesIn
-	ch <- metrics.ServiceBytesOut
-	ch <- metrics.ServiceCPS
-	ch <- metrics.ServicePacketsIn
-	ch <- metrics.ServicePacketsOut
-	ch <- metrics.ServicePpsIn
-	ch <- metrics.ServicePpsOut
-	ch <- metrics.ServiceTotalConn
-	ch <- metrics.ControllerIpvsServices
+type metricsServiceMapKey struct {
+	ip       string
+	uPort    uint16
+	protocol uint16
 }
 
-func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
-	start := time.Now()
-	defer func() {
-		endTime := time.Since(start)
-		klog.V(2).Infof("Publishing IPVS metrics took %v", endTime)
-		if nsc.MetricsEnabled {
-			metrics.ControllerIpvsMetricsExportTime.Observe(endTime.Seconds())
-		}
-	}()
+type metricsServiceMap map[metricsServiceMapKey]*serviceInfo
 
-	ipvsHandle, err := ipvs.New("")
-	if err != nil {
-		klog.Errorf("failed to initialize ipvs handle: %v", err)
-		return
-	}
-	defer ipvsHandle.Close()
+// getMetricsServiceMap builds a structure suitable for quick matching services
+func (nsc *NetworkServicesController) getMetricsServiceMap() metricsServiceMap {
+	var err error
+	serviceMap := metricsServiceMap{}
 
-	ipvsSvcs, err := ipvsHandle.GetServices()
-	if err != nil {
-		klog.Errorf("failed to list IPVS services: %v", err)
-		return
-	}
-
-	type svcMapKey struct {
-		ip       string
-		uPort    uint16
-		protocol uint16
-	}
-
-	serviceMap := map[svcMapKey]*serviceInfo{}
 	for _, svc := range nsc.getServiceMap() {
-		key := svcMapKey{}
+		key := metricsServiceMapKey{}
 		key.uPort, err = safecast.ToUint16(svc.port)
 		if err != nil {
 			klog.Errorf("failed to convert port %d to uint16: %v", svc.port, err)
@@ -83,28 +52,76 @@ func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 
+	return serviceMap
+}
+
+func (m metricsServiceMap) lookupService(ip string, uPort uint16, protocol uint16) *serviceInfo {
+	key := metricsServiceMapKey{
+		ip:       ip,
+		uPort:    uPort,
+		protocol: protocol,
+	}
+
+	return m[key]
+}
+
+func (*NetworkServicesController) Describe(ch chan<- *prometheus.Desc) {
+	ch <- metrics.ServiceBpsIn
+	ch <- metrics.ServiceBpsOut
+	ch <- metrics.ServiceBytesIn
+	ch <- metrics.ServiceBytesOut
+	ch <- metrics.ServiceCPS
+	ch <- metrics.ServicePacketsIn
+	ch <- metrics.ServicePacketsOut
+	ch <- metrics.ServicePpsIn
+	ch <- metrics.ServicePpsOut
+	ch <- metrics.ServiceTotalConn
+	ch <- metrics.ControllerIpvsServices
+}
+
+func (nsc *NetworkServicesController) Collect(ch chan<- prometheus.Metric) {
+	start := time.Now()
+	defer func() {
+		endTime := time.Since(start)
+		klog.V(2).Infof("Publishing IPVS metrics took %v", endTime)
+		if nsc.MetricsEnabled {
+			metrics.ControllerIpvsMetricsExportTime.Observe(endTime.Seconds())
+		}
+	}()
+
+	serviceMap := nsc.getMetricsServiceMap()
+
+	ipvsHandle, err := ipvs.New("")
+	if err != nil {
+		klog.Errorf("failed to initialize ipvs handle: %v", err)
+		return
+	}
+	defer ipvsHandle.Close()
+
+	ipvsSvcs, err := ipvsHandle.GetServices()
+	if err != nil {
+		klog.Errorf("failed to list IPVS services: %v", err)
+		return
+	}
+
 	klog.V(1).Info("Publishing IPVS metrics")
 	for _, ipvsSvc := range ipvsSvcs {
-		key := svcMapKey{
-			ip:       ipvsSvc.Address.String(),
-			uPort:    ipvsSvc.Port,
-			protocol: ipvsSvc.Protocol,
-		}
+		ip := ipvsSvc.Address.String()
+		svc := serviceMap.lookupService(ip, ipvsSvc.Port, ipvsSvc.Protocol)
 
-		svc, ok := serviceMap[key]
-		if !ok {
+		if svc == nil {
 			continue
 		}
 
 		klog.V(3).Infof("Publishing metrics for %s/%s (%s:%d/%s)",
-			svc.namespace, svc.name, key.ip, key.uPort, svc.protocol)
+			svc.namespace, svc.name, ip, ipvsSvc.Port, svc.protocol)
 
 		labelValues := []string{
 			svc.namespace,
 			svc.name,
-			key.ip,
+			ip,
 			svc.protocol,
-			strconv.Itoa(int(key.uPort)),
+			strconv.Itoa(int(ipvsSvc.Port)),
 		}
 
 		ch <- prometheus.MustNewConstMetric(
