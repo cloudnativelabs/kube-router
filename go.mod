@@ -16,7 +16,7 @@ require (
 	github.com/osrg/gobgp/v3 v3.37.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/spf13/pflag v1.0.7
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/net v0.42.0
