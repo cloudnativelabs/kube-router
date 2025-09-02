@@ -45,6 +45,10 @@ func (nsc *NetworkServicesController) getMetricsServiceMap() metricsServiceMap {
 			key.ip = ip
 			serviceMap[key] = svc
 		}
+		for _, ip := range svc.loadBalancerIPs {
+			key.ip = ip
+			serviceMap[key] = svc
+		}
 		if svc.nodePort != 0 {
 			key.ip = nsc.krNode.GetPrimaryNodeIP().String()
 			key.uPort, err = safecast.ToUint16(svc.nodePort)
