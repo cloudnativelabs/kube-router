@@ -34,6 +34,7 @@ const (
 	kubeForwardChainName         = "KUBE-ROUTER-FORWARD"
 	kubeOutputChainName          = "KUBE-ROUTER-OUTPUT"
 	kubeDefaultNetpolChain       = "KUBE-NWPLCY-DEFAULT"
+	kubeCommonNetpolChain        = "KUBE-NWPLCY-COMMON"
 
 	kubeIngressPolicyType = "ingress"
 	kubeEgressPolicyType  = "egress"
@@ -169,6 +170,9 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	// policy
 	npc.ensureDefaultNetworkPolicyChain()
 
+	// setup common network policy chain that is applied to all bi-directional traffic
+	npc.ensureCommonPolicyChain()
+
 	// Full syncs of the network policy controller take a lot of time and can only be processed one at a time,
 	// therefore, we start it in it's own goroutine and request a sync through a single item channel
 	klog.Info("Starting network policy controller full sync goroutine")
@@ -260,6 +264,9 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	// ensure default network policy chain that is applied to traffic from/to the pods that does not match any network
 	// policy
 	npc.ensureDefaultNetworkPolicyChain()
+
+	// ensure common network policy chain that is applied to all bi-directional traffic
+	npc.ensureCommonPolicyChain()
 
 	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 	if err != nil {
@@ -577,9 +584,70 @@ func (npc *NetworkPolicyController) ensureExplicitAccept() {
 	}
 }
 
-// Creates custom chains KUBE-NWPLCY-DEFAULT
-func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
+// Creates custom chain KUBE-NWPLCY-COMMON which holds rules that are applicable to all bi-directional traffic. Which
+// includes the following:
+// - Accept Related & Established traffic
+// - Drop Invalid state traffic
+// - ICMP rules
+func (npc *NetworkPolicyController) ensureCommonPolicyChain() {
+	klog.V(1).Infof("Ensuring common policy chain")
 	for family, iptablesCmdHandler := range npc.iptablesCmdHandlers {
+		exists, err := iptablesCmdHandler.ChainExists("filter", kubeCommonNetpolChain)
+		if err != nil {
+			klog.Fatalf("failed to check for the existence of chain %s, error: %v", kubeCommonNetpolChain, err)
+		}
+		if !exists {
+			klog.V(1).Infof("Creating chain %s", kubeCommonNetpolChain)
+			err = iptablesCmdHandler.NewChain("filter", kubeCommonNetpolChain)
+			if err != nil {
+				klog.Fatalf("failed to run iptables command to create %s chain due to %s", kubeCommonNetpolChain,
+					err.Error())
+			}
+		} else {
+			klog.V(1).Infof("Chain %s already exists", kubeCommonNetpolChain)
+		}
+
+		// ensure statefull firewall drops INVALID state traffic from/to the pod
+		// For full context see: https://bugzilla.netfilter.org/show_bug.cgi?id=693
+		// The NAT engine ignores any packet with state INVALID, because there's no reliable way to determine what kind of
+		// NAT should be performed. So the proper way to prevent the leakage is to drop INVALID packets.
+		// In the future, if we ever allow services or nodes to disable conntrack checking, we may need to make this
+		// conditional so that non-tracked traffic doesn't get dropped as invalid.
+		comment := "\"rule to drop invalid state for pod\""
+		args := []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "INVALID", "-j", "DROP"}
+		err = iptablesCmdHandler.AppendUnique("filter", kubeCommonNetpolChain, args...)
+		if err != nil {
+			klog.Fatalf("failed to run iptables command: %v", err)
+		}
+
+		// ensure statefull firewall that permits RELATED,ESTABLISHED traffic from/to the pod
+		comment = "\"rule for stateful firewall for pod\""
+		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED",
+			"-j", "ACCEPT"}
+		err = iptablesCmdHandler.AppendUnique("filter", kubeCommonNetpolChain, args...)
+		if err != nil {
+			klog.Fatalf("failed to run iptables command: %v", err)
+		}
+
+		icmpRules := utils.CommonICMPRules(family)
+		for _, icmpRule := range icmpRules {
+			icmpArgs := []string{"-m", "comment", "--comment", icmpRule.Comment, "-p", icmpRule.IPTablesProto,
+				icmpRule.IPTablesType, icmpRule.ICMPType, "-j", "ACCEPT"}
+			err = iptablesCmdHandler.AppendUnique("filter", kubeCommonNetpolChain, icmpArgs...)
+			if err != nil {
+				klog.Fatalf("failed to run iptables command: %v", err)
+			}
+		}
+	}
+}
+
+// Creates custom chains KUBE-NWPLCY-DEFAULT which holds rules for the default network policy. This is applied to
+// traffic which is not selected by any network policy and is primarily used to allow traffic that is accepted by
+// default.
+//
+// NOTE: This chain is only targeted by unidirectional network traffic selectors.
+func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
+	for _, iptablesCmdHandler := range npc.iptablesCmdHandlers {
 		exists, err := iptablesCmdHandler.ChainExists("filter", kubeDefaultNetpolChain)
 		if err != nil {
 			klog.Fatalf("failed to check for the existence of chain %s, error: %v", kubeDefaultNetpolChain, err)
@@ -589,17 +657,6 @@ func (npc *NetworkPolicyController) ensureDefaultNetworkPolicyChain() {
 			if err != nil {
 				klog.Fatalf("failed to run iptables command to create %s chain due to %s",
 					kubeDefaultNetpolChain, err.Error())
-			}
-		}
-
-		// Add common IPv4/IPv6 ICMP rules to the default network policy chain to ensure that pods communicate properly
-		icmpRules := utils.CommonICMPRules(family)
-		for _, icmpRule := range icmpRules {
-			icmpArgs := []string{"-m", "comment", "--comment", icmpRule.Comment, "-p", icmpRule.IPTablesProto,
-				icmpRule.IPTablesType, icmpRule.ICMPType, "-j", "ACCEPT"}
-			err = iptablesCmdHandler.AppendUnique("filter", kubeDefaultNetpolChain, icmpArgs...)
-			if err != nil {
-				klog.Fatalf("failed to run iptables command: %v", err)
 			}
 		}
 
@@ -631,6 +688,9 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 		for _, chain := range chains {
 			if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
 				if chain == kubeDefaultNetpolChain {
+					continue
+				}
+				if chain == kubeCommonNetpolChain {
 					continue
 				}
 				if _, ok := activePolicyChains[chain]; !ok {
@@ -667,7 +727,7 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 			}
 			if deleteDefaultChains {
 				for _, chain := range []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName,
-					kubeDefaultNetpolChain} {
+					kubeDefaultNetpolChain, kubeCommonNetpolChain} {
 					if strings.Contains(rule, chain) {
 						skipRule = true
 						break
