@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/goccy/go-yaml"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 
 	v1core "k8s.io/api/core/v1"
@@ -110,6 +111,22 @@ func statementsEqualByName(a, b []*gobgpapi.Statement) bool {
 	return true
 }
 
+// Wrapper type to automatically handles decoding b64 encoded strings upon unmarshalling
+type base64String string
+
+func (b *base64String) UnmarshalYAML(raw []byte) error {
+	var tmp string
+	if err := yaml.Unmarshal(raw, &tmp); err != nil {
+		return fmt.Errorf("failed to unmarshal string into base64string type: %w", err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(tmp)
+	if err != nil {
+		return fmt.Errorf("failed to base64 decode field: %w", err)
+	}
+	*b = base64String(string(decoded))
+	return nil
+}
+
 // getPodCIDRsFromAllNodeSources gets the pod CIDRs for all available sources on a given node in a specific order. The
 // order of preference is:
 //  1. From the kube-router.io/pod-cidr annotation (preserves backwards compatibility)
@@ -155,7 +172,8 @@ func getPodCIDRsFromAllNodeSources(node *v1core.Node) (podCIDRs []string) {
 // based upon whether it is an IPv4 address or an IPv6 address. Returns slash notation subnet as uint32 suitable for
 // sending to GoBGP and an error if it is unable to determine the subnet automatically
 func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet uint32, nh string,
-	afiFamily gobgpapi.Family_Afi, err error) {
+	afiFamily gobgpapi.Family_Afi, err error,
+) {
 	ip := net.ParseIP(vip)
 	if ip == nil {
 		err = fmt.Errorf("could not parse VIP: %s", vip)
