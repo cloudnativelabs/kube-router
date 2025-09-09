@@ -9,6 +9,8 @@ require (
 	github.com/ccoveille/go-safecast v1.6.1
 	github.com/coreos/go-iptables v0.8.0
 	github.com/docker/docker v28.4.0+incompatible
+	github.com/goccy/go-yaml v1.18.0
+	github.com/google/go-cmp v0.7.0
 	github.com/hashicorp/go-version v1.7.0
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
@@ -65,7 +67,6 @@ require (
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
