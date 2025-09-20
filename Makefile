@@ -33,7 +33,8 @@ DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
 # See Versions: https://github.com/osrg/gobgp/releases
 GOBGP_VERSION=v3.37.0
 QEMU_IMAGE?=multiarch/qemu-user-static
-GORELEASER_VERSION=v2.5.0
+# See Versions: https://github.com/goreleaser/goreleaser/releases
+GORELEASER_VERSION=v2.12.2
 MOQ_VERSION=v0.5.1
 CNI_VERSION=v1.6.2
 UID?=$(shell id -u)
