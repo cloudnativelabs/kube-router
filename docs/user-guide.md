@@ -62,6 +62,8 @@ pod on each node through daemonset.
 
 ## command line options
 
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 ```sh
 Usage of kube-router:
       --advertise-cluster-ip                          Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.
@@ -134,6 +136,7 @@ Usage of kube-router:
   -v, --v string                                      log level for V logs (default "0")
   -V, --version                                       Print version information.
 ```
+<!-- markdownlint-restore -->
 
 ## requirements
 

@@ -1,6 +1,8 @@
 <!-- markdownlint-disable-next-line first-line-heading -->
 ![logo](https://cdn.rawgit.com/cloudnativelabs/kube-router/64f7700e/Documentation/img/logo-full.svg)
 
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD045 -->
 [![Build Status](https://github.com/cloudnativelabs/kube-router/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/cloudnativelabs/kube-router/actions/workflows/ci.yml?query=branch%3Amaster)
 [![Go Report Card](https://goreportcard.com/badge/github.com/cloudnativelabs/kube-router)](https://goreportcard.com/report/github.com/cloudnativelabs/kube-router)
 [![Slack](https://img.shields.io/badge/slack-join%20chat%20%E2%86%92-e01563.svg)](https://kubernetes.slack.com/messages/C8DCQGTSB/)
@@ -8,6 +10,7 @@
 [![](https://images.microbadger.com/badges/image/cloudnativelabs/kube-router.svg)](https://microbadger.com/images/cloudnativelabs/kube-router)
 [![](https://img.shields.io/github/release/cloudnativelabs/kube-router/all.svg?style=flat-square)](https://github.com/cloudnativelabs/kube-router/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+<!-- markdownlint-restore -->
 
 Kube-router is a turnkey solution for Kubernetes networking with aim to provide operational simplicity and high performance.
 
@@ -117,7 +120,7 @@ typos, tests — anything at all. Please read the [contribution guide](./CON
 ## Support & Feedback
 
 If you experience any problems please reach us on kube-router [slack channel](https://kubernetes.slack.com/messages/C8DCQGTSB/)
-for quick help. Feel free to leave feedback or raise questions by opening an issue [here](https://github.com/cloudnativelabs/kube-router/issues).
+for quick help. Feel free to leave feedback or raise questions by [opening an issue](https://github.com/cloudnativelabs/kube-router/issues).
 
 ## Acknowledgement
 
