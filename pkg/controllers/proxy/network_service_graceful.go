@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -12,6 +13,8 @@ import (
 	"github.com/moby/ipvs"
 	"k8s.io/klog/v2"
 )
+
+const maxConntrackTimeout = 5 * time.Second
 
 type gracefulQueue struct {
 	mu    sync.Mutex
@@ -150,13 +153,16 @@ func (nsc *NetworkServicesController) getIpvsDestinationConnStats(ipvsSvc *ipvs.
 
 // flushConntrackUDP flushes UDP conntrack records for the given service destination
 func (nsc *NetworkServicesController) flushConntrackUDP(svc *ipvs.Service) error {
+	ctx, cancel := context.WithTimeout(context.Background(), maxConntrackTimeout)
+	defer cancel()
+
 	// Conntrack exits with non zero exit code when exiting if 0 flow entries have been deleted, use regex to
 	// check output and don't Error when matching
 	re := regexp.MustCompile("([[:space:]]0 flow entries have been deleted.)")
 
 	// Shell out and flush conntrack records
 	//nolint:gosec // this exec should be safe from command injection given the parameter's context
-	out, err := exec.Command("conntrack", "-D", "--orig-dst", svc.Address.String(), "-p", udpProtocol,
+	out, err := exec.CommandContext(ctx, "conntrack", "-D", "--orig-dst", svc.Address.String(), "-p", udpProtocol,
 		"--dport", strconv.Itoa(int(svc.Port))).CombinedOutput()
 	if err != nil {
 		if matched := re.MatchString(string(out)); !matched {

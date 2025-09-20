@@ -1,12 +1,16 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"strconv"
 	"sync"
+	"time"
 )
+
+const maxListenTestTimeout = 5 * time.Second
 
 type Listener interface {
 	OnUpdate(instance interface{})
@@ -61,8 +65,11 @@ func SliceContainsString(needle string, haystack []string) bool {
 // TCPAddressBindable checks to see if an IP/port is bindable by attempting to open a listener then closing it
 // returns nil if successful
 func TCPAddressBindable(addr string, port uint16) error {
+	ctx, cancel := context.WithTimeout(context.Background(), maxListenTestTimeout)
+	defer cancel()
 	endpoint := addr + ":" + strconv.Itoa(int(port))
-	ln, err := net.Listen("tcp", endpoint)
+	lc := net.ListenConfig{}
+	ln, err := lc.Listen(ctx, "tcp", endpoint)
 	if err != nil {
 		return fmt.Errorf("unable to open %s: %w", endpoint, err)
 	}

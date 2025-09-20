@@ -68,6 +68,8 @@ const (
 	asnMaxBitSize       = 32
 	routeReflectorMaxID = 32
 	ipv4MaskMinBits     = 32
+
+	maxModprobeTimeout = 5 * time.Second
 )
 
 // RouteSyncer is an interface that defines the methods needed to sync routes to the kernel's routing table
@@ -192,13 +194,17 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			klog.Errorf("Failed to enable required policy based routing: %s", err.Error())
 		}
 		if nrc.tunneler.EncapType() == tunnels.EncapTypeFOU {
-			// enable FoU module for the overlay tunnel
-			if _, err := exec.Command("modprobe", "fou").CombinedOutput(); err != nil {
-				klog.Errorf("Failed to enable FoU for tunnel overlay: %s", err.Error())
-			}
-			if _, err := exec.Command("modprobe", "fou6").CombinedOutput(); err != nil {
-				klog.Errorf("Failed to enable FoU6 for tunnel overlay: %s", err.Error())
-			}
+			func() {
+				ctx, cancel := context.WithTimeout(context.Background(), maxModprobeTimeout)
+				defer cancel()
+				// enable FoU module for the overlay tunnel
+				if _, err := exec.CommandContext(ctx, "modprobe", "fou").CombinedOutput(); err != nil {
+					klog.Errorf("Failed to enable FoU for tunnel overlay: %s", err.Error())
+				}
+				if _, err := exec.CommandContext(ctx, "modprobe", "fou6").CombinedOutput(); err != nil {
+					klog.Errorf("Failed to enable FoU6 for tunnel overlay: %s", err.Error())
+				}
+			}()
 		}
 	} else {
 		klog.V(1).Info("Tunnel Overlay disabled in configuration.")
@@ -288,10 +294,14 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		}
 	}
 	// enable netfilter for the bridge
-	if _, err := exec.Command("modprobe", "br_netfilter").CombinedOutput(); err != nil {
-		klog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may "+
-			"not work: %s", err.Error())
-	}
+	func() {
+		ctx, cancel := context.WithTimeout(context.Background(), maxModprobeTimeout)
+		defer cancel()
+		if _, err := exec.CommandContext(ctx, "modprobe", "br_netfilter").CombinedOutput(); err != nil {
+			klog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may "+
+				"not work: %s", err.Error())
+		}
+	}()
 	sysctlErr := utils.SetSysctl(utils.BridgeNFCallIPTables, 1)
 	if sysctlErr != nil {
 		klog.Errorf("Failed to enable iptables for bridge. Network policies and service proxy may "+
@@ -1476,9 +1486,8 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 				klog.Fatalf("Invalid IP address %s specified in `kube-router.io/bgp-local-addresses`.", addr)
 			}
 			// Ensure that the IP address is able to bind on this host
-			if l, err := net.Listen("tcp", "["+addr+"]:0"); err == nil {
-				_ = l.Close()
-			} else {
+			err = utils.TCPAddressBindable(addr, 0)
+			if err != nil {
 				klog.Fatalf("IP address %s specified in `kube-router.io/bgp-local-addresses` is not able to "+
 					"be bound on this host", addr)
 			}
