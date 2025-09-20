@@ -6,6 +6,7 @@
 package tunnels
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
@@ -44,6 +46,8 @@ const (
 	UnixTunnelEncapTypeFOU  uint16 = 1
 	UnixTunnelEncapTypeGUE  uint16 = 2
 	UnixTunnelEncapTypeMPLS uint16 = 3
+
+	maxIPRoute2Timeout = 5 * time.Second
 )
 
 var (
@@ -258,7 +262,10 @@ func (o *OverlayTunnel) checkFOUTunnelRecreation(tunnelName string, config *tunn
 func (o *OverlayTunnel) cleanupFOUPort(config *tunnelConfig) {
 	fouArgs := config.ipBase
 	fouArgs = append(fouArgs, "fou", "del", "port", config.encapPortStr)
-	out, err := exec.Command("ip", fouArgs...).CombinedOutput()
+
+	ctx, cancel := context.WithTimeout(context.Background(), maxIPRoute2Timeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ip", fouArgs...).CombinedOutput()
 	if err != nil {
 		klog.Warningf("failed to clean up previous FoU tunnel port (this is only a warning because it "+
 			"won't stop kube-router from working for now, but still shouldn't have happened) - error: "+
@@ -359,7 +366,9 @@ func (o *OverlayTunnel) createFOUTunnelWithIPRoute2(tunnelName string, nextHop n
 		config.encapPortStr, "mode", config.ipipMode)
 
 	klog.V(2).Infof("Executing the following command to create tunnel: ip %s", cmdArgs)
-	out, err := exec.Command("ip", cmdArgs...).CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), maxIPRoute2Timeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "ip", cmdArgs...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("route not injected for the route advertised by the node %s "+
 			"Failed to create tunnel interface %s. error: %s, output: %s",
