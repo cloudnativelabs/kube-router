@@ -17,7 +17,8 @@ DOCKER=$(if $(or $(IN_DOCKER_GROUP),$(IS_ROOT),$(OSX)),docker,sudo docker)
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
-DOCKER_BUILD_IMAGE?=golang:1.24.1-alpine3.21
+# See Versions: https://hub.docker.com/_/golang
+DOCKER_BUILD_IMAGE?=golang:1.25.1-alpine3.21
 ## These variables are used by the Dockerfile as the bases for building and creating the runtime container
 ## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
 GO_CACHE?=$(shell go env GOCACHE)
@@ -26,7 +27,8 @@ BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 RUNTIME_BASE?=alpine:3.21
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.0.2
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.39.0
-GOBGP_VERSION=v3.29.0
+# See Versions: https://github.com/osrg/gobgp/releases
+GOBGP_VERSION=v3.37.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v2.5.0
 MOQ_VERSION=v0.5.1
