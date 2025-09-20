@@ -35,7 +35,8 @@ GOBGP_VERSION=v3.37.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 # See Versions: https://github.com/goreleaser/goreleaser/releases
 GORELEASER_VERSION=v2.12.2
-MOQ_VERSION=v0.5.1
+# See Versions: https://github.com/matryer/moq/releases
+MOQ_VERSION=v0.6.0
 CNI_VERSION=v1.6.2
 UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
