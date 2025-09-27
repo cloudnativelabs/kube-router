@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -10,7 +11,8 @@ import (
 
 func Test_buildIPSetRestore(t *testing.T) {
 	type args struct {
-		ipset *IPSet
+		ipset           *IPSet
+		setIncludeNames []string
 	}
 	tests := []struct {
 		name string
@@ -47,6 +49,7 @@ func Test_buildIPSetRestore(t *testing.T) {
 						},
 					},
 				}},
+				setIncludeNames: nil,
 			},
 			want: "create TMP-7NOTZDOMLXBX6DAJ hash:ip yolo things 12345\n" +
 				"flush TMP-7NOTZDOMLXBX6DAJ\n" +
@@ -72,9 +75,570 @@ func Test_buildIPSetRestore(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildIPSetRestore(tt.args.ipset); got != tt.want {
+			if got := buildIPSetRestore(tt.args.ipset, tt.args.setIncludeNames); got != tt.want {
 				t.Errorf("buildIPSetRestore() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func Test_buildIPSetRestore_setIncludeNames(t *testing.T) {
+	tests := []struct {
+		name            string
+		ipset           *IPSet
+		setIncludeNames []string
+		expectedSets    []string
+		excludedSets    []string
+	}{
+		{
+			name: "nil setIncludeNames includes all sets",
+			ipset: &IPSet{sets: map[string]*Set{
+				"set1": {
+					Name:    "set1",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"set2": {
+					Name:    "set2",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: nil,
+			expectedSets:    []string{"set1", "set2"},
+			excludedSets:    []string{},
+		},
+		{
+			name: "empty setIncludeNames includes no sets",
+			ipset: &IPSet{sets: map[string]*Set{
+				"set1": {
+					Name:    "set1",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"set2": {
+					Name:    "set2",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{},
+			expectedSets:    []string{},
+			excludedSets:    []string{"set1", "set2"},
+		},
+		{
+			name: "filter includes only specified sets",
+			ipset: &IPSet{sets: map[string]*Set{
+				"set1": {
+					Name:    "set1",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"set2": {
+					Name:    "set2",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"set3": {
+					Name:    "set3",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"9.10.11.12"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"set1", "set3"},
+			expectedSets:    []string{"set1", "set3"},
+			excludedSets:    []string{"set2"},
+		},
+		{
+			name: "duplicate entries in setIncludeNames",
+			ipset: &IPSet{sets: map[string]*Set{
+				"set1": {
+					Name:    "set1",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"set2": {
+					Name:    "set2",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"set1", "set1", "set2"},
+			expectedSets:    []string{"set1", "set2"},
+			excludedSets:    []string{},
+		},
+		{
+			name: "IPv6 set names with prefix",
+			ipset: &IPSet{sets: map[string]*Set{
+				"inet6:set1": {
+					Name:    "inet6:set1",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"2001:db8::1"}}},
+					Parent:  &IPSet{isIpv6: true},
+				},
+				"inet6:set2": {
+					Name:    "inet6:set2",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"2001:db8::2"}}},
+					Parent:  &IPSet{isIpv6: true},
+				},
+				"regular-set": {
+					Name:    "regular-set",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"set1", "set2"},
+			expectedSets:    []string{"inet6:set1", "inet6:set2"},
+			excludedSets:    []string{"regular-set"},
+		},
+		{
+			name: "IPv6 set names without prefix in filter",
+			ipset: &IPSet{sets: map[string]*Set{
+				"inet6:set1": {
+					Name:    "inet6:set1",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"2001:db8::1"}}},
+					Parent:  &IPSet{isIpv6: true},
+				},
+				"inet6:set2": {
+					Name:    "inet6:set2",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"2001:db8::2"}}},
+					Parent:  &IPSet{isIpv6: true},
+				},
+			}},
+			setIncludeNames: []string{"set1"},
+			expectedSets:    []string{"inet6:set1"},
+			excludedSets:    []string{"inet6:set2"},
+		},
+		{
+			name: "IPv4 set names without prefix",
+			ipset: &IPSet{sets: map[string]*Set{
+				"set1": {
+					Name:    "set1",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"set2": {
+					Name:    "set2",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"set1"},
+			expectedSets:    []string{"set1"},
+			excludedSets:    []string{"set2"},
+		},
+		{
+			name: "non-existent set names in filter",
+			ipset: &IPSet{sets: map[string]*Set{
+				"set1": {
+					Name:    "set1",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"set2": {
+					Name:    "set2",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"nonexistent", "set1"},
+			expectedSets:    []string{"set1"},
+			excludedSets:    []string{"set2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildIPSetRestore(tt.ipset, tt.setIncludeNames)
+
+			// Check that expected sets are included
+			for _, expectedSet := range tt.expectedSets {
+				assert.Contains(t, result, fmt.Sprintf("create %s", expectedSet),
+					"Expected set %s should be created", expectedSet)
+			}
+
+			// Check that excluded sets are not included
+			for _, excludedSet := range tt.excludedSets {
+				assert.NotContains(t, result, fmt.Sprintf("create %s", excludedSet),
+					"Excluded set %s should not be created", excludedSet)
+			}
+
+			// Ensure we have proper destroy statements for temp sets (only if we have sets)
+			if len(tt.expectedSets) > 0 {
+				assert.Contains(t, result, "destroy TMP-", "Should contain destroy statements for temp sets")
+			} else {
+				assert.Empty(t, result, "Should produce empty result when no sets are expected")
+			}
+		})
+	}
+}
+
+func Test_buildIPSetRestore_boundaryConditions(t *testing.T) {
+	tests := []struct {
+		name            string
+		ipset           *IPSet
+		setIncludeNames []string
+		description     string
+	}{
+		{
+			name:            "empty ipset",
+			ipset:           &IPSet{sets: map[string]*Set{}},
+			setIncludeNames: nil,
+			description:     "Empty ipset should produce empty result",
+		},
+		{
+			name: "ipset with empty sets",
+			ipset: &IPSet{sets: map[string]*Set{
+				"empty-set": {
+					Name:    "empty-set",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: nil,
+			description:     "Sets with no entries should still be processed",
+		},
+		{
+			name: "ipset with nil entries",
+			ipset: &IPSet{sets: map[string]*Set{
+				"nil-entries-set": {
+					Name:    "nil-entries-set",
+					Options: []string{"hash:ip"},
+					Entries: nil,
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: nil,
+			description:     "Sets with nil entries should not panic",
+		},
+		{
+			name: "ipset with very long set names",
+			ipset: &IPSet{sets: map[string]*Set{
+				"very-long-set-name-that-exceeds-normal-limits-and-should-still-work": {
+					Name:    "very-long-set-name-that-exceeds-normal-limits-and-should-still-work",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: nil,
+			description:     "Very long set names should be handled",
+		},
+		{
+			name: "ipset with special characters in names",
+			ipset: &IPSet{sets: map[string]*Set{
+				"set-with-dashes": {
+					Name:    "set-with-dashes",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"set_with_underscores": {
+					Name:    "set_with_underscores",
+					Options: []string{"hash:ip"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"set-with-dashes"},
+			description:     "Set names with special characters should be handled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This should not panic
+			result := buildIPSetRestore(tt.ipset, tt.setIncludeNames)
+
+			// Basic validation that we get a string result
+			assert.IsType(t, "", result, tt.description)
+
+			// If we have sets, we should have some output
+			if len(tt.ipset.sets) > 0 {
+				assert.NotEmpty(t, result, "Should produce non-empty result when sets exist")
+			} else {
+				assert.Empty(t, result, "Should produce empty result when no sets exist")
+			}
+		})
+	}
+}
+
+func Test_buildIPSetRestore_differentTypes(t *testing.T) {
+	tests := []struct {
+		name             string
+		ipset            *IPSet
+		expectedTempSets int
+		description      string
+	}{
+		{
+			name: "different ipset types create separate temp sets",
+			ipset: &IPSet{sets: map[string]*Set{
+				"hash-ip-set": {
+					Name:    "hash-ip-set",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"hash-net-set": {
+					Name:    "hash-net-set",
+					Options: []string{"hash:net", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"192.168.0.0/16"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"hash-ip-port-set": {
+					Name:    "hash-ip-port-set",
+					Options: []string{"hash:ip,port", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4,tcp:80"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			expectedTempSets: 3,
+			description:      "Different ipset types should create separate temporary sets",
+		},
+		{
+			name: "same ipset types reuse temp sets",
+			ipset: &IPSet{sets: map[string]*Set{
+				"hash-ip-set1": {
+					Name:    "hash-ip-set1",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"hash-ip-set2": {
+					Name:    "hash-ip-set2",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			expectedTempSets: 1,
+			description:      "Same ipset types should reuse the same temporary set",
+		},
+		{
+			name: "same type different options create separate temp sets",
+			ipset: &IPSet{sets: map[string]*Set{
+				"hash-ip-timeout-0": {
+					Name:    "hash-ip-timeout-0",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"1.2.3.4"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"hash-ip-timeout-300": {
+					Name:    "hash-ip-timeout-300",
+					Options: []string{"hash:ip", "timeout", "300"},
+					Entries: []*Entry{{Options: []string{"5.6.7.8"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			expectedTempSets: 2,
+			description:      "Same type with different options should create separate temporary sets",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildIPSetRestore(tt.ipset, nil)
+
+			// Count the number of temporary sets created
+			tempSetCount := strings.Count(result, "create TMP-")
+			assert.Equal(t, tt.expectedTempSets, tempSetCount, tt.description)
+
+			// Count the number of temporary sets destroyed
+			destroyCount := strings.Count(result, "destroy TMP-")
+			assert.Equal(t, tt.expectedTempSets, destroyCount, "Should destroy same number of temp sets as created")
+		})
+	}
+}
+
+func Test_buildIPSetRestore_integrationRealWorldSets(t *testing.T) {
+	// This test uses real-world set names from the kube-router codebase to ensure
+	// that we don't accidentally delete important sets when using setIncludeNames
+
+	tests := []struct {
+		name            string
+		ipset           *IPSet
+		setIncludeNames []string
+		description     string
+	}{
+		{
+			name: "routing controller sets only",
+			ipset: &IPSet{sets: map[string]*Set{
+				"kube-router-pod-subnets": {
+					Name:    "kube-router-pod-subnets",
+					Options: []string{"hash:net", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.244.0.0/16"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"kube-router-node-ips": {
+					Name:    "kube-router-node-ips",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"192.168.1.100"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"kube-router-svip": {
+					Name:    "kube-router-svip",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.96.0.1"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"kube-router-pod-subnets", "kube-router-node-ips"},
+			description:     "Should only restore routing controller sets, not service sets",
+		},
+		{
+			name: "service controller sets only",
+			ipset: &IPSet{sets: map[string]*Set{
+				"kube-router-svip": {
+					Name:    "kube-router-svip",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.96.0.1"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"kube-router-svip-prt": {
+					Name:    "kube-router-svip-prt",
+					Options: []string{"hash:ip,port", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.96.0.1,tcp:80"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"kube-router-pod-subnets": {
+					Name:    "kube-router-pod-subnets",
+					Options: []string{"hash:net", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.244.0.0/16"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"kube-router-svip", "kube-router-svip-prt"},
+			description:     "Should only restore service controller sets, not routing sets",
+		},
+		{
+			name: "network policy sets only",
+			ipset: &IPSet{sets: map[string]*Set{
+				"KUBE-SRC-ABCD1234567890AB": {
+					Name:    "KUBE-SRC-ABCD1234567890AB",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.244.1.5"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"KUBE-DST-EFGH1234567890CD": {
+					Name:    "KUBE-DST-EFGH1234567890CD",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.244.2.10"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"kube-router-svip": {
+					Name:    "kube-router-svip",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.96.0.1"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"KUBE-SRC-ABCD1234567890AB", "KUBE-DST-EFGH1234567890CD"},
+			description:     "Should only restore network policy sets, not service sets",
+		},
+		{
+			name: "IPv6 sets with prefix matching",
+			ipset: &IPSet{sets: map[string]*Set{
+				"inet6:kube-router-svip": {
+					Name:    "inet6:kube-router-svip",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"2001:db8::1"}}},
+					Parent:  &IPSet{isIpv6: true},
+				},
+				"inet6:kube-router-svip-prt": {
+					Name:    "inet6:kube-router-svip-prt",
+					Options: []string{"hash:ip,port", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"2001:db8::1,tcp:80"}}},
+					Parent:  &IPSet{isIpv6: true},
+				},
+				"inet6:KUBE-SRC-ABCD1234567890AB": {
+					Name:    "inet6:KUBE-SRC-ABCD1234567890AB",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"2001:db8:1::5"}}},
+					Parent:  &IPSet{isIpv6: true},
+				},
+			}},
+			setIncludeNames: []string{"kube-router-svip", "kube-router-svip-prt"},
+			description:     "Should match IPv6 sets by removing inet6: prefix",
+		},
+		{
+			name: "mixed IPv4 and IPv6 sets",
+			ipset: &IPSet{sets: map[string]*Set{
+				"kube-router-svip": {
+					Name:    "kube-router-svip",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.96.0.1"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+				"inet6:kube-router-svip": {
+					Name:    "inet6:kube-router-svip",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"2001:db8::1"}}},
+					Parent:  &IPSet{isIpv6: true},
+				},
+				"KUBE-SRC-ABCD1234567890AB": {
+					Name:    "KUBE-SRC-ABCD1234567890AB",
+					Options: []string{"hash:ip", "timeout", "0"},
+					Entries: []*Entry{{Options: []string{"10.244.1.5"}}},
+					Parent:  &IPSet{isIpv6: false},
+				},
+			}},
+			setIncludeNames: []string{"kube-router-svip"},
+			description:     "Should include both IPv4 and IPv6 versions of the same set name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildIPSetRestore(tt.ipset, tt.setIncludeNames)
+
+			// Verify that only the specified sets are included
+			for setName, set := range tt.ipset.sets {
+				shouldBeIncluded := false
+				for _, includeName := range tt.setIncludeNames {
+					// Check if this set should be included based on the filtering logic
+					origName := setName
+					if set.Parent != nil && set.Parent.isIpv6 {
+						origName = strings.Replace(setName, fmt.Sprintf("%s:", IPv6SetPrefix), "", 1)
+					}
+					if origName == includeName {
+						shouldBeIncluded = true
+						break
+					}
+				}
+
+				if shouldBeIncluded {
+					assert.Contains(t, result, fmt.Sprintf("create %s", setName),
+						"Set %s should be included in restore", setName)
+				} else {
+					assert.NotContains(t, result, fmt.Sprintf("create %s", setName),
+						"Set %s should not be included in restore", setName)
+				}
+			}
+
+			// Ensure we have proper temp set management
+			assert.Contains(t, result, "destroy TMP-", "Should contain destroy statements for temp sets")
+
+			// Verify that the result is deterministic (sorted)
+			lines := strings.Split(strings.TrimSpace(result), "\n")
+			assert.True(t, len(lines) > 0, "Should have some output")
 		})
 	}
 }

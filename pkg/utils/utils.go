@@ -75,3 +75,14 @@ func TCPAddressBindable(addr string, port uint16) error {
 	}
 	return ln.Close()
 }
+
+// ConvertMapKeysToSlice takes a map with a set of keys and then extracts the keys into a slice of the same length
+func ConvertMapKeysToSlice[K comparable, V any](mapContainingKeys map[K]V) []K {
+	keys := make([]K, 0, len(mapContainingKeys))
+
+	for k := range mapContainingKeys {
+		keys = append(keys, k)
+	}
+
+	return keys
+}
