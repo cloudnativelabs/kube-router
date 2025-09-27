@@ -152,9 +152,11 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 		}
 	}
 
+	knownIPSets := utils.ConvertMapKeysToSlice[string](activePolicyIPSets)
+
 	for ipFamily, ipset := range npc.ipSetHandlers {
 		restoreStart := time.Now()
-		err := ipset.Restore()
+		err := ipset.RestoreSets(knownIPSets)
 		restoreEndTime := time.Since(restoreStart)
 
 		if npc.MetricsEnabled {

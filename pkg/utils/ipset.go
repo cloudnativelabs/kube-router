@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"sort"
 	"strings"
 
@@ -163,6 +164,7 @@ type IPSetHandler interface {
 	DestroyAllWithin() error
 	Save() error
 	Restore() error
+	RestoreSets([]string) error
 	Flush() error
 	Get(setName string) *Set
 	Sets() map[string]*Set
@@ -510,13 +512,35 @@ func scrubInitValFromOptions(options []string) []string {
 	return options
 }
 
+// buildIPSetRestore creates a set of ipset rules that can be fed into ipset restore. ipset contains a list of "sets"
+// that we will act on. If setIncludeNames is not null, then the list of sets will be dynamically filtered to ensure
+// that the string for ipset restore only includes sets with those names.
+//
+// In order to ensure that our changes are atomic, we create a temporary set per unique ipset options, then we load
+// that temporary set with the new list of entries, then we swap them to the final name of the set, and then flush the
+// temporary set before potentially reusing it in a future load.
+//
+// The temporary set is created only as needed to ensure that we don't needlessly create temporary sets. Temporary sets
+// have to be unique to the "Type" of the set. This is things like: hash:ip and others.
+//
 // Build ipset restore input
 // ex:
 // create KUBE-DST-3YNVZWWGX3UQQ4VQ hash:ip family inet hashsize 1024 maxelem 65536 timeout 0
 // add KUBE-DST-3YNVZWWGX3UQQ4VQ 100.96.1.6 timeout 0
-func buildIPSetRestore(ipset *IPSet) string {
+func buildIPSetRestore(ipset *IPSet, setIncludeNames []string) string {
 	setNames := make([]string, 0, len(ipset.sets))
-	for setName := range ipset.sets {
+	for setName, set := range ipset.sets {
+		// If we've been passed a set of filter names, check to see if this set is contained within that set before
+		// adding it to the restore to ensure that we don't impact other unrelated sets
+		if setIncludeNames != nil {
+			origName := setName
+			if set.Parent.isIpv6 {
+				origName = strings.Replace(setName, fmt.Sprintf("%s:", IPv6SetPrefix), "", 1)
+			}
+			if !slices.Contains(setIncludeNames, origName) {
+				continue
+			}
+		}
 		// we need setNames in some consistent order so that we can unit-test this method has a predictable output:
 		setNames = append(setNames, setName)
 	}
@@ -591,7 +615,14 @@ func (ipset *IPSet) Save() error {
 // mode except list, help, version, interactive mode and restore itself.
 // Send formatted ipset.sets into stdin of "ipset restore" command.
 func (ipset *IPSet) Restore() error {
-	restoreString := buildIPSetRestore(ipset)
+	return ipset.RestoreSets(nil)
+}
+
+// RestoreSets is very similar to Restore, except that it filters by set names that are passed in a string array
+// so that we don't disrumpt other things that might be using ipsets on the host. In general, this function should be
+// preferred over the Restore() function.
+func (ipset *IPSet) RestoreSets(setNames []string) error {
+	restoreString := buildIPSetRestore(ipset, setNames)
 	klog.V(3).Infof("ipset (ipv6? %t) restore looks like:\n%s", ipset.isIpv6, restoreString)
 	stdin := bytes.NewBufferString(restoreString)
 	err := ipset.runWithStdin(stdin, "restore", "-exist")
