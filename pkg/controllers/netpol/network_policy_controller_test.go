@@ -741,6 +741,10 @@ func (ips *fakeIPSet) Restore() error {
 	return nil
 }
 
+func (ips *fakeIPSet) RestoreSets(_ []string) error {
+	return nil
+}
+
 func (ips *fakeIPSet) Flush() error {
 	return nil
 }

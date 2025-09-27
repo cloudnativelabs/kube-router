@@ -72,7 +72,7 @@ func Test_buildIPSetRestore(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildIPSetRestore(tt.args.ipset); got != tt.want {
+			if got := buildIPSetRestore(tt.args.ipset, nil); got != tt.want {
 				t.Errorf("buildIPSetRestore() = %v, want %v", got, tt.want)
 			}
 		})
