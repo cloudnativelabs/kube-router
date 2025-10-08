@@ -710,7 +710,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 
 		setHandler.RefreshSet(serviceIPPortsSetName, serviceIPPortsIPSets[family], utils.TypeHashIPPort)
 
-		err := setHandler.RestoreSets([]string{serviceIPsIPSetName, serviceIPPortsSetName})
+		err := setHandler.RestoreSets([]string{localIPsIPSetName, serviceIPsIPSetName, serviceIPPortsSetName})
 		if err != nil {
 			return fmt.Errorf("could not save ipset for service firewall: %v", err)
 		}
