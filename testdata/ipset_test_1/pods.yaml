@@ -1,0 +1,45 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    labels:
+      name: whoami
+    name: whoami-nflzk
+    namespace: default
+  spec:
+    containers:
+    - image: example/whoami:latest
+      name: whoami
+    hostNetwork: false
+    nodeName: kube-router-vm2
+  status:
+    hostIP: 10.241.0.21
+    phase: Running
+    podIP: 10.242.1.4
+    podIPs:
+    - ip: 10.242.1.4
+    - ip: 2001:db8:42:1001::4
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    labels:
+      name: whoami
+    name: whoami-s72mp
+    namespace: default
+  spec:
+    containers:
+    - image: example/whoami:latest
+      name: whoami
+    hostNetwork: false
+    nodeName: kube-router-vm1
+  status:
+    hostIP: 10.241.0.20
+    phase: Running
+    podIP: 10.242.0.5
+    podIPs:
+    - ip: 10.242.0.5
+    - ip: 2001:db8:42:1000::5
+kind: List
+metadata:
+  resourceVersion: ""
