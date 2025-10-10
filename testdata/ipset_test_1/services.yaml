@@ -1,0 +1,166 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      kube-router.io/service.hairpin: "true"
+    labels:
+      name: blank-service
+    name: blank-service
+    namespace: default
+  spec:
+    clusterIP: 10.96.156.243
+    clusterIPs:
+    - 10.96.156.243
+    - 2001:db8:42:1::8e7d
+    externalIPs:
+    - 10.243.0.10
+    externalTrafficPolicy: Cluster
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    - IPv6
+    ipFamilyPolicy: PreferDualStack
+    ports:
+    - name: flask
+      port: 5000
+      protocol: TCP
+      targetPort: 5000
+    selector:
+      name: foobarbaz12345
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      component: apiserver
+      provider: kubernetes
+    name: kubernetes
+    namespace: default
+  spec:
+    clusterIP: 10.96.0.1
+    clusterIPs:
+    - 10.96.0.1
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: 6443
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: my-service
+    namespace: default
+  spec:
+    clusterIP: 10.96.255.137
+    clusterIPs:
+    - 10.96.255.137
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 9376
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      name: netcat-server
+    name: netcat-server
+    namespace: default
+  spec:
+    clusterIP: 10.96.115.202
+    clusterIPs:
+    - 10.96.115.202
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - name: nc-tcp
+      port: 5000
+      protocol: TCP
+      targetPort: 5000
+    - name: nc-udp
+      port: 5001
+      protocol: UDP
+      targetPort: 5001
+    selector:
+      name: netcat-server
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      kube-router.io/service.hairpin: "true"
+      kube-router.io/service.local: "true"
+    labels:
+      name: whoami
+    name: whoami
+    namespace: default
+  spec:
+    clusterIP: 10.96.243.193
+    clusterIPs:
+    - 10.96.243.193
+    - 2001:db8:42:1::bd90
+    externalIPs:
+    - 10.243.0.1
+    externalTrafficPolicy: Cluster
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    - IPv6
+    ipFamilyPolicy: PreferDualStack
+    ports:
+    - name: flask
+      port: 5000
+      protocol: TCP
+      targetPort: 5000
+    selector:
+      name: whoami
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      k8s-app: kube-dns
+      kubernetes.io/name: CoreDNS
+    name: kube-dns
+    namespace: kube-system
+  spec:
+    clusterIP: 10.96.0.10
+    clusterIPs:
+    - 10.96.0.10
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - name: dns
+      port: 53
+      protocol: UDP
+      targetPort: 53
+    - name: dns-tcp
+      port: 53
+      protocol: TCP
+      targetPort: 53
+    sessionAffinity: None
+    type: ClusterIP
+kind: List
+metadata:
+  resourceVersion: ""

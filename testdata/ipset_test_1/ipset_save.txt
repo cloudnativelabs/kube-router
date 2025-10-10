@@ -1,0 +1,66 @@
+create inet6:kube-router-pod-subnets hash:net family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x8c48e8f6
+add inet6:kube-router-pod-subnets 2001:db8:42:1001::/64 timeout 0
+add inet6:kube-router-pod-subnets 2001:db8:42:1000::/64 timeout 0
+create inet6:kube-router-node-ips hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xc1c0ab78
+add inet6:kube-router-node-ips 2001:db8:ca2:2::2ca1 timeout 0
+add inet6:kube-router-node-ips 2001:db8:ca2:2::e7e5 timeout 0
+create kube-router-pod-subnets hash:net family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x8c2211f1
+add kube-router-pod-subnets 10.242.0.0/24 timeout 0
+add kube-router-pod-subnets 10.242.1.0/24 timeout 0
+create kube-router-node-ips hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xceda0b01
+add kube-router-node-ips 10.241.0.20 timeout 0
+add kube-router-node-ips 10.241.0.21 timeout 0
+create kube-router-local-ips hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x03a01482
+add kube-router-local-ips 127.0.0.1 timeout 0
+add kube-router-local-ips 10.241.0.21 timeout 0
+create kube-router-svip hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xd1a8e751
+add kube-router-svip 10.243.0.1 timeout 0
+add kube-router-svip 10.96.156.243 timeout 0
+add kube-router-svip 10.96.255.137 timeout 0
+add kube-router-svip 10.243.0.10 timeout 0
+add kube-router-svip 10.96.0.1 timeout 0
+add kube-router-svip 10.96.115.202 timeout 0
+add kube-router-svip 10.96.243.193 timeout 0
+add kube-router-svip 10.96.0.10 timeout 0
+create kube-router-svip-prt hash:ip,port family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xc5567ea9
+add kube-router-svip-prt 10.96.115.202,udp:5001 timeout 0
+add kube-router-svip-prt 10.96.0.1,tcp:443 timeout 0
+add kube-router-svip-prt 10.96.0.10,tcp:9153 timeout 0
+add kube-router-svip-prt 10.96.243.193,tcp:5000 timeout 0
+add kube-router-svip-prt 10.96.115.202,tcp:5000 timeout 0
+add kube-router-svip-prt 10.96.156.243,tcp:5000 timeout 0
+add kube-router-svip-prt 10.243.0.10,tcp:5000 timeout 0
+add kube-router-svip-prt 10.243.0.1,tcp:5000 timeout 0
+add kube-router-svip-prt 10.96.0.10,tcp:53 timeout 0
+add kube-router-svip-prt 10.96.0.10,udp:53 timeout 0
+add kube-router-svip-prt 10.96.255.137,tcp:80 timeout 0
+create inet6:kube-router-local-ips hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x1ac0b76e
+add inet6:kube-router-local-ips fe80::e0c7:dbff:fe6b:2d6 timeout 0
+add inet6:kube-router-local-ips fe80::5054:ff:fe66:d30b timeout 0
+add inet6:kube-router-local-ips fe80::f0eb:4cff:fefc:6cce timeout 0
+add inet6:kube-router-local-ips fe80::3013:9fff:fe8f:892c timeout 0
+add inet6:kube-router-local-ips 2001:db8:ca2:2::e7e5 timeout 0
+add inet6:kube-router-local-ips ::1 timeout 0
+add inet6:kube-router-local-ips fe80::8403:21ff:fee4:5935 timeout 0
+create inet6:kube-router-svip hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x62f79196
+add inet6:kube-router-svip 2001:db8:42:1::bd90 timeout 0
+add inet6:kube-router-svip 2001:db8:42:1::8e7d timeout 0
+create inet6:kube-router-svip-prt hash:ip,port family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xb27296db
+add inet6:kube-router-svip-prt 2001:db8:42:1::bd90,tcp:5000 timeout 0
+add inet6:kube-router-svip-prt 2001:db8:42:1::8e7d,tcp:5000 timeout 0
+create KUBE-DST-IZ5JGF4W6BKI7CEV hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x44a1a05a
+add KUBE-DST-IZ5JGF4W6BKI7CEV 10.242.0.5 timeout 0
+add KUBE-DST-IZ5JGF4W6BKI7CEV 10.242.1.4 timeout 0
+create KUBE-DST-P226T6HGLTLDGDLC hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x9c28f0c3
+add KUBE-DST-P226T6HGLTLDGDLC 10.242.0.5 timeout 0
+add KUBE-DST-P226T6HGLTLDGDLC 10.242.1.4 timeout 0
+create KUBE-SRC-C2EUPKL23CCP4COF hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x889d1bd6
+create inet6:KUBE-DST-GZIEGRFLGG6BN3N7 hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x9748e0b2
+add inet6:KUBE-DST-GZIEGRFLGG6BN3N7 2001:db8:42:1001::4 timeout 0
+add inet6:KUBE-DST-GZIEGRFLGG6BN3N7 2001:db8:42:1000::5 timeout 0
+create KUBE-SRC-KLLOHJLFVAV654Z2 hash:net family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xc50a569f
+add KUBE-SRC-KLLOHJLFVAV654Z2 10.95.0.239 timeout 0
+create inet6:KUBE-DST-KSECZGZUJPU4SKA3 hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x3194fa68
+add inet6:KUBE-DST-KSECZGZUJPU4SKA3 2001:db8:42:1001::4 timeout 0
+add inet6:KUBE-DST-KSECZGZUJPU4SKA3 2001:db8:42:1000::5 timeout 0
+create inet6:KUBE-SRC-VY6KNKQ4BF6Y4J2K hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x0d5ebe1d
