@@ -44,7 +44,7 @@ docker run --privileged -v /lib/modules:/lib/modules --net=host registry.k8s.io/
 ### containerd
 
 ```sh
-ctr images pull k8s.gcr.io/kube-proxy-amd64:v1.28.2
+ctr images pull registry.k8s.io/kube-proxy-amd64:v1.28.2
 ctr run --rm --privileged --net-host --mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro \
     registry.k8s.io/kube-proxy-amd64:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
 ```
