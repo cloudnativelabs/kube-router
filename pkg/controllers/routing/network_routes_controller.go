@@ -45,13 +45,16 @@ const (
 	pathPrependASNAnnotation         = "kube-router.io/path-prepend.as"
 	pathPrependRepeatNAnnotation     = "kube-router.io/path-prepend.repeat-n"
 
+	// Prefer using this consolidated BGP config annotation, as the
+	// individual annotation config options are deprecated.
+	peersAnnotation = "kube-router.io/peers"
+
 	peerASNAnnotation     = "kube-router.io/peer.asns"
 	peerIPAnnotation      = "kube-router.io/peer.ips"
 	peerLocalIPAnnotation = "kube-router.io/peer.localips"
 	//nolint:gosec // this is not a hardcoded password
 	peerPasswordAnnotation             = "kube-router.io/peer.passwords"
 	peerPortAnnotation                 = "kube-router.io/peer.ports"
-	peersAnnotation                    = "kube-router.io/peers"
 	rrClientAnnotation                 = "kube-router.io/rr.client"
 	rrServerAnnotation                 = "kube-router.io/rr.server"
 	svcLocalAnnotation                 = "kube-router.io/service.local"
@@ -1430,85 +1433,14 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	return &nrc, nil
 }
 
-type bgpPeerConfig struct {
-	LocalIP        *string       `yaml:"localip"`
-	Password       *base64String `yaml:"password"`
-	Port           *uint32       `yaml:"port"`
-	RemoteASN      *uint32       `yaml:"remoteasn"`
-	RemoteIP       *net.IP       `yaml:"remoteip"`
-	remoteIPString string
-}
-
-type bgpPeerConfigs []bgpPeerConfig
-
-func (b bgpPeerConfigs) LocalIPs() []string {
-	localIPs := make([]string, 0)
-	for _, cfg := range b {
-		if cfg.LocalIP != nil {
-			localIPs = append(localIPs, *cfg.LocalIP)
-		}
-	}
-	return localIPs
-}
-
-func (b bgpPeerConfigs) Passwords() []string {
-	passwords := make([]string, 0)
-	for _, cfg := range b {
-		if cfg.Password != nil {
-			passwords = append(passwords, string(*cfg.Password))
-		}
-	}
-	return passwords
-}
-
-func (b bgpPeerConfigs) Ports() []uint32 {
-	ports := make([]uint32, 0)
-	for _, cfg := range b {
-		if cfg.Port != nil {
-			ports = append(ports, *cfg.Port)
-		}
-	}
-	return ports
-}
-
-func (b bgpPeerConfigs) RemoteASNs() []uint32 {
-	asns := make([]uint32, 0)
-	for _, cfg := range b {
-		if cfg.RemoteASN != nil {
-			asns = append(asns, *cfg.RemoteASN)
-		}
-	}
-	return asns
-}
-
-func (b bgpPeerConfigs) RemoteIPs() []net.IP {
-	remoteIPs := make([]net.IP, 0)
-	for _, cfg := range b {
-		if cfg.RemoteIP != nil {
-			remoteIPs = append(remoteIPs, *cfg.RemoteIP)
-		}
-	}
-	return remoteIPs
-}
-
-func (b bgpPeerConfigs) RemoteIPStrings() []string {
-	remoteIPs := make([]string, 0)
-	for _, cfg := range b {
-		if cfg.remoteIPString != "" {
-			remoteIPs = append(remoteIPs, cfg.remoteIPString)
-		}
-	}
-	return remoteIPs
-}
-
-func bgpPeerConfigsFromAnnotations(nodeAnnotations map[string]string) (bgpPeerConfigs, error) {
+func bgpPeerConfigsFromAnnotations(nodeAnnotations map[string]string) (bgp.PeerConfigs, error) {
 	nodeBgpPeersAnnotation, ok := nodeAnnotations[peersAnnotation]
 	if !ok {
 		klog.Infof("%s annotation not set, using individual node annotations to configure BGP peer info", peersAnnotation)
 		return bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations)
 	}
 
-	var peerConfigs []bgpPeerConfig
+	var peerConfigs bgp.PeerConfigs
 	if err := yaml.Unmarshal([]byte(nodeBgpPeersAnnotation), &peerConfigs); err != nil {
 		return nil, fmt.Errorf("failed to parse %s annotation: %w", peersAnnotation, err)
 	}
@@ -1516,7 +1448,7 @@ func bgpPeerConfigsFromAnnotations(nodeAnnotations map[string]string) (bgpPeerCo
 	return peerConfigs, nil
 }
 
-func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string) (bgpPeerConfigs, error) {
+func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string) (bgp.PeerConfigs, error) {
 	// Get Global Peer Router ASN configs
 	nodeBgpPeerAsnsAnnotation, ok := nodeAnnotations[peerASNAnnotation]
 	if !ok {
@@ -1529,7 +1461,7 @@ func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse node's Peer ASN Numbers Annotation: %w", err)
 	}
-	peerConfigs := make([]bgpPeerConfig, len(peerASNs))
+	peerConfigs := make([]bgp.PeerConfig, len(peerASNs))
 	for i, peerASN := range peerASNs {
 		peerConfigs[i].RemoteASN = &peerASN
 	}
@@ -1547,7 +1479,6 @@ func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string) 
 		return nil, fmt.Errorf("failed to parse node's Peer Addresses Annotation: %w", err)
 	}
 	for i, peerIP := range peerIPs {
-		peerConfigs[i].remoteIPString = ipStrings[i]
 		peerConfigs[i].RemoteIP = &peerIP
 	}
 
@@ -1578,7 +1509,7 @@ func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string) 
 			return nil, fmt.Errorf("failed to parse node's Peer Passwords Annotation: %w", err)
 		}
 		for i, password := range passwords {
-			bpassword := base64String(password)
+			bpassword := utils.Base64String(password)
 			peerConfigs[i].Password = &bpassword
 		}
 	}
