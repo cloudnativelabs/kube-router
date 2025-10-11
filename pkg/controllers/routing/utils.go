@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goccy/go-yaml"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 
 	v1core "k8s.io/api/core/v1"
@@ -109,22 +108,6 @@ func statementsEqualByName(a, b []*gobgpapi.Statement) bool {
 
 	// If we've made it through both loops then we know that the statements arrays are equal
 	return true
-}
-
-// Wrapper type to automatically handles decoding b64 encoded strings upon unmarshalling
-type base64String string
-
-func (b *base64String) UnmarshalYAML(raw []byte) error {
-	var tmp string
-	if err := yaml.Unmarshal(raw, &tmp); err != nil {
-		return fmt.Errorf("failed to unmarshal string into base64string type: %w", err)
-	}
-	decoded, err := base64.StdEncoding.DecodeString(tmp)
-	if err != nil {
-		return fmt.Errorf("failed to base64 decode field: %w", err)
-	}
-	*b = base64String(string(decoded))
-	return nil
 }
 
 // getPodCIDRsFromAllNodeSources gets the pod CIDRs for all available sources on a given node in a specific order. The
