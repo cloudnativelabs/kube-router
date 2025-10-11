@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/google/go-cmp/cmp"
@@ -2626,7 +2627,7 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 	testCases := []struct {
 		name                   string
 		nodeAnnotations        map[string]string
-		expectedBgpPeerConfigs bgpPeerConfigs
+		expectedBgpPeerConfigs bgp.PeerConfigs
 		expectError            bool
 	}{
 		{
@@ -2647,17 +2648,17 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
   password: cGFzc3dvcmQ=
   localip: 192.168.0.2`,
 			},
-			bgpPeerConfigs{
-				bgpPeerConfig{
+			bgp.PeerConfigs{
+				bgp.PeerConfig{
 					RemoteIP:  valToPtr(net.ParseIP("10.0.0.1")),
 					RemoteASN: valToPtr(uint32(64640)),
-					Password:  valToPtr(base64String("password")),
+					Password:  valToPtr(utils.Base64String("password")),
 					LocalIP:   valToPtr("192.168.0.1"),
 				},
-				bgpPeerConfig{
+				bgp.PeerConfig{
 					RemoteIP:  valToPtr(net.ParseIP("10.0.0.2")),
 					RemoteASN: valToPtr(uint32(64641)),
-					Password:  valToPtr(base64String("password")),
+					Password:  valToPtr(utils.Base64String("password")),
 					LocalIP:   valToPtr("192.168.0.2"),
 				},
 			},
@@ -2673,15 +2674,15 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
   password: cGFzc3dvcmQ=
   localip: 192.168.0.2`,
 			},
-			bgpPeerConfigs{
-				bgpPeerConfig{
+			bgp.PeerConfigs{
+				bgp.PeerConfig{
 					RemoteIP:  valToPtr(net.ParseIP("10.0.0.1")),
 					RemoteASN: valToPtr(uint32(64640)),
 				},
-				bgpPeerConfig{
+				bgp.PeerConfig{
 					RemoteIP:  valToPtr(net.ParseIP("10.0.0.2")),
 					RemoteASN: valToPtr(uint32(64641)),
-					Password:  valToPtr(base64String("password")),
+					Password:  valToPtr(utils.Base64String("password")),
 					LocalIP:   valToPtr("192.168.0.2"),
 				},
 			},
@@ -2695,17 +2696,17 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
 				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
 			},
-			bgpPeerConfigs{
-				bgpPeerConfig{
+			bgp.PeerConfigs{
+				bgp.PeerConfig{
 					RemoteIP:  valToPtr(net.ParseIP("10.0.0.1")),
 					RemoteASN: valToPtr(uint32(64640)),
-					Password:  valToPtr(base64String("password")),
+					Password:  valToPtr(utils.Base64String("password")),
 					LocalIP:   valToPtr("192.168.0.1"),
 				},
-				bgpPeerConfig{
+				bgp.PeerConfig{
 					RemoteIP:  valToPtr(net.ParseIP("10.0.0.2")),
 					RemoteASN: valToPtr(uint32(64641)),
-					Password:  valToPtr(base64String("password")),
+					Password:  valToPtr(utils.Base64String("password")),
 					LocalIP:   valToPtr("192.168.0.2"),
 				},
 			},
@@ -2741,8 +2742,8 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			if !cmp.Equal(tc.expectedBgpPeerConfigs, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgpPeerConfig{})) {
-				diff := cmp.Diff(tc.expectedBgpPeerConfigs, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgpPeerConfig{}))
+			if !cmp.Equal(tc.expectedBgpPeerConfigs, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{})) {
+				diff := cmp.Diff(tc.expectedBgpPeerConfigs, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{}))
 				t.Errorf("BGP peer config mismatch:\n%s", diff)
 			}
 		})
@@ -2995,7 +2996,7 @@ func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *te
 }
 
 type value interface {
-	string | uint32 | net.IP | base64String
+	string | uint32 | net.IP | utils.Base64String
 }
 
 func valToPtr[V value](v V) *V {
