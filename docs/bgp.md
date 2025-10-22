@@ -10,7 +10,7 @@ pod IPs, service IPs, etc.).
 
 This is the default mode. All nodes in the clusters form iBGP peering relationships with rest of the nodes forming a
 full node-to-node mesh. Each node advertise the pod CIDR allocated to the nodes with its peers (the rest of the nodes in
-the cluster).  There is no configuration required in this mode. All the nodes in the cluster are associated with the
+the cluster). There is no configuration required in this mode. All the nodes in the cluster are associated with the
 private ASN 64512 implicitly (which can be configured with `--cluster-asn` flag) and users are transparent to use of
 iBGP. This mode is suitable in public cloud environments or small cluster deployments.
 
@@ -30,7 +30,7 @@ kubectl annotate node <kube-node> "kube-router.io/node.asn=64512"
 
 Only nodes within same ASN form full mesh. Two nodes with different ASNs never get peered.
 
-### Route-Reflector setup  Without Full Mesh
+### Route-Reflector setup Without Full Mesh
 
 This model supports the common scheme of using a Route Reflector Server node to concentrate peering from client peers.
 This has the big advantage of not needing full mesh, and will scale better. In this mode kube-router expects each node
@@ -75,11 +75,45 @@ For example:
 
 ### Node Specific External BGP Peers
 
-Alternatively, each node can be configured with one or more node specific BGP peers. Information regarding node specific
-BGP peer is read from node API object annotations:
+Each node can be configured with one or more node specific BGP peers using the `kube-router.io/peers` node annotation.
+Previously, these settings were configured using individual `kube-router.io/peer.*` annotations.
+While these individual annotations are still supported, they're now deprecated and
+will be removed in a future release.
+
+#### Using Consolidated Annotation
+
+The `kube-router.io/peers` annotation accepts peer configurations in YAML format with the following fields:
+
+- `remoteip` (required): The IP address of the peer
+- `remoteasn` (required): The ASN of the peer
+- `localip` (optional): Local IP address to use for this peer connection
+- `password` (optional): Base64 encoded password for BGP authentication
+- `port` (optional): BGP port (defaults to 179 if not specified)
+
+```shell
+kubectl annotate node <kube-node> \
+kube-router.io/peers="$(cat <<'EOF'
+- remoteip: 192.168.1.99
+  remoteasn: 65000
+  password: U2VjdXJlUGFzc3dvcmQK,
+- remoteip: 192.168.1.100
+  remoteasn: 65000'
+  password: U2VjdXJlUGFzc3dvcmQK,
+EOF
+)"
+```
+
+#### Using Individual Annotations (Deprecated)
+
+> **NOTE:** The individual peer annotations listed below are deprecated in favor of the consolidated `kube-router.io/peers`
+> annotation. They are maintained for backward compatibility but will be removed in a future release.
+
+Node-specific BGP peer configs can also be set via individual node API object annotations:
 
 - `kube-router.io/peer.ips`
 - `kube-router.io/peer.asns`
+- `kube-router.io/peer.passwords`
+- `kube-router.io/peer.localips`
 
 For example, users can annotate node object with below commands:
 
@@ -106,26 +140,23 @@ kubectl annotate node <kube-node> "kube-router.io/path-prepend.repeat-n=5"
 
 ### BGP Peer Local IP configuration
 
-In some setups it might be desirable to set a local IP address used for connecting external BGP peers. This can be
-accomplished on nodes with annotations:
+In some setups it might be desirable to set a local IP address used for connecting external BGP peers.
 
-- `kube-router.io/peer.localips`
+When using the `kube-router.io/peers` annotation, specify the `localip` field for each peer as shown in the
+[Node Specific External BGP Peers](#node-specific-external-bgp-peers) section above.
 
-If set, this must be a list with a local IP address for each peer, or left empty to use nodeIP.
-
-Example:
+When using individual annotations, you can specify the local IP address using `kube-router.io/peer.localips`:
 
 ```shell
 kubectl annotate node <kube-node> "kube-router.io/peer.localips=10.1.1.1,10.1.1.2"
 ```
 
-This will instruct kube-router to use IP `10.1.1.1` for first BGP peer as a local address, and use `10.1.1.2`for the
-second.
+If set, this must be a list with a local IP address for each peer, or left empty to use nodeIP.
 
 ### BGP Peer Password Authentication
 
-The examples above have assumed there is no password authentication with BGP peer routers. If you need to use a password
-for peering, you can use the `--peer-router-passwords` command-line option, the `kube-router.io/peer.passwords` node
+If you need to use a password for peering with BGP peer routers, you can configure it using the `kube-router.io/peers`
+annotation, the `--peer-router-passwords` command-line option, the deprecated `kube-router.io/peer.passwords` node
 annotation, or the `--peer-router-passwords-file` command-line option.
 
 #### Base64 Encoding Passwords
@@ -142,7 +173,14 @@ U2VjdXJlUGFzc3dvcmQ=
 
 #### Password Configuration Examples
 
-In this CLI flag example the first router (192.168.1.99) uses a password, while the second (192.168.1.100) does not.
+**Using the consolidated annotation (recommended):**
+
+When using the `kube-router.io/peers` annotation, specify the `password` field with a base64 encoded password for each
+peer that requires authentication. See the [Node Specific External BGP Peers](#node-specific-external-bgp-peers) section for an example.
+
+**Using CLI flags:**
+
+In this example the first router (192.168.1.99) uses a password, while the second (192.168.1.100) does not:
 
 ```sh
 --peer-router-ips="192.168.1.99,192.168.1.100"
@@ -152,13 +190,17 @@ In this CLI flag example the first router (192.168.1.99) uses a password, while 
 
 Note the comma indicating the end of the first password.
 
-Here's the same example but configured as node annotations:
+**Using individual annotations (deprecated):**
+
+Here's the same example but configured with individual node annotations:
 
 ```shell
 kubectl annotate node <kube-node> "kube-router.io/peer.ips=192.168.1.99,192.168.1.100"
 kubectl annotate node <kube-node> "kube-router.io/peer.asns=65000,65000"
 kubectl annotate node <kube-node> "kube-router.io/peer.passwords=U2VjdXJlUGFzc3dvcmQK,"
 ```
+
+**Using a password file:**
 
 Finally, to include peer passwords as a file you would run kube-router with the following option:
 
@@ -168,8 +210,8 @@ Finally, to include peer passwords as a file you would run kube-router with the 
 --peer-router-passwords-file="/etc/kube-router/bgp-passwords.conf"
 ```
 
-The password file, closely follows the syntax of the command-line and node annotation options.
-Here, the first peer IP (192.168.1.99) would be configured with a password, while the second would not.
+The password file closely follows the syntax of the command-line and node annotation options.
+Here, the first peer IP (192.168.1.99) would be configured with a password, while the second would not:
 
 ```sh
 U2VjdXJlUGFzc3dvcmQK,
