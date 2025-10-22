@@ -2,13 +2,13 @@ package routing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
@@ -205,7 +205,8 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
 func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer,
 	bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration, bgpGracefulRestartTime time.Duration,
-	peerMultihopTTL uint8) error {
+	peerMultihopTTL uint8,
+) error {
 	for _, n := range peerNeighbors {
 		neighborIPStr := n.Conf.NeighborAddress
 		neighborIP := net.ParseIP(neighborIPStr)
@@ -285,32 +286,14 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 }
 
 // Does validation and returns neighbor configs
-func newGlobalPeers(ips []net.IP, ports []uint32, asns []uint32, passwords []string, localips []string,
-	holdtime float64, localAddress string) ([]*gobgpapi.Peer, error) {
+func newGlobalPeers(peerConfigs bgp.PeerConfigs, holdtime float64, localAddress string) ([]*gobgpapi.Peer, error) {
 	peers := make([]*gobgpapi.Peer, 0)
 
-	// Validations
-	if len(ips) != len(asns) {
-		return nil, errors.New("invalid peer router config, the number of IPs and ASN numbers must be equal")
-	}
-
-	if len(ips) != len(passwords) && len(passwords) != 0 {
-		return nil, errors.New("invalid peer router config. The number of passwords should either be zero, or " +
-			"one per peer router. Use blank items if a router doesn't expect a password. Example: \"pass,,pass\" " +
-			"OR [\"pass\",\"\",\"pass\"]")
-	}
-
-	if len(ips) != len(ports) && len(ports) != 0 {
-		return nil, fmt.Errorf("invalid peer router config. The number of ports should either be zero, or "+
-			"one per peer router. If blank items are used, it will default to standard BGP port, %s. "+
-			"Example: \"port,,port\" OR [\"port\",\"\",\"port\"]", strconv.Itoa(options.DefaultBgpPort))
-	}
-
-	if len(ips) != len(localips) && len(localips) != 0 {
-		return nil, fmt.Errorf("invalid peer router config. The number of localIPs should either be zero, or "+
-			"one per peer router. If blank items are used, it will default to nodeIP, %s. "+
-			"Example: \"10.1.1.1,,10.1.1.2\" OR [\"10.1.1.1\",\"\",\"10.1.1.2\"]", localAddress)
-	}
+	ips := peerConfigs.RemoteIPs()
+	asns := peerConfigs.RemoteASNs()
+	passwords := peerConfigs.Passwords()
+	ports := peerConfigs.Ports()
+	localips := peerConfigs.LocalIPs()
 
 	for i := 0; i < len(ips); i++ {
 		if (asns[i] < 1 || asns[i] > 23455) &&
