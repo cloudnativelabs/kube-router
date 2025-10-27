@@ -198,7 +198,7 @@ func Test_buildIPSetRestore_setIncludeNames(t *testing.T) {
 					Parent:  &IPSet{isIpv6: false},
 				},
 			}},
-			setIncludeNames: []string{"set1", "set2"},
+			setIncludeNames: []string{"inet6:set1", "inet6:set2"},
 			expectedSets:    []string{"inet6:set1", "inet6:set2"},
 			excludedSets:    []string{"regular-set"},
 		},
@@ -218,7 +218,7 @@ func Test_buildIPSetRestore_setIncludeNames(t *testing.T) {
 					Parent:  &IPSet{isIpv6: true},
 				},
 			}},
-			setIncludeNames: []string{"set1"},
+			setIncludeNames: []string{"inet6:set1"},
 			expectedSets:    []string{"inet6:set1"},
 			excludedSets:    []string{"inet6:set2"},
 		},
@@ -575,7 +575,7 @@ func Test_buildIPSetRestore_integrationRealWorldSets(t *testing.T) {
 					Parent:  &IPSet{isIpv6: true},
 				},
 			}},
-			setIncludeNames: []string{"kube-router-svip", "kube-router-svip-prt"},
+			setIncludeNames: []string{"inet6:kube-router-svip", "inet6:kube-router-svip-prt"},
 			description:     "Should match IPv6 sets by removing inet6: prefix",
 		},
 		{
@@ -610,15 +610,11 @@ func Test_buildIPSetRestore_integrationRealWorldSets(t *testing.T) {
 			result := BuildIPSetRestore(tt.ipset, tt.setIncludeNames)
 
 			// Verify that only the specified sets are included
-			for setName, set := range tt.ipset.sets {
+			for setName := range tt.ipset.sets {
 				shouldBeIncluded := false
 				for _, includeName := range tt.setIncludeNames {
 					// Check if this set should be included based on the filtering logic
-					origName := setName
-					if set.Parent != nil && set.Parent.isIpv6 {
-						origName = strings.Replace(setName, fmt.Sprintf("%s:", IPv6SetPrefix), "", 1)
-					}
-					if origName == includeName {
+					if setName == includeName {
 						shouldBeIncluded = true
 						break
 					}

@@ -529,15 +529,11 @@ func scrubInitValFromOptions(options []string) []string {
 // add KUBE-DST-3YNVZWWGX3UQQ4VQ 100.96.1.6 timeout 0
 func BuildIPSetRestore(ipset *IPSet, setIncludeNames []string) string {
 	setNames := make([]string, 0, len(ipset.sets))
-	for setName, set := range ipset.sets {
+	for setName := range ipset.sets {
 		// If we've been passed a set of filter names, check to see if this set is contained within that set before
 		// adding it to the restore to ensure that we don't impact other unrelated sets
 		if setIncludeNames != nil {
-			origName := setName
-			if set.Parent.isIpv6 {
-				origName = strings.Replace(setName, fmt.Sprintf("%s:", IPv6SetPrefix), "", 1)
-			}
-			if !slices.Contains(setIncludeNames, origName) {
+			if !slices.Contains(setIncludeNames, setName) {
 				continue
 			}
 		}
@@ -654,4 +650,13 @@ func (ipset *IPSet) Get(setName string) *Set {
 // Sets returns all sets from ipset
 func (ipset *IPSet) Sets() map[string]*Set {
 	return ipset.sets
+}
+
+func GenerateMultiFamilySetNames(setNames []string) []string {
+	multiFamilySetNames := make([]string, 0, len(setNames))
+	for _, setName := range setNames {
+		multiFamilySetNames = append(multiFamilySetNames, setName)
+		multiFamilySetNames = append(multiFamilySetNames, IPSetName(setName, true))
+	}
+	return multiFamilySetNames
 }

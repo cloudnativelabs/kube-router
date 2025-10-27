@@ -864,7 +864,8 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 
 		ipSetHandler.RefreshSet(nodeAddrsIPSetName, currentNodeIPs[family], utils.TypeHashIP)
 
-		err = ipSetHandler.RestoreSets([]string{podSubnetsIPSetName, nodeAddrsIPSetName})
+		multiFamilySetNames := utils.GenerateMultiFamilySetNames([]string{podSubnetsIPSetName, nodeAddrsIPSetName})
+		err = ipSetHandler.RestoreSets(multiFamilySetNames)
 		if err != nil {
 			return fmt.Errorf("failed to sync pod subnets / node addresses ipsets: %v", err)
 		}
