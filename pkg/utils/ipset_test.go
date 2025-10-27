@@ -75,7 +75,7 @@ func Test_buildIPSetRestore(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildIPSetRestore(tt.args.ipset, tt.args.setIncludeNames); got != tt.want {
+			if got := BuildIPSetRestore(tt.args.ipset, tt.args.setIncludeNames); got != tt.want {
 				t.Errorf("buildIPSetRestore() = %v, want %v", got, tt.want)
 			}
 		})
@@ -266,7 +266,7 @@ func Test_buildIPSetRestore_setIncludeNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildIPSetRestore(tt.ipset, tt.setIncludeNames)
+			result := BuildIPSetRestore(tt.ipset, tt.setIncludeNames)
 
 			// Check that expected sets are included
 			for _, expectedSet := range tt.expectedSets {
@@ -366,7 +366,7 @@ func Test_buildIPSetRestore_boundaryConditions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// This should not panic
-			result := buildIPSetRestore(tt.ipset, tt.setIncludeNames)
+			result := BuildIPSetRestore(tt.ipset, tt.setIncludeNames)
 
 			// Basic validation that we get a string result
 			assert.IsType(t, "", result, tt.description)
@@ -455,7 +455,7 @@ func Test_buildIPSetRestore_differentTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildIPSetRestore(tt.ipset, nil)
+			result := BuildIPSetRestore(tt.ipset, nil)
 
 			// Count the number of temporary sets created
 			tempSetCount := strings.Count(result, "create TMP-")
@@ -607,7 +607,7 @@ func Test_buildIPSetRestore_integrationRealWorldSets(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := buildIPSetRestore(tt.ipset, tt.setIncludeNames)
+			result := BuildIPSetRestore(tt.ipset, tt.setIncludeNames)
 
 			// Verify that only the specified sets are included
 			for setName, set := range tt.ipset.sets {
