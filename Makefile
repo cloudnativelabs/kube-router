@@ -66,7 +66,7 @@ FILE_ARCH=x86-64
 DOCKER_ARCH=
 endif
 $(info Building for GOARCH=$(GOARCH))
-all: lint test kube-router container ## Default target. Lints code, runs tests, builds binaries and images.
+all: lint test-pretty kube-router container ## Default target. Lints code, runs tests, builds binaries and images.
 
 kube-router:
 	@echo Starting kube-router binary build.
@@ -96,6 +96,21 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		'CGO_ENABLED=0 go test -v -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/pkg/...'
 else
 	go test -v -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/pkg/...
+endif
+
+test-pretty: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+		sh -c \
+		'go install gotest.tools/gotestsum@latest && CGO_ENABLED=0 gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/pkg/...'
+else
+ifeq ($(shell command -v gotestsum 2>/dev/null),)
+	go install gotest.tools/gotestsum@latest
+endif
+	gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/pkg/...
 endif
 
 lint: gofmt markdownlint
@@ -250,7 +265,7 @@ help:
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs
-.PHONY: test lint docker-login push-manifest push-manifest-release
+.PHONY: test test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint
 
 .DEFAULT: all
