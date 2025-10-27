@@ -56,7 +56,7 @@ jobs:
 
     - name: Run unit tests for kube-router
       run: |
-        make test
+        make test-pretty
       env:
         DOCKER_BUILD_IMAGE: ${{ env.BUILDTIME_BASE }}
 
