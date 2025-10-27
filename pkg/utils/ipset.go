@@ -512,7 +512,7 @@ func scrubInitValFromOptions(options []string) []string {
 	return options
 }
 
-// buildIPSetRestore creates a set of ipset rules that can be fed into ipset restore. ipset contains a list of "sets"
+// BuildIPSetRestore creates a set of ipset rules that can be fed into ipset restore. ipset contains a list of "sets"
 // that we will act on. If setIncludeNames is not null, then the list of sets will be dynamically filtered to ensure
 // that the string for ipset restore only includes sets with those names.
 //
@@ -527,7 +527,7 @@ func scrubInitValFromOptions(options []string) []string {
 // ex:
 // create KUBE-DST-3YNVZWWGX3UQQ4VQ hash:ip family inet hashsize 1024 maxelem 65536 timeout 0
 // add KUBE-DST-3YNVZWWGX3UQQ4VQ 100.96.1.6 timeout 0
-func buildIPSetRestore(ipset *IPSet, setIncludeNames []string) string {
+func BuildIPSetRestore(ipset *IPSet, setIncludeNames []string) string {
 	setNames := make([]string, 0, len(ipset.sets))
 	for setName, set := range ipset.sets {
 		// If we've been passed a set of filter names, check to see if this set is contained within that set before
@@ -622,7 +622,7 @@ func (ipset *IPSet) Restore() error {
 // so that we don't disrumpt other things that might be using ipsets on the host. In general, this function should be
 // preferred over the Restore() function.
 func (ipset *IPSet) RestoreSets(setNames []string) error {
-	restoreString := buildIPSetRestore(ipset, setNames)
+	restoreString := BuildIPSetRestore(ipset, setNames)
 	klog.V(3).Infof("ipset (ipv6? %t) restore looks like:\n%s", ipset.isIpv6, restoreString)
 	stdin := bytes.NewBufferString(restoreString)
 	err := ipset.runWithStdin(stdin, "restore", "-exist")
