@@ -1106,7 +1106,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	// else attempt to get peers from node specific BGP annotations.
 	if len(nrc.globalPeerRouters) == 0 {
 		klog.V(2).Infof("Attempting to construct peer configs from annotation: %+v", node.Annotations)
-		peerCfgs, err := bgpPeerConfigsFromAnnotations(node.Annotations)
+		peerCfgs, err := bgpPeerConfigsFromAnnotations(node.Annotations, nrc.krNode.GetPrimaryNodeIP().String())
 		if err != nil {
 			err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
 			if err2 != nil {
@@ -1441,11 +1441,11 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	return &nrc, nil
 }
 
-func bgpPeerConfigsFromAnnotations(nodeAnnotations map[string]string) (bgp.PeerConfigs, error) {
+func bgpPeerConfigsFromAnnotations(nodeAnnotations map[string]string, localAddress string) (bgp.PeerConfigs, error) {
 	nodeBgpPeersAnnotation, ok := nodeAnnotations[peersAnnotation]
 	if !ok {
 		klog.Infof("%s annotation not set, using individual node annotations to configure BGP peer info", peersAnnotation)
-		return bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations)
+		return bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations, localAddress)
 	}
 
 	var peerConfigs bgp.PeerConfigs
@@ -1456,7 +1456,7 @@ func bgpPeerConfigsFromAnnotations(nodeAnnotations map[string]string) (bgp.PeerC
 	return peerConfigs, nil
 }
 
-func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string) (bgp.PeerConfigs, error) {
+func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string, localAddress string) (bgp.PeerConfigs, error) {
 	// Get Global Peer Router ASN configs
 	nodeBgpPeerAsnsAnnotation, ok := nodeAnnotations[peerASNAnnotation]
 	if !ok {
@@ -1527,6 +1527,5 @@ func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string) 
 		}
 	}
 
-	// TODO: Add local address to the end arg?
-	return bgp.NewPeerConfigs(ipStrings, peerASNs, ports, passwords, localIPs, "")
+	return bgp.NewPeerConfigs(ipStrings, peerASNs, ports, passwords, localIPs, localAddress)
 }

@@ -176,7 +176,8 @@ U2VjdXJlUGFzc3dvcmQ=
 **Using the consolidated annotation (recommended):**
 
 When using the `kube-router.io/peers` annotation, specify the `password` field with a base64 encoded password for each
-peer that requires authentication. See the [Node Specific External BGP Peers](#node-specific-external-bgp-peers) section for an example.
+peer that requires authentication. See the
+[Node Specific External BGP Peers](#node-specific-external-bgp-peers) section for an example.
 
 **Using CLI flags:**
 
