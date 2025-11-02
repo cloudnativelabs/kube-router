@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
@@ -17,6 +18,25 @@ type PeerConfig struct {
 	Port      *uint32             `yaml:"port"`
 	RemoteASN *uint32             `yaml:"remoteasn"`
 	RemoteIP  *net.IP             `yaml:"remoteip"`
+}
+
+// Custom Stringer to prevent leaking passwords when printed
+func (p PeerConfig) String() string {
+	var fields []string
+
+	if p.LocalIP != nil {
+		fields = append(fields, fmt.Sprintf("LocalIP: %s", *p.LocalIP))
+	}
+	if p.Port != nil {
+		fields = append(fields, fmt.Sprintf("Port: %d", *p.Port))
+	}
+	if p.RemoteASN != nil {
+		fields = append(fields, fmt.Sprintf("RemoteASN: %d", *p.RemoteASN))
+	}
+	if p.RemoteIP != nil {
+		fields = append(fields, fmt.Sprintf("RemoteIP: %v", *p.RemoteIP))
+	}
+	return fmt.Sprintf("PeerConfig{%s}", strings.Join(fields, ", "))
 }
 
 func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
@@ -108,6 +128,15 @@ func (p PeerConfigs) RemoteIPStrings() []string {
 		}
 	}
 	return remoteIPs
+}
+
+// Prints the PeerConfigs without the passwords leaking
+func (p PeerConfigs) String() string {
+	pcs := make([]string, len(p))
+	for i, pc := range p {
+		pcs[i] = pc.String()
+	}
+	return fmt.Sprintf("PeerConfigs[%s]", strings.Join(pcs, ","))
 }
 
 func (p *PeerConfigs) UnmarshalYAML(raw []byte) error {

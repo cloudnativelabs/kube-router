@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
@@ -1822,11 +1823,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 				Endpoints: []discoveryv1.Endpoint{
 					{
 						Addresses: []string{"172.20.1.1"},
-						NodeName:  valToPtr("node-1"),
+						NodeName:  testutils.ValToPtr("node-1"),
 					},
 					{
 						Addresses: []string{"172.20.1.2"},
-						NodeName:  valToPtr("node-2"),
+						NodeName:  testutils.ValToPtr("node-2"),
 					},
 				},
 			},
@@ -1867,11 +1868,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 				Endpoints: []discoveryv1.Endpoint{
 					{
 						Addresses: []string{"172.20.1.1"},
-						NodeName:  valToPtr("node-2"),
+						NodeName:  testutils.ValToPtr("node-2"),
 					},
 					{
 						Addresses: []string{"172.20.1.2"},
-						NodeName:  valToPtr("node-3"),
+						NodeName:  testutils.ValToPtr("node-3"),
 					},
 				},
 			},
@@ -2650,16 +2651,16 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 			},
 			bgp.PeerConfigs{
 				bgp.PeerConfig{
-					RemoteIP:  valToPtr(net.ParseIP("10.0.0.1")),
-					RemoteASN: valToPtr(uint32(64640)),
-					Password:  valToPtr(utils.Base64String("password")),
-					LocalIP:   valToPtr("192.168.0.1"),
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
+					RemoteASN: testutils.ValToPtr(uint32(64640)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.1"),
 				},
 				bgp.PeerConfig{
-					RemoteIP:  valToPtr(net.ParseIP("10.0.0.2")),
-					RemoteASN: valToPtr(uint32(64641)),
-					Password:  valToPtr(utils.Base64String("password")),
-					LocalIP:   valToPtr("192.168.0.2"),
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
+					RemoteASN: testutils.ValToPtr(uint32(64641)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.2"),
 				},
 			},
 			false,
@@ -2676,14 +2677,14 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 			},
 			bgp.PeerConfigs{
 				bgp.PeerConfig{
-					RemoteIP:  valToPtr(net.ParseIP("10.0.0.1")),
-					RemoteASN: valToPtr(uint32(64640)),
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
+					RemoteASN: testutils.ValToPtr(uint32(64640)),
 				},
 				bgp.PeerConfig{
-					RemoteIP:  valToPtr(net.ParseIP("10.0.0.2")),
-					RemoteASN: valToPtr(uint32(64641)),
-					Password:  valToPtr(utils.Base64String("password")),
-					LocalIP:   valToPtr("192.168.0.2"),
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
+					RemoteASN: testutils.ValToPtr(uint32(64641)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.2"),
 				},
 			},
 			true,
@@ -2698,16 +2699,16 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 			},
 			bgp.PeerConfigs{
 				bgp.PeerConfig{
-					RemoteIP:  valToPtr(net.ParseIP("10.0.0.1")),
-					RemoteASN: valToPtr(uint32(64640)),
-					Password:  valToPtr(utils.Base64String("password")),
-					LocalIP:   valToPtr("192.168.0.1"),
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
+					RemoteASN: testutils.ValToPtr(uint32(64640)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.1"),
 				},
 				bgp.PeerConfig{
-					RemoteIP:  valToPtr(net.ParseIP("10.0.0.2")),
-					RemoteASN: valToPtr(uint32(64641)),
-					Password:  valToPtr(utils.Base64String("password")),
-					LocalIP:   valToPtr("192.168.0.2"),
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
+					RemoteASN: testutils.ValToPtr(uint32(64641)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.2"),
 				},
 			},
 			false,
@@ -2722,16 +2723,16 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 			},
 			bgp.PeerConfigs{
 				bgp.PeerConfig{
-					RemoteIP:  valToPtr(net.ParseIP("10.0.0.1")),
-					RemoteASN: valToPtr(uint32(64640)),
-					Password:  valToPtr(utils.Base64String("password")),
-					LocalIP:   valToPtr("192.168.0.1"),
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
+					RemoteASN: testutils.ValToPtr(uint32(64640)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.1"),
 				},
 				bgp.PeerConfig{
-					RemoteIP:  valToPtr(net.ParseIP("10.0.0.2")),
-					RemoteASN: valToPtr(uint32(64641)),
-					Password:  valToPtr(utils.Base64String("password")),
-					LocalIP:   valToPtr("192.168.0.2"),
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
+					RemoteASN: testutils.ValToPtr(uint32(64641)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.2"),
 				},
 			},
 			true,
@@ -2760,7 +2761,7 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			bgpPeerCfgs, err := bgpPeerConfigsFromAnnotations(tc.nodeAnnotations)
+			bgpPeerCfgs, err := bgpPeerConfigsFromAnnotations(tc.nodeAnnotations, "")
 			if tc.expectError {
 				assert.Error(t, err)
 				return
@@ -3017,19 +3018,4 @@ func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *te
 			}
 		}
 	}
-}
-
-type value interface {
-	string | uint32 | net.IP | utils.Base64String
-}
-
-func valToPtr[V value](v V) *V {
-	return &v
-}
-
-func ptrToVal[V value](v *V) V {
-	if v == nil {
-		return *new(V)
-	}
-	return *v
 }

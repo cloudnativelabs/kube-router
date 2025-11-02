@@ -95,10 +95,10 @@ kubectl annotate node <kube-node> \
 kube-router.io/peers="$(cat <<'EOF'
 - remoteip: 192.168.1.99
   remoteasn: 65000
-  password: U2VjdXJlUGFzc3dvcmQK,
+  password: U2VjdXJlUGFzc3dvcmQK
 - remoteip: 192.168.1.100
-  remoteasn: 65000'
-  password: U2VjdXJlUGFzc3dvcmQK,
+  remoteasn: 65000
+  password: U2VjdXJlUGFzc3dvcmQK
 EOF
 )"
 ```
