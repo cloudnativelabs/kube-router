@@ -1482,7 +1482,7 @@ func ipvsDestinationString(d *ipvs.Destination) string {
 
 func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) error {
 	if p {
-		uTimeout, err := safecast.ToUint32(timeout)
+		uTimeout, err := safecast.Convert[uint32](timeout)
 		if err != nil {
 			return fmt.Errorf("failed to convert timeout to uint32: %v", err)
 		}

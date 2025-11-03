@@ -30,7 +30,7 @@ func (nsc *NetworkServicesController) getMetricsServiceMap() metricsServiceMap {
 
 	for _, svc := range nsc.getServiceMap() {
 		key := metricsServiceMapKey{}
-		key.uPort, err = safecast.ToUint16(svc.port)
+		key.uPort, err = safecast.Convert[uint16](svc.port)
 		if err != nil {
 			klog.Errorf("failed to convert port %d to uint16: %v", svc.port, err)
 			continue
@@ -51,7 +51,7 @@ func (nsc *NetworkServicesController) getMetricsServiceMap() metricsServiceMap {
 		}
 		if svc.nodePort != 0 {
 			key.ip = nsc.krNode.GetPrimaryNodeIP().String()
-			key.uPort, err = safecast.ToUint16(svc.nodePort)
+			key.uPort, err = safecast.Convert[uint16](svc.nodePort)
 			if err != nil {
 				klog.Errorf("failed to convert nodePort %d to uint16: %v", svc.nodePort, err)
 				continue

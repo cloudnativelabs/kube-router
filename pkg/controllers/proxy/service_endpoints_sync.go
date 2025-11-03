@@ -133,7 +133,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		if err != nil {
 			return fmt.Errorf("failed creating dummy interface: %v", err)
 		}
-		sPort, err := safecast.ToUint16(svc.port)
+		sPort, err := safecast.Convert[uint16](svc.port)
 		if err != nil {
 			return fmt.Errorf("failed to convert service port to uint16: %v", err)
 		}
@@ -242,7 +242,7 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 			syscallINET = syscall.AF_INET6
 		}
 
-		ePort, err := safecast.ToUint16(endpoint.port)
+		ePort, err := safecast.Convert[uint16](endpoint.port)
 		if err != nil {
 			klog.Errorf("failed to convert endpoint port to uint16: %v", err)
 			continue
@@ -289,7 +289,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 			continue
 		}
 
-		nPort, err := safecast.ToUint16(svc.nodePort)
+		nPort, err := safecast.Convert[uint16](svc.nodePort)
 		if err != nil {
 			return fmt.Errorf("failed to convert node port to uint16: %v", err)
 		}
@@ -451,7 +451,7 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 		return fmt.Errorf("failed get list of IPVS services due to: %v", err)
 	}
 
-	sPort, err := safecast.ToUint16(svc.port)
+	sPort, err := safecast.Convert[uint16](svc.port)
 	if err != nil {
 		return fmt.Errorf("failed to convert service port to uint16: %v", err)
 	}
@@ -549,7 +549,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 		return fmt.Errorf("failed to generate FW mark")
 	}
 
-	sInPort, err := safecast.ToUint16(svcIn.port)
+	sInPort, err := safecast.Convert[uint16](svcIn.port)
 	if err != nil {
 		return fmt.Errorf("failed to convert serviceIn port to uint16: %v", err)
 	}
@@ -614,7 +614,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 			syscallINET = syscall.AF_INET6
 		}
 
-		ePort, err := safecast.ToUint16(endpoint.port)
+		ePort, err := safecast.Convert[uint16](endpoint.port)
 		if err != nil {
 			return fmt.Errorf("failed to convert endpoint port to uint16: %v", err)
 		}

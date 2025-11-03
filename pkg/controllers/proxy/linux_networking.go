@@ -297,7 +297,7 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 			vip, svc.Address, protocol, svc.Protocol, port, svc.Port)
 		if vip.Equal(svc.Address) && protocol == svc.Protocol && port == svc.Port {
 			klog.V(2).Info("Service matched VIP")
-			ptim, err := safecast.ToUint32(persistentTimeout)
+			ptim, err := safecast.Convert[uint32](persistentTimeout)
 			if err != nil {
 				return svcs, nil, fmt.Errorf("failed to convert persistent timeout to uint32: %v", err)
 			}

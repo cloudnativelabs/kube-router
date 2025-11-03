@@ -1074,7 +1074,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		localAddressList = append(localAddressList, addr)
 	}
 
-	intBGPPort, err := safecast.ToInt32(nrc.bgpPort)
+	intBGPPort, err := safecast.Convert[int32](nrc.bgpPort)
 	if err != nil {
 		return fmt.Errorf("failed to convert BGP port to int32: %v", err)
 	}
@@ -1422,7 +1422,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	// Convert ints to uint32s
 	peerASNs := make([]uint32, 0)
 	for _, i := range kubeRouterConfig.PeerASNs {
-		ui, err := safecast.ToUint32(i)
+		ui, err := safecast.Convert[uint32](i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert Peer ASNs to uint32: %s", err)
 		}
@@ -1433,7 +1433,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	// Convert uints to uint16s
 	peerPorts := make([]uint32, 0)
 	for _, i := range kubeRouterConfig.PeerPorts {
-		ui, err := safecast.ToUint32(i)
+		ui, err := safecast.Convert[uint32](i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert Peer Port to uint32: %s", err)
 		}
