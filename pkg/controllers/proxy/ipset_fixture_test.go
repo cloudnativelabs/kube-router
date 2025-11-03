@@ -149,7 +149,7 @@ func buildIPVSServicesFromFixtures(t *testing.T, services *v1.ServiceList) []*ip
 			require.GreaterOrEqualf(t, port.Port, int32(0), "service %s/%s has negative port %d", svc.Namespace, svc.Name, port.Port)
 			const maxServicePort = 1<<16 - 1
 			require.LessOrEqualf(t, port.Port, int32(maxServicePort), "service %s/%s port %d exceeds %d", svc.Namespace, svc.Name, port.Port, maxServicePort)
-			targetPort, err := safecast.ToUint16(port.Port)
+			targetPort, err := safecast.Convert[uint16](port.Port)
 			if err != nil {
 				t.Fatalf("failed to convert port %d to uint16: %v", port.Port, err)
 			}

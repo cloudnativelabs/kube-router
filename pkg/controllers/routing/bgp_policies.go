@@ -136,7 +136,7 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 				if cidrLen < 0 || cidrLen > cidrMax {
 					return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
 				}
-				uCIDRLen, err := safecast.ToUint32(cidrLen)
+				uCIDRLen, err := safecast.Convert[uint32](cidrLen)
 				if err != nil {
 					return fmt.Errorf("failed to convert CIDR length to uint32: %v", err)
 				}
@@ -324,7 +324,7 @@ func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
 			prefix.IpPrefix = ipNet.String()
 			mask, _ := ipNet.Mask.Size()
 
-			uIntMask, err := safecast.ToUint32(mask)
+			uIntMask, err := safecast.Convert[uint32](mask)
 			if err != nil {
 				return fmt.Errorf("failed to convert mask to uint32: %v", err)
 			}
