@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ccoveille/go-safecast"
+	"github.com/ccoveille/go-safecast/v2"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/moby/ipvs"
 	"github.com/prometheus/client_golang/prometheus"
