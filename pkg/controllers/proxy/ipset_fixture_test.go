@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ccoveille/go-safecast"
+	"github.com/ccoveille/go-safecast/v2"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/testhelpers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ccoveille/go-safecast"
+	"github.com/ccoveille/go-safecast/v2"
 	gobgpapi "github.com/osrg/gobgp/v3/api"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
