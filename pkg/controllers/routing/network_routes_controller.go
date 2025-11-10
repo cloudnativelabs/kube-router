@@ -1469,7 +1469,6 @@ func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string, 
 	// Get Global Peer Router ASN configs
 	var ports []uint32
 	nodeBgpPeerPortsAnnotation, ok := nodeAnnotations[peerPortAnnotation]
-	// Default to default BGP port if port annotation is not found
 	if ok {
 		portStrings := stringToSlice(nodeBgpPeerPortsAnnotation, ",")
 		ports, err = stringSliceToUInt32(portStrings)

@@ -18,19 +18,19 @@ func TestPeerConfig_String(t *testing.T) {
 		{
 			name:     "empty PeerConfig",
 			config:   PeerConfig{},
-			expected: "PeerConfig{}",
+			expected: "PeerConfig{Port: 0}",
 		},
 		{
 			name: "LocalIP",
 			config: PeerConfig{
 				LocalIP: testutils.ValToPtr("192.168.1.1"),
 			},
-			expected: "PeerConfig{LocalIP: 192.168.1.1}",
+			expected: "PeerConfig{Port: 0, LocalIP: 192.168.1.1}",
 		},
 		{
 			name: "Port",
 			config: PeerConfig{
-				Port: testutils.ValToPtr(uint32(179)),
+				Port: 179,
 			},
 			expected: "PeerConfig{Port: 179}",
 		},
@@ -39,39 +39,39 @@ func TestPeerConfig_String(t *testing.T) {
 			config: PeerConfig{
 				RemoteASN: testutils.ValToPtr(uint32(65000)),
 			},
-			expected: "PeerConfig{RemoteASN: 65000}",
+			expected: "PeerConfig{Port: 0, RemoteASN: 65000}",
 		},
 		{
 			name: "RemoteIP",
 			config: PeerConfig{
 				RemoteIP: testutils.ValToPtr(net.ParseIP("10.0.0.1")),
 			},
-			expected: "PeerConfig{RemoteIP: 10.0.0.1}",
+			expected: "PeerConfig{Port: 0, RemoteIP: 10.0.0.1}",
 		},
 		{
 			name: "RemoteIP with IPv6",
 			config: PeerConfig{
 				RemoteIP: testutils.ValToPtr(net.ParseIP("2001:db8::1")),
 			},
-			expected: "PeerConfig{RemoteIP: 2001:db8::1}",
+			expected: "PeerConfig{Port: 0, RemoteIP: 2001:db8::1}",
 		},
 		{
 			name: "Password - should not be printed",
 			config: PeerConfig{
 				Password: testutils.ValToPtr(utils.Base64String("password")),
 			},
-			expected: "PeerConfig{}",
+			expected: "PeerConfig{Port: 0}",
 		},
 		{
 			name: "all fields - Password should not be printed",
 			config: PeerConfig{
 				LocalIP:   testutils.ValToPtr("192.168.1.1"),
 				Password:  testutils.ValToPtr(utils.Base64String("password")),
-				Port:      testutils.ValToPtr(uint32(179)),
+				Port:      179,
 				RemoteASN: testutils.ValToPtr(uint32(65000)),
 				RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
 			},
-			expected: "PeerConfig{LocalIP: 192.168.1.1, Port: 179, RemoteASN: 65000, RemoteIP: 10.0.0.1}",
+			expected: "PeerConfig{Port: 179, LocalIP: 192.168.1.1, RemoteASN: 65000, RemoteIP: 10.0.0.1}",
 		},
 	}
 
@@ -100,12 +100,12 @@ func TestPeerConfigs_String(t *testing.T) {
 				{
 					LocalIP:   testutils.ValToPtr("192.168.1.1"),
 					Password:  testutils.ValToPtr(utils.Base64String("secret")),
-					Port:      testutils.ValToPtr(uint32(179)),
+					Port:      179,
 					RemoteASN: testutils.ValToPtr(uint32(65000)),
 					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
 				},
 			},
-			expected: "PeerConfigs[PeerConfig{LocalIP: 192.168.1.1, Port: 179, RemoteASN: 65000, RemoteIP: 10.0.0.1}]",
+			expected: "PeerConfigs[PeerConfig{Port: 179, LocalIP: 192.168.1.1, RemoteASN: 65000, RemoteIP: 10.0.0.1}]",
 		},
 		{
 			name: "multiple PeerConfigs - passwords should not be printed",
@@ -117,7 +117,7 @@ func TestPeerConfigs_String(t *testing.T) {
 					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
 				},
 				{
-					Port:      testutils.ValToPtr(uint32(1790)),
+					Port:      179,
 					RemoteASN: testutils.ValToPtr(uint32(65001)),
 					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
 				},
@@ -125,7 +125,7 @@ func TestPeerConfigs_String(t *testing.T) {
 					RemoteIP: testutils.ValToPtr(net.ParseIP("10.0.0.3")),
 				},
 			},
-			expected: "PeerConfigs[PeerConfig{LocalIP: 192.168.1.1, RemoteASN: 65000, RemoteIP: 10.0.0.1},PeerConfig{Port: 1790, RemoteASN: 65001, RemoteIP: 10.0.0.2},PeerConfig{RemoteIP: 10.0.0.3}]",
+			expected: "PeerConfigs[PeerConfig{Port: 0, LocalIP: 192.168.1.1, RemoteASN: 65000, RemoteIP: 10.0.0.1},PeerConfig{Port: 179, RemoteASN: 65001, RemoteIP: 10.0.0.2},PeerConfig{Port: 0, RemoteIP: 10.0.0.3}]",
 		},
 	}
 

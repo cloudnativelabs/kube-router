@@ -15,7 +15,7 @@ import (
 type PeerConfig struct {
 	LocalIP   *string             `yaml:"localip"`
 	Password  *utils.Base64String `yaml:"password"`
-	Port      *uint32             `yaml:"port"`
+	Port      uint32              `yaml:"port"`
 	RemoteASN *uint32             `yaml:"remoteasn"`
 	RemoteIP  *net.IP             `yaml:"remoteip"`
 }
@@ -23,12 +23,10 @@ type PeerConfig struct {
 // Custom Stringer to prevent leaking passwords when printed
 func (p PeerConfig) String() string {
 	var fields []string
+	fields = append(fields, fmt.Sprintf("Port: %d", p.Port))
 
 	if p.LocalIP != nil {
 		fields = append(fields, fmt.Sprintf("LocalIP: %s", *p.LocalIP))
-	}
-	if p.Port != nil {
-		fields = append(fields, fmt.Sprintf("Port: %d", *p.Port))
 	}
 	if p.RemoteASN != nil {
 		fields = append(fields, fmt.Sprintf("RemoteASN: %d", *p.RemoteASN))
@@ -43,7 +41,7 @@ func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
 	tmp := struct {
 		LocalIP   *string             `yaml:"localip"`
 		Password  *utils.Base64String `yaml:"password"`
-		Port      *uint32             `yaml:"port"`
+		Port      uint32              `yaml:"port"`
 		RemoteASN *uint32             `yaml:"remoteasn"`
 		RemoteIP  string              `yaml:"remoteip"`
 	}{}
@@ -93,9 +91,7 @@ func (p PeerConfigs) Passwords() []string {
 func (p PeerConfigs) Ports() []uint32 {
 	ports := make([]uint32, 0)
 	for _, cfg := range p {
-		if cfg.Port != nil {
-			ports = append(ports, *cfg.Port)
-		}
+		ports = append(ports, cfg.Port)
 	}
 	return ports
 }
@@ -176,7 +172,7 @@ func NewPeerConfigs(
 		peerCfgs[i].RemoteASN = &remoteASNs[i]
 
 		if len(ports) != 0 {
-			peerCfgs[i].Port = &ports[i]
+			peerCfgs[i].Port = ports[i]
 		}
 
 		if len(b64EncodedPasswords) != 0 {
