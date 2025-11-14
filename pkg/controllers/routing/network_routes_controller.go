@@ -498,43 +498,46 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	}
 
 	// Advertise IPv4 CIDRs
-	nodePrimaryIPv4IP := nrc.krNode.FindBestIPv4NodeAddress()
-	if nrc.krNode.IsIPv4Capable() && nodePrimaryIPv4IP == nil {
-		return fmt.Errorf("previous logic marked this node as IPv4 capable, but we couldn't find any " +
-			"available IPv4 node IPs, this shouldn't happen")
-	}
-	for _, cidr := range nrc.podIPv4CIDRs {
-		ip, cidrNet, err := net.ParseCIDR(cidr)
-		cidrLen, _ := cidrNet.Mask.Size()
-		if err != nil || cidrLen < 0 || cidrLen > 32 {
-			return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
+	if nrc.krNode.IsIPv4Capable() {
+		nodePrimaryIPv4IP := nrc.krNode.FindBestIPv4NodeAddress()
+		if nodePrimaryIPv4IP == nil {
+			return fmt.Errorf("previous logic marked this node as IPv4 capable, but we couldn't find any " +
+				"available IPv4 node IPs, this shouldn't happen")
 		}
-		klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers",
-			ip, cidrLen, nrc.krNode.GetPrimaryNodeIP().String())
-		nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
-			PrefixLen: uint32(cidrLen),
-			Prefix:    ip.String(),
-		})
 
-		a1, _ := anypb.New(&gobgpapi.OriginAttribute{
-			Origin: 0,
-		})
-		a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
-			NextHop: nodePrimaryIPv4IP.String(),
-		})
-		attrs := []*anypb.Any{a1, a2}
+		for _, cidr := range nrc.podIPv4CIDRs {
+			ip, cidrNet, err := net.ParseCIDR(cidr)
+			cidrLen, _ := cidrNet.Mask.Size()
+			if err != nil || cidrLen < 0 || cidrLen > 32 {
+				return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
+			}
+			klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers",
+				ip, cidrLen, nrc.krNode.GetPrimaryNodeIP().String())
+			nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
+				PrefixLen: uint32(cidrLen),
+				Prefix:    ip.String(),
+			})
 
-		response, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
-			Path: &gobgpapi.Path{
-				Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
-				Nlri:   nlri,
-				Pattrs: attrs,
-			},
-		})
-		if err != nil {
-			return err
+			a1, _ := anypb.New(&gobgpapi.OriginAttribute{
+				Origin: 0,
+			})
+			a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
+				NextHop: nodePrimaryIPv4IP.String(),
+			})
+			attrs := []*anypb.Any{a1, a2}
+
+			response, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
+				Path: &gobgpapi.Path{
+					Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+					Nlri:   nlri,
+					Pattrs: attrs,
+				},
+			})
+			if err != nil {
+				return err
+			}
+			klog.V(1).Infof("Response from adding path: %s", response)
 		}
-		klog.V(1).Infof("Response from adding path: %s", response)
 	}
 
 	// Advertise IPv6 CIDRs
