@@ -1480,7 +1480,7 @@ func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string, 
 	ipStrings := stringToSlice(nodeBgpPeersAnnotation, ",")
 
 	// Get Global Peer Router ASN configs
-	var ports []uint32
+	ports := make([]uint32, 0)
 	nodeBgpPeerPortsAnnotation, ok := nodeAnnotations[peerPortAnnotation]
 	if ok {
 		portStrings := stringToSlice(nodeBgpPeerPortsAnnotation, ",")

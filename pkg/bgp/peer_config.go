@@ -15,7 +15,7 @@ import (
 type PeerConfig struct {
 	LocalIP   *string             `yaml:"localip"`
 	Password  *utils.Base64String `yaml:"password"`
-	Port      uint32              `yaml:"port"`
+	Port      *uint32             `yaml:"port"`
 	RemoteASN *uint32             `yaml:"remoteasn"`
 	RemoteIP  *net.IP             `yaml:"remoteip"`
 }
@@ -23,8 +23,9 @@ type PeerConfig struct {
 // Custom Stringer to prevent leaking passwords when printed
 func (p PeerConfig) String() string {
 	var fields []string
-	fields = append(fields, fmt.Sprintf("Port: %d", p.Port))
-
+	if p.Port != nil {
+		fields = append(fields, fmt.Sprintf("Port: %d", *p.Port))
+	}
 	if p.LocalIP != nil {
 		fields = append(fields, fmt.Sprintf("LocalIP: %s", *p.LocalIP))
 	}
@@ -41,13 +42,20 @@ func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
 	tmp := struct {
 		LocalIP   *string             `yaml:"localip"`
 		Password  *utils.Base64String `yaml:"password"`
-		Port      uint32              `yaml:"port"`
+		Port      *uint32             `yaml:"port"`
 		RemoteASN *uint32             `yaml:"remoteasn"`
-		RemoteIP  string              `yaml:"remoteip"`
+		RemoteIP  *string             `yaml:"remoteip"`
 	}{}
 
 	if err := yaml.Unmarshal(raw, &tmp); err != nil {
 		return fmt.Errorf("failed to unmarshal peer config: %w", err)
+	}
+
+	if tmp.RemoteIP == nil {
+		return errors.New("remoteip cannot be empty")
+	}
+	if tmp.RemoteASN == nil {
+		return errors.New("remoteasn cannot be empty")
 	}
 
 	p.LocalIP = tmp.LocalIP
@@ -55,13 +63,11 @@ func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
 	p.Port = tmp.Port
 	p.RemoteASN = tmp.RemoteASN
 
-	if tmp.RemoteIP != "" {
-		ip := net.ParseIP(tmp.RemoteIP)
-		if ip == nil {
-			return fmt.Errorf("%s is not a valid IP address", tmp.RemoteIP)
-		}
-		p.RemoteIP = &ip
+	ip := net.ParseIP(*tmp.RemoteIP)
+	if ip == nil {
+		return fmt.Errorf("%s is not a valid IP address", *tmp.RemoteIP)
 	}
+	p.RemoteIP = &ip
 	return nil
 }
 
@@ -72,6 +78,8 @@ func (p PeerConfigs) LocalIPs() []string {
 	for _, cfg := range p {
 		if cfg.LocalIP != nil {
 			localIPs = append(localIPs, *cfg.LocalIP)
+		} else {
+			localIPs = append(localIPs, "")
 		}
 	}
 	return localIPs
@@ -91,7 +99,11 @@ func (p PeerConfigs) Passwords() []string {
 func (p PeerConfigs) Ports() []uint32 {
 	ports := make([]uint32, 0)
 	for _, cfg := range p {
-		ports = append(ports, cfg.Port)
+		if cfg.Port != nil {
+			ports = append(ports, *cfg.Port)
+		} else {
+			ports = append(ports, options.DefaultBgpPort)
+		}
 	}
 	return ports
 }
@@ -172,7 +184,7 @@ func NewPeerConfigs(
 		peerCfgs[i].RemoteASN = &remoteASNs[i]
 
 		if len(ports) != 0 {
-			peerCfgs[i].Port = ports[i]
+			peerCfgs[i].Port = &ports[i]
 		}
 
 		if len(b64EncodedPasswords) != 0 {
@@ -206,13 +218,11 @@ func validatePeerConfigs(
 	}
 	if len(remoteIPs) != len(ports) && len(ports) != 0 {
 		return fmt.Errorf("invalid peer router config. The number of ports should either be zero, or "+
-			"one per peer router. If blank items are used, it will default to standard BGP port, %s. "+
-			"Example: \"port,,port\" OR [\"port\",\"\",\"port\"]", strconv.Itoa(options.DefaultBgpPort))
+			"one per peer router. If blank items are used, it will default to standard BGP port, %s. ", strconv.Itoa(options.DefaultBgpPort))
 	}
 	if len(remoteIPs) != len(localIPs) && len(localIPs) != 0 {
 		return fmt.Errorf("invalid peer router config. The number of localIPs should either be zero, or "+
-			"one per peer router. If blank items are used, it will default to nodeIP, %s. "+
-			"Example: \"10.1.1.1,,10.1.1.2\" OR [\"10.1.1.1\",\"\",\"10.1.1.2\"]", localAddress)
+			"one per peer router. If blank items are used, it will default to nodeIP, %s. ", localAddress)
 	}
 
 	for _, asn := range remoteASNs {

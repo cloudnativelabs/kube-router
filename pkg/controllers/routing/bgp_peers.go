@@ -296,15 +296,6 @@ func newGlobalPeers(peerConfigs bgp.PeerConfigs, holdtime float64, localAddress 
 	localips := peerConfigs.LocalIPs()
 
 	for i := 0; i < len(ips); i++ {
-		if (asns[i] < 1 || asns[i] > 23455) &&
-			(asns[i] < 23457 || asns[i] > 63999) &&
-			(asns[i] < 64512 || asns[i] > 65534) &&
-			(asns[i] < 131072 || asns[i] > 4199999999) &&
-			(asns[i] < 4200000000 || asns[i] > 4294967294) {
-			return nil, fmt.Errorf("reserved ASN number \"%d\" for global BGP peer",
-				asns[i])
-		}
-
 		// explicitly set neighbors.transport.config.local-address with primaryIP which is configured
 		// as their neighbor address at the remote peers.
 		// this prevents the controller from initiating connection to its peers with a different IP address
