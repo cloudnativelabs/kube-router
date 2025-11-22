@@ -155,8 +155,7 @@ func getPodCIDRsFromAllNodeSources(node *v1core.Node) (podCIDRs []string) {
 // based upon whether it is an IPv4 address or an IPv6 address. Returns slash notation subnet as uint32 suitable for
 // sending to GoBGP and an error if it is unable to determine the subnet automatically
 func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet uint32, nh string,
-	afiFamily gobgpapi.Family_Afi, err error,
-) {
+	afiFamily gobgpapi.Family_Afi, err error) {
 	ip := net.ParseIP(vip)
 	if ip == nil {
 		err = fmt.Errorf("could not parse VIP: %s", vip)
