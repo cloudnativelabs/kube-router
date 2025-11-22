@@ -218,7 +218,8 @@ func validatePeerConfigs(
 	}
 	if len(remoteIPs) != len(ports) && len(ports) != 0 {
 		return fmt.Errorf("invalid peer router config. The number of ports should either be zero, or "+
-			"one per peer router. If blank items are used, it will default to standard BGP port, %s. ", strconv.Itoa(options.DefaultBgpPort))
+			"one per peer router. If blank items are used, it will default to standard BGP port, %s. ",
+			strconv.Itoa(options.DefaultBgpPort))
 	}
 	if len(remoteIPs) != len(localIPs) && len(localIPs) != 0 {
 		return fmt.Errorf("invalid peer router config. The number of localIPs should either be zero, or "+

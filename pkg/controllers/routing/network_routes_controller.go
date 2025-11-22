@@ -82,7 +82,11 @@ const (
 type RouteSyncer interface {
 	AddInjectedRoute(dst *net.IPNet, route *netlink.Route)
 	DelInjectedRoute(dst *net.IPNet)
-	Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup)
+	Run(
+		healthChan chan<- *healthcheck.ControllerHeartbeat,
+		stopCh <-chan struct{},
+		wg *sync.WaitGroup,
+	)
 	SyncLocalRouteTable() error
 }
 
@@ -162,7 +166,9 @@ type NetworkRoutingController struct {
 }
 
 // Run runs forever until we are notified on stop channel
-func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
+func (nrc *NetworkRoutingController) Run(
+	healthChan chan<- *healthcheck.ControllerHeartbeat,
+	stopCh <-chan struct{},
 	wg *sync.WaitGroup,
 ) {
 	var err error
@@ -252,26 +258,39 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 		linkAttrs.Name = "kube-bridge"
 		bridge := &netlink.Bridge{LinkAttrs: linkAttrs}
 		if err = netlink.LinkAdd(bridge); err != nil {
-			klog.Errorf("Failed to create `kube-router` bridge due to %s. Will be created by CNI bridge "+
-				"plugin when pod is launched.", err.Error())
+			klog.Errorf(
+				"Failed to create `kube-router` bridge due to %s. Will be created by CNI bridge "+
+					"plugin when pod is launched.",
+				err.Error(),
+			)
 		}
 		kubeBridgeIf, err = netlink.LinkByName("kube-bridge")
 		if err != nil {
-			klog.Errorf("Failed to find created `kube-router` bridge due to %s. Will be created by CNI "+
-				"bridge plugin when pod is launched.", err.Error())
+			klog.Errorf(
+				"Failed to find created `kube-router` bridge due to %s. Will be created by CNI "+
+					"bridge plugin when pod is launched.",
+				err.Error(),
+			)
 		}
 		err = netlink.LinkSetUp(kubeBridgeIf)
 		if err != nil {
-			klog.Errorf("Failed to bring `kube-router` bridge up due to %s. Will be created by CNI bridge "+
-				"plugin at later point when pod is launched.", err.Error())
+			klog.Errorf(
+				"Failed to bring `kube-router` bridge up due to %s. Will be created by CNI bridge "+
+					"plugin at later point when pod is launched.",
+				err.Error(),
+			)
 		}
 	}
 
 	if nrc.autoMTU {
 		mtu, err := nrc.krNode.GetNodeMTU()
 		if err != nil {
-			klog.Errorf("Failed to find MTU for node IP: %s for intelligently setting the kube-bridge MTU "+
-				"due to %s.", nrc.krNode.GetPrimaryNodeIP(), err.Error())
+			klog.Errorf(
+				"Failed to find MTU for node IP: %s for intelligently setting the kube-bridge MTU "+
+					"due to %s.",
+				nrc.krNode.GetPrimaryNodeIP(),
+				err.Error(),
+			)
 		}
 		if mtu > 0 {
 			klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
@@ -279,12 +298,17 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 			if err != nil {
 				klog.Errorf(
 					"Failed to set MTU for kube-bridge interface due to: %s (kubeBridgeIf: %#v, mtu: %v)",
-					err.Error(), kubeBridgeIf, mtu,
+					err.Error(),
+					kubeBridgeIf,
+					mtu,
 				)
 				// need to correct kuberouter.conf because autoConfigureMTU() may have set an invalid value!
 				currentMTU := kubeBridgeIf.Attrs().MTU
 				if currentMTU > 0 && currentMTU != mtu {
-					klog.Warningf("Updating config file with current MTU for kube-bridge: %d", currentMTU)
+					klog.Warningf(
+						"Updating config file with current MTU for kube-bridge: %d",
+						currentMTU,
+					)
 					cniNetConf, err := utils.NewCNINetworkConfig(nrc.cniConfFile)
 					if err == nil {
 						cniNetConf.SetMTU(currentMTU)
@@ -309,6 +333,10 @@ func (nrc *NetworkRoutingController) Run(healthChan chan<- *healthcheck.Controll
 				"not work: %s", err.Error())
 		}
 	}()
+	if _, err := exec.Command("modprobe", "br_netfilter").CombinedOutput(); err != nil {
+		klog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may "+
+			"not work: %s", err.Error())
+	}
 	sysctlErr := utils.SetSysctl(utils.BridgeNFCallIPTables, 1)
 	if sysctlErr != nil {
 		klog.Errorf("Failed to enable iptables for bridge. Network policies and service proxy may "+
@@ -445,6 +473,7 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 		err = cniNetConf.InsertPodCIDRIntoIPAM(ipv6CIDR)
 		if err != nil {
 			klog.Fatalf("failed to insert IPv6 `subnet`(pod CIDR) '%s' into CNI conf file: %v", ipv6CIDR, err)
+			)
 		}
 	}
 
@@ -477,7 +506,8 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 					if path.NeighborIp == "<nil>" {
 						return
 					}
-					klog.V(2).Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
+					klog.V(2).
+						Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
 					if err := nrc.injectRoute(path); err != nil {
 						klog.Errorf("failed to inject routes due to: %v", err)
 					}
@@ -551,8 +581,10 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	if nrc.krNode.IsIPv6Capable() {
 		nodePrimaryIPv6IP := nrc.krNode.FindBestIPv6NodeAddress()
 		if nodePrimaryIPv6IP == nil {
-			return fmt.Errorf("previous logic marked this node as IPv6 capable, but we couldn't find any " +
-				"available IPv6 node IPs, this shouldn't happen")
+			return fmt.Errorf(
+				"previous logic marked this node as IPv6 capable, but we couldn't find any " +
+					"available IPv6 node IPs, this shouldn't happen",
+			)
 		}
 
 		for _, cidr := range nrc.podIPv6CIDRs {
@@ -1070,8 +1102,11 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		// Make sure that the address type matches what we're capable of before listening
 		if ip.To4() != nil {
 			if !nrc.krNode.IsIPv4Capable() {
-				klog.Warningf("was configured to listen on %s, but node is not enabled for IPv4 or does not "+
-					"have any IPv4 addresses configured for it, skipping", addr)
+				klog.Warningf(
+					"was configured to listen on %s, but node is not enabled for IPv4 or does not "+
+						"have any IPv4 addresses configured for it, skipping",
+					addr,
+				)
 				continue
 			}
 		} else {
@@ -1105,8 +1140,12 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	// If the global routing peer is configured then peer with it
 	// else attempt to get peers from node specific BGP annotations.
 	if len(nrc.globalPeerRouters) == 0 {
-		klog.V(2).Infof("Attempting to construct peer configs from annotation: %+v", node.Annotations)
-		peerCfgs, err := bgpPeerConfigsFromAnnotations(node.Annotations, nrc.krNode.GetPrimaryNodeIP().String())
+		klog.V(2).
+			Infof("Attempting to construct peer configs from annotation: %+v", node.Annotations)
+		peerCfgs, err := bgpPeerConfigsFromAnnotations(
+			node.Annotations,
+			nrc.krNode.GetPrimaryNodeIP().String(),
+		)
 		if err != nil {
 			err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
 			if err2 != nil {
@@ -1120,7 +1159,11 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 		}
 
 		// Create and set Global Peer Router complete configs
-		nrc.globalPeerRouters, err = newGlobalPeers(peerCfgs, nrc.bgpHoldtime, nrc.krNode.GetPrimaryNodeIP().String())
+		nrc.globalPeerRouters = newGlobalPeers(
+			peerCfgs,
+			nrc.bgpHoldtime,
+			nrc.krNode.GetPrimaryNodeIP().String(),
+		)
 		if err != nil {
 			err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
 			if err2 != nil {
@@ -1134,8 +1177,14 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	if len(nrc.globalPeerRouters) != 0 {
-		err := nrc.connectToExternalBGPPeers(nrc.bgpServer, nrc.globalPeerRouters, nrc.bgpGracefulRestart,
-			nrc.bgpGracefulRestartDeferralTime, nrc.bgpGracefulRestartTime, nrc.peerMultihopTTL)
+		err := nrc.connectToExternalBGPPeers(
+			nrc.bgpServer,
+			nrc.globalPeerRouters,
+			nrc.bgpGracefulRestart,
+			nrc.bgpGracefulRestartDeferralTime,
+			nrc.bgpGracefulRestartTime,
+			nrc.peerMultihopTTL,
+		)
 		if err != nil {
 			err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
 			if err2 != nil {
@@ -1244,6 +1293,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {
 		return nil, errors.New("this is an incorrect BGP holdtime range, holdtime must be in the range " +
 			"3s to 18h12m16s")
+		)
 	}
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
@@ -1391,12 +1441,23 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		peerRouterIPs[i] = pr.String()
 	}
 
-	peerCfgs, err := bgp.NewPeerConfigs(peerRouterIPs, peerASNs, peerPorts, peerPasswords, nil, nrc.krNode.GetPrimaryNodeIP().String())
+	peerCfgs, err := bgp.NewPeerConfigs(
+		peerRouterIPs,
+		peerASNs,
+		peerPorts,
+		peerPasswords,
+		nil,
+		nrc.krNode.GetPrimaryNodeIP().String(),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	nrc.globalPeerRouters, err = newGlobalPeers(peerCfgs, nrc.bgpHoldtime, nrc.krNode.GetPrimaryNodeIP().String())
+	nrc.globalPeerRouters = newGlobalPeers(
+		peerCfgs,
+		nrc.bgpHoldtime,
+		nrc.krNode.GetPrimaryNodeIP().String(),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error processing Global Peer Router configs: %s", err)
 	}
@@ -1409,8 +1470,11 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		if nrc.krNode.IsIPv6Capable() {
 			nrc.localAddressList = append(nrc.localAddressList, nrc.krNode.FindBestIPv6NodeAddress().String())
 		}
-		klog.Infof("Could not find annotation `kube-router.io/bgp-local-addresses` on node object so BGP "+
-			"will listen on node IP: %s addresses.", nrc.localAddressList)
+		klog.Infof(
+			"Could not find annotation `kube-router.io/bgp-local-addresses` on node object so BGP "+
+				"will listen on node IP: %s addresses.",
+			nrc.localAddressList,
+		)
 	} else {
 		klog.Infof("Found annotation `kube-router.io/bgp-local-addresses` on node object so BGP will listen "+
 			"on local IP's: %s", bgpLocalAddressListAnnotation)
@@ -1441,10 +1505,16 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	return &nrc, nil
 }
 
-func bgpPeerConfigsFromAnnotations(nodeAnnotations map[string]string, localAddress string) (bgp.PeerConfigs, error) {
+func bgpPeerConfigsFromAnnotations(
+	nodeAnnotations map[string]string,
+	localAddress string,
+) (bgp.PeerConfigs, error) {
 	nodeBgpPeersAnnotation, ok := nodeAnnotations[peersAnnotation]
 	if !ok {
-		klog.Infof("%s annotation not set, using individual node annotations to configure BGP peer info", peersAnnotation)
+		klog.Infof(
+			"%s annotation not set, using individual node annotations to configure BGP peer info",
+			peersAnnotation,
+		)
 		return bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations, localAddress)
 	}
 
@@ -1456,7 +1526,10 @@ func bgpPeerConfigsFromAnnotations(nodeAnnotations map[string]string, localAddre
 	return peerConfigs, nil
 }
 
-func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string, localAddress string) (bgp.PeerConfigs, error) {
+func bgpPeerConfigsFromIndividualAnnotations(
+	nodeAnnotations map[string]string,
+	localAddress string,
+) (bgp.PeerConfigs, error) {
 	// Get Global Peer Router ASN configs
 	nodeBgpPeerAsnsAnnotation, ok := nodeAnnotations[peerASNAnnotation]
 	if !ok {
@@ -1494,7 +1567,9 @@ func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string, 
 	// Get Global Peer Router Password configs
 	nodeBGPPasswordsAnnotation, ok := nodeAnnotations[peerPasswordAnnotation]
 	if !ok {
-		klog.Infof("Could not find BGP peer password info in the node's annotations. Assuming no passwords.")
+		klog.Infof(
+			"Could not find BGP peer password info in the node's annotations. Assuming no passwords.",
+		)
 	} else {
 		passStrings := stringToSlice(nodeBGPPasswordsAnnotation, ",")
 		passwords, err = stringSliceB64Decode(passStrings)
@@ -1507,7 +1582,9 @@ func bgpPeerConfigsFromIndividualAnnotations(nodeAnnotations map[string]string, 
 	var localIPs []string
 	nodeBGPPeerLocalIPs, ok := nodeAnnotations[peerLocalIPAnnotation]
 	if !ok {
-		klog.Infof("Could not find BGP peer local ip info in the node's annotations. Assuming node IP.")
+		klog.Infof(
+			"Could not find BGP peer local ip info in the node's annotations. Assuming node IP.",
+		)
 	} else {
 		localIPs = stringToSlice(nodeBGPPeerLocalIPs, ",")
 		err = func() error {
