@@ -333,10 +333,6 @@ func (nrc *NetworkRoutingController) Run(
 				"not work: %s", err.Error())
 		}
 	}()
-	if _, err := exec.Command("modprobe", "br_netfilter").CombinedOutput(); err != nil {
-		klog.Errorf("Failed to enable netfilter for bridge. Network policies and service proxy may "+
-			"not work: %s", err.Error())
-	}
 	sysctlErr := utils.SetSysctl(utils.BridgeNFCallIPTables, 1)
 	if sysctlErr != nil {
 		klog.Errorf("Failed to enable iptables for bridge. Network policies and service proxy may "+
@@ -473,7 +469,6 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 		err = cniNetConf.InsertPodCIDRIntoIPAM(ipv6CIDR)
 		if err != nil {
 			klog.Fatalf("failed to insert IPv6 `subnet`(pod CIDR) '%s' into CNI conf file: %v", ipv6CIDR, err)
-			)
 		}
 	}
 
@@ -1293,7 +1288,6 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {
 		return nil, errors.New("this is an incorrect BGP holdtime range, holdtime must be in the range " +
 			"3s to 18h12m16s")
-		)
 	}
 
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride

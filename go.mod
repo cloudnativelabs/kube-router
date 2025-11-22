@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.6
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.249.0
 	github.com/aws/smithy-go v1.23.0
-	github.com/ccoveille/go-safecast v1.6.1
+	github.com/ccoveille/go-safecast/v2 v2.0.0
 	github.com/coreos/go-iptables v0.8.0
 	github.com/docker/docker v28.4.0+incompatible
 	github.com/goccy/go-yaml v1.18.0
@@ -127,7 +127,6 @@ require (
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
-	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
 go 1.24.0
