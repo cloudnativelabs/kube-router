@@ -10,9 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	. "github.com/onsi/ginkgo"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1core "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +40,6 @@ func Test_advertiseClusterIPs(t *testing.T) {
 		// the key is the subnet from the watch event
 		watchEvents map[string]bool
 	}{
-
 		{
 			"add bgp path for service with ClusterIP",
 			&NetworkRoutingController{
@@ -1818,11 +1823,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 				Endpoints: []discoveryv1.Endpoint{
 					{
 						Addresses: []string{"172.20.1.1"},
-						NodeName:  ptrToString("node-1"),
+						NodeName:  testutils.ValToPtr("node-1"),
 					},
 					{
 						Addresses: []string{"172.20.1.2"},
-						NodeName:  ptrToString("node-2"),
+						NodeName:  testutils.ValToPtr("node-2"),
 					},
 				},
 			},
@@ -1863,11 +1868,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 				Endpoints: []discoveryv1.Endpoint{
 					{
 						Addresses: []string{"172.20.1.1"},
-						NodeName:  ptrToString("node-2"),
+						NodeName:  testutils.ValToPtr("node-2"),
 					},
 					{
 						Addresses: []string{"172.20.1.2"},
-						NodeName:  ptrToString("node-3"),
+						NodeName:  testutils.ValToPtr("node-3"),
 					},
 				},
 			},
@@ -1902,7 +1907,6 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 				t.Logf("actual nodeHasEndpoints: %v", nodeHasEndpoints)
 				t.Error("unexpected nodeHasEndpoints")
 			}
-
 		})
 	}
 }
@@ -2618,7 +2622,149 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 			}
 		})
 	}
+}
 
+func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
+	testCases := []struct {
+		name            string
+		nodeAnnotations map[string]string
+		expected        bgp.PeerConfigs
+		expectError     bool
+	}{
+		{
+			name:            "node annotations are empty",
+			nodeAnnotations: map[string]string{},
+		},
+		{
+			name: "combined bgp peers config annotation",
+			nodeAnnotations: map[string]string{
+				peersAnnotation: `- remoteip: 10.0.0.1
+  remoteasn: 64640
+  password: cGFzc3dvcmQ=
+  localip: 192.168.0.1
+- remoteip: 10.0.0.2
+  remoteasn: 64641
+  password: cGFzc3dvcmQ=
+  localip: 192.168.0.2`,
+			},
+			expected: bgp.PeerConfigs{
+				bgp.PeerConfig{
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
+					RemoteASN: testutils.ValToPtr(uint32(64640)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.1"),
+				},
+				bgp.PeerConfig{
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
+					RemoteASN: testutils.ValToPtr(uint32(64641)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.2"),
+				},
+			},
+		},
+		{
+			name: "combined bgp peers config annotation without matching number of peer config fields set",
+			nodeAnnotations: map[string]string{
+				peersAnnotation: `- remoteip: 10.0.0.1
+  remoteasn: 64640
+- remoteip: 10.0.0.2
+  remoteasn: 64641
+  password: cGFzc3dvcmQ=
+  localip: 192.168.0.2`,
+			},
+			expected: bgp.PeerConfigs{
+				bgp.PeerConfig{
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
+					RemoteASN: testutils.ValToPtr(uint32(64640)),
+				},
+				bgp.PeerConfig{
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
+					RemoteASN: testutils.ValToPtr(uint32(64641)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.2"),
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "individual bgp peers config annotations",
+			nodeAnnotations: map[string]string{
+				peerIPAnnotation:       "10.0.0.1,10.0.0.2",
+				peerASNAnnotation:      "64640,64641",
+				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
+				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
+			},
+			expected: bgp.PeerConfigs{
+				bgp.PeerConfig{
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
+					RemoteASN: testutils.ValToPtr(uint32(64640)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.1"),
+				},
+				bgp.PeerConfig{
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
+					RemoteASN: testutils.ValToPtr(uint32(64641)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.2"),
+				},
+			},
+		},
+		{
+			name: "individual bgp peers config annotations without matching number of peer config fields set",
+			nodeAnnotations: map[string]string{
+				peerIPAnnotation:       "10.0.0.1,10.0.0.2",
+				peerASNAnnotation:      "64640,64641",
+				peerPasswordAnnotation: "cGFzc3dvcmQ=",
+				peerLocalIPAnnotation:  "192.168.0.2",
+			},
+			expected: bgp.PeerConfigs{
+				bgp.PeerConfig{
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
+					RemoteASN: testutils.ValToPtr(uint32(64640)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.1"),
+				},
+				bgp.PeerConfig{
+					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
+					RemoteASN: testutils.ValToPtr(uint32(64641)),
+					Password:  testutils.ValToPtr(utils.Base64String("password")),
+					LocalIP:   testutils.ValToPtr("192.168.0.2"),
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "individual bgp peers config annotations without peer ASN annotation",
+			nodeAnnotations: map[string]string{
+				peerASNAnnotation:      "64640,64641",
+				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
+				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
+			},
+		},
+		{
+			name: "individual bgp peers config annotations without peer IP annotation",
+			nodeAnnotations: map[string]string{
+				peerIPAnnotation:       "10.0.0.1,10.0.0.2",
+				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
+				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			bgpPeerCfgs, err := bgpPeerConfigsFromAnnotations(tc.nodeAnnotations, "")
+			if tc.expectError {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			if !cmp.Equal(tc.expected, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{})) {
+				diff := cmp.Diff(tc.expected, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{}))
+				t.Errorf("BGP peer config mismatch:\n%s", diff)
+			}
+		})
+	}
 }
 
 /* Disabling test for now. OnNodeUpdate() behaviour is changed. test needs to be adopted.
@@ -2864,8 +3010,4 @@ func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *te
 			}
 		}
 	}
-}
-
-func ptrToString(str string) *string {
-	return &str
 }
