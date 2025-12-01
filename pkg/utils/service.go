@@ -59,14 +59,14 @@ func ServiceNameforEndpointSlice(es *discoveryv1.EndpointSlice) (string, error) 
 	}
 
 	// At this point we do some checks to ensure that the final owning service name is sane. Specifically, we want to
-	// check it against labelSvcName and ownerRefName if they were not blank and return error if they don't agree. We
+	// check it against labelSvcName and ownerRefName if they were not blank and log a debug log if they don't agree. We
 	// don't worry about generateName as that is less conclusive.
 	//
-	// From above, we already know that if labelSvcName was not blank then it is equal to finalSvcName, so we only need
-	// to worry about ownerRefName
+	// See: https://github.com/cloudnativelabs/kube-router/issues/1957 for more information
 	if ownerRefName != "" && finalSvcName != ownerRefName {
-		return "", fmt.Errorf("the ownerReferences field on EndpointSlice (%s) doesn't agree with with the %s label "+
-			"(%s) for %s/%s EndpointSlice", ownerRefName, serviceNameLabel, labelSvcName, es.Namespace, es.Name)
+		klog.V(1).Infof("The metadata ownerReference name %s and the label service name (%s) %s don't appear to "+
+			"match for EndpointSlice %s/%s. In this case we prefer the label service name.",
+			ownerRefName, serviceNameLabel, labelSvcName, es.Namespace, es.Name)
 	}
 
 	return finalSvcName, nil
