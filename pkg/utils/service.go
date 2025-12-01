@@ -73,7 +73,7 @@ func ServiceNameforEndpointSlice(es *discoveryv1.EndpointSlice) (string, error) 
 }
 
 // ServiceForEndpoints given EndpointSlice object return Service API object if it exists
-func ServiceForEndpointSlice(ci *cache.Indexer, es *discoveryv1.EndpointSlice) (interface{}, bool, error) {
+func ServiceForEndpointSlice(ci *cache.Indexer, es *discoveryv1.EndpointSlice) (any, bool, error) {
 	svcName, err := ServiceNameforEndpointSlice(es)
 	if err != nil {
 		return nil, false, err
@@ -99,7 +99,7 @@ func ServiceForEndpointSlice(ci *cache.Indexer, es *discoveryv1.EndpointSlice) (
 // kube-router as there is no need to execute logic on most headless changes. Function takes a generic interface as its
 // input parameter so that it can be used more easily in early processing if needed. If a non-service object is given,
 // function will return false.
-func ServiceHasNoClusterIP(obj interface{}) bool {
+func ServiceHasNoClusterIP(obj any) bool {
 	if svc, _ := obj.(*v1core.Service); svc != nil {
 		if svc.Spec.Type == v1core.ServiceTypeClusterIP {
 			if ClusterIPIsNone(svc.Spec.ClusterIP) && containsOnlyNone(svc.Spec.ClusterIPs) {
