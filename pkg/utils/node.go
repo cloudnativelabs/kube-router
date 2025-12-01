@@ -183,12 +183,12 @@ func (n *KRNode) FindBestIPv4NodeAddress() net.IP {
 func (n *LocalKRNode) GetNodeMTU() (int, error) {
 	links, err := n.linkQ.LinkList()
 	if err != nil {
-		return 0, errors.New("failed to get list of links")
+		return 0, fmt.Errorf("failed to get list of links: %w", err)
 	}
 	for _, link := range links {
 		addresses, err := n.linkQ.AddrList(link, netlink.FAMILY_ALL)
 		if err != nil {
-			return 0, errors.New("failed to get list of addr")
+			return 0, fmt.Errorf("failed to get list of addr: %w", err)
 		}
 		for _, addr := range addresses {
 			if addr.IP.Equal(n.PrimaryIP) {
@@ -289,7 +289,7 @@ func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*ap
 	if hostnameOverride != "" {
 		node, err := clientset.CoreV1().Nodes().Get(context.Background(), hostnameOverride, metav1.GetOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("unable to get node %s, due to: %v", hostnameOverride, err)
+			return nil, fmt.Errorf("unable to get node %s, due to: %w", hostnameOverride, err)
 		}
 		return node, nil
 	}
@@ -299,7 +299,7 @@ func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*ap
 	if nodeName != "" {
 		node, err := clientset.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("unable to get node %s, due to: %v", nodeName, err)
+			return nil, fmt.Errorf("unable to get node %s, due to: %w", nodeName, err)
 		}
 		return node, nil
 	}
@@ -308,7 +308,7 @@ func GetNodeObject(clientset kubernetes.Interface, hostnameOverride string) (*ap
 	hostName, _ := os.Hostname()
 	node, err := clientset.CoreV1().Nodes().Get(context.Background(), hostName, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to identify the node by NODE_NAME, %s or --hostname-override: %v", hostName, err)
+		return nil, fmt.Errorf("failed to identify the node by NODE_NAME, %s or --hostname-override: %w", hostName, err)
 	}
 
 	return node, nil
@@ -375,13 +375,13 @@ func GetNodeSubnet(nodeIP net.IP, linkQ LocalLinkQuerier) (net.IPNet, string, er
 
 	links, err := linkQ.LinkList()
 	if err != nil {
-		return net.IPNet{}, "", errors.New("failed to get list of links")
+		return net.IPNet{}, "", fmt.Errorf("failed to get list of links: %w", err)
 	}
 
 	for _, link := range links {
 		addresses, err := linkQ.AddrList(link, netlink.FAMILY_ALL)
 		if err != nil {
-			return net.IPNet{}, "", errors.New("failed to get list of addrs")
+			return net.IPNet{}, "", fmt.Errorf("failed to get list of addrs: %w", err)
 		}
 		for _, addr := range addresses {
 			if addr.IP.Equal(nodeIP) {

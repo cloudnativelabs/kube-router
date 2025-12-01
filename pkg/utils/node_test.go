@@ -842,11 +842,11 @@ func Test_GetNodeSubnet(t *testing.T) {
 			"error getting list of links",
 			net.ParseIP("10.0.0.1"),
 			func(myMock *MockLocalLinkQuerier) {
-				myMock.On("LinkList").Return([]netlink.Link{}, errors.New("failed to get list of links"))
+				myMock.On("LinkList").Return([]netlink.Link{}, errors.New("embedded LinkList error"))
 			},
 			net.IPNet{},
 			"",
-			errors.New("failed to get list of links"),
+			errors.New("failed to get list of links: embedded LinkList error"),
 		},
 		{
 			"error getting addrs",
@@ -855,11 +855,11 @@ func Test_GetNodeSubnet(t *testing.T) {
 				myMock.On("LinkList").Return(
 					[]netlink.Link{&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: "eth0"}}}, nil)
 				myMock.On("AddrList", mock.Anything, mock.Anything).Return(
-					[]netlink.Addr{}, errors.New("failed to get list of addrs"))
+					[]netlink.Addr{}, errors.New("embedded LinkList error"))
 			},
 			net.IPNet{},
 			"",
-			errors.New("failed to get list of addrs"),
+			errors.New("failed to get list of addrs: embedded LinkList error"),
 		},
 	}
 
