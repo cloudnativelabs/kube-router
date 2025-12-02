@@ -133,14 +133,6 @@ func (p PeerConfigs) String() string {
 	return fmt.Sprintf("PeerConfigs[%s]", strings.Join(pcs, ","))
 }
 
-// TODO: Delete me?
-// func (p *PeerConfigs) UnmarshalYAML(raw []byte) error {
-// 	type tmpPeerConfigs PeerConfigs
-// 	tmp := (*tmpPeerConfigs)(p)
-//
-// 	return yaml.Unmarshal(raw, tmp)
-// }
-
 func NewPeerConfigs(
 	remoteIPs []string,
 	remoteASNs []uint32,
