@@ -2629,7 +2629,7 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 		name            string
 		nodeAnnotations map[string]string
 		expected        bgp.PeerConfigs
-		expectError     bool
+		errorContains   string
 	}{
 		{
 			name:            "node annotations are empty",
@@ -2647,45 +2647,95 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
   password: cGFzc3dvcmQ=
   localip: 192.168.0.2`,
 			},
-			expected: bgp.PeerConfigs{
-				bgp.PeerConfig{
-					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
-					RemoteASN: testutils.ValToPtr(uint32(64640)),
-					Password:  testutils.ValToPtr(utils.Base64String("password")),
-					LocalIP:   testutils.ValToPtr("192.168.0.1"),
-				},
-				bgp.PeerConfig{
-					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
-					RemoteASN: testutils.ValToPtr(uint32(64641)),
-					Password:  testutils.ValToPtr(utils.Base64String("password")),
-					LocalIP:   testutils.ValToPtr("192.168.0.2"),
-				},
-			},
+			expected: func() bgp.PeerConfigs {
+				peer1, _ := bgp.NewPeerConfig("10.0.0.1", 64640, nil, "cGFzc3dvcmQ=", "192.168.0.1")
+				peer2, _ := bgp.NewPeerConfig("10.0.0.2", 64641, nil, "cGFzc3dvcmQ=", "192.168.0.2")
+				return bgp.PeerConfigs{peer1, peer2}
+			}(),
 		},
 		{
-			name: "combined bgp peers config annotation without matching number of peer config fields set",
+			name: "combined bgp peers config annotation with mix of local IPs, passwords, and ports being set",
 			nodeAnnotations: map[string]string{
 				peersAnnotation: `- remoteip: 10.0.0.1
   remoteasn: 64640
+  password: cGFzc3dvcmQ=
+  localip: 192.168.0.1
 - remoteip: 10.0.0.2
   remoteasn: 64641
+  localip: 192.168.0.2
+  port: 180
+- remoteip: 10.0.0.3
+  password: cGFzc3dvcmQ=
+  remoteasn: 64642
+  port: 181`,
+			},
+			expected: func() bgp.PeerConfigs {
+				peer1, err := bgp.NewPeerConfig("10.0.0.1", 64640, nil, "cGFzc3dvcmQ=", "192.168.0.1")
+				if err != nil {
+					t.Fatalf("should not have gotten error constructing PeerConfig but got one: %s", err)
+				}
+				port2 := uint32(180)
+				peer2, err := bgp.NewPeerConfig("10.0.0.2", 64641, &port2, "", "192.168.0.2")
+				if err != nil {
+					t.Fatalf("should not have gotten error constructing PeerConfig but got one: %s", err)
+				}
+				port3 := uint32(181)
+				peer3, err := bgp.NewPeerConfig("10.0.0.3", 64642, &port3, "cGFzc3dvcmQ=", "")
+				if err != nil {
+					t.Fatalf("should not have gotten error constructing PeerConfig but got one: %s", err)
+				}
+				return bgp.PeerConfigs{peer1, peer2, peer3}
+			}(),
+		},
+		{
+			name: "combined bgp peers config annotation with one peer missing remote ip returns error",
+			nodeAnnotations: map[string]string{
+				peersAnnotation: `- remoteip: 10.0.0.1
+  remoteasn: 64640
+  port: 180
+- remoteasn: 64641
   password: cGFzc3dvcmQ=
   localip: 192.168.0.2`,
 			},
-			expected: bgp.PeerConfigs{
-				bgp.PeerConfig{
-					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
-					RemoteASN: testutils.ValToPtr(uint32(64640)),
-				},
-				bgp.PeerConfig{
-					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
-					RemoteASN: testutils.ValToPtr(uint32(64641)),
-					Password:  testutils.ValToPtr(utils.Base64String("password")),
-					LocalIP:   testutils.ValToPtr("192.168.0.2"),
-				},
-			},
-			expectError: true,
+			errorContains: "remoteip cannot be empty",
 		},
+		{
+			name: "combined bgp peers config annotation with one peer missing remote asn returns error",
+			nodeAnnotations: map[string]string{
+				peersAnnotation: `- remoteip: 10.0.0.1
+  remoteasn: 64640
+  port: 180
+- remoteip: 10.0.0.2
+  password: cGFzc3dvcmQ=
+  localip: 192.168.0.2`,
+			},
+			errorContains: "remoteasn cannot be empty",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(st *testing.T) {
+			bgpPeerCfgs, err := bgpPeerConfigsFromAnnotations(tc.nodeAnnotations, "")
+			if tc.errorContains != "" {
+				assert.ErrorContains(st, err, tc.errorContains)
+			} else {
+				require.NoError(t, err)
+				if !cmp.Equal(tc.expected, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{})) {
+					diff := cmp.Diff(tc.expected, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{}))
+					t.Errorf("BGP peer config mismatch:\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
+func Test_bgpPeerConfigsFromIndividualAnnotations(t *testing.T) {
+	testCases := []struct {
+		name            string
+		nodeAnnotations map[string]string
+		expected        bgp.PeerConfigs
+		errorContains   string
+	}{
 		{
 			name: "individual bgp peers config annotations",
 			nodeAnnotations: map[string]string{
@@ -2693,75 +2743,98 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 				peerASNAnnotation:      "64640,64641",
 				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
 				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
+				peerPortAnnotation:     "180,181",
 			},
-			expected: bgp.PeerConfigs{
-				bgp.PeerConfig{
-					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
-					RemoteASN: testutils.ValToPtr(uint32(64640)),
-					Password:  testutils.ValToPtr(utils.Base64String("password")),
-					LocalIP:   testutils.ValToPtr("192.168.0.1"),
-				},
-				bgp.PeerConfig{
-					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
-					RemoteASN: testutils.ValToPtr(uint32(64641)),
-					Password:  testutils.ValToPtr(utils.Base64String("password")),
-					LocalIP:   testutils.ValToPtr("192.168.0.2"),
-				},
-			},
+			expected: func() bgp.PeerConfigs {
+				port1 := uint32(180)
+				port2 := uint32(181)
+				peer1, _ := bgp.NewPeerConfig("10.0.0.1", 64640, &port1, "cGFzc3dvcmQ=", "192.168.0.1")
+				peer2, _ := bgp.NewPeerConfig("10.0.0.2", 64641, &port2, "cGFzc3dvcmQ=", "192.168.0.2")
+				return bgp.PeerConfigs{peer1, peer2}
+			}(),
 		},
 		{
-			name: "individual bgp peers config annotations without matching number of peer config fields set",
+			name: "individual bgp peers config annotations with some blank passwords",
+			nodeAnnotations: map[string]string{
+				peerIPAnnotation:       "10.0.0.1,10.0.0.2",
+				peerASNAnnotation:      "64640,64641",
+				peerPasswordAnnotation: ",cGFzc3dvcmQ=",
+				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
+				peerPortAnnotation:     "180,181",
+			},
+			expected: func() bgp.PeerConfigs {
+				port1 := uint32(180)
+				port2 := uint32(181)
+				peer1, _ := bgp.NewPeerConfig("10.0.0.1", 64640, &port1, "", "192.168.0.1")
+				peer2, _ := bgp.NewPeerConfig("10.0.0.2", 64641, &port2, "cGFzc3dvcmQ=", "192.168.0.2")
+				return bgp.PeerConfigs{peer1, peer2}
+			}(),
+		},
+		{
+			name: "individual bgp peers config annotations without matching number of passwords returns error",
 			nodeAnnotations: map[string]string{
 				peerIPAnnotation:       "10.0.0.1,10.0.0.2",
 				peerASNAnnotation:      "64640,64641",
 				peerPasswordAnnotation: "cGFzc3dvcmQ=",
-				peerLocalIPAnnotation:  "192.168.0.2",
+				peerLocalIPAnnotation:  "192.168.0.2,",
 			},
-			expected: bgp.PeerConfigs{
-				bgp.PeerConfig{
-					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.1")),
-					RemoteASN: testutils.ValToPtr(uint32(64640)),
-					Password:  testutils.ValToPtr(utils.Base64String("password")),
-					LocalIP:   testutils.ValToPtr("192.168.0.1"),
-				},
-				bgp.PeerConfig{
-					RemoteIP:  testutils.ValToPtr(net.ParseIP("10.0.0.2")),
-					RemoteASN: testutils.ValToPtr(uint32(64641)),
-					Password:  testutils.ValToPtr(utils.Base64String("password")),
-					LocalIP:   testutils.ValToPtr("192.168.0.2"),
-				},
-			},
-			expectError: true,
+			errorContains: "The number of passwords should either be zero, or one per peer router.",
 		},
 		{
-			name: "individual bgp peers config annotations without peer ASN annotation",
+			name: "individual bgp peers config annotations without matching number of ports returns error",
 			nodeAnnotations: map[string]string{
+				peerIPAnnotation:       "10.0.0.1,10.0.0.2",
+				peerASNAnnotation:      "64640,64641",
+				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
+				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
+				peerPortAnnotation:     "180",
+			},
+			errorContains: "The number of ports should either be zero, or one per peer router",
+		},
+		{
+			name: "individual bgp peers config annotations without matching number of local IPs returns error",
+			nodeAnnotations: map[string]string{
+				peerIPAnnotation:       "10.0.0.1,10.0.0.2",
+				peerASNAnnotation:      "64640,64641",
+				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
+				peerLocalIPAnnotation:  "192.168.0.2",
+				peerPortAnnotation:     "180,181",
+			},
+			errorContains: "The number of localIPs should either be zero, or one per peer router",
+		},
+		{
+			name: "individual bgp peers config annotations without matching number of peer IPs returns error",
+			nodeAnnotations: map[string]string{
+				peerIPAnnotation:       "10.0.0.1",
 				peerASNAnnotation:      "64640,64641",
 				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
 				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
 			},
+			errorContains: "the number of IPs and ASN numbers must be equal",
 		},
 		{
-			name: "individual bgp peers config annotations without peer IP annotation",
+			name: "individual bgp peers config annotations without matching number of peer ASNs returns error",
 			nodeAnnotations: map[string]string{
 				peerIPAnnotation:       "10.0.0.1,10.0.0.2",
+				peerASNAnnotation:      "64640",
 				peerPasswordAnnotation: "cGFzc3dvcmQ=,cGFzc3dvcmQ=",
 				peerLocalIPAnnotation:  "192.168.0.1,192.168.0.2",
 			},
+			errorContains: "the number of IPs and ASN numbers must be equal",
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(st *testing.T) {
 			bgpPeerCfgs, err := bgpPeerConfigsFromAnnotations(tc.nodeAnnotations, "")
-			if tc.expectError {
-				assert.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			if !cmp.Equal(tc.expected, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{})) {
-				diff := cmp.Diff(tc.expected, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{}))
-				t.Errorf("BGP peer config mismatch:\n%s", diff)
+			if tc.errorContains != "" {
+				assert.ErrorContains(st, err, tc.errorContains)
+			} else {
+				require.NoError(t, err)
+				if !cmp.Equal(tc.expected, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{})) {
+					diff := cmp.Diff(tc.expected, bgpPeerCfgs, cmpopts.IgnoreUnexported(bgp.PeerConfig{}))
+					t.Errorf("BGP peer config mismatch:\n%s", diff)
+				}
 			}
 		})
 	}

@@ -322,23 +322,18 @@ func newGlobalPeers(
 	holdtime float64,
 	localAddress string,
 ) []*gobgpapi.Peer {
-	peers := make([]*gobgpapi.Peer, 0)
+	peers := make([]*gobgpapi.Peer, len(peerConfigs))
 
-	ips := peerConfigs.RemoteIPs()
-	asns := peerConfigs.RemoteASNs()
-	passwords := peerConfigs.Passwords()
-	ports := peerConfigs.Ports()
-	localips := peerConfigs.LocalIPs()
-
-	for i := 0; i < len(ips); i++ {
+	for i, peerConfig := range peerConfigs {
 		// explicitly set neighbors.transport.config.local-address with primaryIP which is configured
 		// as their neighbor address at the remote peers.
 		// this prevents the controller from initiating connection to its peers with a different IP address
 		// when multiple L3 interfaces are active.
 		peer := &gobgpapi.Peer{
 			Conf: &gobgpapi.PeerConf{
-				NeighborAddress: ips[i].String(),
-				PeerAsn:         asns[i],
+				NeighborAddress: peerConfig.RemoteIP().String(),
+				PeerAsn:         peerConfig.RemoteASN(),
+				AuthPassword:    peerConfig.Password(),
 			},
 			Timers: &gobgpapi.Timers{Config: &gobgpapi.TimersConfig{HoldTime: uint64(holdtime)}},
 			Transport: &gobgpapi.Transport{
@@ -349,20 +344,15 @@ func newGlobalPeers(
 			},
 		}
 
-		if len(ports) != 0 {
-			peer.Transport.RemotePort = ports[i]
+		if peerConfig.Port() != nil {
+			peer.Transport.RemotePort = *peerConfig.Port()
 		}
 
-		if len(passwords) != 0 {
-			peer.Conf.AuthPassword = passwords[i]
+		if peerConfig.LocalIP() != "" {
+			peer.Transport.LocalAddress = peerConfig.LocalIP()
 		}
 
-		// if localip is set and is non-blank for BGP configuration override primaryIP choice set for peer above
-		if len(localips) != 0 && localips[i] != "" {
-			peer.Transport.LocalAddress = localips[i]
-		}
-
-		peers = append(peers, peer)
+		peers[i] = peer
 	}
 
 	return peers

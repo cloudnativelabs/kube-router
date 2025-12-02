@@ -13,27 +13,65 @@ import (
 )
 
 type PeerConfig struct {
-	LocalIP   *string             `yaml:"localip"`
-	Password  *utils.Base64String `yaml:"password"`
-	Port      *uint32             `yaml:"port"`
-	RemoteASN *uint32             `yaml:"remoteasn"`
-	RemoteIP  *net.IP             `yaml:"remoteip"`
+	remoteASN uint32             `yaml:"remoteasn"`
+	remoteIP  net.IP             `yaml:"remoteip"`
+	localIP   string             `yaml:"localip"`
+	password  utils.Base64String `yaml:"password"`
+	port      *uint32            `yaml:"port"`
+}
+
+func NewPeerConfig(remoteIPStr string, remoteASN uint32, port *uint32, b64EncodedPassword utils.Base64String, localIP string) (PeerConfig, error) {
+	remoteIP := net.ParseIP(remoteIPStr)
+	if remoteIP == nil {
+		return PeerConfig{}, fmt.Errorf("invalid IP address: %s", remoteIPStr)
+	}
+	if err := validateASN(remoteASN); err != nil {
+		return PeerConfig{}, err
+	}
+
+	return PeerConfig{
+		remoteIP:  remoteIP,
+		remoteASN: remoteASN,
+		localIP:   localIP,
+		password:  b64EncodedPassword,
+		port:      port,
+	}, nil
+}
+
+func (p PeerConfig) RemoteASN() uint32 {
+	return p.remoteASN
+}
+
+func (p PeerConfig) RemoteIP() net.IP {
+	return p.remoteIP
+}
+
+func (p PeerConfig) LocalIP() string {
+	return p.localIP
+}
+
+func (p PeerConfig) Password() string {
+	return string(p.password)
+}
+
+func (p PeerConfig) Port() *uint32 {
+	return p.port
 }
 
 // Custom Stringer to prevent leaking passwords when printed
 func (p PeerConfig) String() string {
 	var fields []string
-	if p.Port != nil {
-		fields = append(fields, fmt.Sprintf("Port: %d", *p.Port))
+	if p.localIP != "" {
+		fields = append(fields, fmt.Sprintf("LocalIP: %s", p.localIP))
 	}
-	if p.LocalIP != nil {
-		fields = append(fields, fmt.Sprintf("LocalIP: %s", *p.LocalIP))
+	if p.port != nil {
+		fields = append(fields, fmt.Sprintf("Port: %d", *p.port))
 	}
-	if p.RemoteASN != nil {
-		fields = append(fields, fmt.Sprintf("RemoteASN: %d", *p.RemoteASN))
+	if p.remoteASN != uint32(0) {
+		fields = append(fields, fmt.Sprintf("RemoteASN: %d", p.remoteASN))
 	}
-	if p.RemoteIP != nil {
-		fields = append(fields, fmt.Sprintf("RemoteIP: %v", *p.RemoteIP))
+	if p.remoteIP != nil {
+		fields = append(fields, fmt.Sprintf("RemoteIP: %v", p.remoteIP))
 	}
 	return fmt.Sprintf("PeerConfig{%s}", strings.Join(fields, ", "))
 }
@@ -57,83 +95,31 @@ func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
 	if tmp.RemoteASN == nil {
 		return errors.New("remoteasn cannot be empty")
 	}
-
-	p.LocalIP = tmp.LocalIP
-	p.Password = tmp.Password
-	p.Port = tmp.Port
-	p.RemoteASN = tmp.RemoteASN
-
+	if err := validateASN(*tmp.RemoteASN); err != nil {
+		return err
+	}
+	if tmp.LocalIP != nil {
+		p.localIP = *tmp.LocalIP
+	}
+	if tmp.Password != nil {
+		p.password = *tmp.Password
+	}
+	p.port = tmp.Port
+	p.remoteASN = *tmp.RemoteASN
 	ip := net.ParseIP(*tmp.RemoteIP)
 	if ip == nil {
 		return fmt.Errorf("%s is not a valid IP address", *tmp.RemoteIP)
 	}
-	p.RemoteIP = &ip
+	p.remoteIP = ip
 	return nil
 }
 
 type PeerConfigs []PeerConfig
 
-func (p PeerConfigs) LocalIPs() []string {
-	localIPs := make([]string, 0)
-	for _, cfg := range p {
-		if cfg.LocalIP != nil {
-			localIPs = append(localIPs, *cfg.LocalIP)
-		} else {
-			localIPs = append(localIPs, "")
-		}
-	}
-	return localIPs
-}
-
-// Returns b64 decoded passwords
-func (p PeerConfigs) Passwords() []string {
-	passwords := make([]string, 0)
-	for _, cfg := range p {
-		if cfg.Password != nil {
-			passwords = append(passwords, string(*cfg.Password))
-		}
-	}
-	return passwords
-}
-
-func (p PeerConfigs) Ports() []uint32 {
-	ports := make([]uint32, 0)
-	for _, cfg := range p {
-		if cfg.Port != nil {
-			ports = append(ports, *cfg.Port)
-		} else {
-			ports = append(ports, options.DefaultBgpPort)
-		}
-	}
-	return ports
-}
-
-func (p PeerConfigs) RemoteASNs() []uint32 {
-	asns := make([]uint32, 0)
-	for _, cfg := range p {
-		if cfg.RemoteASN != nil {
-			asns = append(asns, *cfg.RemoteASN)
-		}
-	}
-	return asns
-}
-
-func (p PeerConfigs) RemoteIPs() []net.IP {
-	remoteIPs := make([]net.IP, 0)
-	for _, cfg := range p {
-		if cfg.RemoteIP != nil {
-			remoteIPs = append(remoteIPs, *cfg.RemoteIP)
-		}
-	}
-	return remoteIPs
-}
-
 func (p PeerConfigs) RemoteIPStrings() []string {
 	remoteIPs := make([]string, 0)
 	for _, cfg := range p {
-		if cfg.RemoteIP != nil {
-			remoteIPs = append(remoteIPs, cfg.RemoteIP.String())
-		}
+		remoteIPs = append(remoteIPs, cfg.RemoteIP().String())
 	}
 	return remoteIPs
 }
@@ -147,20 +133,13 @@ func (p PeerConfigs) String() string {
 	return fmt.Sprintf("PeerConfigs[%s]", strings.Join(pcs, ","))
 }
 
-func (p *PeerConfigs) UnmarshalYAML(raw []byte) error {
-	type tmpPeerConfigs PeerConfigs
-	tmp := (*tmpPeerConfigs)(p)
-
-	if err := yaml.Unmarshal(raw, tmp); err != nil {
-		return err
-	}
-
-	return p.Validate()
-}
-
-func (p PeerConfigs) Validate() error {
-	return validatePeerConfigs(p.RemoteIPStrings(), p.RemoteASNs(), p.Ports(), p.Passwords(), p.LocalIPs(), "")
-}
+// TODO: Delete me?
+// func (p *PeerConfigs) UnmarshalYAML(raw []byte) error {
+// 	type tmpPeerConfigs PeerConfigs
+// 	tmp := (*tmpPeerConfigs)(p)
+//
+// 	return yaml.Unmarshal(raw, tmp)
+// }
 
 func NewPeerConfigs(
 	remoteIPs []string,
@@ -170,72 +149,55 @@ func NewPeerConfigs(
 	localIPs []string,
 	localAddress string,
 ) (PeerConfigs, error) {
-	if err := validatePeerConfigs(remoteIPs, remoteASNs, ports, b64EncodedPasswords, localIPs, localAddress); err != nil {
-		return nil, err
+	if len(remoteIPs) != len(remoteASNs) {
+		return nil, errors.New("invalid peer router config, the number of IPs and ASN numbers must be equal")
+	}
+	if len(remoteIPs) != len(b64EncodedPasswords) && len(b64EncodedPasswords) != 0 {
+		return nil, errors.New("invalid peer router config. The number of passwords should either be zero, or " +
+			"one per peer router. Use blank items if a router doesn't expect a password. Example: \"pass,,pass\" " +
+			"OR [\"pass\",\"\",\"pass\"]")
+	}
+	if len(remoteIPs) != len(ports) && len(ports) != 0 {
+		return nil, fmt.Errorf("invalid peer router config. The number of ports should either be zero, or "+
+			"one per peer router. If blank items are used, it will default to standard BGP port, %s. ",
+			strconv.Itoa(options.DefaultBgpPort))
+	}
+	if len(remoteIPs) != len(localIPs) && len(localIPs) != 0 {
+		return nil, fmt.Errorf("invalid peer router config. The number of localIPs should either be zero, or "+
+			"one per peer router. If blank items are used, it will default to nodeIP, %s. ", localAddress)
 	}
 
 	peerCfgs := make(PeerConfigs, len(remoteIPs))
 	for i, remoteIP := range remoteIPs {
-		ip := net.ParseIP(remoteIP)
-		if ip == nil {
-			return nil, fmt.Errorf("invalid IP address: %s", remoteIP)
-		}
-		peerCfgs[i].RemoteIP = &ip
-		peerCfgs[i].RemoteASN = &remoteASNs[i]
-
+		var localIP string
+		var pw utils.Base64String
+		var port *uint32
 		if len(ports) != 0 {
-			peerCfgs[i].Port = &ports[i]
+			port = &ports[i]
 		}
-
 		if len(b64EncodedPasswords) != 0 {
-			pw := utils.Base64String(b64EncodedPasswords[i])
-			peerCfgs[i].Password = &pw
+			pw = utils.Base64String(b64EncodedPasswords[i])
 		}
-
-		if len(localIPs) != 0 && localIPs[i] != "" {
-			peerCfgs[i].LocalIP = &localIPs[i]
+		if len(localIPs) != 0 {
+			localIP = localIPs[i]
 		}
+		peerCfg, err := NewPeerConfig(remoteIP, remoteASNs[i], port, pw, localIP)
+		if err != nil {
+			return nil, err
+		}
+		peerCfgs[i] = peerCfg
 	}
 
 	return peerCfgs, nil
 }
 
-func validatePeerConfigs(
-	remoteIPs []string,
-	remoteASNs []uint32,
-	ports []uint32,
-	b64EncodedPasswords []string,
-	localIPs []string,
-	localAddress string,
-) error {
-	if len(remoteIPs) != len(remoteASNs) {
-		return errors.New("invalid peer router config, the number of IPs and ASN numbers must be equal")
+func validateASN(asn uint32) error {
+	if (asn < 1 || asn > 23455) &&
+		(asn < 23457 || asn > 63999) &&
+		(asn < 64512 || asn > 65534) &&
+		(asn < 131072 || asn > 4199999999) &&
+		(asn < 4200000000 || asn > 4294967294) {
+		return fmt.Errorf("reserved ASN number \"%d\" for global BGP peer", asn)
 	}
-	if len(remoteIPs) != len(b64EncodedPasswords) && len(b64EncodedPasswords) != 0 {
-		return errors.New("invalid peer router config. The number of passwords should either be zero, or " +
-			"one per peer router. Use blank items if a router doesn't expect a password. Example: \"pass,,pass\" " +
-			"OR [\"pass\",\"\",\"pass\"]")
-	}
-	if len(remoteIPs) != len(ports) && len(ports) != 0 {
-		return fmt.Errorf("invalid peer router config. The number of ports should either be zero, or "+
-			"one per peer router. If blank items are used, it will default to standard BGP port, %s. ",
-			strconv.Itoa(options.DefaultBgpPort))
-	}
-	if len(remoteIPs) != len(localIPs) && len(localIPs) != 0 {
-		return fmt.Errorf("invalid peer router config. The number of localIPs should either be zero, or "+
-			"one per peer router. If blank items are used, it will default to nodeIP, %s. ", localAddress)
-	}
-
-	for _, asn := range remoteASNs {
-		if (asn < 1 || asn > 23455) &&
-			(asn < 23457 || asn > 63999) &&
-			(asn < 64512 || asn > 65534) &&
-			(asn < 131072 || asn > 4199999999) &&
-			(asn < 4200000000 || asn > 4294967294) {
-			return fmt.Errorf("reserved ASN number \"%d\" for global BGP peer",
-				asn)
-		}
-	}
-
 	return nil
 }
