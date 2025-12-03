@@ -93,13 +93,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		sourceNodeIsIPv4 := nrc.krNode.GetPrimaryNodeIP().To4() != nil
 
 		if targetNodeIsIPv4 != sourceNodeIsIPv4 {
-			klog.Warningf(
-				"Not peering with Node %s as it's primary IP (%s) uses a different protocol than "+
-					"our primary IP (%s)",
-				node.Name,
-				targetNode.GetPrimaryNodeIP(),
-				nrc.krNode.GetPrimaryNodeIP(),
-			)
+			klog.Warningf("Not peering with Node %s as it's primary IP (%s) uses a different protocol than "+
+				"our primary IP (%s)", node.Name, targetNode.GetPrimaryNodeIP(),
+				nrc.krNode.GetPrimaryNodeIP())
 			continue
 		}
 
@@ -132,10 +128,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			if targetNode.IsIPv4Capable() {
 				afiSafi := gobgpapi.AfiSafi{
 					Config: &gobgpapi.AfiSafiConfig{
-						Family: &gobgpapi.Family{
-							Afi:  gobgpapi.Family_AFI_IP,
-							Safi: gobgpapi.Family_SAFI_UNICAST,
-						},
+						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
 						Enabled: true,
 					},
 					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
@@ -150,10 +143,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			if targetNode.IsIPv6Capable() {
 				afiSafi := gobgpapi.AfiSafi{
 					Config: &gobgpapi.AfiSafiConfig{
-						Family: &gobgpapi.Family{
-							Afi:  gobgpapi.Family_AFI_IP6,
-							Safi: gobgpapi.Family_SAFI_UNICAST,
-						},
+						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
 						Enabled: true,
 					},
 					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
@@ -183,11 +173,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			Peer: n,
 		}); err != nil {
 			if !strings.Contains(err.Error(), "can't overwrite the existing peer") {
-				klog.Errorf(
-					"Failed to add node %s as peer due to %s",
-					targetNode.GetPrimaryNodeIP(),
-					err,
-				)
+				klog.Errorf("Failed to add node %s as peer due to %s", targetNode.GetPrimaryNodeIP(), err)
 			}
 		}
 	}
@@ -217,14 +203,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 }
 
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
-func (nrc *NetworkRoutingController) connectToExternalBGPPeers(
-	server *gobgp.BgpServer,
-	peerNeighbors []*gobgpapi.Peer,
-	bgpGracefulRestart bool,
-	bgpGracefulRestartDeferralTime time.Duration,
-	bgpGracefulRestartTime time.Duration,
-	peerMultihopTTL uint8,
-) error {
+func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.BgpServer, peerNeighbors []*gobgpapi.Peer,
+	bgpGracefulRestart bool, bgpGracefulRestartDeferralTime time.Duration, bgpGracefulRestartTime time.Duration,
+	peerMultihopTTL uint8) error {
 	for _, n := range peerNeighbors {
 		neighborIPStr := n.Conf.NeighborAddress
 		neighborIP := net.ParseIP(neighborIPStr)
@@ -235,23 +216,16 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(
 		}
 		peeringAddressForNeighbor := net.ParseIP(n.Transport.LocalAddress)
 		if peeringAddressForNeighbor == nil {
-			klog.Errorf(
-				"unable to parse our local address for peer (%s), not peering with this peer (%s)",
-				n.Transport.LocalAddress,
-				neighborIPStr,
-			)
+			klog.Errorf("unable to parse our local address for peer (%s), not peering with this peer (%s)",
+				n.Transport.LocalAddress, neighborIPStr)
 		}
 
 		neighborIsIPv4 := neighborIP.To4() != nil
 		peeringAddressIsIPv4 := peeringAddressForNeighbor.To4() != nil
 		if neighborIsIPv4 != peeringAddressIsIPv4 {
-			klog.Warningf(
-				"Not peering with configured peer as it's primary IP (%s) uses a different "+
-					"protocol than our configured local-address (%s). Its possible that this can be resolved by setting "+
-					"the local address appropriately",
-				neighborIP,
-				peeringAddressForNeighbor,
-			)
+			klog.Warningf("Not peering with configured peer as it's primary IP (%s) uses a different "+
+				"protocol than our configured local-address (%s). Its possible that this can be resolved by setting "+
+				"the local address appropriately", neighborIP, peeringAddressForNeighbor)
 			continue
 		}
 
@@ -267,10 +241,7 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(
 				n.AfiSafis = []*gobgpapi.AfiSafi{
 					{
 						Config: &gobgpapi.AfiSafiConfig{
-							Family: &gobgpapi.Family{
-								Afi:  gobgpapi.Family_AFI_IP,
-								Safi: gobgpapi.Family_SAFI_UNICAST,
-							},
+							Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
 							Enabled: true,
 						},
 						MpGracefulRestart: &gobgpapi.MpGracefulRestart{
@@ -284,10 +255,7 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(
 			if nrc.krNode.IsIPv6Capable() {
 				afiSafi := gobgpapi.AfiSafi{
 					Config: &gobgpapi.AfiSafiConfig{
-						Family: &gobgpapi.Family{
-							Afi:  gobgpapi.Family_AFI_IP6,
-							Safi: gobgpapi.Family_SAFI_UNICAST,
-						},
+						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
 						Enabled: true,
 					},
 					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
@@ -392,10 +360,8 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			// In this case even if we can't get the NodeIP that's alright as the node is being removed anyway and
 			// future node lister operations that happen in OnNodeUpdate won't be affected as the node won't be returned
 			if err == nil && targetNode != nil {
-				klog.Infof(
-					"Received node %s removed update from watch API, so remove node from peer",
-					targetNode.GetPrimaryNodeIP(),
-				)
+				klog.Infof("Received node %s removed update from watch API, so remove node from peer",
+					targetNode.GetPrimaryNodeIP())
 			} else {
 				klog.Infof("Received node (IP unavailable) removed update from watch API, so remove node " +
 					"from peer")
