@@ -20,7 +20,9 @@ type PeerConfig struct {
 	port      *uint32            `yaml:"port"`
 }
 
-func NewPeerConfig(remoteIPStr string, remoteASN uint32, port *uint32, b64EncodedPassword utils.Base64String, localIP string) (PeerConfig, error) {
+func NewPeerConfig(remoteIPStr string, remoteASN uint32, port *uint32, b64EncodedPassword utils.Base64String,
+	localIP string,
+) (PeerConfig, error) {
 	remoteIP := net.ParseIP(remoteIPStr)
 	if remoteIP == nil {
 		return PeerConfig{}, fmt.Errorf("invalid IP address: %s", remoteIPStr)
