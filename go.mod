@@ -12,7 +12,7 @@ require (
 	github.com/hashicorp/go-version v1.8.0
 	github.com/moby/ipvs v1.1.0
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.38.2
+	github.com/onsi/gomega v1.38.3
 	github.com/osrg/gobgp/v3 v3.37.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/pflag v1.0.10
