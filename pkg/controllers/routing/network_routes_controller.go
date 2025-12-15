@@ -501,8 +501,7 @@ func (nrc *NetworkRoutingController) watchBgpUpdates() {
 					if path.NeighborIp == "<nil>" {
 						return
 					}
-					klog.V(2).
-						Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
+					klog.V(2).Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
 					if err := nrc.injectRoute(path); err != nil {
 						klog.Errorf("failed to inject routes due to: %v", err)
 					}
@@ -1135,8 +1134,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	// If the global routing peer is configured then peer with it
 	// else attempt to get peers from node specific BGP annotations.
 	if len(nrc.globalPeerRouters) == 0 {
-		klog.V(2).
-			Infof("Attempting to construct peer configs from annotation: %+v", node.Annotations)
+		klog.V(2).Infof("Attempting to construct peer configs from annotation: %+v", node.Annotations)
 		peerCfgs, err := bgpPeerConfigsFromAnnotations(
 			node.Annotations,
 			nrc.krNode.GetPrimaryNodeIP().String(),
@@ -1148,7 +1146,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 			}
 			return err
 		}
-		// Early exist because no BGP peer info was set in annotations for the node
+		// Early exit because no BGP peer info was set in annotations for the node
 		if peerCfgs == nil {
 			return nil
 		}
