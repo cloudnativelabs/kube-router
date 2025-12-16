@@ -14,6 +14,9 @@ on:
     - v[1-9].*
     - prep-v[1-9].*
 
+permissions:
+  contents: read
+
 env:
   BUILDTIME_BASE: "golang:1.25.1-alpine3.22"
   RUNTIME_BASE: "alpine:3.22"
@@ -183,6 +186,8 @@ jobs:
   ci-goreleaser-tag:
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    permissions:
+      contents: write
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v6

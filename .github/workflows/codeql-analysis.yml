@@ -18,6 +18,11 @@ on:
     #        *  * * * *
     - cron: '30 1 * * 0'
 
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
 jobs:
   CodeQL-Build:
     # CodeQL runs on ubuntu-latest, windows-latest, and macos-latest
