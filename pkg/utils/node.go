@@ -9,6 +9,7 @@ import (
 
 	"github.com/vishvananda/netlink"
 
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -218,7 +219,7 @@ func (n *KRNode) GetNodeIPAddrs() []net.IP {
 // IPv6 addresses defined in the Kubernetes Node Object.
 func NewKRNode(node *apiv1.Node, linkQ LocalLinkQuerier, enableIPv4, enableIPv6 bool) (*LocalKRNode, error) {
 	if linkQ == nil {
-		linkQ = &netlink.Handle{}
+		linkQ = nlretry.NewHandle(&netlink.Handle{})
 	}
 
 	primaryNodeIP, err := getPrimaryNodeIP(node)
@@ -370,7 +371,7 @@ func getAllNodeIPs(node *apiv1.Node) (addressMap, addressMap) {
 // GetNodeSubnet returns the subnet and interface name for a given node IP
 func GetNodeSubnet(nodeIP net.IP, linkQ LocalLinkQuerier) (net.IPNet, string, error) {
 	if linkQ == nil {
-		linkQ = &netlink.Handle{}
+		linkQ = nlretry.NewHandle(&netlink.Handle{})
 	}
 
 	links, err := linkQ.LinkList()

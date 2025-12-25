@@ -7,6 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.275.1
 	github.com/aws/smithy-go v1.24.0
 	github.com/ccoveille/go-safecast/v2 v2.0.0
+	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/coreos/go-iptables v0.8.0
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/goccy/go-yaml v1.19.0
