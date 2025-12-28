@@ -182,12 +182,13 @@ func (n *KRNode) FindBestIPv4NodeAddress() net.IP {
 // available if you are running on the node itself, as kube-router determines this by looking at the node's interfaces
 // and parsing the address data there. If you attempt to call this function on a remote node, it will return an error.
 func (n *LocalKRNode) GetNodeMTU() (int, error) {
-	links, err := n.linkQ.LinkList()
+	ctx := context.Background()
+	links, err := n.linkQ.LinkList(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get list of links: %w", err)
 	}
 	for _, link := range links {
-		addresses, err := n.linkQ.AddrList(link, netlink.FAMILY_ALL)
+		addresses, err := n.linkQ.AddrList(ctx, link, netlink.FAMILY_ALL)
 		if err != nil {
 			return 0, fmt.Errorf("failed to get list of addr: %w", err)
 		}
@@ -374,13 +375,14 @@ func GetNodeSubnet(nodeIP net.IP, linkQ LocalLinkQuerier) (net.IPNet, string, er
 		linkQ = nlretry.NewHandle(&netlink.Handle{})
 	}
 
-	links, err := linkQ.LinkList()
+	ctx := context.Background()
+	links, err := linkQ.LinkList(ctx)
 	if err != nil {
 		return net.IPNet{}, "", fmt.Errorf("failed to get list of links: %w", err)
 	}
 
 	for _, link := range links {
-		addresses, err := linkQ.AddrList(link, netlink.FAMILY_ALL)
+		addresses, err := linkQ.AddrList(ctx, link, netlink.FAMILY_ALL)
 		if err != nil {
 			return net.IPNet{}, "", fmt.Errorf("failed to get list of addrs: %w", err)
 		}

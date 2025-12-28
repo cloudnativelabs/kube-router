@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -14,17 +15,15 @@ const (
 	iproutePkg       = "iproute2"
 )
 
-var (
-	rtTablesPosLoc = []string{
-		fmt.Sprintf("/etc/%s/%s", iproutePkg, rtTablesFileName),
-		fmt.Sprintf("/usr/lib/%s/%s", iproutePkg, rtTablesFileName),
-		fmt.Sprintf("/usr/share/%s/%s", iproutePkg, rtTablesFileName),
-	}
-)
+var rtTablesPosLoc = []string{
+	fmt.Sprintf("/etc/%s/%s", iproutePkg, rtTablesFileName),
+	fmt.Sprintf("/usr/lib/%s/%s", iproutePkg, rtTablesFileName),
+	fmt.Sprintf("/usr/share/%s/%s", iproutePkg, rtTablesFileName),
+}
 
 type LocalLinkQuerier interface {
-	LinkList() ([]netlink.Link, error)
-	AddrList(link netlink.Link, family int) ([]netlink.Addr, error)
+	LinkList(ctx context.Context) ([]netlink.Link, error)
+	AddrList(ctx context.Context, link netlink.Link, family int) ([]netlink.Addr, error)
 }
 
 // RouteTableAdd adds a new named table to iproute's rt_tables configuration file

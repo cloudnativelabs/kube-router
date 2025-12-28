@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -50,11 +51,11 @@ func NewFakeLocalLinkQuerier(addrStrings []string, mtus []int) *FakeLocalLinkQue
 	}
 }
 
-func (f *FakeLocalLinkQuerier) LinkList() ([]netlink.Link, error) {
+func (f *FakeLocalLinkQuerier) LinkList(_ context.Context) ([]netlink.Link, error) {
 	return f.links, nil
 }
 
-func (f *FakeLocalLinkQuerier) AddrList(link netlink.Link, family int) ([]netlink.Addr, error) {
+func (f *FakeLocalLinkQuerier) AddrList(_ context.Context, link netlink.Link, family int) ([]netlink.Addr, error) {
 	addrs := make([]netlink.Addr, 1)
 	addrs[0] = netlink.Addr{IPNet: f.addrs[link.Attrs().Index]}
 	if link.Attrs().MTU == 0 {
@@ -67,12 +68,12 @@ type MockLocalLinkQuerier struct {
 	mock.Mock
 }
 
-func (m *MockLocalLinkQuerier) LinkList() ([]netlink.Link, error) {
+func (m *MockLocalLinkQuerier) LinkList(_ context.Context) ([]netlink.Link, error) {
 	args := m.Called()
 	return args.Get(0).([]netlink.Link), args.Error(1)
 }
 
-func (m *MockLocalLinkQuerier) AddrList(link netlink.Link, family int) ([]netlink.Addr, error) {
+func (m *MockLocalLinkQuerier) AddrList(_ context.Context, link netlink.Link, family int) ([]netlink.Addr, error) {
 	args := m.Called(link, family)
 	return args.Get(0).([]netlink.Addr), args.Error(1)
 }
