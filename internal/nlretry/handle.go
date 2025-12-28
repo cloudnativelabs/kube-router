@@ -20,15 +20,15 @@ func NewHandle(h *netlink.Handle) *handle {
 	return &handle{Handle: h}
 }
 
-func (r *handle) AddrList(link netlink.Link, family int) ([]netlink.Addr, error) {
-	return RetryErrDumpInterruptedWithResult(context.Background(), netlinkRetryInterval, netlinkRetryMaxInterval,
+func (r *handle) AddrList(ctx context.Context, link netlink.Link, family int) ([]netlink.Addr, error) {
+	return RetryErrDumpInterruptedWithResult(ctx, netlinkRetryInterval, netlinkRetryMaxInterval,
 		netlinkRetryAttempts, func() ([]netlink.Addr, error) {
 			return r.Handle.AddrList(link, family)
 		})
 }
 
-func (r *handle) LinkList() ([]netlink.Link, error) {
-	return RetryErrDumpInterruptedWithResult(context.Background(), netlinkRetryInterval, netlinkRetryMaxInterval,
+func (r *handle) LinkList(ctx context.Context) ([]netlink.Link, error) {
+	return RetryErrDumpInterruptedWithResult(ctx, netlinkRetryInterval, netlinkRetryMaxInterval,
 		netlinkRetryAttempts, func() ([]netlink.Link, error) {
 			return r.Handle.LinkList()
 		})
