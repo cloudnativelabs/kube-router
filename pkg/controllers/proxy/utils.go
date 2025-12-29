@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/cri"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/vishvananda/netlink"
@@ -548,7 +549,7 @@ func getAllLocalIPs() (map[v1.IPFamily][]net.IP, error) {
 	// We use maps here so that we can de-duplicate repeat IP addresses
 	v4Map := make(map[string]bool)
 	v6Map := make(map[string]bool)
-	links, err := netlink.LinkList()
+	links, err := nlretry.LinkList(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("could not load list of net interfaces: %v", err)
 	}
@@ -562,7 +563,7 @@ func getAllLocalIPs() (map[v1.IPFamily][]net.IP, error) {
 			continue
 		}
 
-		linkAddrs, err := netlink.AddrList(link, netlink.FAMILY_ALL)
+		linkAddrs, err := nlretry.AddrList(context.Background(), link, netlink.FAMILY_ALL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get IPs for interface: %v", err)
 		}

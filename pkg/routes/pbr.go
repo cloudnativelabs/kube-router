@@ -1,9 +1,11 @@
 package routes
 
 import (
+	"context"
 	"fmt"
 	"net"
 
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/vishvananda/netlink"
 )
@@ -60,9 +62,10 @@ func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 		return fmt.Errorf("failed to check if CIDR is a default route: %v", err)
 	}
 
+	ctx := context.Background()
 	if isDefaultRoute {
 		var tmpRules []netlink.Rule
-		tmpRules, err = netlink.RuleListFiltered(ipFamily, nRule, netlink.RT_FILTER_TABLE)
+		tmpRules, err = nlretry.RuleListFiltered(ctx, ipFamily, nRule, netlink.RT_FILTER_TABLE)
 		if err != nil {
 			return fmt.Errorf("failed to list rules: %s", err.Error())
 		}
@@ -75,7 +78,7 @@ func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 			}
 		}
 	} else {
-		rules, err = netlink.RuleListFiltered(ipFamily, nRule, netlink.RT_FILTER_SRC|netlink.RT_FILTER_TABLE)
+		rules, err = nlretry.RuleListFiltered(ctx, ipFamily, nRule, netlink.RT_FILTER_SRC|netlink.RT_FILTER_TABLE)
 		if err != nil {
 			return fmt.Errorf("failed to list rules: %s", err.Error())
 		}

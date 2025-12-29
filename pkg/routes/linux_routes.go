@@ -1,9 +1,11 @@
 package routes
 
 import (
+	"context"
 	"fmt"
 	"net"
 
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"k8s.io/klog/v2"
@@ -16,7 +18,8 @@ const (
 
 // DeleteByDestination attempts to safely find all routes based upon its destination subnet and delete them
 func DeleteByDestination(destinationSubnet *net.IPNet) error {
-	routes, err := netlink.RouteListFiltered(nl.FAMILY_ALL, &netlink.Route{
+	ctx := context.Background()
+	routes, err := nlretry.RouteListFiltered(ctx, nl.FAMILY_ALL, &netlink.Route{
 		Dst: destinationSubnet, Protocol: ZebraOriginator,
 	}, netlink.RT_FILTER_DST|netlink.RT_FILTER_PROTOCOL)
 	if err != nil {

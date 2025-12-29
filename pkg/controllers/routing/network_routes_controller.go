@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/ccoveille/go-safecast/v2"
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
@@ -252,7 +253,8 @@ func (nrc *NetworkRoutingController) Run(
 	}
 
 	// create 'kube-bridge' interface to which pods will be connected
-	kubeBridgeIf, err := netlink.LinkByName("kube-bridge")
+	ctx := context.Background()
+	kubeBridgeIf, err := nlretry.LinkByName(ctx, "kube-bridge")
 	if err != nil && err.Error() == IfaceNotFound {
 		linkAttrs := netlink.NewLinkAttrs()
 		linkAttrs.Name = "kube-bridge"
@@ -264,7 +266,7 @@ func (nrc *NetworkRoutingController) Run(
 				err.Error(),
 			)
 		}
-		kubeBridgeIf, err = netlink.LinkByName("kube-bridge")
+		kubeBridgeIf, err = nlretry.LinkByName(ctx, "kube-bridge")
 		if err != nil {
 			klog.Errorf(
 				"Failed to find created `kube-router` bridge due to %s. Will be created by CNI "+
