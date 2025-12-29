@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ccoveille/go-safecast/v2"
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
@@ -1659,7 +1661,7 @@ func routeVIPTrafficToDirector(fwmark uint32, family v1.IPFamily) error {
 	nRule.Table = customDSRRouteTableID
 	nRule.Priority = defaultTrafficDirectorRulePriority
 
-	routes, err := netlink.RuleListFiltered(nFamily, nRule,
+	routes, err := nlretry.RuleListFiltered(context.Background(), nFamily, nRule,
 		netlink.RT_FILTER_MARK|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_PRIORITY)
 	if err != nil {
 		return fmt.Errorf("failed to verify if `ip rule` exists due to: %v", err)
@@ -1764,7 +1766,7 @@ func (nsc *NetworkServicesController) Cleanup() {
 	nsc.cleanupIpvsFirewall()
 
 	// delete dummy interface used to assign cluster IP's
-	dummyVipInterface, err := netlink.LinkByName(KubeDummyIf)
+	dummyVipInterface, err := nlretry.LinkByName(context.Background(), KubeDummyIf)
 	if err != nil {
 		if err.Error() != IfaceNotFound {
 			klog.Infof("Dummy interface: " + KubeDummyIf + " does not exist")

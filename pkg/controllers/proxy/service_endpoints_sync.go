@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ccoveille/go-safecast/v2"
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
@@ -688,7 +690,7 @@ func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap 
 	}
 
 	cleanupStaleVIPsForFamily := func(intfc netlink.Link, netlinkFamily int) error {
-		addrs, err := netlink.AddrList(intfc, netlinkFamily)
+		addrs, err := nlretry.AddrList(context.Background(), intfc, netlinkFamily)
 		if err != nil {
 			return errors.New("Failed to list dummy interface IPs: " + err.Error())
 		}

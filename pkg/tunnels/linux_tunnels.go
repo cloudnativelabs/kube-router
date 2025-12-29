@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/vishvananda/netlink"
@@ -134,7 +135,7 @@ func (o *OverlayTunnel) EncapPort() EncapPort {
 // setupOverlayTunnel attempts to create a tunnel link and corresponding routes for IPIP based overlay networks
 func (o *OverlayTunnel) SetupOverlayTunnel(tunnelName string, nextHop net.IP,
 	nextHopSubnet *net.IPNet) (netlink.Link, error) {
-	link, err := netlink.LinkByName(tunnelName)
+	link, err := nlretry.LinkByName(context.Background(), tunnelName)
 	if err != nil {
 		klog.Warningf("failed to get tunnel link by name %s: %v, will attempt to create it", tunnelName, err)
 		link = nil
@@ -193,7 +194,6 @@ func (o *OverlayTunnel) createTunnelConfig(nextHop net.IP, nextHopSubnet *net.IP
 // that do not match the config
 func (o *OverlayTunnel) applyTunnelConfig(link netlink.Link, tunnelName string, nextHop net.IP,
 	config *tunnelConfig) (netlink.Link, error) {
-
 	var recreate bool
 	switch o.encapType {
 	case EncapTypeIPIP:
@@ -380,7 +380,7 @@ func (o *OverlayTunnel) createFOUTunnelWithIPRoute2(tunnelName string, nextHop n
 
 // bringTunnelUp brings the tunnel interface up
 func (o *OverlayTunnel) bringTunnelUp(tunnelName string) (netlink.Link, error) {
-	link, err := netlink.LinkByName(tunnelName)
+	link, err := nlretry.LinkByName(context.Background(), tunnelName)
 	if err != nil {
 		return nil, fmt.Errorf("route not injected for the route advertised by the node %s "+
 			"Failed to get tunnel interface by name error: %s", tunnelName, err)
@@ -408,7 +408,7 @@ func (o *OverlayTunnel) addTunnelRoute(link netlink.Link, nextHop net.IP, isIPv6
 		Dst:       utils.GetSingleIPNet(nextHop),
 	}
 
-	routeList, err := netlink.RouteListFiltered(routeFamily, route,
+	routeList, err := nlretry.RouteListFiltered(context.Background(), routeFamily, route,
 		netlink.RT_FILTER_OIF|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_DST)
 	if err != nil {
 		return fmt.Errorf("failed to list routes in custom table: %v", err)
@@ -434,7 +434,7 @@ func CleanupTunnel(destinationSubnet *net.IPNet, tunnelName string) {
 	}
 
 	klog.V(1).Infof("Cleaning up any lingering tunnel interfaces named: %s", tunnelName)
-	if link, err := netlink.LinkByName(tunnelName); err == nil {
+	if link, err := nlretry.LinkByName(context.Background(), tunnelName); err == nil {
 		if err = netlink.LinkDel(link); err != nil {
 			klog.Errorf("failed to delete tunnel link for the node due to %v", err)
 		}
@@ -473,7 +473,7 @@ func fouPortAndProtoExist(port EncapPort, isIPv6 bool) bool {
 		nFamily = netlink.FAMILY_V6
 	}
 
-	fList, err := netlink.FouList(nFamily)
+	fList, err := nlretry.FouList(context.Background(), nFamily)
 	if err != nil {
 		klog.Warningf("failed to list fou ports: %v", err)
 		return false
@@ -493,7 +493,7 @@ func fouPortAndProtoExist(port EncapPort, isIPv6 bool) bool {
 // kube-router only works with GUE (Generic UDP Encapsulation) we look for that and not just FoU in general. If the
 // linkName is enabled with FoU GUE then we return true, otherwise false
 func linkFOUEnabled(linkName string) (bool, error) {
-	link, err := netlink.LinkByName(linkName)
+	link, err := nlretry.LinkByName(context.Background(), linkName)
 	if err != nil {
 		return false, fmt.Errorf("failed to get link by name: %v", err)
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ccoveille/go-safecast/v2"
+	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/cri"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/docker/docker/client"
@@ -85,7 +86,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 	}
 
 	naddr := &netlink.Addr{IPNet: utils.GetSingleIPNet(parsedIP), Scope: syscall.RT_SCOPE_LINK}
-	addrList, err := netlink.AddrList(iface, nFamily)
+	addrList, err := nlretry.AddrList(context.Background(), iface, nFamily)
 	nIfaceHasAddr := false
 	if err != nil {
 		return fmt.Errorf("failed to list addresses for interface %s due to: %v", iface.Attrs().Name, err)
@@ -121,7 +122,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		Scope:     syscall.RT_SCOPE_HOST,
 		Src:       parsedNodeIP,
 	}
-	routes, err := netlink.RouteListFiltered(netlink.FAMILY_ALL, nRoute,
+	routes, err := nlretry.RouteListFiltered(context.Background(), netlink.FAMILY_ALL, nRoute,
 		netlink.RT_FILTER_TYPE|netlink.RT_FILTER_DST|netlink.RT_FILTER_OIF|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_SRC)
 	if err != nil {
 		return fmt.Errorf("failed to list filtered routes for route %s: %v", nRoute, err)
@@ -192,7 +193,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 		return nil
 	}
 
-	kubeDummyLink, err := netlink.LinkByName(KubeDummyIf)
+	kubeDummyLink, err := nlretry.LinkByName(context.Background(), KubeDummyIf)
 	if err != nil {
 		klog.Errorf("failed to get %s link due to %v", KubeDummyIf, err)
 		return err
@@ -221,7 +222,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 			Dst:   utils.GetSingleIPNet(parsedIP),
 			Table: unix.RT_TABLE_UNSPEC,
 		}
-		routes, err := netlink.RouteListFiltered(netlink.FAMILY_V6, nRoute,
+		routes, err := nlretry.RouteListFiltered(context.Background(), netlink.FAMILY_V6, nRoute,
 			netlink.RT_FILTER_DST|netlink.RT_FILTER_TABLE)
 		if err != nil {
 			klog.Errorf("failed to list routes for interface %s: %v", iface.Attrs().Name, err)
@@ -513,7 +514,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 		return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
 	}
 
-	loNetLink, err := netlink.LinkByName("lo")
+	loNetLink, err := nlretry.LinkByName(context.Background(), "lo")
 	if err != nil {
 		return fmt.Errorf("failed to get loopback interface due to %v", err)
 	}
@@ -533,7 +534,8 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 			Table:     customDSRRouteTableID,
 			Scope:     unix.RT_SCOPE_HOST,
 		}
-		routes, err := netlink.RouteListFiltered(nFamily, nRoute, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
+		routes, err := nlretry.RouteListFiltered(context.Background(), nFamily, nRoute,
+			netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
 		if err != nil || len(routes) < 1 {
 			err = netlink.RouteAdd(nRoute)
 			if err != nil {
@@ -557,7 +559,8 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 			Table:     customDSRRouteTableID,
 			Scope:     unix.RT_SCOPE_HOST,
 		}
-		routes, err := netlink.RouteListFiltered(nFamily, nRoute, netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
+		routes, err := nlretry.RouteListFiltered(context.Background(), nFamily, nRoute,
+			netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
 		if err != nil || len(routes) < 1 {
 			err = netlink.RouteAdd(nRoute)
 			if err != nil {
@@ -603,7 +606,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		// It would be better if we could filter by src, but it's not actually set by iproute2 when netlink receives it
 		// back. Instead, a rule.Src that is set to 0.0.0.0/0 or ::/0 will come back as nil. So if we filter by src, we
 		// will not find any rules.
-		rules, err := netlink.RuleListFiltered(nFamily, nRule,
+		rules, err := nlretry.RuleListFiltered(context.Background(), nFamily, nRule,
 			netlink.RT_FILTER_TABLE|netlink.RT_FILTER_PRIORITY)
 		if err != nil {
 			return fmt.Errorf("failed to list rule for external IP's and verify if `ip rule add prio 32765 from all "+
@@ -634,7 +637,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		// in PR #210 - https://github.com/cloudnativelabs/kube-router/pull/210/files to supposedly help with martian
 		// packets, but when enabled it seems to cause issues with service routing from the node to an external IP
 		// service from the local node to an non-local traffic policy service.
-		/* kubeBridgeLink, err := netlink.LinkByName(KubeBridgeIf)
+		/* kubeBridgeLink, err := nlretry.LinkByName(context.Background(), KubeBridgeIf)
 		if err != nil {
 			return fmt.Errorf("failed to get kube-bridge interface due to %v", err)
 		}
@@ -662,7 +665,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 					Table:     externalIPRouteTableID,
 				}
 
-				routes, err := netlink.RouteListFiltered(nFamily, nRoute,
+				routes, err := nlretry.RouteListFiltered(context.Background(), nFamily, nRoute,
 					netlink.RT_FILTER_DST|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
 				if err != nil {
 					return fmt.Errorf("failed to list route for external IP's due to: %s", err)
@@ -687,7 +690,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 			Family: nFamily,
 			Table:  externalIPRouteTableID,
 		}
-		routes, err := netlink.RouteListFiltered(nFamily, nRoute, netlink.RT_FILTER_TABLE)
+		routes, err := nlretry.RouteListFiltered(context.Background(), nFamily, nRoute, netlink.RT_FILTER_TABLE)
 		if err != nil {
 			return fmt.Errorf("failed to list route for external IP's due to: %s", err)
 		}
@@ -855,7 +858,8 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	_ = activeNetworkNamespaceHandle.Close()
 
 	// create an ipip tunnel interface inside the endpoint container
-	tunIf, err := netlink.LinkByName(ipTunLink.Attrs().Name)
+	ctx := context.Background()
+	tunIf, err := nlretry.LinkByName(ctx, ipTunLink.Attrs().Name)
 	if err != nil {
 		if err.Error() != IfaceNotFound {
 			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
@@ -874,7 +878,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 		// this is ugly, but ran into issue multiple times where interface did not come up quickly.
 		for retry := 0; retry < 60; retry++ {
 			time.Sleep(interfaceWaitSleepTime)
-			tunIf, err = netlink.LinkByName(ipTunLink.Attrs().Name)
+			tunIf, err = nlretry.LinkByName(ctx, ipTunLink.Attrs().Name)
 			if err == nil {
 				break
 			}
@@ -948,8 +952,9 @@ func (ln *linuxNetworking) configureContainerForDSR(
 }
 
 func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
+	ctx := context.Background()
 	var dummyVipInterface netlink.Link
-	dummyVipInterface, err := netlink.LinkByName(KubeDummyIf)
+	dummyVipInterface, err := nlretry.LinkByName(ctx, KubeDummyIf)
 	if err != nil && err.Error() == IfaceNotFound {
 		klog.V(1).Infof("Could not find dummy interface: %s to assign cluster ip's, creating one",
 			KubeDummyIf)
@@ -957,7 +962,7 @@ func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to add dummy interface: %v", err)
 		}
-		dummyVipInterface, err = netlink.LinkByName(KubeDummyIf)
+		dummyVipInterface, err = nlretry.LinkByName(ctx, KubeDummyIf)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get dummy interface: %v", err)
 		}
