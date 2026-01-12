@@ -145,7 +145,7 @@ Usage of kube-router:
   information can be passed as:
 
 ```sh
-kube-router --master=http://192.168.1.99:8080/` or `kube-router --kubeconfig=<path to kubeconfig file>
+kube-router --master=http://192.168.1.99:6443/` or `kube-router --kubeconfig=<path to kubeconfig file>
 ```
 
 - If you run kube-router as agent on the node, ipset package must be installed on each of the nodes (when run as
@@ -203,7 +203,7 @@ You can choose to run kube-router as agent runnng on each node. For e.g if you j
 firewall for the pods then you can start kube-router as:
 
 ```sh
-kube-router --master=http://192.168.1.99:8080/ --run-firewall=true --run-service-proxy=false --run-router=false
+kube-router --master=http://192.168.1.99:6443/ --run-firewall=true --run-service-proxy=false --run-router=false
 ```
 
 ## cleanup configuration
@@ -241,7 +241,7 @@ kube-proxy --cleanup-iptables
 followed by
 
 ```sh
-kube-router --master=http://192.168.1.99:8080/ --run-service-proxy=true --run-firewall=false --run-router=false
+kube-router --master=http://192.168.1.99:6443/ --run-service-proxy=true --run-firewall=false --run-router=false
 ```
 
 and if you want to move back to kube-proxy then clean up config done by kube-router by running
