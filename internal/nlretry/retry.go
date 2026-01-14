@@ -7,6 +7,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/vishvananda/netlink"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -25,6 +26,7 @@ func RetryErrDumpInterruptedWithResult[T any](ctx context.Context, retryInterval
 		res, err := netlinkFunc()
 		if err != nil {
 			if errors.Is(err, netlink.ErrDumpInterrupted) {
+				klog.V(3).Infof("ErrDumpInterrupted encountered, scheduling retry with backoff...")
 				return res, err
 			}
 			return res, backoff.Permanent(err)
@@ -35,6 +37,8 @@ func RetryErrDumpInterruptedWithResult[T any](ctx context.Context, retryInterval
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = retryInterval
 	bo.MaxInterval = retryMaxInterval
+	klog.V(3).Infof("Attempting a netlink call with retry enabled for ErrDumpInterrupted, max retries: %d, interval: "+
+		"%d, max interval: %d", maxRetryAttempts, retryInterval, retryMaxInterval)
 	res, err := backoff.Retry(ctx, op, backoff.WithBackOff(bo), backoff.WithMaxTries(maxRetryAttempts))
 	if err != nil {
 		return res, err
