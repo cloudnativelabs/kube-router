@@ -7,12 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"context"
+
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"golang.org/x/net/context"
 	"k8s.io/klog/v2"
 )
 
