@@ -123,38 +123,38 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				DeferralTime:    uint32(nrc.bgpGracefulRestartDeferralTime.Seconds()),
 				LocalRestarting: true,
 			}
+		}
 
-			// We choose to only peer using the protocol of the node's primary IP
-			if targetNode.IsIPv4Capable() {
-				afiSafi := gobgpapi.AfiSafi{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
+		// We choose to only peer using the protocol of the node's primary IP
+		if targetNode.IsIPv4Capable() {
+			afiSafi := gobgpapi.AfiSafi{
+				Config: &gobgpapi.AfiSafiConfig{
+					Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+					Enabled: true,
+				},
+				MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+					Config: &gobgpapi.MpGracefulRestartConfig{
+						Enabled: nrc.bgpGracefulRestart,
 					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
-							Enabled: true,
-						},
-						State: &gobgpapi.MpGracefulRestartState{},
-					},
-				}
-				n.AfiSafis = append(n.AfiSafis, &afiSafi)
+					State: &gobgpapi.MpGracefulRestartState{},
+				},
 			}
-			if targetNode.IsIPv6Capable() {
-				afiSafi := gobgpapi.AfiSafi{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
+			n.AfiSafis = append(n.AfiSafis, &afiSafi)
+		}
+		if targetNode.IsIPv6Capable() {
+			afiSafi := gobgpapi.AfiSafi{
+				Config: &gobgpapi.AfiSafiConfig{
+					Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
+					Enabled: true,
+				},
+				MpGracefulRestart: &gobgpapi.MpGracefulRestart{
+					Config: &gobgpapi.MpGracefulRestartConfig{
+						Enabled: nrc.bgpGracefulRestart,
 					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
-							Enabled: true,
-						},
-						State: &gobgpapi.MpGracefulRestartState{},
-					},
-				}
-				n.AfiSafis = append(n.AfiSafis, &afiSafi)
+					State: &gobgpapi.MpGracefulRestartState{},
+				},
 			}
+			n.AfiSafis = append(n.AfiSafis, &afiSafi)
 		}
 
 		// we are rr-server peer with other rr-client with reflection enabled
