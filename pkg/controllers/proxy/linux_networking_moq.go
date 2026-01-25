@@ -4,12 +4,11 @@
 package proxy
 
 import (
-	"net"
-	"sync"
-
 	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	"net"
+	"sync"
 )
 
 // Ensure, that LinuxNetworkingMock does implement LinuxNetworking.
