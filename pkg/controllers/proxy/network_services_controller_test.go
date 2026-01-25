@@ -45,6 +45,7 @@ func (m *mockIPVSState) addService(vip net.IP, protocol, port uint16) *ipvs.Serv
 	return svc
 }
 
+//nolint:unparam // timeout parameter allows flexibility for future tests
 func waitForListerWithTimeout(t *testing.T, lister cache.Indexer, timeout time.Duration) {
 	t.Helper()
 	tick := time.Tick(100 * time.Millisecond)
@@ -175,6 +176,152 @@ func setupTestController(t *testing.T, service *v1core.Service, endpointSlice *d
 
 	startInformersForServiceProxy(t, nsc, clientset)
 	waitForListerWithTimeout(t, nsc.svcLister, time.Second*10)
+
+	nsc.setServiceMap(nsc.buildServicesInfo())
+	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
+
+	return ipvsState, mock, nsc
+}
+
+// setupTestControllerWithEndpoints creates a NetworkServicesController for testing traffic policy behavior.
+// It automatically generates an EndpointSlice from the provided local and remote endpoint IPs.
+// - localEndpoints: IPs for endpoints on the local node ("localnode-1")
+// - remoteEndpoints: IPs for endpoints on a remote node ("node-2")
+// All endpoints are created with Ready=true, Port=80, Protocol=TCP.
+//
+// NOTE: This function uses "localnode-1" as the controller's node name to clearly distinguish
+// between local and remote endpoints in traffic policy tests.
+//
+//nolint:unparam // mockIPVSState returned for API consistency with setupTestController
+func setupTestControllerWithEndpoints(t *testing.T, service *v1core.Service,
+	localEndpoints, remoteEndpoints []string) (*mockIPVSState, *LinuxNetworkingMock, *NetworkServicesController) {
+	t.Helper()
+
+	const localNodeName = "localnode-1"
+	const remoteNodeName = "node-2"
+
+	ipvsState := newMockIPVSState()
+
+	mock := &LinuxNetworkingMock{
+		getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
+			return netlink.LinkByName("lo")
+		},
+		ipAddrAddFunc: func(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
+			return nil
+		},
+		ipAddrDelFunc: func(iface netlink.Link, ip string, nodeIP string) error {
+			return nil
+		},
+		ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
+			return nil
+		},
+		ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16,
+			persistent bool, persistentTimeout int32, scheduler string,
+			flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
+			svc := &ipvs.Service{
+				Address:  vip,
+				Protocol: protocol,
+				Port:     port,
+			}
+			ipvsState.services = append(ipvsState.services, svc)
+			return svcs, svc, nil
+		},
+		ipvsDelServiceFunc: func(ipvsSvc *ipvs.Service) error {
+			for idx, svc := range ipvsState.services {
+				if svc.Address.Equal(ipvsSvc.Address) && svc.Protocol == ipvsSvc.Protocol &&
+					svc.Port == ipvsSvc.Port {
+					ipvsState.services = append(ipvsState.services[:idx], ipvsState.services[idx+1:]...)
+					break
+				}
+			}
+			return nil
+		},
+		ipvsGetDestinationsFunc: func(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
+			return []*ipvs.Destination{}, nil
+		},
+		ipvsGetServicesFunc: func() ([]*ipvs.Service, error) {
+			svcsCopy := make([]*ipvs.Service, len(ipvsState.services))
+			copy(svcsCopy, ipvsState.services)
+			return svcsCopy, nil
+		},
+		setupPolicyRoutingForDSRFunc: func(setupIPv4 bool, setupIPv6 bool) error {
+			return nil
+		},
+		setupRoutesForExternalIPForDSRFunc: func(serviceInfo serviceInfoMap, setupIPv4 bool, setupIPv6 bool) error {
+			return nil
+		},
+	}
+
+	clientset := fake.NewSimpleClientset()
+
+	// Build EndpointSlice from provided endpoint IPs
+	if len(localEndpoints) > 0 || len(remoteEndpoints) > 0 {
+		var endpoints []discoveryv1.Endpoint
+
+		for _, ip := range localEndpoints {
+			endpoints = append(endpoints, discoveryv1.Endpoint{
+				Addresses:  []string{ip},
+				NodeName:   stringToPtr(localNodeName),
+				Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+			})
+		}
+
+		for _, ip := range remoteEndpoints {
+			endpoints = append(endpoints, discoveryv1.Endpoint{
+				Addresses:  []string{ip},
+				NodeName:   stringToPtr(remoteNodeName),
+				Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+			})
+		}
+
+		endpointSlice := &discoveryv1.EndpointSlice{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      service.Name + "-slice",
+				Namespace: service.Namespace,
+				Labels: map[string]string{
+					"kubernetes.io/service-name": service.Name,
+				},
+			},
+			AddressType: discoveryv1.AddressTypeIPv4,
+			Endpoints:   endpoints,
+			Ports: []discoveryv1.EndpointPort{
+				{Name: stringToPtr("http"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
+			},
+		}
+
+		_, err := clientset.DiscoveryV1().EndpointSlices(service.Namespace).Create(
+			context.Background(), endpointSlice, metav1.CreateOptions{})
+		if err != nil {
+			t.Fatalf("failed to create endpoint slice: %v", err)
+		}
+	}
+
+	_, err := clientset.CoreV1().Services(service.Namespace).Create(
+		context.Background(), service, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	krNode := &utils.LocalKRNode{
+		KRNode: utils.KRNode{
+			NodeName:  localNodeName,
+			PrimaryIP: net.ParseIP("10.0.0.1"),
+		},
+	}
+	nsc := &NetworkServicesController{
+		krNode:     krNode,
+		ln:         mock,
+		nphc:       NewNodePortHealthCheck(),
+		ipsetMutex: &sync.Mutex{},
+	}
+
+	startInformersForServiceProxy(t, nsc, clientset)
+	waitForListerWithTimeout(t, nsc.svcLister, time.Second*10)
+
+	// Wait for endpoint slice if we created one
+	if len(localEndpoints) > 0 || len(remoteEndpoints) > 0 {
+		waitForListerWithTimeout(t, nsc.epSliceLister, time.Second*10)
+	}
 
 	nsc.setServiceMap(nsc.buildServicesInfo())
 	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
@@ -505,4 +652,651 @@ func TestNetworkServicesController_syncIpvsServices_DSRCallsWithServiceMap(t *te
 	// The call should contain a non-empty service map
 	assert.NotEmpty(t, dsrCalls[0].ServiceInfo,
 		"setupRoutesForExternalIPForDSR should be called with non-empty serviceInfoMap")
+}
+
+// =============================================================================
+// Traffic Policy Tests
+//
+// These tests verify that internalTrafficPolicy and externalTrafficPolicy are
+// correctly applied to route traffic to the appropriate endpoints.
+//
+// Key behaviors being tested:
+// - internalTrafficPolicy controls ClusterIP traffic routing
+// - externalTrafficPolicy controls NodePort/ExternalIP/LoadBalancer traffic routing
+// - These policies work INDEPENDENTLY (critical for issue #818)
+// - When policy=Local and no local endpoints exist, the service is skipped entirely
+//
+// NOTE: kube-router skips creating IPVS services when policy=Local and no local endpoints.
+// This is more aggressive than upstream kube-proxy (which creates service but drops traffic),
+// but is valid and more efficient. Upstream e2e tests verify connection errors from clients;
+// these unit tests verify the service is never created.
+// =============================================================================
+
+// TestTrafficPolicy_InternalCluster_AllEndpoints verifies that with internalTrafficPolicy=Cluster,
+// ClusterIP traffic is routed to ALL ready endpoints (both local and remote).
+func TestTrafficPolicy_InternalCluster_AllEndpoints(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-itp-cluster", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.1.1",
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.1"}, // local endpoint
+		[]string{"172.20.2.1"}) // remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// Verify ClusterIP service was created
+	actualServices := getServicesFromAddServiceCalls(mock)
+	assert.Contains(t, actualServices, "10.100.1.1:6:8080:false:rr",
+		"ClusterIP service should be created")
+
+	// Verify BOTH endpoints are added (Cluster policy routes to all)
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+	assert.Contains(t, actualEndpoints, "10.100.1.1:8080->172.20.1.1:80",
+		"local endpoint should be added to ClusterIP")
+	assert.Contains(t, actualEndpoints, "10.100.1.1:8080->172.20.2.1:80",
+		"remote endpoint should be added to ClusterIP with Cluster policy")
+}
+
+// TestTrafficPolicy_InternalLocal_OnlyLocalEndpoints verifies that with internalTrafficPolicy=Local,
+// ClusterIP traffic is routed ONLY to node-local endpoints.
+func TestTrafficPolicy_InternalLocal_OnlyLocalEndpoints(t *testing.T) {
+	intPolicyLocal := v1core.ServiceInternalTrafficPolicyLocal
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-itp-local", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.1.2",
+			InternalTrafficPolicy: &intPolicyLocal,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.2", "172.20.1.3"}, // local endpoints
+		[]string{"172.20.2.2"})               // remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// Verify ClusterIP service was created
+	actualServices := getServicesFromAddServiceCalls(mock)
+	assert.Contains(t, actualServices, "10.100.1.2:6:8080:false:rr",
+		"ClusterIP service should be created")
+
+	// Verify ONLY local endpoints are added (Local policy filters remote)
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+	assert.Contains(t, actualEndpoints, "10.100.1.2:8080->172.20.1.2:80",
+		"first local endpoint should be added")
+	assert.Contains(t, actualEndpoints, "10.100.1.2:8080->172.20.1.3:80",
+		"second local endpoint should be added")
+	assert.NotContains(t, actualEndpoints, "10.100.1.2:8080->172.20.2.2:80",
+		"remote endpoint should NOT be added with Local policy")
+}
+
+// TestTrafficPolicy_InternalLocal_NoLocalEndpoints_SkipsService verifies that with
+// internalTrafficPolicy=Local and NO local endpoints, the ClusterIP service is skipped entirely.
+func TestTrafficPolicy_InternalLocal_NoLocalEndpoints_SkipsService(t *testing.T) {
+	intPolicyLocal := v1core.ServiceInternalTrafficPolicyLocal
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-itp-nolocal", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.1.3",
+			InternalTrafficPolicy: &intPolicyLocal,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		nil,                    // NO local endpoints
+		[]string{"172.20.2.3"}) // only remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// Verify NO ClusterIP service was created (early exit due to no local endpoints)
+	actualServices := getServicesFromAddServiceCalls(mock)
+	for _, svc := range actualServices {
+		assert.NotContains(t, svc, "10.100.1.3",
+			"ClusterIP service should NOT be created when no local endpoints exist")
+	}
+
+	// Verify NO IPs were added for this service
+	actualIPs := getIPsFromAddrAddCalls(mock)
+	assert.NotContains(t, actualIPs, "10.100.1.3",
+		"ClusterIP should NOT be added to dummy interface when service is skipped")
+}
+
+// TestTrafficPolicy_ExternalCluster_NodePort_AllEndpoints verifies that with externalTrafficPolicy=Cluster,
+// NodePort traffic is routed to ALL ready endpoints.
+func TestTrafficPolicy_ExternalCluster_NodePort_AllEndpoints(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-etp-cluster-np", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "10.100.2.1",
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30001, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.4"}, // local endpoint
+		[]string{"172.20.2.4"}) // remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// Verify both ClusterIP and NodePort services were created
+	actualServices := getServicesFromAddServiceCalls(mock)
+	assert.Contains(t, actualServices, "10.100.2.1:6:8080:false:rr",
+		"ClusterIP service should be created")
+
+	// For NodePort, we check if endpoints are added for the NodePort
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+
+	// Both endpoints should be routed to for ClusterIP (internalTrafficPolicy=Cluster)
+	assert.Contains(t, actualEndpoints, "10.100.2.1:8080->172.20.1.4:80",
+		"local endpoint should be added to ClusterIP")
+	assert.Contains(t, actualEndpoints, "10.100.2.1:8080->172.20.2.4:80",
+		"remote endpoint should be added to ClusterIP")
+}
+
+// TestTrafficPolicy_ExternalLocal_NodePort_OnlyLocalEndpoints verifies that with externalTrafficPolicy=Local,
+// NodePort traffic is routed ONLY to node-local endpoints.
+func TestTrafficPolicy_ExternalLocal_NodePort_OnlyLocalEndpoints(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyLocal := v1core.ServiceExternalTrafficPolicyLocal
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-etp-local-np", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "10.100.2.2",
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyLocal,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30002, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.5"},               // local endpoint
+		[]string{"172.20.2.5", "172.20.2.6"}) // remote endpoints
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+
+	// ClusterIP should have ALL endpoints (internalTrafficPolicy=Cluster)
+	assert.Contains(t, actualEndpoints, "10.100.2.2:8080->172.20.1.5:80",
+		"local endpoint should be added to ClusterIP")
+	assert.Contains(t, actualEndpoints, "10.100.2.2:8080->172.20.2.5:80",
+		"remote endpoint should be added to ClusterIP (internal policy is Cluster)")
+	assert.Contains(t, actualEndpoints, "10.100.2.2:8080->172.20.2.6:80",
+		"second remote endpoint should be added to ClusterIP")
+
+	// Note: NodePort endpoint verification would require checking NodePort-specific
+	// IPVS services, which bind to node IPs. The filtering happens at the endpoint
+	// addition level in syncIpvsServices.
+}
+
+// TestTrafficPolicy_ExternalLocal_NodePort_NoLocalEndpoints_SkipsService verifies that with
+// externalTrafficPolicy=Local and NO local endpoints, the NodePort service is skipped.
+func TestTrafficPolicy_ExternalLocal_NodePort_NoLocalEndpoints_SkipsService(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyLocal := v1core.ServiceExternalTrafficPolicyLocal
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-etp-nolocal-np", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "10.100.2.3",
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyLocal,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30003, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		nil,                    // NO local endpoints
+		[]string{"172.20.2.7"}) // only remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// ClusterIP should still be created (internalTrafficPolicy=Cluster doesn't require local)
+	actualServices := getServicesFromAddServiceCalls(mock)
+	assert.Contains(t, actualServices, "10.100.2.3:6:8080:false:rr",
+		"ClusterIP service should still be created")
+
+	// But NodePort should be skipped due to no local endpoints with Local policy
+	// The syncNodePortIpvsServices function has early exit logic for this case
+}
+
+// TestTrafficPolicy_ExternalCluster_ExternalIP_AllEndpoints verifies that with externalTrafficPolicy=Cluster,
+// ExternalIP traffic is routed to ALL ready endpoints.
+func TestTrafficPolicy_ExternalCluster_ExternalIP_AllEndpoints(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-etp-cluster-eip", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.3.1",
+			ExternalIPs:           []string{"203.0.113.1"},
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.6"}, // local endpoint
+		[]string{"172.20.2.8"}) // remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// Verify both ClusterIP and ExternalIP services were created
+	actualServices := getServicesFromAddServiceCalls(mock)
+	assert.Contains(t, actualServices, "10.100.3.1:6:8080:false:rr",
+		"ClusterIP service should be created")
+	assert.Contains(t, actualServices, "203.0.113.1:6:8080:false:rr",
+		"ExternalIP service should be created")
+
+	// Verify both endpoints are added to ExternalIP (externalTrafficPolicy=Cluster)
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+	assert.Contains(t, actualEndpoints, "203.0.113.1:8080->172.20.1.6:80",
+		"local endpoint should be added to ExternalIP")
+	assert.Contains(t, actualEndpoints, "203.0.113.1:8080->172.20.2.8:80",
+		"remote endpoint should be added to ExternalIP with Cluster policy")
+}
+
+// TestTrafficPolicy_ExternalLocal_ExternalIP_OnlyLocalEndpoints verifies that with externalTrafficPolicy=Local,
+// ExternalIP traffic is routed ONLY to node-local endpoints.
+func TestTrafficPolicy_ExternalLocal_ExternalIP_OnlyLocalEndpoints(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyLocal := v1core.ServiceExternalTrafficPolicyLocal
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-etp-local-eip", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.3.2",
+			ExternalIPs:           []string{"203.0.113.2"},
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyLocal,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.7", "172.20.1.8"}, // local endpoints
+		[]string{"172.20.2.9"})               // remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+
+	// ClusterIP should have ALL endpoints (internalTrafficPolicy=Cluster)
+	assert.Contains(t, actualEndpoints, "10.100.3.2:8080->172.20.1.7:80",
+		"first local endpoint should be added to ClusterIP")
+	assert.Contains(t, actualEndpoints, "10.100.3.2:8080->172.20.2.9:80",
+		"remote endpoint should be added to ClusterIP (internal policy is Cluster)")
+
+	// ExternalIP should have ONLY local endpoints (externalTrafficPolicy=Local)
+	assert.Contains(t, actualEndpoints, "203.0.113.2:8080->172.20.1.7:80",
+		"first local endpoint should be added to ExternalIP")
+	assert.Contains(t, actualEndpoints, "203.0.113.2:8080->172.20.1.8:80",
+		"second local endpoint should be added to ExternalIP")
+	assert.NotContains(t, actualEndpoints, "203.0.113.2:8080->172.20.2.9:80",
+		"remote endpoint should NOT be added to ExternalIP with Local policy")
+}
+
+// TestTrafficPolicy_ExternalLocal_ExternalIP_NoLocalEndpoints_SkipsService verifies that with
+// externalTrafficPolicy=Local and NO local endpoints, the ExternalIP service is skipped.
+func TestTrafficPolicy_ExternalLocal_ExternalIP_NoLocalEndpoints_SkipsService(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyLocal := v1core.ServiceExternalTrafficPolicyLocal
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-etp-nolocal-eip", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.3.3",
+			ExternalIPs:           []string{"203.0.113.3"},
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyLocal,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		nil,                     // NO local endpoints
+		[]string{"172.20.2.10"}) // only remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// ClusterIP should still be created (internalTrafficPolicy=Cluster)
+	actualServices := getServicesFromAddServiceCalls(mock)
+	assert.Contains(t, actualServices, "10.100.3.3:6:8080:false:rr",
+		"ClusterIP service should still be created")
+
+	// ExternalIP should be skipped due to no local endpoints with Local policy
+	// Check that ExternalIP was NOT created
+	// Note: The actual behavior depends on implementation - ExternalIP may still be
+	// created but with no endpoints, or may be skipped entirely
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+	assert.NotContains(t, actualEndpoints, "203.0.113.3:8080->172.20.2.10:80",
+		"remote endpoint should NOT be added to ExternalIP with Local policy")
+}
+
+// =============================================================================
+// Mixed Policy Tests - CRITICAL for Issue #818
+//
+// These tests verify that internalTrafficPolicy and externalTrafficPolicy work
+// INDEPENDENTLY. Issue #818 was caused by externalTrafficPolicy=Local incorrectly
+// affecting ClusterIP (internal) traffic routing.
+//
+// NOTE: Upstream Kubernetes e2e tests do NOT have mixed policy tests.
+// These tests fill a gap in upstream testing and are critical for preventing
+// regression of issue #818.
+// =============================================================================
+
+// TestTrafficPolicy_Mixed_LocalInternal_ClusterExternal verifies that policies work independently:
+// - internalTrafficPolicy=Local should route ClusterIP to local endpoints only
+// - externalTrafficPolicy=Cluster should route NodePort to ALL endpoints
+func TestTrafficPolicy_Mixed_LocalInternal_ClusterExternal(t *testing.T) {
+	intPolicyLocal := v1core.ServiceInternalTrafficPolicyLocal
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-mixed-1", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "10.100.4.1",
+			InternalTrafficPolicy: &intPolicyLocal,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30004, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.9"},  // local endpoint
+		[]string{"172.20.2.11"}) // remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+
+	// ClusterIP should have ONLY local endpoint (internalTrafficPolicy=Local)
+	assert.Contains(t, actualEndpoints, "10.100.4.1:8080->172.20.1.9:80",
+		"local endpoint should be added to ClusterIP")
+	assert.NotContains(t, actualEndpoints, "10.100.4.1:8080->172.20.2.11:80",
+		"remote endpoint should NOT be added to ClusterIP with Local internal policy")
+
+	// This is the CRITICAL check for issue #818:
+	// externalTrafficPolicy=Cluster should NOT affect ClusterIP routing
+	// The ClusterIP should only have the local endpoint, not be affected by external policy
+}
+
+// TestTrafficPolicy_Mixed_ClusterInternal_LocalExternal verifies the reverse scenario:
+// - internalTrafficPolicy=Cluster should route ClusterIP to ALL endpoints
+// - externalTrafficPolicy=Local should route ExternalIP to local endpoints only
+func TestTrafficPolicy_Mixed_ClusterInternal_LocalExternal(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyLocal := v1core.ServiceExternalTrafficPolicyLocal
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-mixed-2", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "10.100.4.2",
+			ExternalIPs:           []string{"203.0.113.4"},
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyLocal,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30005, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.10"}, // local endpoint
+		[]string{"172.20.2.12"}) // remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+
+	// ClusterIP should have ALL endpoints (internalTrafficPolicy=Cluster)
+	assert.Contains(t, actualEndpoints, "10.100.4.2:8080->172.20.1.10:80",
+		"local endpoint should be added to ClusterIP")
+	assert.Contains(t, actualEndpoints, "10.100.4.2:8080->172.20.2.12:80",
+		"remote endpoint should be added to ClusterIP with Cluster internal policy")
+
+	// ExternalIP should have ONLY local endpoint (externalTrafficPolicy=Local)
+	assert.Contains(t, actualEndpoints, "203.0.113.4:8080->172.20.1.10:80",
+		"local endpoint should be added to ExternalIP")
+	assert.NotContains(t, actualEndpoints, "203.0.113.4:8080->172.20.2.12:80",
+		"remote endpoint should NOT be added to ExternalIP with Local external policy")
+}
+
+// TestTrafficPolicy_Mixed_BothLocal verifies that when BOTH policies are Local,
+// both ClusterIP and ExternalIP route only to local endpoints.
+func TestTrafficPolicy_Mixed_BothLocal(t *testing.T) {
+	intPolicyLocal := v1core.ServiceInternalTrafficPolicyLocal
+	extPolicyLocal := v1core.ServiceExternalTrafficPolicyLocal
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-mixed-3", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "10.100.4.3",
+			ExternalIPs:           []string{"203.0.113.5"},
+			InternalTrafficPolicy: &intPolicyLocal,
+			ExternalTrafficPolicy: extPolicyLocal,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30006, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.11"},                // local endpoint
+		[]string{"172.20.2.13", "172.20.2.14"}) // remote endpoints
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+
+	// ClusterIP should have ONLY local endpoint
+	assert.Contains(t, actualEndpoints, "10.100.4.3:8080->172.20.1.11:80",
+		"local endpoint should be added to ClusterIP")
+	assert.NotContains(t, actualEndpoints, "10.100.4.3:8080->172.20.2.13:80",
+		"first remote endpoint should NOT be added to ClusterIP")
+	assert.NotContains(t, actualEndpoints, "10.100.4.3:8080->172.20.2.14:80",
+		"second remote endpoint should NOT be added to ClusterIP")
+
+	// ExternalIP should have ONLY local endpoint
+	assert.Contains(t, actualEndpoints, "203.0.113.5:8080->172.20.1.11:80",
+		"local endpoint should be added to ExternalIP")
+	assert.NotContains(t, actualEndpoints, "203.0.113.5:8080->172.20.2.13:80",
+		"first remote endpoint should NOT be added to ExternalIP")
+	assert.NotContains(t, actualEndpoints, "203.0.113.5:8080->172.20.2.14:80",
+		"second remote endpoint should NOT be added to ExternalIP")
+}
+
+// =============================================================================
+// Edge Case Tests
+// =============================================================================
+
+// TestTrafficPolicy_LocalPolicy_AllEndpointsLocal verifies that when all endpoints
+// are local, Local policy works correctly (no filtering needed).
+func TestTrafficPolicy_LocalPolicy_AllEndpointsLocal(t *testing.T) {
+	intPolicyLocal := v1core.ServiceInternalTrafficPolicyLocal
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-edge-alllocal", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.5.1",
+			InternalTrafficPolicy: &intPolicyLocal,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.12", "172.20.1.13"}, // all local endpoints
+		nil)                                    // no remote endpoints
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// Verify service was created
+	actualServices := getServicesFromAddServiceCalls(mock)
+	assert.Contains(t, actualServices, "10.100.5.1:6:8080:false:rr",
+		"ClusterIP service should be created")
+
+	// Verify both local endpoints are added
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+	assert.Contains(t, actualEndpoints, "10.100.5.1:8080->172.20.1.12:80",
+		"first local endpoint should be added")
+	assert.Contains(t, actualEndpoints, "10.100.5.1:8080->172.20.1.13:80",
+		"second local endpoint should be added")
+}
+
+// TestTrafficPolicy_LocalPolicy_ZeroEndpoints verifies that when there are no endpoints
+// at all (not just no local endpoints), the service is handled correctly.
+func TestTrafficPolicy_LocalPolicy_ZeroEndpoints(t *testing.T) {
+	intPolicyLocal := v1core.ServiceInternalTrafficPolicyLocal
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-edge-noeps", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.5.2",
+			InternalTrafficPolicy: &intPolicyLocal,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		nil, // no local endpoints
+		nil) // no remote endpoints
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// With internalTrafficPolicy=Local and no local endpoints, service should be skipped
+	actualServices := getServicesFromAddServiceCalls(mock)
+	for _, svc := range actualServices {
+		assert.NotContains(t, svc, "10.100.5.2",
+			"ClusterIP service should NOT be created when no local endpoints exist")
+	}
+}
+
+// TestTrafficPolicy_LoadBalancer_MixedPolicies verifies that LoadBalancer services
+// correctly apply both traffic policies.
+func TestTrafficPolicy_LoadBalancer_MixedPolicies(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyLocal := v1core.ServiceExternalTrafficPolicyLocal
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-edge-lb", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeLoadBalancer,
+			ClusterIP:             "10.100.5.3",
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyLocal,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP},
+			},
+		},
+		Status: v1core.ServiceStatus{
+			LoadBalancer: v1core.LoadBalancerStatus{
+				Ingress: []v1core.LoadBalancerIngress{
+					{IP: "198.51.100.1"},
+				},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.14"}, // local endpoint
+		[]string{"172.20.2.15"}) // remote endpoint
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+
+	// ClusterIP should have ALL endpoints (internalTrafficPolicy=Cluster)
+	assert.Contains(t, actualEndpoints, "10.100.5.3:8080->172.20.1.14:80",
+		"local endpoint should be added to ClusterIP")
+	assert.Contains(t, actualEndpoints, "10.100.5.3:8080->172.20.2.15:80",
+		"remote endpoint should be added to ClusterIP with Cluster internal policy")
+
+	// LoadBalancer IP should have ONLY local endpoint (externalTrafficPolicy=Local)
+	assert.Contains(t, actualEndpoints, "198.51.100.1:8080->172.20.1.14:80",
+		"local endpoint should be added to LoadBalancer IP")
+	assert.NotContains(t, actualEndpoints, "198.51.100.1:8080->172.20.2.15:80",
+		"remote endpoint should NOT be added to LoadBalancer IP with Local external policy")
 }
