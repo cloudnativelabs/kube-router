@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
+	"testing"
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
 	"github.com/vishvananda/netlink"
 	v1core "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -37,12 +38,15 @@ func (lnm *LinuxNetworkingMockImpl) getKubeDummyInterface() (netlink.Link, error
 	iface, err := netlink.LinkByName("lo")
 	return iface, err
 }
+
 func (lnm *LinuxNetworkingMockImpl) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) error {
 	return nil
 }
+
 func (lnm *LinuxNetworkingMockImpl) setupRoutesForExternalIPForDSR(s serviceInfoMap, setupIPv4, setupIPv6 bool) error {
 	return nil
 }
+
 func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {
 	// need to return a copy, else if the caller does `range svcs` and then calls
 	// DelService (on the returned svcs reference), it'll skip the "next" element
@@ -50,12 +54,19 @@ func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {
 	copy(svcsCopy, lnm.ipvsSvcs)
 	return svcsCopy, nil
 }
+
 func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr, nodeIP string, addRouter bool) error {
 	return nil
 }
+
+func (lnm *LinuxNetworkingMockImpl) ipAddrDel(iface netlink.Link, ip, nodeIP string) error {
+	return nil
+}
+
 func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 	return nil
 }
+
 func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16,
 	persistent bool, persistentTimeout int32, scheduler string,
 	flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
@@ -67,6 +78,7 @@ func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net
 	lnm.ipvsSvcs = append(lnm.ipvsSvcs, svc)
 	return svcs, svc, nil
 }
+
 func (lnm *LinuxNetworkingMockImpl) ipvsDelService(ipvsSvc *ipvs.Service) error {
 	for idx, svc := range lnm.ipvsSvcs {
 		if svc.Address.Equal(ipvsSvc.Address) && svc.Protocol == ipvsSvc.Protocol && svc.Port == ipvsSvc.Port {
@@ -76,26 +88,19 @@ func (lnm *LinuxNetworkingMockImpl) ipvsDelService(ipvsSvc *ipvs.Service) error 
 	}
 	return nil
 }
+
 func (lnm *LinuxNetworkingMockImpl) ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
 	return []*ipvs.Destination{}, nil
 }
 
-func fatalf(format string, a ...interface{}) {
-	msg := fmt.Sprintf("FATAL: "+format+"\n", a...)
-	Fail(msg)
-}
-
-// There's waitForListerWithTimeout in network_routes_controller_test.go
-// that receives a 2nd *testing argument - mixing testing and ginkgo
-// is discouraged (latter uses own GinkgoWriter), so need to create
-// our own here.
-func waitForListerWithTimeoutG(lister cache.Indexer, timeout time.Duration) {
+func waitForListerWithTimeout(t *testing.T, lister cache.Indexer, timeout time.Duration) {
+	t.Helper()
 	tick := time.Tick(100 * time.Millisecond)
 	timeoutCh := time.After(timeout)
 	for {
 		select {
 		case <-timeoutCh:
-			fatalf("timeout exceeded waiting for service lister to fill cache")
+			t.Fatalf("timeout exceeded waiting for lister to fill cache")
 		case <-tick:
 			if len(lister.List()) != 0 {
 				return
@@ -104,409 +109,8 @@ func waitForListerWithTimeoutG(lister cache.Indexer, timeout time.Duration) {
 	}
 }
 
-type TestCaseSvcEPs struct {
-	existingService  *v1core.Service
-	existingEndpoint *discoveryv1.EndpointSlice
-	nodeHasEndpoints bool
-}
-
-var _ = Describe("NetworkServicesController", func() {
-	var lnm *LinuxNetworkingMockImpl
-	var testcase *TestCaseSvcEPs
-	var mockedLinuxNetworking *LinuxNetworkingMock
-	var nsc *NetworkServicesController
-	BeforeEach(func() {
-		lnm = NewLinuxNetworkMock()
-		mockedLinuxNetworking = &LinuxNetworkingMock{
-			getKubeDummyInterfaceFunc:          lnm.getKubeDummyInterface,
-			ipAddrAddFunc:                      lnm.ipAddrAdd,
-			ipvsAddServerFunc:                  lnm.ipvsAddServer,
-			ipvsAddServiceFunc:                 lnm.ipvsAddService,
-			ipvsDelServiceFunc:                 lnm.ipvsDelService,
-			ipvsGetDestinationsFunc:            lnm.ipvsGetDestinations,
-			ipvsGetServicesFunc:                lnm.ipvsGetServices,
-			setupPolicyRoutingForDSRFunc:       lnm.setupPolicyRoutingForDSR,
-			setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSR,
-		}
-
-	})
-	JustBeforeEach(func() {
-		clientset := fake.NewSimpleClientset()
-
-		_, err := clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), testcase.existingEndpoint, metav1.CreateOptions{})
-		if err != nil {
-			fatalf("failed to create existing endpoints: %v", err)
-		}
-
-		_, err = clientset.CoreV1().Services("default").Create(context.Background(), testcase.existingService, metav1.CreateOptions{})
-		if err != nil {
-			fatalf("failed to create existing services: %v", err)
-		}
-
-		krNode := &utils.LocalKRNode{
-			KRNode: utils.KRNode{
-				NodeName:  "node-1",
-				PrimaryIP: net.ParseIP("10.0.0.0"),
-			},
-		}
-		nsc = &NetworkServicesController{
-			krNode: krNode,
-			ln:     mockedLinuxNetworking,
-		}
-
-		startInformersForServiceProxy(nsc, clientset)
-		waitForListerWithTimeoutG(nsc.svcLister, time.Second*10)
-		waitForListerWithTimeoutG(nsc.epSliceLister, time.Second*10)
-
-		nsc.setServiceMap(nsc.buildServicesInfo())
-		nsc.endpointsMap = nsc.buildEndpointSliceInfo()
-	})
-	Context("service no endpoints with externalIPs", func() {
-		var fooSvc1, fooSvc2 *ipvs.Service
-		var syncErr error
-		BeforeEach(func() {
-			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "svc-1"},
-					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
-							{Name: "port-1", Port: 8080, Protocol: "TCP"},
-						},
-					},
-				},
-				&discoveryv1.EndpointSlice{},
-				false,
-			}
-		})
-		JustBeforeEach(func() {
-			// pre-inject some foo ipvs Service to verify its deletion
-			_, fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, 0, "rr",
-				schedFlags{})
-			_, fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, 0, "rr",
-				schedFlags{true, true, false})
-			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
-		})
-		It("Should have called syncIpvsServices OK", func() {
-			Expect(syncErr).To(Succeed())
-		})
-		It("Should have called setupPolicyRoutingForDSR", func() {
-			Expect(
-				mockedLinuxNetworking.setupPolicyRoutingForDSRCalls()).To(
-				HaveLen(1))
-		})
-		It("Should have called getKubeDummyInterface", func() {
-			Expect(
-				mockedLinuxNetworking.getKubeDummyInterfaceCalls()).To(
-				HaveLen(1))
-		})
-		It("Should have called setupRoutesForExternalIPForDSR with serviceInfoMap", func() {
-			Expect(
-				mockedLinuxNetworking.setupRoutesForExternalIPForDSRCalls()).To(
-				ContainElement(
-					struct{ In1 serviceInfoMap }{In1: nsc.getServiceMap()}))
-		})
-		It("Should have called ipAddrAdd for ClusterIP and ExternalIPs", func() {
-			Expect((func() []string {
-				ret := []string{}
-				for _, addr := range mockedLinuxNetworking.ipAddrAddCalls() {
-					ret = append(ret, addr.IP)
-				}
-				return ret
-			})()).To(
-				ConsistOf("10.0.0.1", "1.1.1.1", "2.2.2.2"))
-		})
-		It("Should have called ipvsDelService for pre-existing fooSvc1 fooSvc2", func() {
-			Expect(fmt.Sprintf("%v", mockedLinuxNetworking.ipvsDelServiceCalls())).To(
-				Equal(
-					fmt.Sprintf("[{%p} {%p}]", fooSvc1, fooSvc2)))
-		})
-		It("Should have called ipvsAddService for ClusterIP and ExternalIPs", func() {
-			Expect(func() []string {
-				ret := []string{}
-				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
-					ret = append(ret, fmt.Sprintf("%v:%v:%v:%v:%v",
-						args.Vip, args.Protocol, args.Port,
-						args.Persistent, args.Scheduler))
-				}
-				return ret
-			}()).To(
-				ConsistOf(
-					"10.0.0.1:6:8080:false:rr",
-					"1.1.1.1:6:8080:false:rr",
-					"2.2.2.2:6:8080:false:rr"))
-		})
-	})
-	Context("service no endpoints with loadbalancer IPs", func() {
-		var syncErr error
-		BeforeEach(func() {
-			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
-					},
-					Spec: v1core.ServiceSpec{
-						Type:        "LoadBalancer",
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
-							{Name: "port-1", Protocol: "TCP", Port: 8080},
-						},
-					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
-								{IP: "10.255.0.1"},
-								{IP: "10.255.0.2"},
-							},
-						},
-					},
-				},
-				&discoveryv1.EndpointSlice{},
-				false,
-			}
-		})
-		JustBeforeEach(func() {
-			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
-		})
-		It("Should have called syncIpvsServices OK", func() {
-			Expect(syncErr).To(Succeed())
-		})
-		It("Should have called ipAddrAdd for ClusterIP, ExternalIPs and LoadBalancerIPs", func() {
-			Expect((func() []string {
-				ret := []string{}
-				for _, addr := range mockedLinuxNetworking.ipAddrAddCalls() {
-					ret = append(ret, addr.IP)
-				}
-				return ret
-			})()).To(
-				ConsistOf(
-					"10.0.0.1", "1.1.1.1", "2.2.2.2", "10.255.0.1", "10.255.0.2"))
-		})
-		It("Should have called ipvsAddService for ClusterIP, ExternalIPs and LoadBalancerIPs", func() {
-			Expect(func() []string {
-				ret := []string{}
-				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
-					ret = append(ret, fmt.Sprintf("%v:%v:%v:%v:%v",
-						args.Vip, args.Protocol, args.Port,
-						args.Persistent, args.Scheduler))
-				}
-				return ret
-			}()).To(
-				ConsistOf(
-					"10.0.0.1:6:8080:false:rr",
-					"1.1.1.1:6:8080:false:rr",
-					"2.2.2.2:6:8080:false:rr",
-					"10.255.0.1:6:8080:false:rr",
-					"10.255.0.2:6:8080:false:rr"))
-		})
-	})
-	Context("service no endpoints with loadbalancer IPs with skiplbips annotation", func() {
-		var syncErr error
-		BeforeEach(func() {
-			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
-						Annotations: map[string]string{
-							"kube-router.io/service.skiplbips": "true",
-						},
-					},
-					Spec: v1core.ServiceSpec{
-						Type:        "LoadBalancer",
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
-							{Name: "port-1", Protocol: "TCP", Port: 8080},
-						},
-					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
-								{IP: "10.255.0.1"},
-								{IP: "10.255.0.2"},
-							},
-						},
-					},
-				},
-				&discoveryv1.EndpointSlice{},
-				false,
-			}
-		})
-		JustBeforeEach(func() {
-			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
-		})
-		It("Should have called syncIpvsServices OK", func() {
-			Expect(syncErr).To(Succeed())
-		})
-		It("Should have called ipAddrAdd only for ClusterIP and ExternalIPs", func() {
-			Expect((func() []string {
-				ret := []string{}
-				for _, addr := range mockedLinuxNetworking.ipAddrAddCalls() {
-					ret = append(ret, addr.IP)
-				}
-				return ret
-			})()).To(
-				ConsistOf(
-					"10.0.0.1", "1.1.1.1", "2.2.2.2"))
-		})
-		It("Should have called ipvsAddService only for ClusterIP and ExternalIPs", func() {
-			Expect(func() []string {
-				ret := []string{}
-				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
-					ret = append(ret, fmt.Sprintf("%v:%v:%v:%v:%v",
-						args.Vip, args.Protocol, args.Port,
-						args.Persistent, args.Scheduler))
-				}
-				return ret
-			}()).To(
-				ConsistOf(
-					"10.0.0.1:6:8080:false:rr",
-					"1.1.1.1:6:8080:false:rr",
-					"2.2.2.2:6:8080:false:rr"))
-		})
-	})
-	Context("service no endpoints with loadbalancer without IPs", func() {
-		var syncErr error
-		BeforeEach(func() {
-			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "svc-1",
-					},
-					Spec: v1core.ServiceSpec{
-						Type:        "LoadBalancer",
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
-							{Name: "port-1", Protocol: "TCP", Port: 8080},
-						},
-					},
-					Status: v1core.ServiceStatus{
-						LoadBalancer: v1core.LoadBalancerStatus{
-							Ingress: []v1core.LoadBalancerIngress{
-								{Hostname: "foo-bar.zone.elb.example.com"},
-							},
-						},
-					},
-				},
-				&discoveryv1.EndpointSlice{},
-				false,
-			}
-		})
-		JustBeforeEach(func() {
-			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
-		})
-		It("Should have called syncIpvsServices OK", func() {
-			Expect(syncErr).To(Succeed())
-		})
-		It("Should have called ipAddrAdd only for ClusterIP and ExternalIPs", func() {
-			Expect((func() []string {
-				ret := []string{}
-				for _, addr := range mockedLinuxNetworking.ipAddrAddCalls() {
-					ret = append(ret, addr.IP)
-				}
-				return ret
-			})()).To(
-				ConsistOf(
-					"10.0.0.1", "1.1.1.1", "2.2.2.2"))
-		})
-		It("Should have properly ipvsAddService only for ClusterIP and ExternalIPs", func() {
-			Expect(func() []string {
-				ret := []string{}
-				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
-					ret = append(ret, fmt.Sprintf("%v:%v:%v:%v:%v",
-						args.Vip, args.Protocol, args.Port,
-						args.Persistent, args.Scheduler))
-				}
-				return ret
-			}()).To(
-				ConsistOf(
-					"10.0.0.1:6:8080:false:rr",
-					"1.1.1.1:6:8080:false:rr",
-					"2.2.2.2:6:8080:false:rr"))
-		})
-	})
-	Context("node has endpoints for service", func() {
-		var syncErr error
-		BeforeEach(func() {
-			testcase = &TestCaseSvcEPs{
-				&v1core.Service{
-					ObjectMeta: metav1.ObjectMeta{Name: "svc-1", Namespace: "default"},
-					Spec: v1core.ServiceSpec{
-						Type:        "ClusterIP",
-						ClusterIP:   "10.0.0.1",
-						ExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
-						Ports: []v1core.ServicePort{
-							{Name: "port-1", Protocol: "TCP", Port: 8080},
-						},
-					},
-				},
-				&discoveryv1.EndpointSlice{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "svc-1",
-						Namespace: "default",
-						Labels: map[string]string{
-							"kubernetes.io/service-name": "svc-1",
-						},
-					},
-					Endpoints: []discoveryv1.Endpoint{
-						{
-							Addresses: []string{"172.20.1.1"},
-							NodeName:  stringToPtr("node-1"),
-						},
-						{
-							Addresses: []string{"172.20.1.2"},
-							NodeName:  stringToPtr("node-2"),
-						},
-					},
-					Ports: []discoveryv1.EndpointPort{
-						{Name: stringToPtr("port-1"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
-					},
-				},
-				true,
-			}
-		})
-		JustBeforeEach(func() {
-			syncErr = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
-		})
-		It("Should have called syncIpvsServices OK", func() {
-			Expect(syncErr).To(Succeed())
-		})
-		It("Should have called AddServiceCalls for ClusterIP and ExternalIPs", func() {
-			Expect((func() []string {
-				ret := []string{}
-				for _, args := range mockedLinuxNetworking.ipvsAddServiceCalls() {
-					ret = append(ret, fmt.Sprintf("%v:%v:%v:%v:%v",
-						args.Vip, args.Protocol, args.Port,
-						args.Persistent, args.Scheduler))
-				}
-				return ret
-			})()).To(ConsistOf(
-				"10.0.0.1:6:8080:false:rr", "1.1.1.1:6:8080:false:rr", "2.2.2.2:6:8080:false:rr"))
-		})
-		It("Should have added proper Endpoints", func() {
-			Expect((func() []string {
-				ret := []string{}
-				for _, args := range mockedLinuxNetworking.ipvsAddServerCalls() {
-					svc := args.IpvsSvc
-					dst := args.IpvsDst
-					ret = append(ret, fmt.Sprintf("%v:%v->%v:%v",
-						svc.Address, svc.Port,
-						dst.Address, dst.Port))
-				}
-				return ret
-			})()).To(ConsistOf(
-				"10.0.0.1:8080->172.20.1.1:80", "1.1.1.1:8080->172.20.1.1:80", "2.2.2.2:8080->172.20.1.1:80",
-				"10.0.0.1:8080->172.20.1.2:80", "1.1.1.1:8080->172.20.1.2:80", "2.2.2.2:8080->172.20.1.2:80",
-			))
-		})
-	})
-})
-
-func startInformersForServiceProxy(nsc *NetworkServicesController, clientset kubernetes.Interface) {
+func startInformersForServiceProxy(t *testing.T, nsc *NetworkServicesController, clientset kubernetes.Interface) {
+	t.Helper()
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
 	epSliceInformer := informerFactory.Discovery().V1().EndpointSlices().Informer()
@@ -516,7 +120,7 @@ func startInformersForServiceProxy(nsc *NetworkServicesController, clientset kub
 		indexers.ServiceNameIndex: indexers.ServiceNameIndexFunc,
 	})
 	if err != nil {
-		fatalf("failed to add indexers to endpoint slice informer: %v", err)
+		t.Fatalf("failed to add indexers to endpoint slice informer: %v", err)
 	}
 
 	go informerFactory.Start(nil)
@@ -537,4 +141,392 @@ func int32ToPtr(i int32) *int32 {
 
 func protoToPtr(proto v1core.Protocol) *v1core.Protocol {
 	return &proto
+}
+
+func boolToPtr(b bool) *bool {
+	return &b
+}
+
+// setupTestController creates and initializes a NetworkServicesController for testing
+func setupTestController(t *testing.T, service *v1core.Service, endpointSlice *discoveryv1.EndpointSlice) (
+	*LinuxNetworkingMockImpl, *LinuxNetworkingMock, *NetworkServicesController) {
+	t.Helper()
+
+	lnm := NewLinuxNetworkMock()
+	mockedLinuxNetworking := &LinuxNetworkingMock{
+		getKubeDummyInterfaceFunc:          lnm.getKubeDummyInterface,
+		ipAddrAddFunc:                      lnm.ipAddrAdd,
+		ipAddrDelFunc:                      lnm.ipAddrDel,
+		ipvsAddServerFunc:                  lnm.ipvsAddServer,
+		ipvsAddServiceFunc:                 lnm.ipvsAddService,
+		ipvsDelServiceFunc:                 lnm.ipvsDelService,
+		ipvsGetDestinationsFunc:            lnm.ipvsGetDestinations,
+		ipvsGetServicesFunc:                lnm.ipvsGetServices,
+		setupPolicyRoutingForDSRFunc:       lnm.setupPolicyRoutingForDSR,
+		setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSR,
+	}
+
+	clientset := fake.NewSimpleClientset()
+
+	if endpointSlice != nil && endpointSlice.Name != "" {
+		_, err := clientset.DiscoveryV1().EndpointSlices("default").Create(
+			context.Background(), endpointSlice, metav1.CreateOptions{})
+		if err != nil {
+			t.Fatalf("failed to create endpoint slice: %v", err)
+		}
+	}
+
+	_, err := clientset.CoreV1().Services("default").Create(
+		context.Background(), service, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	krNode := &utils.LocalKRNode{
+		KRNode: utils.KRNode{
+			NodeName:  "node-1",
+			PrimaryIP: net.ParseIP("10.0.0.0"),
+		},
+	}
+	nsc := &NetworkServicesController{
+		krNode:     krNode,
+		ln:         mockedLinuxNetworking,
+		nphc:       NewNodePortHealthCheck(),
+		ipsetMutex: &sync.Mutex{},
+	}
+
+	startInformersForServiceProxy(t, nsc, clientset)
+	waitForListerWithTimeout(t, nsc.svcLister, time.Second*10)
+
+	nsc.setServiceMap(nsc.buildServicesInfo())
+	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
+
+	return lnm, mockedLinuxNetworking, nsc
+}
+
+// getIPsFromAddrAddCalls extracts IP addresses from ipAddrAdd mock calls
+func getIPsFromAddrAddCalls(mock *LinuxNetworkingMock) []string {
+	var ips []string
+	for _, call := range mock.ipAddrAddCalls() {
+		ips = append(ips, call.IP)
+	}
+	return ips
+}
+
+// getServicesFromAddServiceCalls formats ipvsAddService calls as strings for comparison
+func getServicesFromAddServiceCalls(mock *LinuxNetworkingMock) []string {
+	var services []string
+	for _, args := range mock.ipvsAddServiceCalls() {
+		services = append(services, fmt.Sprintf("%v:%v:%v:%v:%v",
+			args.Vip, args.Protocol, args.Port, args.Persistent, args.Scheduler))
+	}
+	return services
+}
+
+// getEndpointsFromAddServerCalls formats ipvsAddServer calls as strings for comparison
+func getEndpointsFromAddServerCalls(mock *LinuxNetworkingMock) []string {
+	var endpoints []string
+	for _, args := range mock.ipvsAddServerCalls() {
+		svc := args.IpvsSvc
+		dst := args.IpvsDst
+		endpoints = append(endpoints, fmt.Sprintf("%v:%v->%v:%v",
+			svc.Address, svc.Port, dst.Address, dst.Port))
+	}
+	return endpoints
+}
+
+func TestNetworkServicesController_syncIpvsServices(t *testing.T) {
+	// Default traffic policies used in tests
+	intTrafficPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extTrafficPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	tests := []struct {
+		name                     string
+		service                  *v1core.Service
+		endpointSlice            *discoveryv1.EndpointSlice
+		injectPreExistingIpvsSvc bool
+		expectedIPs              []string
+		expectedServices         []string
+		expectedEndpoints        []string
+		verifyDSRSetup           bool // whether to verify DSR-related mock calls
+		verifyPreExistingDeleted bool // whether to verify pre-existing services were deleted
+	}{
+		{
+			name: "service with externalIPs and no endpoints",
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-1"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "ClusterIP",
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "port-1", Port: 8080, Protocol: "TCP"},
+					},
+				},
+			},
+			endpointSlice:            &discoveryv1.EndpointSlice{},
+			injectPreExistingIpvsSvc: true,
+			expectedIPs:              []string{"10.0.0.1", "1.1.1.1", "2.2.2.2"},
+			expectedServices: []string{
+				"10.0.0.1:6:8080:false:rr",
+				"1.1.1.1:6:8080:false:rr",
+				"2.2.2.2:6:8080:false:rr",
+			},
+			verifyDSRSetup:           true,
+			verifyPreExistingDeleted: true,
+		},
+		{
+			name: "service with loadbalancer IPs",
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-1"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "LoadBalancer",
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "port-1", Protocol: "TCP", Port: 8080},
+					},
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{IP: "10.255.0.1"},
+							{IP: "10.255.0.2"},
+						},
+					},
+				},
+			},
+			endpointSlice: &discoveryv1.EndpointSlice{},
+			expectedIPs:   []string{"10.0.0.1", "1.1.1.1", "2.2.2.2", "10.255.0.1", "10.255.0.2"},
+			expectedServices: []string{
+				"10.0.0.1:6:8080:false:rr",
+				"1.1.1.1:6:8080:false:rr",
+				"2.2.2.2:6:8080:false:rr",
+				"10.255.0.1:6:8080:false:rr",
+				"10.255.0.2:6:8080:false:rr",
+			},
+		},
+		{
+			name: "service with loadbalancer IPs and skiplbips annotation",
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "svc-1",
+					Annotations: map[string]string{
+						"kube-router.io/service.skiplbips": "true",
+					},
+				},
+				Spec: v1core.ServiceSpec{
+					Type:                  "LoadBalancer",
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "port-1", Protocol: "TCP", Port: 8080},
+					},
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{IP: "10.255.0.1"},
+							{IP: "10.255.0.2"},
+						},
+					},
+				},
+			},
+			endpointSlice: &discoveryv1.EndpointSlice{},
+			expectedIPs:   []string{"10.0.0.1", "1.1.1.1", "2.2.2.2"},
+			expectedServices: []string{
+				"10.0.0.1:6:8080:false:rr",
+				"1.1.1.1:6:8080:false:rr",
+				"2.2.2.2:6:8080:false:rr",
+			},
+		},
+		{
+			name: "service with loadbalancer hostname only (no IPs)",
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-1"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "LoadBalancer",
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "port-1", Protocol: "TCP", Port: 8080},
+					},
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{Hostname: "foo-bar.zone.elb.example.com"},
+						},
+					},
+				},
+			},
+			endpointSlice: &discoveryv1.EndpointSlice{},
+			expectedIPs:   []string{"10.0.0.1", "1.1.1.1", "2.2.2.2"},
+			expectedServices: []string{
+				"10.0.0.1:6:8080:false:rr",
+				"1.1.1.1:6:8080:false:rr",
+				"2.2.2.2:6:8080:false:rr",
+			},
+		},
+		{
+			name: "node has endpoints for service",
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-1", Namespace: "default"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "ClusterIP",
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "port-1", Protocol: "TCP", Port: 8080},
+					},
+				},
+			},
+			endpointSlice: &discoveryv1.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc-1-slice",
+					Namespace: "default",
+					Labels: map[string]string{
+						"kubernetes.io/service-name": "svc-1",
+					},
+				},
+				AddressType: discoveryv1.AddressTypeIPv4,
+				Endpoints: []discoveryv1.Endpoint{
+					{
+						Addresses:  []string{"172.20.1.1"},
+						NodeName:   stringToPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+					},
+					{
+						Addresses:  []string{"172.20.1.2"},
+						NodeName:   stringToPtr("node-2"),
+						Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+					},
+				},
+				Ports: []discoveryv1.EndpointPort{
+					{Name: stringToPtr("port-1"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
+				},
+			},
+			expectedIPs: []string{"10.0.0.1", "1.1.1.1", "2.2.2.2"},
+			expectedServices: []string{
+				"10.0.0.1:6:8080:false:rr",
+				"1.1.1.1:6:8080:false:rr",
+				"2.2.2.2:6:8080:false:rr",
+			},
+			expectedEndpoints: []string{
+				"10.0.0.1:8080->172.20.1.1:80",
+				"1.1.1.1:8080->172.20.1.1:80",
+				"2.2.2.2:8080->172.20.1.1:80",
+				"10.0.0.1:8080->172.20.1.2:80",
+				"1.1.1.1:8080->172.20.1.2:80",
+				"2.2.2.2:8080->172.20.1.2:80",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lnm, mock, nsc := setupTestController(t, tc.service, tc.endpointSlice)
+
+			// Inject pre-existing IPVS services if requested (to test deletion)
+			var fooSvc1, fooSvc2 *ipvs.Service
+			if tc.injectPreExistingIpvsSvc {
+				_, fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, 0, "rr",
+					schedFlags{})
+				_, fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, 0, "rr",
+					schedFlags{true, true, false})
+			}
+
+			// Wait for endpoint slice if we have one with data
+			if tc.endpointSlice != nil && tc.endpointSlice.Name != "" {
+				waitForListerWithTimeout(t, nsc.epSliceLister, time.Second*10)
+				nsc.endpointsMap = nsc.buildEndpointSliceInfo()
+			}
+
+			// Execute
+			err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+			assert.NoError(t, err, "syncIpvsServices should succeed")
+
+			// Verify DSR setup calls if requested
+			if tc.verifyDSRSetup {
+				assert.Len(t, mock.setupPolicyRoutingForDSRCalls(), 1,
+					"setupPolicyRoutingForDSR should be called once")
+				assert.NotEmpty(t, mock.getKubeDummyInterfaceCalls(),
+					"getKubeDummyInterface should be called at least once")
+				assert.NotEmpty(t, mock.setupRoutesForExternalIPForDSRCalls(),
+					"setupRoutesForExternalIPForDSR should be called")
+			}
+
+			// Verify IP addresses added
+			actualIPs := getIPsFromAddrAddCalls(mock)
+			assert.ElementsMatch(t, tc.expectedIPs, actualIPs,
+				"ipAddrAdd should be called for expected IPs")
+
+			// Verify IPVS services created
+			actualServices := getServicesFromAddServiceCalls(mock)
+			assert.ElementsMatch(t, tc.expectedServices, actualServices,
+				"ipvsAddService should be called for expected services")
+
+			// Verify endpoints if expected
+			if len(tc.expectedEndpoints) > 0 {
+				actualEndpoints := getEndpointsFromAddServerCalls(mock)
+				assert.ElementsMatch(t, tc.expectedEndpoints, actualEndpoints,
+					"ipvsAddServer should be called for expected endpoints")
+			}
+
+			// Verify pre-existing services were deleted if requested
+			if tc.verifyPreExistingDeleted {
+				deleteCalls := mock.ipvsDelServiceCalls()
+				assert.Len(t, deleteCalls, 2, "should delete 2 pre-existing services")
+				// Verify the correct services were deleted (by pointer comparison)
+				deletedPtrs := fmt.Sprintf("[{%p} {%p}]", fooSvc1, fooSvc2)
+				actualPtrs := fmt.Sprintf("%v", deleteCalls)
+				assert.Equal(t, deletedPtrs, actualPtrs,
+					"should delete the correct pre-existing services")
+			}
+		})
+	}
+}
+
+// TestNetworkServicesController_syncIpvsServices_DSRCallsWithServiceMap verifies that
+// setupRoutesForExternalIPForDSR is called with the correct serviceInfoMap
+func TestNetworkServicesController_syncIpvsServices_DSRCallsWithServiceMap(t *testing.T) {
+	intTrafficPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extTrafficPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-1"},
+		Spec: v1core.ServiceSpec{
+			Type:                  "ClusterIP",
+			ClusterIP:             "10.0.0.1",
+			ExternalIPs:           []string{"1.1.1.1"},
+			InternalTrafficPolicy: &intTrafficPolicyCluster,
+			ExternalTrafficPolicy: extTrafficPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "port-1", Port: 8080, Protocol: "TCP"},
+			},
+		},
+	}
+
+	_, mock, nsc := setupTestController(t, service, &discoveryv1.EndpointSlice{})
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	// Verify setupRoutesForExternalIPForDSR was called with the service map
+	dsrCalls := mock.setupRoutesForExternalIPForDSRCalls()
+	assert.Len(t, dsrCalls, 1, "setupRoutesForExternalIPForDSR should be called once")
+
+	// The call should contain a non-empty service map
+	assert.NotEmpty(t, dsrCalls[0].ServiceInfo,
+		"setupRoutesForExternalIPForDSR should be called with non-empty serviceInfoMap")
 }
