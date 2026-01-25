@@ -1595,6 +1595,57 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 		}
 	}
 
+	// Clean up old IPv6 rules that were created with the incorrect MSS value (MTU-60 instead of MTU-100).
+	// Prior to commit ee0940b8, IPv6 rules incorrectly used the same MSS calculation as IPv4 (MTU-60),
+	// resulting in IPv6 rules with MSS=1440 instead of the correct MSS=1400 (for MTU=1500).
+	// This cleanup ensures these old incorrect rules are removed during upgrades.
+	// TODO: remove after v2.4.X or above
+	if parsedIP.To4() == nil && protocol == tcpProtocol {
+		// Calculate what the old incorrect MSS would have been (using IPv4 calculation for IPv6)
+		oldIncorrectIPv6MSS := nsc.mtu - 2*ipv4.HeaderLen - tcpHeaderMinLen
+
+		// Only proceed if the old incorrect value differs from the current correct value
+		if oldIncorrectIPv6MSS != tcpMSS {
+			klog.V(2).Infof("checking for old incorrect IPv6 TCPMSS rules with MSS %d (correct is %d)",
+				oldIncorrectIPv6MSS, tcpMSS)
+
+			// Check for old-style rules (POSTROUTING with -s, PREROUTING with -d)
+			for firstArg, chain := range map[string]string{"-s": "POSTROUTING", "-d": "PREROUTING"} {
+				oldIncorrectArgs := []string{firstArg, ip, "-m", tcpProtocol, "-p", tcpProtocol,
+					"--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", strconv.Itoa(oldIncorrectIPv6MSS)}
+				exists, err := iptablesCmdHandler.Exists("mangle", chain, oldIncorrectArgs...)
+				if err != nil {
+					return fmt.Errorf("failed to check for old incorrect IPv6 TCPMSS rule in %s due to %v", chain, err)
+				}
+				if exists {
+					klog.V(2).Infof("removing old incorrect IPv6 TCPMSS rule with MSS %d: ip6tables -D %s -t mangle %v",
+						oldIncorrectIPv6MSS, chain, oldIncorrectArgs)
+					err = iptablesCmdHandler.Delete("mangle", chain, oldIncorrectArgs...)
+					if err != nil {
+						return fmt.Errorf("failed to delete old incorrect IPv6 TCPMSS rule from %s due to %v", chain, err)
+					}
+				}
+			}
+
+			// Check for current-style rule format with incorrect MSS
+			currentFormatOldMSS := []string{"-s", ip, "-m", tcpProtocol, "-p", tcpProtocol, "--sport", port,
+				"-i", "kube-bridge", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS",
+				"--set-mss", strconv.Itoa(oldIncorrectIPv6MSS)}
+			exists, err := iptablesCmdHandler.Exists("mangle", "PREROUTING", currentFormatOldMSS...)
+			if err != nil {
+				return fmt.Errorf("failed to check for old incorrect IPv6 TCPMSS rule (current format) due to %v", err)
+			}
+			if exists {
+				klog.V(2).Infof("removing old incorrect IPv6 TCPMSS rule (current format) with MSS %d",
+					oldIncorrectIPv6MSS)
+				err = iptablesCmdHandler.Delete("mangle", "PREROUTING", currentFormatOldMSS...)
+				if err != nil {
+					return fmt.Errorf("failed to delete old incorrect IPv6 TCPMSS rule (current format) due to %v", err)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 

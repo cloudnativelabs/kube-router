@@ -446,9 +446,6 @@ func TestSetupMangleTableRule_LegacyCleanup_PREROUTING(t *testing.T) {
 // TestSetupMangleTableRule_UpgradeCleanup_IncorrectIPv6MSS tests that when upgrading
 // from a version that had the bug (using MTU-60 for IPv6 instead of MTU-100),
 // the old incorrect rules are cleaned up.
-//
-// EXPECTED TO FAIL: The current implementation does not clean up old IPv6 rules
-// that were created with the incorrect MSS value.
 func TestSetupMangleTableRule_UpgradeCleanup_IncorrectIPv6MSS(t *testing.T) {
 	t.Parallel()
 	existsRules := make(map[string]bool)
@@ -478,9 +475,7 @@ func TestSetupMangleTableRule_UpgradeCleanup_IncorrectIPv6MSS(t *testing.T) {
 		}
 	}
 	assert.Contains(t, deletedMSSValues, oldIncorrectIPv6MSS,
-		"Expected old incorrect IPv6 TCPMSS rule with MSS %s to be deleted, "+
-			"but deleted MSS values were: %v. "+
-			"This test is expected to fail until the cleanup gap is fixed.",
+		"Expected old incorrect IPv6 TCPMSS rule with MSS %s to be deleted, but deleted MSS values were: %v",
 		oldIncorrectIPv6MSS, deletedMSSValues)
 }
 
