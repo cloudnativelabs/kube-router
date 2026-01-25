@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -199,13 +200,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	// find the list of the node removed, from the last known list of active nodes
 	removedNodes := make([]string, 0)
 	for ip := range nrc.activeNodes {
-		stillActive := false
-		for _, node := range currentNodes {
-			if ip == node {
-				stillActive = true
-				break
-			}
-		}
+		stillActive := slices.Contains(currentNodes, ip)
 		if !stillActive {
 			removedNodes = append(removedNodes, ip)
 		}
