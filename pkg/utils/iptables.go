@@ -23,6 +23,8 @@ const (
 
 // IPTablesHandler interface based on the IPTables struct from github.com/coreos/go-iptables
 // which allows to mock it.
+//
+//go:generate moq -out iptables_moq.go . IPTablesHandler
 type IPTablesHandler interface {
 	Proto() iptables.Protocol
 	Exists(table, chain string, rulespec ...string) (bool, error)
