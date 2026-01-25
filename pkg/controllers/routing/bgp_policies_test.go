@@ -1437,7 +1437,7 @@ func Test_AddPolicies(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
+			startInformersForRoutes(t, testcase.nrc, testcase.nrc.clientset)
 
 			if err := createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
 				t.Errorf("failed to create existing nodes: %v", err)

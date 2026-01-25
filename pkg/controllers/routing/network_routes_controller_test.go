@@ -16,7 +16,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	. "github.com/onsi/ginkgo"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1core "k8s.io/api/core/v1"
@@ -372,7 +372,7 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			}()
 
 			clientset := fake.NewSimpleClientset()
-			startInformersForRoutes(testcase.nrc, clientset)
+			startInformersForRoutes(t, testcase.nrc, clientset)
 
 			err = createServices(clientset, testcase.existingServices)
 			if err != nil {
@@ -1055,7 +1055,7 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
 			}
 			clientset := fake.NewSimpleClientset()
-			startInformersForRoutes(testcase.nrc, clientset)
+			startInformersForRoutes(t, testcase.nrc, clientset)
 
 			err = createServices(clientset, testcase.existingServices)
 			if err != nil {
@@ -1354,7 +1354,7 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			}
 
 			clientset := fake.NewSimpleClientset()
-			startInformersForRoutes(testcase.nrc, clientset)
+			startInformersForRoutes(t, testcase.nrc, clientset)
 
 			err = createServices(clientset, testcase.existingServices)
 			if err != nil {
@@ -1719,7 +1719,7 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			}
 
 			clientset := fake.NewSimpleClientset()
-			startInformersForRoutes(testcase.nrc, clientset)
+			startInformersForRoutes(t, testcase.nrc, clientset)
 
 			err = createServices(clientset, testcase.existingServices)
 			if err != nil {
@@ -1883,7 +1883,7 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			clientset := fake.NewSimpleClientset()
-			startInformersForRoutes(testcase.nrc, clientset)
+			startInformersForRoutes(t, testcase.nrc, clientset)
 
 			_, err := clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), testcase.existingEndpoint, metav1.CreateOptions{})
 			if err != nil {
@@ -2348,7 +2348,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				}
 			}()
 
-			startInformersForRoutes(testcase.nrc, testcase.nrc.clientset)
+			startInformersForRoutes(t, testcase.nrc, testcase.nrc.clientset)
 			if err = createNodes(testcase.nrc.clientset, testcase.existingNodes); err != nil {
 				t.Errorf("failed to create existing nodes: %v", err)
 			}
@@ -3043,12 +3043,8 @@ func createEndpointSlices(clientset kubernetes.Interface, endpointSlices []*disc
 	return nil
 }
 
-func fatalf(format string, a ...interface{}) {
-	msg := fmt.Sprintf("FATAL: "+format+"\n", a...)
-	Fail(msg)
-}
-
-func startInformersForRoutes(nrc *NetworkRoutingController, clientset kubernetes.Interface) {
+func startInformersForRoutes(t *testing.T, nrc *NetworkRoutingController, clientset kubernetes.Interface) {
+	t.Helper()
 	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
 	svcInformer := informerFactory.Core().V1().Services().Informer()
 	epSliceInformer := informerFactory.Discovery().V1().EndpointSlices().Informer()
@@ -3058,7 +3054,7 @@ func startInformersForRoutes(nrc *NetworkRoutingController, clientset kubernetes
 		indexers.ServiceNameIndex: indexers.ServiceNameIndexFunc,
 	})
 	if err != nil {
-		fatalf("failed to add indexers to endpoint slice informer: %v", err)
+		t.Fatalf("failed to add indexers to endpoint slice informer: %v", err)
 	}
 
 	go informerFactory.Start(nil)

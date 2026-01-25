@@ -908,7 +908,7 @@ func Test_getVIPsForService(t *testing.T) {
 			for _, serviceAdvertisedIP := range test.serviceAdvertisedIPs {
 				endpoints := serviceAdvertisedIP.endpoints
 				clientset := fake.NewSimpleClientset()
-				startInformersForRoutes(test.nrc, clientset)
+				startInformersForRoutes(t, test.nrc, clientset)
 
 				// Take care of adding annotations
 				if serviceAdvertisedIP.annotations != nil {
