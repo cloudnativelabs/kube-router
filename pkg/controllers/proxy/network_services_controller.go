@@ -24,6 +24,8 @@ import (
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/moby/ipvs"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 	v1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/client-go/kubernetes"
@@ -104,6 +106,8 @@ const (
 	tunnelInterfaceType = "tunnel"
 
 	gracefulTermServiceTickTime = 5 * time.Second
+
+	tcpHeaderMinLen = 20
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -147,7 +151,7 @@ type NetworkServicesController struct {
 	gracefulTermination bool
 	syncChan            chan int
 	dsr                 *dsrOpt
-	dsrTCPMSS           int
+	mtu                 int
 
 	iptablesCmdHandlers map[v1.IPFamily]utils.IPTablesHandler
 	ipSetHandlers       map[v1.IPFamily]utils.IPSetHandler
@@ -1537,14 +1541,17 @@ func changedIpvsSchedFlags(svc *ipvs.Service, s schedFlags) bool {
 }
 
 // setupMangleTableRule: sets up iptables rule to FWMARK the traffic to external IP vip
-func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol string, port string, fwmark string,
-	tcpMSS int) error {
+func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol string, port string,
+	fwmark string) error {
 	var iptablesCmdHandler utils.IPTablesHandler
+	tcpMSS := nsc.mtu
 	parsedIP := net.ParseIP(ip)
 	if parsedIP.To4() != nil {
 		iptablesCmdHandler = nsc.iptablesCmdHandlers[v1.IPv4Protocol]
+		tcpMSS -= 2*ipv4.HeaderLen + tcpHeaderMinLen
 	} else {
 		iptablesCmdHandler = nsc.iptablesCmdHandlers[v1.IPv6Protocol]
+		tcpMSS -= 2*ipv6.HeaderLen + tcpHeaderMinLen
 	}
 
 	args := []string{"-d", ip, "-m", protocol, "-p", protocol, "--dport", port, "-j", "MARK", "--set-mark", fwmark}
@@ -1592,13 +1599,16 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 }
 
 func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol string, port string,
-	fwmark string, tcpMSS int) error {
+	fwmark string) error {
 	var iptablesCmdHandler utils.IPTablesHandler
+	tcpMSS := nsc.mtu
 	parsedIP := net.ParseIP(ip)
 	if parsedIP.To4() != nil {
 		iptablesCmdHandler = nsc.iptablesCmdHandlers[v1.IPv4Protocol]
+		tcpMSS -= 2*ipv4.HeaderLen + tcpHeaderMinLen
 	} else {
 		iptablesCmdHandler = nsc.iptablesCmdHandlers[v1.IPv6Protocol]
+		tcpMSS -= 2*ipv6.HeaderLen + tcpHeaderMinLen
 	}
 
 	args := []string{"-d", ip, "-m", protocol, "-p", protocol, "--dport", port, "-j", "MARK", "--set-mark", fwmark}
@@ -2026,11 +2036,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	if err != nil {
 		return nil, err
 	}
-	// Sets it to 60 bytes less than the auto-detected MTU to account for additional ip-ip headers needed for DSR, above
-	// method GetMTUFromNodeIP() already accounts for the overhead of ip-ip overlay networking, so we need to
-	// remove 60 bytes (internet headers and additional ip-ip because MTU includes internet headers. MSS does not.)
-	// This needs also a condition to deal with auto-mtu=false
-	nsc.dsrTCPMSS = automtu - utils.IPInIPHeaderLength*3
+	// Store MTU only. Code setting MSS will handle address family, and calculate correct MSS.
+	nsc.mtu = automtu
 
 	nsc.podLister = podInformer.GetIndexer()
 

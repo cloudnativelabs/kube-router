@@ -566,8 +566,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 	externalIPServiceID := fmt.Sprint(fwMark)
 
 	// ensure there is iptables mangle table rule to FWMARK the packet
-	err = nsc.setupMangleTableRule(externalIP.String(), svcIn.protocol, strconv.Itoa(svcIn.port), externalIPServiceID,
-		nsc.dsrTCPMSS)
+	err = nsc.setupMangleTableRule(externalIP.String(), svcIn.protocol, strconv.Itoa(svcIn.port), externalIPServiceID)
 	if err != nil {
 		return fmt.Errorf("failed to setup mangle table rule to forward the traffic to external IP")
 	}
@@ -858,8 +857,7 @@ func (nsc *NetworkServicesController) cleanupDSRService(fwMark uint32) error {
 				klog.V(2).Infof("found mangle rule to cleanup: %s", mangleTableRule)
 
 				// When we cleanup the iptables rule, we need to pass FW mark as an int string rather than a hex string
-				err = nsc.cleanupMangleTableRule(ipAddress, proto, strconv.Itoa(port), strconv.Itoa(int(fwMark)),
-					nsc.dsrTCPMSS)
+				err = nsc.cleanupMangleTableRule(ipAddress, proto, strconv.Itoa(port), strconv.Itoa(int(fwMark)))
 				if err != nil {
 					klog.Errorf("failed to verify and cleanup any mangle table rule to FORWARD the traffic "+
 						"to external IP due to: %v", err)
