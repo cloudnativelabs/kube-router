@@ -19,6 +19,54 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// configurePeerAfiSafis configures the AFI-SAFI (Address Family Indicator / Subsequent Address Family Indicator)
+// settings on a BGP peer based on the node's IP capabilities. This function must be called regardless of graceful
+// restart settings to ensure proper route advertisement for dual-stack environments. Without explicit AFI-SAFI
+// configuration, GoBGP defaults to only the address family matching the peer's IP address type, which prevents
+// IPv6 route advertisement when peering over IPv4.
+//
+// Parameters:
+//   - peer: The GoBGP peer configuration to modify
+//   - node: A node that implements NodeFamilyAware to determine IPv4/IPv6 capabilities
+//   - gracefulRestartEnabled: Whether to enable MP-BGP Graceful Restart for each AFI-SAFI
+func configurePeerAfiSafis(peer *gobgpapi.Peer, node utils.NodeFamilyAware, gracefulRestartEnabled bool) {
+	if node.IsIPv4Capable() {
+		afiSafi := gobgpapi.AfiSafi{
+			Config: &gobgpapi.AfiSafiConfig{
+				Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
+				Enabled: true,
+			},
+		}
+		if gracefulRestartEnabled {
+			afiSafi.MpGracefulRestart = &gobgpapi.MpGracefulRestart{
+				Config: &gobgpapi.MpGracefulRestartConfig{
+					Enabled: true,
+				},
+				State: &gobgpapi.MpGracefulRestartState{},
+			}
+		}
+		peer.AfiSafis = append(peer.AfiSafis, &afiSafi)
+	}
+
+	if node.IsIPv6Capable() {
+		afiSafi := gobgpapi.AfiSafi{
+			Config: &gobgpapi.AfiSafiConfig{
+				Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
+				Enabled: true,
+			},
+		}
+		if gracefulRestartEnabled {
+			afiSafi.MpGracefulRestart = &gobgpapi.MpGracefulRestart{
+				Config: &gobgpapi.MpGracefulRestartConfig{
+					Enabled: true,
+				},
+				State: &gobgpapi.MpGracefulRestartState{},
+			}
+		}
+		peer.AfiSafis = append(peer.AfiSafis, &afiSafi)
+	}
+}
+
 // Refresh the peer relationship with rest of the nodes in the cluster (iBGP peers). Node add/remove
 // events should ensure peer relationship with only currently active nodes. In case
 // we miss any events from API server this method which is called periodically
@@ -123,39 +171,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				DeferralTime:    uint32(nrc.bgpGracefulRestartDeferralTime.Seconds()),
 				LocalRestarting: true,
 			}
-
-			// We choose to only peer using the protocol of the node's primary IP
-			if targetNode.IsIPv4Capable() {
-				afiSafi := gobgpapi.AfiSafi{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
-					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
-							Enabled: true,
-						},
-						State: &gobgpapi.MpGracefulRestartState{},
-					},
-				}
-				n.AfiSafis = append(n.AfiSafis, &afiSafi)
-			}
-			if targetNode.IsIPv6Capable() {
-				afiSafi := gobgpapi.AfiSafi{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
-					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
-							Enabled: true,
-						},
-						State: &gobgpapi.MpGracefulRestartState{},
-					},
-				}
-				n.AfiSafis = append(n.AfiSafis, &afiSafi)
-			}
 		}
+
+		configurePeerAfiSafis(n, targetNode, nrc.bgpGracefulRestart)
 
 		// we are rr-server peer with other rr-client with reflection enabled
 		if nrc.bgpRRServer {
@@ -236,37 +254,9 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 				DeferralTime:    uint32(bgpGracefulRestartDeferralTime.Seconds()),
 				LocalRestarting: true,
 			}
-
-			if nrc.krNode.IsIPv4Capable() {
-				n.AfiSafis = []*gobgpapi.AfiSafi{
-					{
-						Config: &gobgpapi.AfiSafiConfig{
-							Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
-							Enabled: true,
-						},
-						MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-							Config: &gobgpapi.MpGracefulRestartConfig{
-								Enabled: true,
-							},
-						},
-					},
-				}
-			}
-			if nrc.krNode.IsIPv6Capable() {
-				afiSafi := gobgpapi.AfiSafi{
-					Config: &gobgpapi.AfiSafiConfig{
-						Family:  &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP6, Safi: gobgpapi.Family_SAFI_UNICAST},
-						Enabled: true,
-					},
-					MpGracefulRestart: &gobgpapi.MpGracefulRestart{
-						Config: &gobgpapi.MpGracefulRestartConfig{
-							Enabled: true,
-						},
-					},
-				}
-				n.AfiSafis = append(n.AfiSafis, &afiSafi)
-			}
 		}
+
+		configurePeerAfiSafis(n, nrc.krNode, bgpGracefulRestart)
 		if peerMultihopTTL > 1 {
 			n.EbgpMultihop = &gobgpapi.EbgpMultihop{
 				Enabled:     true,
