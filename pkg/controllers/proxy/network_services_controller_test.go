@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
-	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
 	"github.com/stretchr/testify/assert"
@@ -18,369 +17,8 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/cache"
 )
-
-// mockIPVSState holds stateful IPVS data for tests that need to track services
-type mockIPVSState struct {
-	services []*ipvs.Service
-}
-
-func newMockIPVSState() *mockIPVSState {
-	return &mockIPVSState{
-		services: make([]*ipvs.Service, 0, 64),
-	}
-}
-
-// addService adds an IPVS service to the mock state and returns the created service
-func (m *mockIPVSState) addService(vip net.IP, protocol, port uint16) *ipvs.Service {
-	svc := &ipvs.Service{
-		Address:  vip,
-		Protocol: protocol,
-		Port:     port,
-	}
-	m.services = append(m.services, svc)
-	return svc
-}
-
-//nolint:unparam // timeout parameter allows flexibility for future tests
-func waitForListerWithTimeout(t *testing.T, lister cache.Indexer, timeout time.Duration) {
-	t.Helper()
-	tick := time.Tick(100 * time.Millisecond)
-	timeoutCh := time.After(timeout)
-	for {
-		select {
-		case <-timeoutCh:
-			t.Fatalf("timeout exceeded waiting for lister to fill cache")
-		case <-tick:
-			if len(lister.List()) != 0 {
-				return
-			}
-		}
-	}
-}
-
-func startInformersForServiceProxy(t *testing.T, nsc *NetworkServicesController, clientset kubernetes.Interface) {
-	t.Helper()
-	informerFactory := informers.NewSharedInformerFactory(clientset, 0)
-	svcInformer := informerFactory.Core().V1().Services().Informer()
-	epSliceInformer := informerFactory.Discovery().V1().EndpointSlices().Informer()
-	podInformer := informerFactory.Core().V1().Pods().Informer()
-
-	err := epSliceInformer.AddIndexers(map[string]cache.IndexFunc{
-		indexers.ServiceNameIndex: indexers.ServiceNameIndexFunc,
-	})
-	if err != nil {
-		t.Fatalf("failed to add indexers to endpoint slice informer: %v", err)
-	}
-
-	go informerFactory.Start(nil)
-	informerFactory.WaitForCacheSync(nil)
-
-	nsc.svcLister = svcInformer.GetIndexer()
-	nsc.epSliceLister = epSliceInformer.GetIndexer()
-	nsc.podLister = podInformer.GetIndexer()
-}
-
-// setupTestController creates and initializes a NetworkServicesController for testing.
-// It returns the mock IPVS state (for injecting pre-existing services), the LinuxNetworkingMock
-// (for verifying calls), and the controller.
-func setupTestController(t *testing.T, service *v1core.Service, endpointSlice *discoveryv1.EndpointSlice) (
-	*mockIPVSState, *LinuxNetworkingMock, *NetworkServicesController) {
-	t.Helper()
-
-	ipvsState := newMockIPVSState()
-
-	// Create the mock using moq-generated LinuxNetworkingMock with inline implementations
-	mock := &LinuxNetworkingMock{
-		getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
-			return netlink.LinkByName("lo")
-		},
-		ipAddrAddFunc: func(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
-			return nil
-		},
-		ipAddrDelFunc: func(iface netlink.Link, ip string, nodeIP string) error {
-			return nil
-		},
-		ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-			return nil
-		},
-		ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16,
-			persistent bool, persistentTimeout int32, scheduler string,
-			flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
-			svc := &ipvs.Service{
-				Address:  vip,
-				Protocol: protocol,
-				Port:     port,
-			}
-			ipvsState.services = append(ipvsState.services, svc)
-			return svcs, svc, nil
-		},
-		ipvsDelServiceFunc: func(ipvsSvc *ipvs.Service) error {
-			for idx, svc := range ipvsState.services {
-				if svc.Address.Equal(ipvsSvc.Address) && svc.Protocol == ipvsSvc.Protocol &&
-					svc.Port == ipvsSvc.Port {
-					ipvsState.services = append(ipvsState.services[:idx], ipvsState.services[idx+1:]...)
-					break
-				}
-			}
-			return nil
-		},
-		ipvsGetDestinationsFunc: func(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
-			return []*ipvs.Destination{}, nil
-		},
-		ipvsGetServicesFunc: func() ([]*ipvs.Service, error) {
-			// Return a copy to avoid mutation issues during iteration
-			svcsCopy := make([]*ipvs.Service, len(ipvsState.services))
-			copy(svcsCopy, ipvsState.services)
-			return svcsCopy, nil
-		},
-		setupPolicyRoutingForDSRFunc: func(setupIPv4 bool, setupIPv6 bool) error {
-			return nil
-		},
-		setupRoutesForExternalIPForDSRFunc: func(serviceInfo serviceInfoMap, setupIPv4 bool, setupIPv6 bool) error {
-			return nil
-		},
-	}
-
-	clientset := fake.NewSimpleClientset()
-
-	if endpointSlice != nil && endpointSlice.Name != "" {
-		_, err := clientset.DiscoveryV1().EndpointSlices("default").Create(
-			context.Background(), endpointSlice, metav1.CreateOptions{})
-		if err != nil {
-			t.Fatalf("failed to create endpoint slice: %v", err)
-		}
-	}
-
-	_, err := clientset.CoreV1().Services("default").Create(
-		context.Background(), service, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("failed to create service: %v", err)
-	}
-
-	krNode := &utils.LocalKRNode{
-		KRNode: utils.KRNode{
-			NodeName:  "node-1",
-			PrimaryIP: net.ParseIP("10.0.0.0"),
-		},
-	}
-	nsc := &NetworkServicesController{
-		krNode:     krNode,
-		ln:         mock,
-		nphc:       NewNodePortHealthCheck(),
-		ipsetMutex: &sync.Mutex{},
-		client:     clientset,
-		fwMarkMap:  make(map[uint32]string),
-	}
-
-	startInformersForServiceProxy(t, nsc, clientset)
-	waitForListerWithTimeout(t, nsc.svcLister, time.Second*10)
-
-	nsc.setServiceMap(nsc.buildServicesInfo())
-	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
-
-	return ipvsState, mock, nsc
-}
-
-// setupTestControllerWithEndpoints creates a NetworkServicesController for testing traffic policy behavior.
-// It automatically generates an EndpointSlice from the provided local and remote endpoint IPs.
-// - localEndpoints: IPs for endpoints on the local node ("localnode-1")
-// - remoteEndpoints: IPs for endpoints on a remote node ("node-2")
-// All endpoints are created with Ready=true, Port=80, Protocol=TCP.
-//
-// NOTE: This function uses "localnode-1" as the controller's node name to clearly distinguish
-// between local and remote endpoints in traffic policy tests.
-//
-//nolint:unparam // mockIPVSState returned for API consistency with setupTestController
-func setupTestControllerWithEndpoints(t *testing.T, service *v1core.Service,
-	localEndpoints, remoteEndpoints []string) (*mockIPVSState, *LinuxNetworkingMock, *NetworkServicesController) {
-	t.Helper()
-
-	const localNodeName = "localnode-1"
-	const remoteNodeName = "node-2"
-
-	ipvsState := newMockIPVSState()
-
-	mock := &LinuxNetworkingMock{
-		getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
-			return netlink.LinkByName("lo")
-		},
-		ipAddrAddFunc: func(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
-			return nil
-		},
-		ipAddrDelFunc: func(iface netlink.Link, ip string, nodeIP string) error {
-			return nil
-		},
-		ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-			return nil
-		},
-		ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16,
-			persistent bool, persistentTimeout int32, scheduler string,
-			flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
-			svc := &ipvs.Service{
-				Address:  vip,
-				Protocol: protocol,
-				Port:     port,
-			}
-			ipvsState.services = append(ipvsState.services, svc)
-			return svcs, svc, nil
-		},
-		ipvsAddFWMarkServiceFunc: func(svcs []*ipvs.Service, fwMark uint32, family uint16, protocol uint16,
-			port uint16, persistent bool, persistentTimeout int32, scheduler string,
-			flags schedFlags) (*ipvs.Service, error) {
-			svc := &ipvs.Service{
-				FWMark:   fwMark,
-				Protocol: protocol,
-				Port:     port,
-			}
-			ipvsState.services = append(ipvsState.services, svc)
-			return svc, nil
-		},
-		ipvsDelServiceFunc: func(ipvsSvc *ipvs.Service) error {
-			for idx, svc := range ipvsState.services {
-				if svc.Address.Equal(ipvsSvc.Address) && svc.Protocol == ipvsSvc.Protocol &&
-					svc.Port == ipvsSvc.Port {
-					ipvsState.services = append(ipvsState.services[:idx], ipvsState.services[idx+1:]...)
-					break
-				}
-			}
-			return nil
-		},
-		ipvsGetDestinationsFunc: func(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
-			return []*ipvs.Destination{}, nil
-		},
-		ipvsGetServicesFunc: func() ([]*ipvs.Service, error) {
-			svcsCopy := make([]*ipvs.Service, len(ipvsState.services))
-			copy(svcsCopy, ipvsState.services)
-			return svcsCopy, nil
-		},
-		setupPolicyRoutingForDSRFunc: func(setupIPv4 bool, setupIPv6 bool) error {
-			return nil
-		},
-		setupRoutesForExternalIPForDSRFunc: func(serviceInfo serviceInfoMap, setupIPv4 bool, setupIPv6 bool) error {
-			return nil
-		},
-	}
-
-	clientset := fake.NewSimpleClientset()
-
-	// Build EndpointSlice from provided endpoint IPs
-	if len(localEndpoints) > 0 || len(remoteEndpoints) > 0 {
-		var endpoints []discoveryv1.Endpoint
-
-		for _, ip := range localEndpoints {
-			endpoints = append(endpoints, discoveryv1.Endpoint{
-				Addresses:  []string{ip},
-				NodeName:   stringToPtr(localNodeName),
-				Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
-			})
-		}
-
-		for _, ip := range remoteEndpoints {
-			endpoints = append(endpoints, discoveryv1.Endpoint{
-				Addresses:  []string{ip},
-				NodeName:   stringToPtr(remoteNodeName),
-				Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
-			})
-		}
-
-		endpointSlice := &discoveryv1.EndpointSlice{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      service.Name + "-slice",
-				Namespace: service.Namespace,
-				Labels: map[string]string{
-					"kubernetes.io/service-name": service.Name,
-				},
-			},
-			AddressType: discoveryv1.AddressTypeIPv4,
-			Endpoints:   endpoints,
-			Ports: []discoveryv1.EndpointPort{
-				{Name: stringToPtr("http"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
-			},
-		}
-
-		_, err := clientset.DiscoveryV1().EndpointSlices(service.Namespace).Create(
-			context.Background(), endpointSlice, metav1.CreateOptions{})
-		if err != nil {
-			t.Fatalf("failed to create endpoint slice: %v", err)
-		}
-	}
-
-	_, err := clientset.CoreV1().Services(service.Namespace).Create(
-		context.Background(), service, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("failed to create service: %v", err)
-	}
-
-	krNode := &utils.LocalKRNode{
-		KRNode: utils.KRNode{
-			NodeName:  localNodeName,
-			PrimaryIP: net.ParseIP("10.0.0.1"),
-		},
-	}
-	// Create iptables mocks for DSR support
-	ipv4Mock := &utils.IPTablesHandlerMock{
-		AppendUniqueFunc: func(table string, chain string, rulespec ...string) error {
-			return nil
-		},
-		ExistsFunc: func(table string, chain string, rulespec ...string) (bool, error) {
-			return false, nil
-		},
-		DeleteFunc: func(table string, chain string, rulespec ...string) error {
-			return nil
-		},
-	}
-	ipv6Mock := &utils.IPTablesHandlerMock{
-		AppendUniqueFunc: func(table string, chain string, rulespec ...string) error {
-			return nil
-		},
-		ExistsFunc: func(table string, chain string, rulespec ...string) (bool, error) {
-			return false, nil
-		},
-		DeleteFunc: func(table string, chain string, rulespec ...string) error {
-			return nil
-		},
-	}
-
-	nsc := &NetworkServicesController{
-		krNode:     krNode,
-		ln:         mock,
-		nphc:       NewNodePortHealthCheck(),
-		ipsetMutex: &sync.Mutex{},
-		client:     clientset,
-		fwMarkMap:  make(map[uint32]string),
-		iptablesCmdHandlers: map[v1core.IPFamily]utils.IPTablesHandler{
-			v1core.IPv4Protocol: ipv4Mock,
-			v1core.IPv6Protocol: ipv6Mock,
-		},
-	}
-
-	startInformersForServiceProxy(t, nsc, clientset)
-	waitForListerWithTimeout(t, nsc.svcLister, time.Second*10)
-
-	// Wait for endpoint slice if we created one
-	if len(localEndpoints) > 0 || len(remoteEndpoints) > 0 {
-		waitForListerWithTimeout(t, nsc.epSliceLister, time.Second*10)
-	}
-
-	nsc.setServiceMap(nsc.buildServicesInfo())
-	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
-
-	return ipvsState, mock, nsc
-}
-
-// getIPsFromAddrAddCalls extracts IP addresses from ipAddrAdd mock calls
-func getIPsFromAddrAddCalls(mock *LinuxNetworkingMock) []string {
-	var ips []string
-	for _, call := range mock.ipAddrAddCalls() {
-		ips = append(ips, call.IP)
-	}
-	return ips
-}
 
 // getServicesFromAddServiceCalls formats ipvsAddService calls as strings for comparison
 func getServicesFromAddServiceCalls(mock *LinuxNetworkingMock) []string {
@@ -1366,28 +1004,27 @@ func TestTrafficPolicy_LoadBalancer_MixedPolicies(t *testing.T) {
 // - #1995: IPv6 DSR issues
 // - #1671: Multiple services on same IP with DSR
 //
-// TEST LIMITATIONS:
-// DSR setup requires privileged netlink operations (adding IP routing rules)
-// which need CAP_NET_ADMIN or root privileges. Unit tests run unprivileged,
-// so DSR setup will fail with "operation not permitted" errors.
+// TEST IMPLEMENTATION:
+// These tests use a comprehensive NetLink mocking layer (see mock_netlink_state_test.go)
+// that simulates all netlink operations (interfaces, addresses, routes, rules) in-memory.
+// This allows DSR tests to run fully without requiring privileges or CAP_NET_ADMIN.
 //
-// This is acceptable because these tests verify:
-// 1. DSR code paths are exercised correctly
-// 2. FWMARK services are created (before netlink failure)
-// 3. VIP-less director logic is followed
-// 4. Traffic policy filtering works correctly
+// The mock infrastructure enables testing:
+// 1. Complete DSR code paths including policy routing setup
+// 2. FWMARK service creation and management
+// 3. VIP-less director logic with traffic routing
+// 4. Traffic policy filtering for both local and cluster modes
+// 5. Container DSR receiver configuration
 //
-// Tests that require full DSR setup will skip gracefully when netlink
-// operations fail. The core DSR logic is still validated even when
-// netlink operations cannot complete.
-//
-// For full end-to-end DSR testing, run integration tests with elevated
-// privileges in a container with CAP_NET_ADMIN capability.
+// All DSR functionality is fully tested without any test skipping or conditional logic.
 // =============================================================================
 
 // Helper functions for DSR tests
 
 // createDSRService creates a service with DSR annotation enabled
+// All tests use "default" namespace for simplicity and consistency
+//
+//nolint:unparam // namespace parameter kept for API clarity and potential future multi-namespace tests
 func createDSRService(name, namespace, clusterIP, externalIP string, port int32,
 	intPolicy *v1core.ServiceInternalTrafficPolicy,
 	extPolicy v1core.ServiceExternalTrafficPolicyType) *v1core.Service {
@@ -1601,16 +1238,21 @@ func TestDSR_PolicyRoutingCalledOncePerSync(t *testing.T) {
 		&intPolicyCluster, extPolicyCluster)
 
 	ipvsState := newMockIPVSState()
+	netlinkState := newMockNetlinkState()
+
+	// Mock the standalone routeVIPTrafficToDirector function
+	routeVIPTrafficToDirector = createMockRouteVIPTrafficToDirector(netlinkState)
+
 	mock := &LinuxNetworkingMock{
-		getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
-			return netlink.LinkByName("lo")
-		},
-		ipAddrAddFunc: func(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
-			return nil
-		},
-		ipAddrDelFunc: func(iface netlink.Link, ip string, nodeIP string) error {
-			return nil
-		},
+		getKubeDummyInterfaceFunc:          createMockGetKubeDummyInterface(netlinkState),
+		ipAddrAddFunc:                      createMockIPAddrAdd(netlinkState),
+		ipAddrDelFunc:                      createMockIPAddrDel(netlinkState),
+		setupPolicyRoutingForDSRFunc:       createMockSetupPolicyRoutingForDSR(netlinkState),
+		setupRoutesForExternalIPForDSRFunc: createMockSetupRoutesForExternalIPForDSR(netlinkState),
+		configureContainerForDSRFunc:       createMockConfigureContainerForDSR(netlinkState),
+		getContainerPidWithDockerFunc:      createMockGetContainerPidWithDocker(netlinkState),
+		getContainerPidWithCRIFunc:         createMockGetContainerPidWithCRI(netlinkState),
+		findIfaceLinkForPidFunc:            createMockFindIfaceLinkForPid(netlinkState),
 		ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 			return nil
 		},
@@ -1641,12 +1283,6 @@ func TestDSR_PolicyRoutingCalledOncePerSync(t *testing.T) {
 			copy(svcsCopy, ipvsState.services)
 			return svcsCopy, nil
 		},
-		setupPolicyRoutingForDSRFunc: func(setupIPv4 bool, setupIPv6 bool) error {
-			return nil
-		},
-		setupRoutesForExternalIPForDSRFunc: func(serviceInfo serviceInfoMap, setupIPv4 bool, setupIPv6 bool) error {
-			return nil
-		},
 	}
 
 	clientset := fake.NewSimpleClientset()
@@ -1672,12 +1308,12 @@ func TestDSR_PolicyRoutingCalledOncePerSync(t *testing.T) {
 		Endpoints: []discoveryv1.Endpoint{
 			{
 				Addresses:  []string{"172.20.1.1"},
-				NodeName:   stringToPtr("localnode-1"),
-				Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+				NodeName:   testutils.ValToPtr("localnode-1"),
+				Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
 			},
 		},
 		Ports: []discoveryv1.EndpointPort{
-			{Name: stringToPtr("http"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
+			{Name: testutils.ValToPtr("http"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
 		},
 	}
 	_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(
@@ -1696,16 +1332,59 @@ func TestDSR_PolicyRoutingCalledOncePerSync(t *testing.T) {
 		Endpoints: []discoveryv1.Endpoint{
 			{
 				Addresses:  []string{"172.20.1.2"},
-				NodeName:   stringToPtr("localnode-1"),
-				Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+				NodeName:   testutils.ValToPtr("localnode-1"),
+				Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
 			},
 		},
 		Ports: []discoveryv1.EndpointPort{
-			{Name: stringToPtr("http"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
+			{Name: testutils.ValToPtr("http"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
 		},
 	}
 	_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(
 		context.Background(), endpointSlice2, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	// Create pods for the endpoints (required for DSR container configuration)
+	pod1 := &v1core.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod-1",
+			Namespace: "default",
+		},
+		Spec: v1core.PodSpec{
+			Containers: []v1core.Container{{Name: "container-1"}},
+		},
+		Status: v1core.PodStatus{
+			PodIP:  "172.20.1.1",
+			PodIPs: []v1core.PodIP{{IP: "172.20.1.1"}},
+			HostIP: "10.0.0.0",
+			ContainerStatuses: []v1core.ContainerStatus{
+				{ContainerID: "docker://abc123"},
+			},
+		},
+	}
+	_, err = clientset.CoreV1().Pods("default").Create(
+		context.Background(), pod1, metav1.CreateOptions{})
+	assert.NoError(t, err)
+
+	pod2 := &v1core.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod-2",
+			Namespace: "default",
+		},
+		Spec: v1core.PodSpec{
+			Containers: []v1core.Container{{Name: "container-2"}},
+		},
+		Status: v1core.PodStatus{
+			PodIP:  "172.20.1.2",
+			PodIPs: []v1core.PodIP{{IP: "172.20.1.2"}},
+			HostIP: "10.0.0.0",
+			ContainerStatuses: []v1core.ContainerStatus{
+				{ContainerID: "docker://def456"},
+			},
+		},
+	}
+	_, err = clientset.CoreV1().Pods("default").Create(
+		context.Background(), pod2, metav1.CreateOptions{})
 	assert.NoError(t, err)
 
 	krNode := &utils.LocalKRNode{
@@ -1755,6 +1434,7 @@ func TestDSR_PolicyRoutingCalledOncePerSync(t *testing.T) {
 	startInformersForServiceProxy(t, nsc, clientset)
 	waitForListerWithTimeout(t, nsc.svcLister, time.Second*10)
 	waitForListerWithTimeout(t, nsc.epSliceLister, time.Second*10)
+	waitForListerWithTimeout(t, nsc.podLister, time.Second*10)
 
 	nsc.setServiceMap(nsc.buildServicesInfo())
 	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
@@ -2027,12 +1707,12 @@ func TestDSR_TwoDSRServicesSameIPDifferentPorts(t *testing.T) {
 			Endpoints: []discoveryv1.Endpoint{
 				{
 					Addresses:  []string{fmt.Sprintf("172.20.1.%d", i+1)},
-					NodeName:   stringToPtr("localnode-1"),
-					Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+					NodeName:   testutils.ValToPtr("localnode-1"),
+					Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
 				},
 			},
 			Ports: []discoveryv1.EndpointPort{
-				{Name: stringToPtr("http"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
+				{Name: testutils.ValToPtr("http"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
 			},
 		}
 		_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), endpointSlice, metav1.CreateOptions{})
@@ -2151,8 +1831,8 @@ func TestDSR_FWMarkCollisionCase_Issue1045(t *testing.T) {
 		endpointSlice := &discoveryv1.EndpointSlice{
 			ObjectMeta:  metav1.ObjectMeta{Name: fmt.Sprintf("%s-slice", svcName), Namespace: "default", Labels: map[string]string{discoveryv1.LabelServiceName: svcName}},
 			AddressType: discoveryv1.AddressTypeIPv4,
-			Endpoints:   []discoveryv1.Endpoint{{Addresses: []string{fmt.Sprintf("172.20.1.%d", i+1)}, NodeName: stringToPtr("localnode-1"), Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)}}},
-			Ports:       []discoveryv1.EndpointPort{{Name: stringToPtr("port"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)}},
+			Endpoints:   []discoveryv1.Endpoint{{Addresses: []string{fmt.Sprintf("172.20.1.%d", i+1)}, NodeName: testutils.ValToPtr("localnode-1"), Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)}}},
+			Ports:       []discoveryv1.EndpointPort{{Name: testutils.ValToPtr("port"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)}},
 		}
 		_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), endpointSlice, metav1.CreateOptions{})
 		assert.NoError(t, err)
