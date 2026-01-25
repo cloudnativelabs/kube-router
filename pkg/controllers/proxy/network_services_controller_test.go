@@ -22,75 +22,26 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type LinuxNetworkingMockImpl struct {
-	ipvsSvcs []*ipvs.Service
+// mockIPVSState holds stateful IPVS data for tests that need to track services
+type mockIPVSState struct {
+	services []*ipvs.Service
 }
 
-func NewLinuxNetworkMock() *LinuxNetworkingMockImpl {
-	lnm := &LinuxNetworkingMockImpl{
-		ipvsSvcs: make([]*ipvs.Service, 0, 64),
+func newMockIPVSState() *mockIPVSState {
+	return &mockIPVSState{
+		services: make([]*ipvs.Service, 0, 64),
 	}
-	return lnm
 }
 
-func (lnm *LinuxNetworkingMockImpl) getKubeDummyInterface() (netlink.Link, error) {
-	var iface netlink.Link
-	iface, err := netlink.LinkByName("lo")
-	return iface, err
-}
-
-func (lnm *LinuxNetworkingMockImpl) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) error {
-	return nil
-}
-
-func (lnm *LinuxNetworkingMockImpl) setupRoutesForExternalIPForDSR(s serviceInfoMap, setupIPv4, setupIPv6 bool) error {
-	return nil
-}
-
-func (lnm *LinuxNetworkingMockImpl) ipvsGetServices() ([]*ipvs.Service, error) {
-	// need to return a copy, else if the caller does `range svcs` and then calls
-	// DelService (on the returned svcs reference), it'll skip the "next" element
-	svcsCopy := make([]*ipvs.Service, len(lnm.ipvsSvcs))
-	copy(svcsCopy, lnm.ipvsSvcs)
-	return svcsCopy, nil
-}
-
-func (lnm *LinuxNetworkingMockImpl) ipAddrAdd(iface netlink.Link, addr, nodeIP string, addRouter bool) error {
-	return nil
-}
-
-func (lnm *LinuxNetworkingMockImpl) ipAddrDel(iface netlink.Link, ip, nodeIP string) error {
-	return nil
-}
-
-func (lnm *LinuxNetworkingMockImpl) ipvsAddServer(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
-	return nil
-}
-
-func (lnm *LinuxNetworkingMockImpl) ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16,
-	persistent bool, persistentTimeout int32, scheduler string,
-	flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
+// addService adds an IPVS service to the mock state and returns the created service
+func (m *mockIPVSState) addService(vip net.IP, protocol, port uint16) *ipvs.Service {
 	svc := &ipvs.Service{
 		Address:  vip,
 		Protocol: protocol,
 		Port:     port,
 	}
-	lnm.ipvsSvcs = append(lnm.ipvsSvcs, svc)
-	return svcs, svc, nil
-}
-
-func (lnm *LinuxNetworkingMockImpl) ipvsDelService(ipvsSvc *ipvs.Service) error {
-	for idx, svc := range lnm.ipvsSvcs {
-		if svc.Address.Equal(ipvsSvc.Address) && svc.Protocol == ipvsSvc.Protocol && svc.Port == ipvsSvc.Port {
-			lnm.ipvsSvcs = append(lnm.ipvsSvcs[:idx], lnm.ipvsSvcs[idx+1:]...)
-			break
-		}
-	}
-	return nil
-}
-
-func (lnm *LinuxNetworkingMockImpl) ipvsGetDestinations(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
-	return []*ipvs.Destination{}, nil
+	m.services = append(m.services, svc)
+	return svc
 }
 
 func waitForListerWithTimeout(t *testing.T, lister cache.Indexer, timeout time.Duration) {
@@ -147,23 +98,65 @@ func boolToPtr(b bool) *bool {
 	return &b
 }
 
-// setupTestController creates and initializes a NetworkServicesController for testing
+// setupTestController creates and initializes a NetworkServicesController for testing.
+// It returns the mock IPVS state (for injecting pre-existing services), the LinuxNetworkingMock
+// (for verifying calls), and the controller.
 func setupTestController(t *testing.T, service *v1core.Service, endpointSlice *discoveryv1.EndpointSlice) (
-	*LinuxNetworkingMockImpl, *LinuxNetworkingMock, *NetworkServicesController) {
+	*mockIPVSState, *LinuxNetworkingMock, *NetworkServicesController) {
 	t.Helper()
 
-	lnm := NewLinuxNetworkMock()
-	mockedLinuxNetworking := &LinuxNetworkingMock{
-		getKubeDummyInterfaceFunc:          lnm.getKubeDummyInterface,
-		ipAddrAddFunc:                      lnm.ipAddrAdd,
-		ipAddrDelFunc:                      lnm.ipAddrDel,
-		ipvsAddServerFunc:                  lnm.ipvsAddServer,
-		ipvsAddServiceFunc:                 lnm.ipvsAddService,
-		ipvsDelServiceFunc:                 lnm.ipvsDelService,
-		ipvsGetDestinationsFunc:            lnm.ipvsGetDestinations,
-		ipvsGetServicesFunc:                lnm.ipvsGetServices,
-		setupPolicyRoutingForDSRFunc:       lnm.setupPolicyRoutingForDSR,
-		setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSR,
+	ipvsState := newMockIPVSState()
+
+	// Create the mock using moq-generated LinuxNetworkingMock with inline implementations
+	mock := &LinuxNetworkingMock{
+		getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
+			return netlink.LinkByName("lo")
+		},
+		ipAddrAddFunc: func(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
+			return nil
+		},
+		ipAddrDelFunc: func(iface netlink.Link, ip string, nodeIP string) error {
+			return nil
+		},
+		ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
+			return nil
+		},
+		ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16,
+			persistent bool, persistentTimeout int32, scheduler string,
+			flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
+			svc := &ipvs.Service{
+				Address:  vip,
+				Protocol: protocol,
+				Port:     port,
+			}
+			ipvsState.services = append(ipvsState.services, svc)
+			return svcs, svc, nil
+		},
+		ipvsDelServiceFunc: func(ipvsSvc *ipvs.Service) error {
+			for idx, svc := range ipvsState.services {
+				if svc.Address.Equal(ipvsSvc.Address) && svc.Protocol == ipvsSvc.Protocol &&
+					svc.Port == ipvsSvc.Port {
+					ipvsState.services = append(ipvsState.services[:idx], ipvsState.services[idx+1:]...)
+					break
+				}
+			}
+			return nil
+		},
+		ipvsGetDestinationsFunc: func(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
+			return []*ipvs.Destination{}, nil
+		},
+		ipvsGetServicesFunc: func() ([]*ipvs.Service, error) {
+			// Return a copy to avoid mutation issues during iteration
+			svcsCopy := make([]*ipvs.Service, len(ipvsState.services))
+			copy(svcsCopy, ipvsState.services)
+			return svcsCopy, nil
+		},
+		setupPolicyRoutingForDSRFunc: func(setupIPv4 bool, setupIPv6 bool) error {
+			return nil
+		},
+		setupRoutesForExternalIPForDSRFunc: func(serviceInfo serviceInfoMap, setupIPv4 bool, setupIPv6 bool) error {
+			return nil
+		},
 	}
 
 	clientset := fake.NewSimpleClientset()
@@ -190,7 +183,7 @@ func setupTestController(t *testing.T, service *v1core.Service, endpointSlice *d
 	}
 	nsc := &NetworkServicesController{
 		krNode:     krNode,
-		ln:         mockedLinuxNetworking,
+		ln:         mock,
 		nphc:       NewNodePortHealthCheck(),
 		ipsetMutex: &sync.Mutex{},
 	}
@@ -201,7 +194,7 @@ func setupTestController(t *testing.T, service *v1core.Service, endpointSlice *d
 	nsc.setServiceMap(nsc.buildServicesInfo())
 	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
 
-	return lnm, mockedLinuxNetworking, nsc
+	return ipvsState, mock, nsc
 }
 
 // getIPsFromAddrAddCalls extracts IP addresses from ipAddrAdd mock calls
@@ -435,15 +428,13 @@ func TestNetworkServicesController_syncIpvsServices(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			lnm, mock, nsc := setupTestController(t, tc.service, tc.endpointSlice)
+			ipvsState, mock, nsc := setupTestController(t, tc.service, tc.endpointSlice)
 
 			// Inject pre-existing IPVS services if requested (to test deletion)
 			var fooSvc1, fooSvc2 *ipvs.Service
 			if tc.injectPreExistingIpvsSvc {
-				_, fooSvc1, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("1.2.3.4"), 6, 1234, false, 0, "rr",
-					schedFlags{})
-				_, fooSvc2, _ = lnm.ipvsAddService(lnm.ipvsSvcs, net.ParseIP("5.6.7.8"), 6, 5678, false, 0, "rr",
-					schedFlags{true, true, false})
+				fooSvc1 = ipvsState.addService(net.ParseIP("1.2.3.4"), 6, 1234)
+				fooSvc2 = ipvsState.addService(net.ParseIP("5.6.7.8"), 6, 5678)
 			}
 
 			// Wait for endpoint slice if we have one with data
