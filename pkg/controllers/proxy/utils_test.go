@@ -7,21 +7,43 @@ import (
 	"testing"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
+	"github.com/moby/ipvs"
 	"github.com/stretchr/testify/assert"
+	"github.com/vishvananda/netlink"
 )
 
 func getMoqNSC() *NetworkServicesController {
-	lnm := NewLinuxNetworkMock()
-	mockedLinuxNetworking := &LinuxNetworkingMock{
-		getKubeDummyInterfaceFunc:          lnm.getKubeDummyInterface,
-		ipAddrAddFunc:                      lnm.ipAddrAdd,
-		ipvsAddServerFunc:                  lnm.ipvsAddServer,
-		ipvsAddServiceFunc:                 lnm.ipvsAddService,
-		ipvsDelServiceFunc:                 lnm.ipvsDelService,
-		ipvsGetDestinationsFunc:            lnm.ipvsGetDestinations,
-		ipvsGetServicesFunc:                lnm.ipvsGetServices,
-		setupPolicyRoutingForDSRFunc:       lnm.setupPolicyRoutingForDSR,
-		setupRoutesForExternalIPForDSRFunc: lnm.setupRoutesForExternalIPForDSR,
+	// Create a minimal mock using moq-generated LinuxNetworkingMock
+	mock := &LinuxNetworkingMock{
+		getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
+			return netlink.LinkByName("lo")
+		},
+		ipAddrAddFunc: func(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
+			return nil
+		},
+		ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
+			return nil
+		},
+		ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16,
+			persistent bool, persistentTimeout int32, scheduler string,
+			flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
+			return svcs, &ipvs.Service{Address: vip, Protocol: protocol, Port: port}, nil
+		},
+		ipvsDelServiceFunc: func(ipvsSvc *ipvs.Service) error {
+			return nil
+		},
+		ipvsGetDestinationsFunc: func(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
+			return []*ipvs.Destination{}, nil
+		},
+		ipvsGetServicesFunc: func() ([]*ipvs.Service, error) {
+			return []*ipvs.Service{}, nil
+		},
+		setupPolicyRoutingForDSRFunc: func(setupIPv4 bool, setupIPv6 bool) error {
+			return nil
+		},
+		setupRoutesForExternalIPForDSRFunc: func(serviceInfo serviceInfoMap, setupIPv4 bool, setupIPv6 bool) error {
+			return nil
+		},
 	}
 
 	krNode := &utils.LocalKRNode{
@@ -32,7 +54,7 @@ func getMoqNSC() *NetworkServicesController {
 	}
 	return &NetworkServicesController{
 		krNode:    krNode,
-		ln:        mockedLinuxNetworking,
+		ln:        mock,
 		fwMarkMap: map[uint32]string{},
 	}
 }
