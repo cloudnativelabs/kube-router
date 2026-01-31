@@ -586,8 +586,17 @@ func TestTrafficPolicy_ExternalLocal_NodePort_NoLocalEndpoints_SkipsService(t *t
 	assert.Contains(t, actualServices, "10.100.2.3:6:8080:false:rr",
 		"ClusterIP service should still be created")
 
-	// But NodePort should be skipped due to no local endpoints with Local policy
+	// Verify remote endpoint IS added to ClusterIP (internalTrafficPolicy=Cluster allows remote)
+	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+	assert.Contains(t, actualEndpoints, "10.100.2.3:8080->172.20.2.7:80",
+		"remote endpoint should be added to ClusterIP (internal policy is Cluster)")
+
+	// Verify NO NodePort endpoints were added (externalTrafficPolicy=Local with no local endpoints)
 	// The syncNodePortIpvsServices function has early exit logic for this case
+	for _, endpoint := range actualEndpoints {
+		assert.NotContains(t, endpoint, "30003",
+			"NodePort should not have any endpoints when externalTrafficPolicy=Local and no local endpoints exist")
+	}
 }
 
 // TestTrafficPolicy_ExternalCluster_ExternalIP_AllEndpoints verifies that with externalTrafficPolicy=Cluster,
@@ -708,11 +717,13 @@ func TestTrafficPolicy_ExternalLocal_ExternalIP_NoLocalEndpoints_SkipsService(t 
 	assert.Contains(t, actualServices, "10.100.3.3:6:8080:false:rr",
 		"ClusterIP service should still be created")
 
-	// ExternalIP should be skipped due to no local endpoints with Local policy
-	// Check that ExternalIP was NOT created
-	// Note: The actual behavior depends on implementation - ExternalIP may still be
-	// created but with no endpoints, or may be skipped entirely
+	// Verify remote endpoint IS added to ClusterIP (internalTrafficPolicy=Cluster allows remote)
 	actualEndpoints := getEndpointsFromAddServerCalls(mock)
+	assert.Contains(t, actualEndpoints, "10.100.3.3:8080->172.20.2.10:80",
+		"remote endpoint should be added to ClusterIP (internal policy is Cluster)")
+
+	// ExternalIP should be skipped due to no local endpoints with Local policy
+	// Verify that the remote endpoint is NOT added to the ExternalIP
 	assert.NotContains(t, actualEndpoints, "203.0.113.3:8080->172.20.2.10:80",
 		"remote endpoint should NOT be added to ExternalIP with Local policy")
 }
@@ -1574,6 +1585,11 @@ func TestDSR_ExternalTrafficPolicyLocal_NoLocalEndpoints(t *testing.T) {
 	svcs := getServicesFromAddServiceCalls(mock)
 	assert.Contains(t, svcs, "10.100.1.1:6:8080:false:rr",
 		"ClusterIP service should still be created")
+
+	// Verify remote endpoint IS added to ClusterIP (internalTrafficPolicy=Cluster allows remote)
+	allEndpoints := getEndpointsFromAddServerCalls(mock)
+	assert.Contains(t, allEndpoints, "10.100.1.1:8080->172.20.2.1:80",
+		"remote endpoint should be added to ClusterIP (internal policy is Cluster)")
 }
 
 // TestDSR_ClusterIPUnaffectedByExternalTrafficPolicy verifies that DSR annotation only affects
