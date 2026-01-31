@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
@@ -80,22 +81,6 @@ func startInformersForServiceProxy(t *testing.T, nsc *NetworkServicesController,
 	nsc.svcLister = svcInformer.GetIndexer()
 	nsc.epSliceLister = epSliceInformer.GetIndexer()
 	nsc.podLister = podInformer.GetIndexer()
-}
-
-func stringToPtr(str string) *string {
-	return &str
-}
-
-func int32ToPtr(i int32) *int32 {
-	return &i
-}
-
-func protoToPtr(proto v1core.Protocol) *v1core.Protocol {
-	return &proto
-}
-
-func boolToPtr(b bool) *bool {
-	return &b
 }
 
 // setupTestController creates and initializes a NetworkServicesController for testing.
@@ -396,17 +381,17 @@ func TestNetworkServicesController_syncIpvsServices(t *testing.T) {
 				Endpoints: []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"172.20.1.1"},
-						NodeName:   stringToPtr("node-1"),
-						Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+						NodeName:   testutils.ValToPtr("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
 					},
 					{
 						Addresses:  []string{"172.20.1.2"},
-						NodeName:   stringToPtr("node-2"),
-						Conditions: discoveryv1.EndpointConditions{Ready: boolToPtr(true)},
+						NodeName:   testutils.ValToPtr("node-2"),
+						Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
 					},
 				},
 				Ports: []discoveryv1.EndpointPort{
-					{Name: stringToPtr("port-1"), Port: int32ToPtr(80), Protocol: protoToPtr(v1core.ProtocolTCP)},
+					{Name: testutils.ValToPtr("port-1"), Port: testutils.ValToPtr[int32](80), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
 				},
 			},
 			expectedIPs: []string{"10.0.0.1", "1.1.1.1", "2.2.2.2"},
