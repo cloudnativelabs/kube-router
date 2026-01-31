@@ -1643,32 +1643,39 @@ func TestDSR_TwoDSRServicesSameIPDifferentPorts(t *testing.T) {
 		&intPolicyCluster, extPolicyCluster)
 
 	ipvsState := newMockIPVSState()
+	netlinkState := newMockNetlinkState()
+
+	// Mock the standalone routeVIPTrafficToDirector function
+	routeVIPTrafficToDirector = createMockRouteVIPTrafficToDirector(netlinkState)
+
 	mock := &LinuxNetworkingMock{
-		getKubeDummyInterfaceFunc: func() (netlink.Link, error) {
-			return netlink.LinkByName("lo")
-		},
-		ipAddrAddFunc: func(iface netlink.Link, ip string, nodeIP string, addRoute bool) error {
-			return nil
-		},
-		ipAddrDelFunc: func(iface netlink.Link, ip string, nodeIP string) error {
-			return nil
-		},
+		getKubeDummyInterfaceFunc:          createMockGetKubeDummyInterface(netlinkState),
+		ipAddrAddFunc:                      createMockIPAddrAdd(netlinkState),
+		ipAddrDelFunc:                      createMockIPAddrDel(netlinkState),
+		setupPolicyRoutingForDSRFunc:       createMockSetupPolicyRoutingForDSR(netlinkState),
+		setupRoutesForExternalIPForDSRFunc: createMockSetupRoutesForExternalIPForDSR(netlinkState),
+		configureContainerForDSRFunc:       createMockConfigureContainerForDSR(netlinkState),
+		getContainerPidWithDockerFunc:      createMockGetContainerPidWithDocker(netlinkState),
+		getContainerPidWithCRIFunc:         createMockGetContainerPidWithCRI(netlinkState),
+		findIfaceLinkForPidFunc:            createMockFindIfaceLinkForPid(netlinkState),
 		ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
 			return nil
 		},
 		ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16,
 			persistent bool, persistentTimeout int32, scheduler string,
 			flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
-			svc := &ipvs.Service{Address: vip, Protocol: protocol, Port: port}
+			svc := &ipvs.Service{
+				Address:  vip,
+				Protocol: protocol,
+				Port:     port,
+			}
 			ipvsState.services = append(ipvsState.services, svc)
 			return svcs, svc, nil
 		},
 		ipvsAddFWMarkServiceFunc: func(svcs []*ipvs.Service, fwMark uint32, family uint16, protocol uint16,
 			port uint16, persistent bool, persistentTimeout int32, scheduler string,
 			flags schedFlags) (*ipvs.Service, error) {
-			svc := &ipvs.Service{FWMark: fwMark, Protocol: protocol, Port: port}
-			ipvsState.services = append(ipvsState.services, svc)
-			return svc, nil
+			return &ipvs.Service{FWMark: fwMark}, nil
 		},
 		ipvsDelServiceFunc: func(ipvsSvc *ipvs.Service) error {
 			return nil
@@ -1680,12 +1687,6 @@ func TestDSR_TwoDSRServicesSameIPDifferentPorts(t *testing.T) {
 			svcsCopy := make([]*ipvs.Service, len(ipvsState.services))
 			copy(svcsCopy, ipvsState.services)
 			return svcsCopy, nil
-		},
-		setupPolicyRoutingForDSRFunc: func(setupIPv4 bool, setupIPv6 bool) error {
-			return nil
-		},
-		setupRoutesForExternalIPForDSRFunc: func(serviceInfo serviceInfoMap, setupIPv4 bool, setupIPv6 bool) error {
-			return nil
 		},
 	}
 
@@ -1716,6 +1717,29 @@ func TestDSR_TwoDSRServicesSameIPDifferentPorts(t *testing.T) {
 			},
 		}
 		_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), endpointSlice, metav1.CreateOptions{})
+		assert.NoError(t, err)
+	}
+
+	// Create pods for the endpoints (required for DSR container configuration)
+	for i := 1; i <= 2; i++ {
+		pod := &v1core.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("pod-%d", i),
+				Namespace: "default",
+			},
+			Spec: v1core.PodSpec{
+				Containers: []v1core.Container{{Name: fmt.Sprintf("container-%d", i)}},
+			},
+			Status: v1core.PodStatus{
+				PodIP:  fmt.Sprintf("172.20.1.%d", i),
+				PodIPs: []v1core.PodIP{{IP: fmt.Sprintf("172.20.1.%d", i)}},
+				HostIP: "10.0.0.1",
+				ContainerStatuses: []v1core.ContainerStatus{
+					{ContainerID: fmt.Sprintf("docker://container-%d-id", i)},
+				},
+			},
+		}
+		_, err = clientset.CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
 		assert.NoError(t, err)
 	}
 
