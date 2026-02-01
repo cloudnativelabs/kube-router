@@ -7,7 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	gobgpapi "github.com/osrg/gobgp/v3/api"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
+	gobgpapi "github.com/osrg/gobgp/v4/api"
+	"github.com/osrg/gobgp/v4/pkg/apiutil"
 
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -151,36 +154,48 @@ func getPodCIDRsFromAllNodeSources(node *v1core.Node) (podCIDRs []string) {
 	return node.Spec.PodCIDRs
 }
 
-// getBGPRouteInfoForVIP attempt to automatically find the subnet, BGP AFI/SAFI Family, and nexthop for a given VIP
-// based upon whether it is an IPv4 address or an IPv6 address. Returns slash notation subnet as uint32 suitable for
-// sending to GoBGP and an error if it is unable to determine the subnet automatically
-func (nrc *NetworkRoutingController) getBGPRouteInfoForVIP(vip string) (subnet uint32, nh string,
-	afiFamily gobgpapi.Family_Afi, err error) {
+// getBGPPathForVIP creates a BGP path for advertising or withdrawing a VIP (service IP).
+// It automatically determines whether the VIP is IPv4 or IPv6, finds the appropriate
+// next-hop from the node, and constructs a /32 or /128 CIDR path.
+func getBGPPathForVIP(vip string, krNode utils.NodeIPAware, isWithdrawal bool) (*apiutil.Path, error) {
 	ip := net.ParseIP(vip)
 	if ip == nil {
-		err = fmt.Errorf("could not parse VIP: %s", vip)
-		return
+		return nil, fmt.Errorf("could not parse VIP: %s", vip)
 	}
-	if ip.To4() != nil {
+
+	var nextHop string
+	var subnet int32
+
+	// Determine IP version and set appropriate parameters
+	switch {
+	case ip.To4() != nil:
 		subnet = 32
-		afiFamily = gobgpapi.Family_AFI_IP
-		nhIP := nrc.krNode.FindBestIPv4NodeAddress()
+		nhIP := krNode.FindBestIPv4NodeAddress()
 		if nhIP == nil {
-			err = fmt.Errorf("could not find an IPv4 address on node to set as nexthop for vip: %s", vip)
+			return nil, fmt.Errorf("could not find an IPv4 address on node to set as nexthop for vip: %s", vip)
 		}
-		nh = nhIP.String()
-		return
-	}
-	if ip.To16() != nil {
+		nextHop = nhIP.String()
+	case ip.To16() != nil:
 		subnet = 128
-		afiFamily = gobgpapi.Family_AFI_IP6
-		nhIP := nrc.krNode.FindBestIPv6NodeAddress()
+		nhIP := krNode.FindBestIPv6NodeAddress()
 		if nhIP == nil {
-			err = fmt.Errorf("could not find an IPv6 address on node to set as nexthop for vip: %s", vip)
+			return nil, fmt.Errorf("could not find an IPv6 address on node to set as nexthop for vip: %s", vip)
 		}
-		nh = nhIP.String()
-		return
+		nextHop = nhIP.String()
 	}
-	err = fmt.Errorf("could not convert IP to IPv4 or IPv6, unable to find subnet for: %s", vip)
-	return
+
+	// Construct CIDR (e.g., "10.96.0.1/32" or "2001:db8::1/128")
+	cidr := fmt.Sprintf("%s/%d", vip, subnet)
+
+	// Use builder to create the path
+	builder, err := bgp.NewPathBuilder(cidr, nextHop)
+	if err != nil {
+		return nil, err
+	}
+
+	// Mark as withdrawal if requested
+	if isWithdrawal {
+		return builder.WithWithdrawal().Build()
+	}
+	return builder.Build()
 }

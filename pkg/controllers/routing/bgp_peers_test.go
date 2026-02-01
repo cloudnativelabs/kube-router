@@ -4,7 +4,7 @@ import (
 	"net"
 	"testing"
 
-	gobgpapi "github.com/osrg/gobgp/v3/api"
+	gobgpapi "github.com/osrg/gobgp/v4/api"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,18 +1,15 @@
 package routing
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
-
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 
-	gobgpapi "github.com/osrg/gobgp/v3/api"
+	"github.com/osrg/gobgp/v4/pkg/apiutil"
 	v1core "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/client-go/tools/cache"
@@ -22,74 +19,53 @@ import (
 
 // bgpAdvertiseVIP advertises the service vip (cluster ip or load balancer ip or external IP) the configured peers
 func (nrc *NetworkRoutingController) bgpAdvertiseVIP(vip string) error {
-	subnet, nh, afiFamily, err := nrc.getBGPRouteInfoForVIP(vip)
+	path, err := getBGPPathForVIP(vip, nrc.krNode, false)
 	if err != nil {
-		return fmt.Errorf("unable to advertise VIP because of: %v", err)
+		return fmt.Errorf("unable to advertise VIP: %w", err)
 	}
 
-	klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers", vip, subnet, nh)
+	klog.V(2).Infof("Advertising route: '%s' to peers", vip)
 
-	a1, _ := anypb.New(&gobgpapi.OriginAttribute{
-		Origin: 0,
+	// Add the path using v4 API
+	responses, err := nrc.bgpServer.AddPath(apiutil.AddPathRequest{
+		Paths: []*apiutil.Path{path},
 	})
-	a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
-		NextHop: nh,
-	})
-	attrs := []*anypb.Any{a1, a2}
-	nlri1, _ := anypb.New(&gobgpapi.IPAddressPrefix{
-		Prefix:    vip,
-		PrefixLen: subnet,
-	})
-	_, err = nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
-		Path: &gobgpapi.Path{
-			Family: &gobgpapi.Family{Afi: afiFamily, Safi: gobgpapi.Family_SAFI_UNICAST},
-			Nlri:   nlri1,
-			Pattrs: attrs,
-		},
-	})
+	if err != nil {
+		return err
+	}
+	if len(responses) > 0 && responses[0].Error != nil {
+		return responses[0].Error
+	}
 
 	if nrc.MetricsEnabled {
 		metrics.ControllerBGPadvertisementsSent.WithLabelValues("advertise-vip").Inc()
 	}
 
-	return err
+	return nil
 }
 
 // bgpWithdrawVIP  un-advertises the service vip
 func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
-	subnet, nh, afiFamily, err := nrc.getBGPRouteInfoForVIP(vip)
+	path, err := getBGPPathForVIP(vip, nrc.krNode, true)
 	if err != nil {
-		return fmt.Errorf("unable to advertise VIP because of: %v", err)
+		return fmt.Errorf("unable to withdraw VIP: %w", err)
 	}
 
-	klog.V(2).Infof("Withdrawing route: '%s/%d via %s' to peers", vip, subnet, nh)
+	klog.V(2).Infof("Withdrawing route: '%s' to peers", vip)
 
-	a1, _ := anypb.New(&gobgpapi.OriginAttribute{
-		Origin: 0,
+	// Delete the path using v4 API
+	err = nrc.bgpServer.DeletePath(apiutil.DeletePathRequest{
+		Paths: []*apiutil.Path{path},
 	})
-	a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
-		NextHop: nh,
-	})
-	attrs := []*anypb.Any{a1, a2}
-	nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
-		Prefix:    vip,
-		PrefixLen: subnet,
-	})
-	path := gobgpapi.Path{
-		Family: &gobgpapi.Family{Afi: afiFamily, Safi: gobgpapi.Family_SAFI_UNICAST},
-		Nlri:   nlri,
-		Pattrs: attrs,
+	if err != nil {
+		return err
 	}
-	err = nrc.bgpServer.DeletePath(context.Background(), &gobgpapi.DeletePathRequest{
-		TableType: gobgpapi.TableType_GLOBAL,
-		Path:      &path,
-	})
 
 	if nrc.MetricsEnabled {
 		metrics.ControllerBGPadvertisementsSent.WithLabelValues("withdraw-vip").Inc()
 	}
 
-	return err
+	return nil
 }
 
 func (nrc *NetworkRoutingController) advertiseVIPs(vips []string) {
