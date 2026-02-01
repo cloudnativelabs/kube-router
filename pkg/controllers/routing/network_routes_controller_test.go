@@ -2,7 +2,6 @@ package routing
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"reflect"
@@ -27,8 +26,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 
-	gobgpapi "github.com/osrg/gobgp/v3/api"
-	gobgp "github.com/osrg/gobgp/v3/pkg/server"
+	gobgpapi "github.com/osrg/gobgp/v4/api"
+	"github.com/osrg/gobgp/v4/pkg/apiutil"
+	bgppkt "github.com/osrg/gobgp/v4/pkg/packet/bgp"
+	gobgp "github.com/osrg/gobgp/v4/pkg/server"
 )
 
 func Test_advertiseClusterIPs(t *testing.T) {
@@ -387,11 +388,12 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			waitForListerWithTimeout(testcase.nrc.svcLister, time.Second*10, t)
 
 			eventMu := sync.Mutex{}
-			var events []*gobgpapi.Path
-			pathWatch := func(r *gobgpapi.WatchEventResponse) {
-				if table := r.GetTable(); table != nil {
-					for _, p := range table.Paths {
-						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+			var events []*apiutil.Path
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), gobgp.WatchEventMessageCallbacks{
+				OnBestPath: func(paths []*apiutil.Path, _ time.Time) {
+					for _, p := range paths {
+						// Check if path is IPv4 or IPv6 unicast
+						if p.Family == bgppkt.RF_IPv4_UC || p.Family == bgppkt.RF_IPv6_UC {
 							func() {
 								defer eventMu.Unlock()
 								eventMu.Lock()
@@ -399,17 +401,8 @@ func Test_advertiseClusterIPs(t *testing.T) {
 							}()
 						}
 					}
-				}
-			}
-			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
-				Table: &gobgpapi.WatchEventRequest_Table{
-					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
-						{
-							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
-						},
-					},
 				},
-			}, pathWatch)
+			}, gobgp.WatchBestPath(true))
 			if err != nil {
 				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
 			}
@@ -444,13 +437,12 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			defer eventMu.Unlock()
 			eventMu.Lock()
 			for _, path := range events {
-				nlri := path.GetNlri()
-				var prefix gobgpapi.IPAddressPrefix
-				err = nlri.UnmarshalTo(&prefix)
-				if err != nil {
-					t.Fatalf("Invalid nlri in advertised path")
+				// apiutil.Path has the NLRI as a native BGP type directly
+				ipPrefix, ok := path.Nlri.(*bgppkt.IPAddrPrefix)
+				if !ok {
+					t.Fatalf("Unexpected NLRI type: %T", path.Nlri)
 				}
-				advertisedPrefix := prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen)
+				advertisedPrefix := ipPrefix.Prefix.String()
 				if _, ok := testcase.watchEvents[advertisedPrefix]; !ok {
 					t.Errorf("got unexpected path: %v", advertisedPrefix)
 				}
@@ -1027,12 +1019,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 				}
 			}()
 
-			var events []*gobgpapi.Path
+			var events []*apiutil.Path
 			eventMu := sync.Mutex{}
-			pathWatch := func(r *gobgpapi.WatchEventResponse) {
-				if table := r.GetTable(); table != nil {
-					for _, p := range table.Paths {
-						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), gobgp.WatchEventMessageCallbacks{
+				OnBestPath: func(paths []*apiutil.Path, _ time.Time) {
+					for _, p := range paths {
+						if p.Family == bgppkt.RF_IPv4_UC || p.Family == bgppkt.RF_IPv6_UC {
 							func() {
 								defer eventMu.Unlock()
 								eventMu.Lock()
@@ -1040,17 +1032,8 @@ func Test_advertiseExternalIPs(t *testing.T) {
 							}()
 						}
 					}
-				}
-			}
-			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
-				Table: &gobgpapi.WatchEventRequest_Table{
-					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
-						{
-							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
-						},
-					},
 				},
-			}, pathWatch)
+			}, gobgp.WatchBestPath(true))
 			if err != nil {
 				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
 			}
@@ -1100,13 +1083,12 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			defer eventMu.Unlock()
 			eventMu.Lock()
 			for _, path := range events {
-				nlri := path.GetNlri()
-				var prefix gobgpapi.IPAddressPrefix
-				err = nlri.UnmarshalTo(&prefix)
-				if err != nil {
-					t.Fatalf("Invalid nlri in advertised path")
+				// apiutil.Path has the NLRI as a native BGP type directly
+				ipPrefix, ok := path.Nlri.(*bgppkt.IPAddrPrefix)
+				if !ok {
+					t.Fatalf("Unexpected NLRI type: %T", path.Nlri)
 				}
-				advertisedPrefix := prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen)
+				advertisedPrefix := ipPrefix.Prefix.String()
 				if _, ok := testcase.watchEvents[advertisedPrefix]; !ok {
 					t.Errorf("got unexpected path: %v", advertisedPrefix)
 				}
@@ -1325,12 +1307,12 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 				}
 			}()
 
-			var events []*gobgpapi.Path
+			var events []*apiutil.Path
 			eventMu := sync.Mutex{}
-			pathWatch := func(r *gobgpapi.WatchEventResponse) {
-				if table := r.GetTable(); table != nil {
-					for _, p := range table.Paths {
-						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), gobgp.WatchEventMessageCallbacks{
+				OnBestPath: func(paths []*apiutil.Path, _ time.Time) {
+					for _, p := range paths {
+						if p.Family == bgppkt.RF_IPv4_UC || p.Family == bgppkt.RF_IPv6_UC {
 							func() {
 								defer eventMu.Unlock()
 								eventMu.Lock()
@@ -1338,17 +1320,8 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 							}()
 						}
 					}
-				}
-			}
-			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
-				Table: &gobgpapi.WatchEventRequest_Table{
-					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
-						{
-							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
-						},
-					},
 				},
-			}, pathWatch)
+			}, gobgp.WatchBestPath(true))
 			if err != nil {
 				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
 			}
@@ -1399,13 +1372,12 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			defer eventMu.Unlock()
 			eventMu.Lock()
 			for _, path := range events {
-				nlri := path.GetNlri()
-				var prefix gobgpapi.IPAddressPrefix
-				err = nlri.UnmarshalTo(&prefix)
-				if err != nil {
-					t.Fatalf("Invalid nlri in advertised path")
+				// apiutil.Path has the NLRI as a native BGP type directly
+				ipPrefix, ok := path.Nlri.(*bgppkt.IPAddrPrefix)
+				if !ok {
+					t.Fatalf("Unexpected NLRI type: %T", path.Nlri)
 				}
-				advertisedPrefix := prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen)
+				advertisedPrefix := ipPrefix.Prefix.String()
 				if _, ok := testcase.watchEvents[advertisedPrefix]; !ok {
 					t.Errorf("got unexpected path: %v", advertisedPrefix)
 				}
@@ -1690,12 +1662,12 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 				}
 			}()
 
-			var events []*gobgpapi.Path
+			var events []*apiutil.Path
 			eventMu := sync.Mutex{}
-			pathWatch := func(r *gobgpapi.WatchEventResponse) {
-				if table := r.GetTable(); table != nil {
-					for _, p := range table.Paths {
-						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), gobgp.WatchEventMessageCallbacks{
+				OnBestPath: func(paths []*apiutil.Path, _ time.Time) {
+					for _, p := range paths {
+						if p.Family == bgppkt.RF_IPv4_UC || p.Family == bgppkt.RF_IPv6_UC {
 							func() {
 								defer eventMu.Unlock()
 								eventMu.Lock()
@@ -1703,17 +1675,8 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 							}()
 						}
 					}
-				}
-			}
-			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
-				Table: &gobgpapi.WatchEventRequest_Table{
-					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
-						{
-							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
-						},
-					},
 				},
-			}, pathWatch)
+			}, gobgp.WatchBestPath(true))
 			if err != nil {
 				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
 			}
@@ -1765,13 +1728,12 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			defer eventMu.Unlock()
 			eventMu.Lock()
 			for _, path := range events {
-				nlri := path.GetNlri()
-				var prefix gobgpapi.IPAddressPrefix
-				err = nlri.UnmarshalTo(&prefix)
-				if err != nil {
-					t.Fatalf("Invalid nlri in advertised path")
+				// apiutil.Path has the NLRI as a native BGP type directly
+				ipPrefix, ok := path.Nlri.(*bgppkt.IPAddrPrefix)
+				if !ok {
+					t.Fatalf("Unexpected NLRI type: %T", path.Nlri)
 				}
-				advertisedPrefix := prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen)
+				advertisedPrefix := ipPrefix.Prefix.String()
 				if _, ok := testcase.watchEvents[advertisedPrefix]; !ok {
 					t.Errorf("got unexpected path: %v", advertisedPrefix)
 				}
@@ -2072,12 +2034,12 @@ func Test_advertisePodRoute(t *testing.T) {
 				}
 			}()
 
-			var events []*gobgpapi.Path
+			var events []*apiutil.Path
 			eventMu := sync.Mutex{}
-			pathWatch := func(r *gobgpapi.WatchEventResponse) {
-				if table := r.GetTable(); table != nil {
-					for _, p := range table.Paths {
-						if p.Family.Afi == gobgpapi.Family_AFI_IP || p.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), gobgp.WatchEventMessageCallbacks{
+				OnBestPath: func(paths []*apiutil.Path, _ time.Time) {
+					for _, p := range paths {
+						if p.Family == bgppkt.RF_IPv4_UC || p.Family == bgppkt.RF_IPv6_UC {
 							func() {
 								defer eventMu.Unlock()
 								eventMu.Lock()
@@ -2085,17 +2047,8 @@ func Test_advertisePodRoute(t *testing.T) {
 							}()
 						}
 					}
-				}
-			}
-			err = testcase.nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
-				Table: &gobgpapi.WatchEventRequest_Table{
-					Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
-						{
-							Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
-						},
-					},
 				},
-			}, pathWatch)
+			}, gobgp.WatchBestPath(true))
 			if err != nil {
 				t.Fatalf("failed to register callback to mortor global routing table: %v", err)
 			}
@@ -2137,13 +2090,12 @@ func Test_advertisePodRoute(t *testing.T) {
 			defer eventMu.Unlock()
 			eventMu.Lock()
 			for _, path := range events {
-				nlri := path.GetNlri()
-				var prefix gobgpapi.IPAddressPrefix
-				err = nlri.UnmarshalTo(&prefix)
-				if err != nil {
-					t.Fatalf("Invalid nlri in advertised path")
+				// apiutil.Path has the NLRI as a native BGP type directly
+				ipPrefix, ok := path.Nlri.(*bgppkt.IPAddrPrefix)
+				if !ok {
+					t.Fatalf("Unexpected NLRI type: %T", path.Nlri)
 				}
-				advertisedPrefix := prefix.Prefix + "/" + fmt.Sprint(prefix.PrefixLen)
+				advertisedPrefix := ipPrefix.Prefix.String()
 				if _, ok := testcase.watchEvents[advertisedPrefix]; !ok {
 					t.Errorf("got unexpected path: %v", advertisedPrefix)
 				}

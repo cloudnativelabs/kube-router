@@ -31,7 +31,7 @@ DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.8.0
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
 # See Versions: https://github.com/osrg/gobgp/releases
-GOBGP_VERSION=v3.37.0
+GOBGP_VERSION=v4.2.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 # See Versions: https://github.com/goreleaser/goreleaser/releases
 GORELEASER_VERSION=v2.13.3
@@ -241,9 +241,9 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 		sh -c \
-		'CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v3/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .'
+		'CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v4/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .'
 else
-	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v3/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .
+	CGO_ENABLED=0 GOARCH=$(GOARCH) GOOS=linux go install github.com/osrg/gobgp/v4/cmd/gobgp@$(GOBGP_VERSION) && if [ ${GOARCH} != $$(go env GOHOSTARCH) ]; then PREFIX=linux_${GOARCH}; fi && cp $$(go env GOPATH)/bin/$${PREFIX}/gobgp .
 endif
 	@echo Finished building gobgp.
 
