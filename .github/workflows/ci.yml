@@ -18,9 +18,9 @@ permissions:
   contents: read
 
 env:
-  BUILDTIME_BASE: "golang:1.25.1-alpine3.22"
-  RUNTIME_BASE: "alpine:3.22"
-  GO_VERSION: "~1.25.1"
+  BUILDTIME_BASE: "golang:1.25.7-alpine3.23"
+  RUNTIME_BASE: "alpine:3.23"
+  GO_VERSION: "~1.25.7"
   GO_CACHE: "/home/runner/.cache/go-build"
   GO_MOD_CACHE: "/home/runner/go/pkg/mod"
 
