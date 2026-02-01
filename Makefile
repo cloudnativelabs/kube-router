@@ -27,7 +27,7 @@ BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 # See Versions: https://hub.docker.com/_/alpine
 RUNTIME_BASE?=alpine:3.23
 # See Versions: https://hub.docker.com/r/golangci/golangci-lint/tags
-DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.4.0
+DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.8.0
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
 # See Versions: https://github.com/osrg/gobgp/releases
