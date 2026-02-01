@@ -15,8 +15,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
-	gobgpapi "github.com/osrg/gobgp/v3/api"
-	gobgp "github.com/osrg/gobgp/v3/pkg/server"
+	gobgpapi "github.com/osrg/gobgp/v4/api"
+	gobgp "github.com/osrg/gobgp/v4/pkg/server"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -113,7 +113,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -124,7 +124,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -141,12 +141,12 @@ func Test_AddPolicies(t *testing.T) {
 			},
 			&gobgpapi.DefinedSet{},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        allPeerSet,
 				List:        []string{},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
@@ -155,17 +155,17 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 			},
@@ -261,7 +261,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -272,7 +272,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -288,17 +288,17 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        externalPeerSet,
 				List:        []string{"10.11.0.1/32", "10.11.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        allPeerSet,
 				List:        []string{"10.11.0.1/32", "10.11.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        customImportRejectSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -328,34 +328,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 				{
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 			},
@@ -364,51 +364,51 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 				{
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 				{
 					Name: "kube_router_import_stmt2",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: customImportRejectSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 			},
@@ -502,7 +502,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -513,7 +513,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -529,17 +529,17 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        externalPeerSet,
 				List:        []string{"10.12.0.1/32", "10.12.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        allPeerSet,
 				List:        []string{"10.12.0.1/32", "10.12.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
@@ -548,34 +548,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 				{
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 			},
@@ -584,34 +584,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 				{
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 			},
@@ -705,7 +705,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -716,7 +716,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -732,17 +732,17 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        externalPeerSet,
 				List:        []string{"10.13.0.1/32", "10.13.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        allPeerSet,
 				List:        []string{"10.13.0.1/32", "10.13.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
@@ -751,17 +751,17 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 			},
@@ -770,34 +770,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 				{
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 			},
@@ -893,7 +893,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -904,7 +904,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -920,17 +920,17 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        externalPeerSet,
 				List:        []string{"10.14.0.1/32", "10.14.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        allPeerSet,
 				List:        []string{"10.14.0.1/32", "10.14.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
@@ -939,34 +939,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 				{
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 						AsPrepend: &gobgpapi.AsPrependAction{
 							Asn:    65100,
 							Repeat: 5,
@@ -979,34 +979,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 				{
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 			},
@@ -1101,7 +1101,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -1112,7 +1112,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -1128,17 +1128,17 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        externalPeerSet,
 				List:        []string{"10.15.0.1/32", "10.15.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        allPeerSet,
 				List:        []string{"10.15.0.1/32", "10.15.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
@@ -1147,34 +1147,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: iBGPPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 				{
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 						AsPrepend: &gobgpapi.AsPrependAction{
 							Asn:    65100,
 							Repeat: 5,
@@ -1187,34 +1187,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 				{
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 			},
@@ -1310,7 +1310,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        podCIDRSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -1321,7 +1321,7 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        serviceVIPsSet,
 				Prefixes: []*gobgpapi.Prefix{
 					{
@@ -1337,17 +1337,17 @@ func Test_AddPolicies(t *testing.T) {
 				},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        externalPeerSet,
 				List:        []string{"10.16.0.1/32", "10.16.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        allPeerSet,
 				List:        []string{"10.16.0.1/32", "10.16.0.2/32"},
 			},
 			&gobgpapi.DefinedSet{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        customImportRejectSet,
 				Prefixes:    []*gobgpapi.Prefix{},
 			},
@@ -1356,42 +1356,42 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_export_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						Community: &gobgpapi.CommunityAction{
-							Type:        gobgpapi.CommunityAction_ADD,
+							Type:        gobgpapi.CommunityAction_TYPE_ADD,
 							Communities: []string{"65535:65281"}, // corresponds to no-export
 						},
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 				{
 					Name: "kube_router_export_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: podCIDRSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: externalPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
 						Community: &gobgpapi.CommunityAction{
-							Type:        gobgpapi.CommunityAction_ADD,
+							Type:        gobgpapi.CommunityAction_TYPE_ADD,
 							Communities: []string{"65535:65281"}, // corresponds to no-export
 						},
-						RouteAction: gobgpapi.RouteAction_ACCEPT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT,
 					},
 				},
 			},
@@ -1400,34 +1400,34 @@ func Test_AddPolicies(t *testing.T) {
 					Name: "kube_router_import_stmt0",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: serviceVIPsSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 				{
 					Name: "kube_router_import_stmt1",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
-							Type: gobgpapi.MatchSet_ANY,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: allPeerSet,
 						},
 						RpkiResult: -1,
 					},
 					Actions: &gobgpapi.Actions{
-						RouteAction: gobgpapi.RouteAction_REJECT,
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
 			},
@@ -1484,7 +1484,7 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(),
-				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: podCIDRSet},
+				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX, Name: podCIDRSet},
 				func(podDefinedSet *gobgpapi.DefinedSet) {
 					if !reflect.DeepEqual(podDefinedSet, testcase.podDefinedSet) {
 						t.Logf("expected pod defined set: %+v", testcase.podDefinedSet)
@@ -1497,7 +1497,7 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(),
-				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_PREFIX, Name: customImportRejectSet},
+				&gobgpapi.ListDefinedSetRequest{DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX, Name: customImportRejectSet},
 				func(customImportRejectDefinedSet *gobgpapi.DefinedSet) {
 					if !reflect.DeepEqual(customImportRejectDefinedSet, testcase.customImportRejectDefinedSet) {
 						t.Logf("expected customimportreject defined set: %+v", testcase.customImportRejectDefinedSet)
@@ -1510,7 +1510,7 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(), &gobgpapi.ListDefinedSetRequest{
-				DefinedType: gobgpapi.DefinedType_PREFIX,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
 				Name:        serviceVIPsSet}, func(clusterIPDefinedSet *gobgpapi.DefinedSet) {
 				if !reflect.DeepEqual(clusterIPDefinedSet, testcase.clusterIPDefinedSet) {
 					t.Logf("expected pod defined set: %+v", testcase.clusterIPDefinedSet)
@@ -1523,7 +1523,7 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(), &gobgpapi.ListDefinedSetRequest{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        externalPeerSet}, func(externalPeerDefinedSet *gobgpapi.DefinedSet) {
 				if !reflect.DeepEqual(externalPeerDefinedSet, testcase.externalPeerDefinedSet) {
 					t.Logf("expected external peer defined set: %+v", testcase.externalPeerDefinedSet.List)
@@ -1536,7 +1536,7 @@ func Test_AddPolicies(t *testing.T) {
 			}
 
 			err = testcase.nrc.bgpServer.ListDefinedSet(context.Background(), &gobgpapi.ListDefinedSetRequest{
-				DefinedType: gobgpapi.DefinedType_NEIGHBOR,
+				DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_NEIGHBOR,
 				Name:        allPeerSet}, func(allPeerDefinedSet *gobgpapi.DefinedSet) {
 				if !reflect.DeepEqual(allPeerDefinedSet, testcase.allPeerDefinedSet) {
 					t.Logf("expected all peer defined set: %+v", testcase.allPeerDefinedSet.List)
@@ -1548,8 +1548,8 @@ func Test_AddPolicies(t *testing.T) {
 				t.Fatalf("error validating defined sets: %v", err)
 			}
 
-			checkPolicies(t, testcase, gobgpapi.PolicyDirection_EXPORT, testcase.exportPolicyStatements)
-			checkPolicies(t, testcase, gobgpapi.PolicyDirection_IMPORT, testcase.importPolicyStatements)
+			checkPolicies(t, testcase, gobgpapi.PolicyDirection_POLICY_DIRECTION_EXPORT, testcase.exportPolicyStatements)
+			checkPolicies(t, testcase, gobgpapi.PolicyDirection_POLICY_DIRECTION_IMPORT, testcase.importPolicyStatements)
 		})
 	}
 }
@@ -1558,9 +1558,9 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 	policyExists := false
 
 	var direction string
-	if gobgpDirection.String() == "EXPORT" {
+	if gobgpDirection.String() == "POLICY_DIRECTION_EXPORT" {
 		direction = "export"
-	} else if gobgpDirection.String() == "IMPORT" {
+	} else if gobgpDirection.String() == "POLICY_DIRECTION_IMPORT" {
 		direction = "import"
 	}
 
