@@ -34,7 +34,7 @@ DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
 GOBGP_VERSION=v3.37.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 # See Versions: https://github.com/goreleaser/goreleaser/releases
-GORELEASER_VERSION=v2.12.2
+GORELEASER_VERSION=v2.13.3
 # See Versions: https://github.com/matryer/moq/releases
 MOQ_VERSION=v0.6.0
 # See Versions: https://github.com/containernetworking/plugins/releases
