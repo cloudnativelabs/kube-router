@@ -38,7 +38,7 @@ GORELEASER_VERSION=v2.13.3
 # See Versions: https://github.com/matryer/moq/releases
 MOQ_VERSION=v0.6.0
 # See Versions: https://github.com/containernetworking/plugins/releases
-CNI_VERSION=v1.8.0
+CNI_VERSION=v1.9.0
 UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
