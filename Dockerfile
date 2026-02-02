@@ -14,7 +14,7 @@ RUN apk add --no-cache make git tar curl \
 
 WORKDIR /iptables-wrappers
 # This is the latest commit on the master branch.
-ENV IPTABLES_WRAPPERS_VERSION=f6ef44b2c449cca8f005b32dea9a4b497202dbef
+ENV IPTABLES_WRAPPERS_VERSION=c6b9b2d4ee8701f3d476768ab8732d1b85ec7fef
 RUN git clone https://github.com/kubernetes-sigs/iptables-wrappers.git . \
     && git checkout "${IPTABLES_WRAPPERS_VERSION}" \
     && make build \
