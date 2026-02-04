@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
-	gobgp "github.com/osrg/gobgp/v3/pkg/packet/bgp"
+	gobgp "github.com/osrg/gobgp/v4/pkg/packet/bgp"
 )
 
 const (

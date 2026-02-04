@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/goccy/go-yaml"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/ccoveille/go-safecast/v2"
 	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
@@ -25,8 +24,10 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/tunnels"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
-	gobgpapi "github.com/osrg/gobgp/v3/api"
-	gobgp "github.com/osrg/gobgp/v3/pkg/server"
+	gobgpapi "github.com/osrg/gobgp/v4/api"
+	"github.com/osrg/gobgp/v4/pkg/apiutil"
+	bgppkt "github.com/osrg/gobgp/v4/pkg/packet/bgp"
+	gobgp "github.com/osrg/gobgp/v4/pkg/server"
 	"github.com/vishvananda/netlink"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -491,38 +492,67 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 }
 
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
-	pathWatch := func(r *gobgpapi.WatchEventResponse) {
-		if table := r.GetTable(); table != nil {
-			for _, path := range table.Paths {
-				if path.Family.Afi == gobgpapi.Family_AFI_IP ||
-					path.Family.Afi == gobgpapi.Family_AFI_IP6 ||
-					path.Family.Safi == gobgpapi.Family_SAFI_UNICAST {
+	// v4 API uses structured callbacks instead of response handling
+	err := nrc.bgpServer.WatchEvent(context.Background(), gobgp.WatchEventMessageCallbacks{
+		OnBestPath: func(paths []*apiutil.Path, _ time.Time) {
+			for _, path := range paths {
+				// Check if this is an IPv4 or IPv6 unicast path
+				// NOTE: Prior to the v3 migration (Dec 2021), the GoBGP v2 API filtered routes to only
+				// IPv4 UNICAST at the API level. During the v3 migration, a manual filter was added but
+				// incorrectly used OR instead of AND, allowing any UNICAST route regardless of AFI or any
+				// IPv4/IPv6 route regardless of SAFI. This has been corrected here to match the original
+				// intent: only accept IPv4 or IPv6 routes that are UNICAST.
+				family := path.Family
+				if (family.Afi() == bgppkt.AFI_IP || family.Afi() == bgppkt.AFI_IP6) && family.Safi() == bgppkt.SAFI_UNICAST {
 					if nrc.MetricsEnabled {
 						metrics.ControllerBGPadvertisementsReceived.Inc()
 					}
-					if path.NeighborIp == "<nil>" {
+					// Check if path has a valid peer address
+					if !path.PeerAddress.IsValid() {
 						return
 					}
-					klog.V(2).Infof("Processing bgp route advertisement from peer: %s", path.NeighborIp)
+					klog.V(2).Infof("Processing bgp route advertisement from peer: %s", path.PeerAddress.String())
 					if err := nrc.injectRoute(path); err != nil {
 						klog.Errorf("failed to inject routes due to: %v", err)
 					}
 				}
 			}
-		}
-	}
-	err := nrc.bgpServer.WatchEvent(context.Background(), &gobgpapi.WatchEventRequest{
-		Table: &gobgpapi.WatchEventRequest_Table{
-			Filters: []*gobgpapi.WatchEventRequest_Table_Filter{
-				{
-					Type: gobgpapi.WatchEventRequest_Table_Filter_BEST,
-				},
-			},
 		},
-	}, pathWatch)
+	}, gobgp.WatchBestPath(true))
 	if err != nil {
 		klog.Errorf("failed to register monitor global routing table callback due to: %v", err)
 	}
+}
+
+// advertiseCIDRs advertises a list of CIDR prefixes using the given next-hop address
+func (nrc *NetworkRoutingController) advertiseCIDRs(cidrs []string, nextHop net.IP) error {
+	for _, cidr := range cidrs {
+		klog.V(2).Infof("Advertising route: '%s via %s' to peers", cidr, nextHop.String())
+
+		// Use builder to create the path (builder handles IPv4/IPv6 differences automatically)
+		builder, err := bgp.NewPathBuilder(cidr, nextHop.String())
+		if err != nil {
+			return fmt.Errorf("failed to create path builder for %s: %w", cidr, err)
+		}
+
+		path, err := builder.Build()
+		if err != nil {
+			return fmt.Errorf("failed to build path for %s: %w", cidr, err)
+		}
+
+		// Add the path using v4 API
+		responses, err := nrc.bgpServer.AddPath(apiutil.AddPathRequest{
+			Paths: []*apiutil.Path{path},
+		})
+		if err != nil {
+			return err
+		}
+		if len(responses) > 0 && responses[0].Error != nil {
+			return responses[0].Error
+		}
+		klog.V(1).Infof("Successfully added path for %s", cidr)
+	}
+	return nil
 }
 
 func (nrc *NetworkRoutingController) advertisePodRoute() error {
@@ -538,38 +568,8 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 				"available IPv4 node IPs, this shouldn't happen")
 		}
 
-		for _, cidr := range nrc.podIPv4CIDRs {
-			ip, cidrNet, err := net.ParseCIDR(cidr)
-			cidrLen, _ := cidrNet.Mask.Size()
-			if err != nil || cidrLen < 0 || cidrLen > 32 {
-				return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
-			}
-			klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers",
-				ip, cidrLen, nrc.krNode.GetPrimaryNodeIP().String())
-			nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
-				PrefixLen: uint32(cidrLen),
-				Prefix:    ip.String(),
-			})
-
-			a1, _ := anypb.New(&gobgpapi.OriginAttribute{
-				Origin: 0,
-			})
-			a2, _ := anypb.New(&gobgpapi.NextHopAttribute{
-				NextHop: nodePrimaryIPv4IP.String(),
-			})
-			attrs := []*anypb.Any{a1, a2}
-
-			response, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
-				Path: &gobgpapi.Path{
-					Family: &gobgpapi.Family{Afi: gobgpapi.Family_AFI_IP, Safi: gobgpapi.Family_SAFI_UNICAST},
-					Nlri:   nlri,
-					Pattrs: attrs,
-				},
-			})
-			if err != nil {
-				return err
-			}
-			klog.V(1).Infof("Response from adding path: %s", response)
+		if err := nrc.advertiseCIDRs(nrc.podIPv4CIDRs, nodePrimaryIPv4IP); err != nil {
+			return err
 		}
 	}
 
@@ -583,50 +583,17 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 			)
 		}
 
-		for _, cidr := range nrc.podIPv6CIDRs {
-			ip, cidrNet, err := net.ParseCIDR(cidr)
-			cidrLen, _ := cidrNet.Mask.Size()
-			if err != nil || cidrLen < 0 || cidrLen > 128 {
-				return fmt.Errorf("the pod CIDR IP given is not a proper mask: %d", cidrLen)
-			}
-
-			klog.V(2).Infof("Advertising route: '%s/%d via %s' to peers", ip, cidrLen, nodePrimaryIPv6IP)
-
-			v6Family := &gobgpapi.Family{
-				Afi:  gobgpapi.Family_AFI_IP6,
-				Safi: gobgpapi.Family_SAFI_UNICAST,
-			}
-			nlri, _ := anypb.New(&gobgpapi.IPAddressPrefix{
-				PrefixLen: uint32(cidrLen),
-				Prefix:    ip.String(),
-			})
-			a1, _ := anypb.New(&gobgpapi.OriginAttribute{
-				Origin: 0,
-			})
-			v6Attrs, _ := anypb.New(&gobgpapi.MpReachNLRIAttribute{
-				Family:   v6Family,
-				NextHops: []string{nodePrimaryIPv6IP.String()},
-				Nlris:    []*anypb.Any{nlri},
-			})
-			response, err := nrc.bgpServer.AddPath(context.Background(), &gobgpapi.AddPathRequest{
-				Path: &gobgpapi.Path{
-					Family: v6Family,
-					Nlri:   nlri,
-					Pattrs: []*anypb.Any{a1, v6Attrs},
-				},
-			})
-			if err != nil {
-				return err
-			}
-			klog.V(1).Infof("Response from adding path: %s", response)
+		if err := nrc.advertiseCIDRs(nrc.podIPv6CIDRs, nodePrimaryIPv6IP); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
-	klog.V(2).Infof("injectRoute Path Looks Like: %s", path.String())
+func (nrc *NetworkRoutingController) injectRoute(path *apiutil.Path) error {
+	klog.V(2).Infof("injectRoute Path Looks Like: Nlri=%s Family=%s Withdrawal=%v",
+		path.Nlri.String(), path.Family.String(), path.Withdrawal)
 	var route *netlink.Route
 	var link netlink.Link
 
@@ -661,7 +628,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 	// If we've made it this far, then it is likely that the node is holding a destination route for this path already.
 	// If the path we've received from GoBGP is a withdrawal, we should clean up any lingering routes that may exist
 	// on the host (rather than creating a new one or updating an existing one), and then return.
-	if path.IsWithdraw {
+	if path.Withdrawal {
 		klog.V(2).Infof("Removing route: '%s via %s' from peer in the routing table", dst, nextHop)
 
 		// The path might be withdrawn because the peer became unestablished or it may be withdrawn because just the
@@ -765,7 +732,7 @@ func (nrc *NetworkRoutingController) injectRoute(path *gobgpapi.Path) error {
 func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, error) {
 	var peerConnected bool
 	peerFunc := func(peer *gobgpapi.Peer) {
-		if peer.Conf.NeighborAddress == peerIP && peer.State.SessionState == gobgpapi.PeerState_ESTABLISHED {
+		if peer.Conf.NeighborAddress == peerIP && peer.State.SessionState == gobgpapi.PeerState_SESSION_STATE_ESTABLISHED {
 			peerConnected = true
 		}
 	}
