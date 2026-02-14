@@ -88,9 +88,6 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	// get the current list of the nodes from API server
 	nodes := nrc.nodeLister.List()
 
-	if nrc.MetricsEnabled {
-		metrics.ControllerBPGpeers.Set(float64(len(nodes)))
-	}
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
 	for _, obj := range nodes {

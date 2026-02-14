@@ -158,12 +158,12 @@ var (
 		Name:      "controller_routes_sync_time",
 		Help:      "Time it took for controller to sync routes",
 	})
-	// ControllerBPGpeers BGP peers in the runtime configuration
-	ControllerBPGpeers = prometheus.NewGauge(prometheus.GaugeOpts{
+	// ControllerBGPPeerInfo BGP peer information
+	ControllerBGPPeerInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
-		Name:      "controller_bgp_peers",
-		Help:      "BGP peers in the runtime configuration",
-	})
+		Name:      "bgp_peer_info",
+		Help:      "BGP peer information",
+	}, []string{"address", "type", "asn", "state"})
 	// ControllerBGPInternalPeersSyncTime Time it took to sync internal bgp peers
 	ControllerBGPInternalPeersSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
