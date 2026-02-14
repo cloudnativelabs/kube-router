@@ -436,6 +436,10 @@ func (nrc *NetworkRoutingController) Run(
 			nrc.syncInternalPeers()
 		}
 
+		if nrc.MetricsEnabled {
+			nrc.updateBGPPeerMetrics()
+		}
+
 		if err == nil {
 			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkRoutesController)
 		} else {
@@ -727,6 +731,23 @@ func (nrc *NetworkRoutingController) injectRoute(path *apiutil.Path) error {
 	nrc.routeSyncer.AddInjectedRoute(dst, route)
 	// Immediately sync the local route table regardless of timer
 	return nrc.routeSyncer.SyncLocalRouteTable()
+}
+
+func (nrc *NetworkRoutingController) updateBGPPeerMetrics() {
+	metrics.ControllerBGPPeerInfo.Reset()
+	err := nrc.bgpServer.ListPeer(context.Background(), &gobgpapi.ListPeerRequest{}, func(peer *gobgpapi.Peer) {
+		if peer.Conf == nil || peer.State == nil {
+			return
+		}
+		peerAddress := peer.Conf.NeighborAddress
+		peerType := strings.ToLower(strings.TrimPrefix(peer.State.GetType().String(), "PEER_TYPE_"))
+		peerASN := strconv.FormatUint(uint64(peer.Conf.PeerAsn), 10)
+		peerState := strings.ToLower(strings.TrimPrefix(peer.State.SessionState.String(), "SESSION_STATE_"))
+		metrics.ControllerBGPPeerInfo.WithLabelValues(peerAddress, peerType, peerASN, peerState).Set(1)
+	})
+	if err != nil {
+		klog.Errorf("error updating BGP peer metrics: %v", err)
+	}
 }
 
 func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, error) {
@@ -1227,7 +1248,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPadvertisementsReceived)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPadvertisementsSent)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
-		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBPGpeers)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPPeerInfo)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerRoutesSyncTime)
 		nrc.MetricsEnabled = true
 	}
