@@ -23,10 +23,9 @@ const (
 	awsMaxRetries             = 5
 )
 
-// disableSourceDestinationCheck disables src-dst check of all the VM's when cluster
-// is provisioned on AWS. EC2 by default drops any packets originating or destination
-// to a VM with IP other than that of VM's ip. This check needs to be disabled so that
-// cross node pod-to-pod traffic can be sent and received by a VM.
+// disableSourceDestinationCheck disables src-dst check of all the VM's when cluster is provisioned on AWS. EC2 by
+// default drops any packets originating or destination to a VM with IP other than that of VM's ip. This check needs to
+// be disabled so that cross node pod-to-pod traffic can be sent and received by a VM.
 func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 	nodes := nrc.nodeLister.List()
 
@@ -44,15 +43,24 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 		instanceID := URL.Path
 		instanceID = strings.Trim(instanceID, "/")
 
-		cfg, _ := config.LoadDefaultConfig(context.TODO(),
-			config.WithRetryMaxAttempts(awsMaxRetries))
-		metadataClient := imds.NewFromConfig(cfg)
-		region, err := metadataClient.GetRegion(context.TODO(), &imds.GetRegionInput{})
+		// First, get the region from IMDS. This must be done before loading the full config because when using IRSA
+		// (IAM Roles for Service Accounts), the STS client needs a region configured before it can assume the role to
+		// get credentials.
+		imdsClient := imds.New(imds.Options{})
+		region, err := imdsClient.GetRegion(context.TODO(), &imds.GetRegionInput{})
 		if err != nil {
-			klog.Errorf("failed to disable source destination check due to: %v", err)
+			klog.Errorf("failed to get region from IMDS: %v", err)
 			return
 		}
-		cfg.Region = region.Region
+
+		// Now load the full AWS config with the region already set
+		cfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(region.Region),
+			config.WithRetryMaxAttempts(awsMaxRetries))
+		if err != nil {
+			klog.Errorf("failed to load AWS config: %v", err)
+			return
+		}
 		ec2Client := ec2.NewFromConfig(cfg)
 		_, err = ec2Client.ModifyInstanceAttribute(context.TODO(),
 			&ec2.ModifyInstanceAttributeInput{
