@@ -220,6 +220,8 @@ func convertSvcProtoToSysCallProto(svcProtocol string) uint16 {
 		return syscall.IPPROTO_TCP
 	case udpProtocol:
 		return syscall.IPPROTO_UDP
+	case sctpProtocol:
+		return syscall.IPPROTO_SCTP
 	default:
 		return syscall.IPPROTO_NONE
 	}
@@ -233,6 +235,8 @@ func convertSysCallProtoToSvcProto(sysProtocol uint16) string {
 		return tcpProtocol
 	case syscall.IPPROTO_UDP:
 		return udpProtocol
+	case syscall.IPPROTO_SCTP:
+		return sctpProtocol
 	default:
 		return noneProtocol
 	}
