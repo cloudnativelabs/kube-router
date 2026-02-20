@@ -746,7 +746,7 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 	var protocol string
 	for _, ipvsSvc := range ipvsSvcs {
 		// Note that this isn't all that safe of an assumption because FWMark services have a completely different
-		// protocol. So do SCTP services. However, we don't deal with SCTP in kube-router and FWMark is handled below.
+		// protocol, which is handled below.
 		protocol = convertSysCallProtoToSvcProto(ipvsSvc.Protocol)
 		// FWMark services by definition don't have a protocol, so we exclude those from the conditional so that they
 		// can be cleaned up correctly.
