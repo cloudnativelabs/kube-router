@@ -25,7 +25,7 @@ func sanitizeForComment(s string) string {
 	}, s)
 }
 
-func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHandler {
+func (npc *NetworkPolicyControllerBase) newPodEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			if podObj, ok := obj.(*api.Pod); ok {
@@ -63,14 +63,14 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 }
 
 // OnPodUpdate handles updates to pods from the Kubernetes api server
-func (npc *NetworkPolicyController) OnPodUpdate(obj any) {
+func (npc *NetworkPolicyControllerBase) OnPodUpdate(obj any) {
 	pod := obj.(*api.Pod)
 	klog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
 
 	npc.RequestFullSync()
 }
 
-func (npc *NetworkPolicyController) handlePodDelete(obj any) {
+func (npc *NetworkPolicyControllerBase) handlePodDelete(obj any) {
 	pod, ok := obj.(*api.Pod)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -91,7 +91,7 @@ func (npc *NetworkPolicyController) handlePodDelete(obj any) {
 // syncPodFirewallChains emits per-pod KUBE-POD-FW-* chains and the rules that jump into them for every local
 // pod. Returns the active pod-firewall chain names (for stale-rule cleanup) and a per-family map of pod IPs
 // whose chain was programmed this sync (consumed by populateProtectedPodsIPSet).
-func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []networkPolicyInfo,
+func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInfo []networkPolicyInfo,
 	version string) (map[string]bool, map[api.IPFamily][]string) {
 
 	activePodFwChains := make(map[string]bool)
@@ -192,7 +192,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 }
 
 // setup rules to jump to applicable network policy chains for the traffic from/to the pod
-func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainName string,
+func (npc *NetworkPolicyControllerBase) setupPodNetpolRules(pod podInfo, podFwChainName string,
 	networkPoliciesInfo []networkPolicyInfo, version string) {
 
 	hasIngressPolicy := false
@@ -267,7 +267,7 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 	}
 }
 
-func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod podInfo, podFwChainName string) {
+func (npc *NetworkPolicyControllerBase) interceptPodInboundTraffic(pod podInfo, podFwChainName string) {
 	for ipFamily, filterTableRules := range npc.filterTableRules {
 		ip, err := getPodIPForFamily(pod, ipFamily)
 		if err != nil {
@@ -308,7 +308,7 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod podInfo, podF
 
 // setup iptable rules to intercept outbound traffic from pods and run it across the
 // firewall chain corresponding to the pod so that egress network policies are enforced
-func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod podInfo, podFwChainName string) {
+func (npc *NetworkPolicyControllerBase) interceptPodOutboundTraffic(pod podInfo, podFwChainName string) {
 	for ipFamily, filterTableRules := range npc.filterTableRules {
 		ip, err := getPodIPForFamily(pod, ipFamily)
 		if err != nil {
@@ -343,7 +343,7 @@ func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod podInfo, pod
 	}
 }
 
-func (npc *NetworkPolicyController) getLocalPods(localPods map[string]podInfo, nodeIP string) {
+func (npc *NetworkPolicyControllerBase) getLocalPods(localPods map[string]podInfo, nodeIP string) {
 	for _, obj := range npc.podLister.List() {
 		pod := obj.(*api.Pod)
 		// ignore the pods running on the different node and pods that are not actionable

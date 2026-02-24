@@ -1,0 +1,125 @@
+name: ci-e2e-netpol
+
+on:
+  push:
+    branches:
+    - master
+    - v[1-9].*
+    - prep-v[1-9].*
+  pull_request:
+    branches:
+    - master
+    - v[1-9].*
+    - prep-v[1-9].*
+
+permissions:
+  contents: read
+
+env:
+  # Keep these in sync with ci.yml; update-deps will pin the SHAs.
+  BUILDTIME_BASE: "golang:1.26.3-alpine3.23@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d"
+  RUNTIME_BASE: "alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11"
+  GO_VERSION: "~1.26.3"
+  KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
+  KIND_VERSION: "v0.27.0"
+  KIND_NODE_IMAGE: "kindest/node:v1.32.2"
+
+jobs:
+  # Executes Integration Tests (require nft binary + kernel nftables support) 
+  ci-integration-tests:
+    name: ci-integration-tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+      id: go
+
+    - name: Download Go modules
+      run: go mod download
+
+    - name: Install nftables
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y nftables
+
+    - name: Run integration tests for kube-router netpol
+      run: |
+        sudo --preserve-env=PATH,HOME,GOPATH,GOROOT \
+          make test-integration BUILD_IN_DOCKER=false
+
+  e2e-netpol:
+    name: e2e-netpol (${{ matrix.backend }}, default-deny=${{ matrix.default-deny }})
+    runs-on: ubuntu-latest
+    env:
+      BACKEND: ${{ matrix.backend }}
+      DEFAULT_DENY: ${{ matrix.default-deny }}
+      KIND_CLUSTER_NAME: e2e
+      KIND_NODE_IMAGE: ${{ env.KIND_NODE_IMAGE }}
+      KUBE_ROUTER_IMAGE: ${{ env.KUBE_ROUTER_IMAGE }}
+      BUILDTIME_BASE: ${{ env.BUILDTIME_BASE }}
+      RUNTIME_BASE: ${{ env.RUNTIME_BASE }}
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [iptables, nftables]
+        default-deny: [false, true]
+    steps:
+    - name: Check out code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Set up Go
+      uses: ./.github/actions/setup-go
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Clean test cache
+      run: go clean -testcache
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+    # Build the kube-router image from source and load it into the local Docker daemon.
+    # The Dockerfile handles compilation in a builder stage, so no pre-built binary is needed.
+    - name: Build kube-router container image
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+      with:
+        context: .
+        load: true
+        build-args: |
+          BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
+          RUNTIME_BASE=${{ env.RUNTIME_BASE }}
+        tags: ${{ env.KUBE_ROUTER_IMAGE }}
+
+    - name: Install kind
+      run: hack/e2e-netpol.sh install-kind
+
+    - name: Create Kind cluster (dual-stack)
+      run: hack/e2e-netpol.sh create-cluster
+
+    - name: Load kube-router image into kind
+      run: hack/e2e-netpol.sh load-image
+
+    - name: Deploy kube-router (${{ matrix.backend }} NetworkPolicy backend)
+      run: hack/e2e-netpol.sh deploy
+
+    - name: Wait for kube-router to be ready
+      run: hack/e2e-netpol.sh wait
+
+    - name: Dump initial cluster state
+      run: hack/e2e-netpol.sh dump-initial
+
+    - name: Run NetworkPolicy e2e tests
+      run: hack/e2e-netpol.sh run-tests
+
+    - name: Collect debug info on failure
+      if: failure()
+      run: hack/e2e-netpol.sh dump-debug
+
+    - name: Delete Kind cluster
+      if: always()
+      run: hack/e2e-netpol.sh delete-cluster
