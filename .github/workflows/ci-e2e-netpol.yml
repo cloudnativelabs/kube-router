@@ -1,0 +1,185 @@
+name: ci-e2e-netpol
+
+on:
+  push:
+    branches:
+    - master
+    - v[1-9].*
+    - prep-v[1-9].*
+  pull_request:
+    branches:
+    - master
+    - v[1-9].*
+    - prep-v[1-9].*
+
+permissions:
+  contents: read
+
+env:
+  # Keep these in sync with ci.yml; update-deps will pin the SHAs.
+  BUILDTIME_BASE: "golang:1.25.7-alpine3.23@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced"
+  RUNTIME_BASE: "alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659"
+  GO_VERSION: "~1.25.7"
+  KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
+  KIND_VERSION: "v0.27.0"
+  KIND_NODE_IMAGE: "kindest/node:v1.32.2"
+
+jobs:
+  # Executes Integration Tests (require nft binary + kernel nftables support) 
+  ci-integration-tests:
+    name: ci-integration-tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v6
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+      id: go
+
+    - name: Download Go modules
+      run: go mod download
+
+    - name: Install nftables
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y nftables
+
+    - name: Run integration tests for kube-router netpol
+      run: |
+        sudo --preserve-env=PATH,HOME,GOPATH,GOROOT \
+          go test -tags integration -v -timeout 60s -run TestIntegration \
+          github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...
+
+  e2e-netpol:
+    name: e2e-netpol (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [iptables, nftables]
+    steps:
+    - name: Check out code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Set up Go
+      uses: ./.github/actions/setup-go
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Clean test cache
+      run: go clean -testcache
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+    # Build the kube-router image from source and load it into the local Docker daemon.
+    # The Dockerfile handles compilation in a builder stage, so no pre-built binary is needed.
+    - name: Build kube-router container image
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+      with:
+        context: .
+        load: true
+        build-args: |
+          BUILDTIME_BASE=${{ env.BUILDTIME_BASE }}
+          RUNTIME_BASE=${{ env.RUNTIME_BASE }}
+        tags: ${{ env.KUBE_ROUTER_IMAGE }}
+
+    - name: Install kind
+      run: |
+        curl -sSLo ./kind \
+          "https://kind.sigs.k8s.io/dl/${{ env.KIND_VERSION }}/kind-linux-amd64"
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+
+    - name: Create Kind cluster (dual-stack)
+      run: |
+        cat <<'EOF' | kind create cluster --image "${{ env.KIND_NODE_IMAGE }}" --name e2e --config=-
+        kind: Cluster
+        apiVersion: kind.x-k8s.io/v1alpha4
+        networking:
+          disableDefaultCNI: true
+          ipFamily: dual
+        nodes:
+          - role: control-plane
+          - role: worker
+        EOF
+
+
+    - name: Load kube-router image into kind
+      run: kind load docker-image "${{ env.KUBE_ROUTER_IMAGE }}" --name e2e
+
+    - name: Deploy kube-router (${{ matrix.netpol-backend }} NetworkPolicy backend)
+      run: |
+        MANIFEST=$(cat daemonset/generic-kuberouter.yaml \
+          | sed 's|[^ ]*cloudnativelabs/kube-router[^ ]*|kube-router:e2e-test|g' \
+          | sed 's|imagePullPolicy: Always|imagePullPolicy: Never|g')
+        if [[ "${{ matrix.netpol-backend }}" == "nftables" ]]; then
+          MANIFEST=$(echo "$MANIFEST" \
+            | yq '(select(.kind == "DaemonSet") | .spec.template.spec.containers[0].args) += ["--use-nftables-for-netpol=true"]')
+        fi
+        # debug: output the final manifest to be applied
+        echo "=== Final kube-router DaemonSet manifest ==="
+        echo "$MANIFEST"
+        echo "$MANIFEST" | kubectl apply -f -
+
+    - name: Wait for kube-router to be ready
+      run: kubectl rollout status daemonset/kube-router -n kube-system --timeout=120s
+
+    - name: Dump initial cluster state
+      run: |
+        echo "=== Nodes ==="
+        kubectl get nodes -o wide
+        echo ""
+        echo "=== Pods (all namespaces) ==="
+        kubectl get pods -A -o wide
+        echo ""
+        echo "=== kube-router DaemonSet ==="
+        kubectl -n kube-system describe daemonset/kube-router
+        echo ""
+        echo "=== kube-router initial logs ==="
+        kubectl -n kube-system logs -l k8s-app=kube-router --tail=100
+
+
+    - name: Run NetworkPolicy e2e tests
+      run: go test -v ./test/e2e/netpol/... -timeout 600s
+      env:
+        E2E: "1"
+
+
+    - name: Collect debug info on failure
+      if: failure()
+      run: |
+        echo "=== Nodes ==="
+        kubectl get nodes -o wide || true
+        echo ""
+        echo "=== Node descriptions ==="
+        kubectl describe nodes || true
+        echo ""
+        echo "=== All pods ==="
+        kubectl get pods -A -o wide || true
+        echo ""
+        echo "=== Events (all namespaces, sorted by time) ==="
+        kubectl get events -A --sort-by='.lastTimestamp' || true
+        echo ""
+        echo "=== kube-router DaemonSet description ==="
+        kubectl -n kube-system describe daemonset/kube-router || true
+        echo ""
+        echo "=== kube-router pod descriptions ==="
+        kubectl -n kube-system describe pods -l k8s-app=kube-router || true
+        echo ""
+        echo "=== kube-router full logs ==="
+        kubectl -n kube-system logs -l k8s-app=kube-router --tail=500 || true
+        echo ""
+        echo "=== nftables ruleset (per kube-router pod) ==="
+        for pod in $(kubectl -n kube-system get pods -l k8s-app=kube-router -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+          echo "--- $pod ---"
+          kubectl -n kube-system exec "$pod" -- nft list ruleset 2>&1 || true
+          echo ""
+        done
+
+    - name: Delete Kind cluster
+      if: always()
+      run: kind delete cluster --name e2e
