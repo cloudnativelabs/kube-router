@@ -17,7 +17,6 @@ worktrees
 /.vscode
 /.idea
 
-
 #### Go Lang Ignores ####
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore

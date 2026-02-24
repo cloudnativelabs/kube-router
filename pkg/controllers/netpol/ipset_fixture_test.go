@@ -86,6 +86,7 @@ func TestNetworkPolicyFixtureIPSets(t *testing.T) {
 			v1.IPv6Protocol: ipv6Handler,
 		},
 		validator,
+		nil, // knftInterfaces
 	)
 	require.NoError(t, err)
 
