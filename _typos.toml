@@ -7,6 +7,8 @@ extend-exclude = ["vendor/", "go.sum", "*_release_notes.md", "*.svg"]
 # FoU (Foo over UDP) is a real networking encapsulation type
 Fo = "Fo"
 FoU = "FoU"
+# nd-neighbor-solicit and nd-neighbor-advert are real nftables ICMPv6 type names
+nd = "nd"
 
 # RT_FILTER_OIF is a netlink constant (Output InterFace)
 OIF = "OIF"
