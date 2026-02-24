@@ -63,7 +63,7 @@ func Main() error {
 	}
 
 	if config.CleanupConfig {
-		cmd.CleanupConfigAndExit()
+		cmd.CleanupConfigAndExit(config)
 		return nil
 	}
 
