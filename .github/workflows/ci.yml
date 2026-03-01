@@ -199,7 +199,7 @@ jobs:
       id: go
 
     - name: Run GoReleaser
-      uses: goreleaser/goreleaser-action@v6
+      uses: goreleaser/goreleaser-action@v7
       with:
         version: "~> v2"
         distribution: goreleaser
