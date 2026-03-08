@@ -46,8 +46,8 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
 
 ### run-router = true
 
-* controller_bgp_peers
-  Number of BGP peers of the instance
+* bgp_peer_info
+  Metric per peer that shows BGP Peer connection: address, state, and type (internal for iBGP and external for eBGP)
 * controller_bgp_advertisements_received
   Total number of BGP advertisements received since kube-router started
 * controller_bgp_advertisements_sent
