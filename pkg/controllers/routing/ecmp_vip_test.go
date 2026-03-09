@@ -1079,7 +1079,7 @@ func getLoadBalancerProxySvc() *v1core.Service {
 		Status: v1core.ServiceStatus{
 			LoadBalancer: v1core.LoadBalancerStatus{
 				Ingress: []v1core.LoadBalancerIngress{
-					{IP: "10.0.255.1", IPMode: },
+					{IP: "10.0.255.1", IPMode: &testIpModeProxy},
 					{IP: "10.0.255.2", IPMode: &testIpModeProxy},
 				},
 			},
