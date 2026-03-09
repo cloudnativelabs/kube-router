@@ -44,3 +44,8 @@ go.work.sum
 
 # env file
 .env
+
+# AI stuff
+/.plans
+/.reviews
+/.opencode
