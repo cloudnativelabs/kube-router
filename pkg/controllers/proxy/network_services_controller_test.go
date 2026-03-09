@@ -46,6 +46,8 @@ func TestNetworkServicesController_syncIpvsServices(t *testing.T) {
 	// Default traffic policies used in tests
 	intTrafficPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
 	extTrafficPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+	lbIPModeProxy := v1core.LoadBalancerIngressIPModeProxy
+	lbIPModeVIP := v1core.LoadBalancerIngressIPModeVIP
 
 	tests := []struct {
 		name                     string
@@ -181,6 +183,69 @@ func TestNetworkServicesController_syncIpvsServices(t *testing.T) {
 				"10.0.0.1:6:8080:false:rr",
 				"1.1.1.1:6:8080:false:rr",
 				"2.2.2.2:6:8080:false:rr",
+			},
+		},
+		{
+			name: "service with loadbalancer IPs where ipMode is Proxy (should be skipped)",
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-1"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "LoadBalancer",
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "port-1", Protocol: "TCP", Port: 8080},
+					},
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{IP: "10.255.0.1", IPMode: &lbIPModeProxy},
+							{IP: "10.255.0.2", IPMode: &lbIPModeProxy},
+						},
+					},
+				},
+			},
+			endpointSlice: &discoveryv1.EndpointSlice{},
+			expectedIPs:   []string{"10.0.0.1", "1.1.1.1", "2.2.2.2"},
+			expectedServices: []string{
+				"10.0.0.1:6:8080:false:rr",
+				"1.1.1.1:6:8080:false:rr",
+				"2.2.2.2:6:8080:false:rr",
+			},
+		},
+		{
+			name: "service with mixed loadbalancer IPs (one Proxy, one VIP)",
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-1"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "LoadBalancer",
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "port-1", Protocol: "TCP", Port: 8080},
+					},
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{IP: "10.255.0.1", IPMode: &lbIPModeProxy},
+							{IP: "10.255.0.2", IPMode: &lbIPModeVIP},
+						},
+					},
+				},
+			},
+			endpointSlice: &discoveryv1.EndpointSlice{},
+			expectedIPs:   []string{"10.0.0.1", "1.1.1.1", "2.2.2.2", "10.255.0.2"},
+			expectedServices: []string{
+				"10.0.0.1:6:8080:false:rr",
+				"1.1.1.1:6:8080:false:rr",
+				"2.2.2.2:6:8080:false:rr",
+				"10.255.0.2:6:8080:false:rr",
 			},
 		},
 		{

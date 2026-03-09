@@ -338,7 +338,7 @@ func (nrc *NetworkRoutingController) getLoadBalancerIPs(svc *v1core.Service) []s
 		// skip headless services
 		if !utils.ClusterIPIsNoneOrBlank(svc.Spec.ClusterIP) {
 			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
-				if len(lbIngress.IP) > 0 {
+				if len(lbIngress.IP) > 0 && (lbIngress.IPMode == nil || *lbIngress.IPMode != v1core.LoadBalancerIPModeProxy) {
 					loadBalancerIPList = append(loadBalancerIPList, lbIngress.IP)
 				}
 			}
