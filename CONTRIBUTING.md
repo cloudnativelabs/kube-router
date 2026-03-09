@@ -1,63 +1,79 @@
-
-# Contributing to Kube-router
+# Contributing to kube-router
 
 ## Summary
 
-This document covers how to contribute to the kube-router project. Kube-router uses github PRs to manage contributions (could be anything from documentation, bug fixes, manifests etc.).
+This document covers how to contribute to the kube-router project. kube-router uses GitHub pull requests to
+manage contributions (documentation, bug fixes, features, manifests, etc.).
 
-Please read [users guide](/docs/user-guide.md) and [developers guide](/docs/developing.md) for the functionality and internals of kube-router.
+Please read the [User Guide](/docs/user-guide.md) and [Developer's Guide](/docs/developing.md) for
+functionality and internals of kube-router.
 
-## Filing issues
+## Getting Help
 
-If you have a question about Kube-router or have a problem using it, please start with contacting us on [community forum](https://kubernetes.slack.com/messages/C8DCQGTSB/) for quick help. If that doesn't answer your questions, or if you think you found a bug, please [file an issue](https://github.com/cloudnativelabs/kube-router/issues).
+If you have a question about kube-router or have a problem using it, please start with the
+[#kube-router](https://kubernetes.slack.com/messages/C8DCQGTSB/) channel on Kubernetes Slack.
+If that doesn't answer your question, or if you think you found a bug, please
+[file an issue](https://github.com/cloudnativelabs/kube-router/issues).
 
 ## Contributing Changes
 
-### Fork the code
+### Fork and Clone
 
-Navigate to:
-[https://github.com/cloudnativelabs/kube-router](https://github.com/cloudnativelabs/kube-router)
-and fork the repository.
-
-Follow these steps to setup a local repository for working on Kube-router:
-
-``` bash
-$ git clone https://github.com/YOUR_ACCOUNT/kube-router.git
-$ cd kube-router
-$ git remote add upstream https://github.com/cloudnativelabs/kube-router
-$ git checkout master
-$ git fetch upstream
-$ git rebase upstream/master
+```bash
+git clone https://github.com/YOUR_ACCOUNT/kube-router.git
+cd kube-router
+git remote add upstream https://github.com/cloudnativelabs/kube-router
+git checkout master
+git fetch upstream
+git rebase upstream/master
 ```
 
-### Creating A Feature Branch
+### Create a Feature Branch
 
-Create a new branch to make changes on and that branch.
-
-``` bash
-$ git checkout -b feature_x
-   (make your changes)
-$ git status
-$ git add .
-$ git commit -a -m "descriptive commit message for your changes"
-```
-get update from upstream
-
-``` bash
-$ git checkout master
-$ git fetch upstream
-$ git rebase upstream/master
-$ git checkout feature_x
-$ git rebase master
+```bash
+git checkout -b feature_x
 ```
 
-Now your `feature_x` branch is up-to-date with all the code in `upstream/master`, so push to your fork
+Make your changes, then ensure they pass formatting, linting, and tests before committing:
 
-### Performing A Pull Request
-
-``` bash
-$ git push origin master
-$ git push origin feature_x
+```bash
+make clean
+make gofmt-fix
+make
 ```
 
-Now that the `feature_x` branch has been pushed to your GitHub repository, you can initiate the pull request.
+This project uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Please adopt
+this convention for all commit messages. Use the following scope abbreviations for controller changes:
+
+- **NSC** -- Network Services Controller (`pkg/controllers/proxy/`)
+- **NRC** -- Network Routes Controller (`pkg/controllers/routing/`)
+- **NPC** -- Network Policy Controller (`pkg/controllers/netpol/`)
+
+Commit with a descriptive message that explains the *why*, not just the *what*:
+
+```bash
+git add .
+git commit -m "fix(NSC): handle nil endpoint slices during sync"
+```
+
+### Stay Up-to-Date
+
+Before pushing, rebase on the latest upstream:
+
+```bash
+git checkout master
+git fetch upstream
+git rebase upstream/master
+git checkout feature_x
+git rebase master
+```
+
+### Submit a Pull Request
+
+Push your branch and open a pull request:
+
+```bash
+git push origin feature_x
+```
+
+Then open a pull request from your fork on GitHub against the `master` branch.
