@@ -4,6 +4,27 @@ When kube-router is used to provide pod-to-pod networking, BGP is used to exchan
 provides flexible networking models to support different deployments (public vs private cloud, routable vs non-routable
 pod IPs, service IPs, etc.).
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Peering Within The Cluster](#peering-within-the-cluster)
+  - [Full Node-To-Node Mesh](#full-node-to-node-mesh)
+  - [Node-To-Node Peering Without Full Mesh](#node-to-node-peering-without-full-mesh)
+  - [Route-Reflector setup Without Full Mesh](#route-reflector-setup-without-full-mesh)
+- [Peering Outside The Cluster](#peering-outside-the-cluster)
+  - [Global External BGP Peers](#global-external-bgp-peers)
+  - [Node Specific External BGP Peers](#node-specific-external-bgp-peers)
+  - [AS Path Prepending](#as-path-prepending)
+  - [BGP Peer Local IP configuration](#bgp-peer-local-ip-configuration)
+  - [BGP Peer Password Authentication](#bgp-peer-password-authentication)
+  - [BGP Communities](#bgp-communities)
+  - [Custom BGP Import Policy Reject](#custom-bgp-import-policy-reject)
+- [BGP listen address list](#bgp-listen-address-list)
+- [Overriding the next hop](#overriding-the-next-hop)
+- [Overriding the next hop and enable IPIP/tunnel](#overriding-the-next-hop-and-enable-ipiptunnel)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## Peering Within The Cluster
 
 ### Full Node-To-Node Mesh

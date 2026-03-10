@@ -30,6 +30,8 @@ RUNTIME_BASE?=alpine:3.23
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.8.0
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
+# See Versions: https://www.npmjs.com/package/doctoc
+DOCTOC_VERSION=2.3.0
 # See Versions: https://github.com/osrg/gobgp/releases
 GOBGP_VERSION=v4.2.0
 QEMU_IMAGE?=multiarch/qemu-user-static
@@ -66,7 +68,7 @@ FILE_ARCH=x86-64
 DOCKER_ARCH=
 endif
 $(info Building for GOARCH=$(GOARCH))
-all: lint test-pretty kube-router container ## Default target. Lints code, runs tests, builds binaries and images.
+all: doctoc lint test-pretty kube-router container ## Default target. Lints code, runs tests, builds binaries and images.
 
 kube-router:
 	@echo Starting kube-router binary build.
@@ -127,6 +129,9 @@ endif
 
 markdownlint:
 	$(DOCKER) run -v $(PWD):/work $(DOCKER_MARKDOWNLINT_IMAGE) -- README.md docs
+
+doctoc: ## Regenerates table of contents in docs that have doctoc markers.
+	$(DOCKER) run --rm -v $(PWD):/work -w /work node:alpine npx doctoc@$(DOCTOC_VERSION) docs/ --github --maxlevel 3 --notitle --update-only
 
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
@@ -266,6 +271,6 @@ help:
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs
 .PHONY: test test-pretty lint docker-login push-manifest push-manifest-release
-.PHONY: push-release github-release help multiarch-binverify markdownlint
+.PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
 
 .DEFAULT: all
