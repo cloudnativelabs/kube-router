@@ -12,7 +12,7 @@ cluster with Kube-router using [Kops](https://github.com/kubernetes/kops)
 ### kubeadm
 
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/kubeadm.md) to deploy Kubernetes
-cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/)
+cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/)
 
 ### k0sproject
 
@@ -155,11 +155,8 @@ kube-router --master=http://192.168.1.99:6443/` or `kube-router --kubeconfig=<pa
   configured to allocate pod CIDRs by passing `--allocate-node-cidrs=true` flag and providing a `cluster-cidr` (i.e. by
   passing --cluster-cidr=10.1.0.0/16 for e.g.)
 
-- If you choose to run kube-router as daemonset in Kubernetes version below v1.15, both kube-apiserver and kubelet must
-  be run with `--allow-privileged=true` option. In later Kubernetes versions, only kube-apiserver must be run with
-  `--allow-privileged=true` option and if PodSecurityPolicy admission controller is enabled, you should create
-  PodSecurityPolicy, allowing privileged kube-router pods.
-  - Additionally, when run in daemonset mode, it is highly recommended that you keep netfilter related userspace host
+- If you choose to run kube-router as a daemonset, the kube-router pods require privileged access.
+  - When run in daemonset mode, it is highly recommended that you keep netfilter related userspace host
     tooling like `iptables`, `ipset`, and `ipvsadm` in sync with the versions that are distributed by Alpine inside the
     kube-router container. This will help avoid conflicts that can potentially arise when both the host's userspace and
     kube-router's userspace tooling modifies netfilter kernel definitions. See:
@@ -235,7 +232,7 @@ docker.io/cloudnativelabs/kube-router:latest kube-router-cleanup /usr/local/bin/
 If you have a kube-proxy in use, and want to try kube-router just for service proxy you can do
 
 ```sh
-kube-proxy --cleanup-iptables
+kube-proxy --cleanup
 ```
 
 followed by

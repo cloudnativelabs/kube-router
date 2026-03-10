@@ -48,6 +48,7 @@ this convention for all commit messages. Use the following scope abbreviations f
 - **NSC** -- Network Services Controller (`pkg/controllers/proxy/`)
 - **NRC** -- Network Routes Controller (`pkg/controllers/routing/`)
 - **NPC** -- Network Policy Controller (`pkg/controllers/netpol/`)
+- **LBC** -- LoadBalancer Controller (`pkg/controllers/lballoc/`)
 
 Commit with a descriptive message that explains the *why*, not just the *what*:
 

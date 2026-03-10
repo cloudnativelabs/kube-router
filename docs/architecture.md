@@ -5,11 +5,11 @@ on events related to create, update, delete of Kubernetes objects. Each watcher 
 particular API object. On receiving an event from API server, watcher broadcasts events. Controller registers to get
 event updates from the watchers and act up on the events.
 
-Kube-router consists of 3 core controllers and multiple watchers as depicted in below diagram.
+Kube-router consists of 4 core controllers and multiple watchers as depicted in below diagram.
 
 ![Arch](./img/kube-router-arch.png)
 
-Each of the [controller](https://github.com/cloudnativelabs/kube-router/tree/master/app/controllers) follows below
+Each of the [controller](https://github.com/cloudnativelabs/kube-router/tree/master/pkg/controllers) follows below
 structure:
 
 ```go

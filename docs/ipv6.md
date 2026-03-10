@@ -97,7 +97,7 @@ kube-router.
 ### IPv6 & IPv4 Network Policy Ranges Will Only Work If That Family Has Been Enabled
 
 Network Policy in Kubernetes allows users to specify
-[IPBlock](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.24/#ipblock-v1-networking-k8s-io) ranges for
+[IPBlock](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#ipblock-v1-networking-k8s-io) ranges for
 ingress and egress policies. These blocks are string-based network CIDRs and allow the user to specify any ranges that
 they wish in order to allow ingress or egress from network ranges that are not selectable using Kubernetes pod
 selectors.

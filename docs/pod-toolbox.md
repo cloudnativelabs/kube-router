@@ -11,7 +11,7 @@ Here's a quick way to get going on a random node in your cluster:
 
 ```sh
 KR_POD=$(basename $(kubectl -n kube-system get pods -l k8s-app=kube-router --output name|head -n1))
-kubectl -n kube-system exec -it ${KR_POD} bash
+kubectl -n kube-system exec -it ${KR_POD} -- bash
 ```
 
 Use `kubectl -n kube-system get pods -l k8s-app=kube-router -o wide` to see what
