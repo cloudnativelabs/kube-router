@@ -516,6 +516,19 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		ensureRuleAtPosition(handler,
 			kubeInputChainName, whitelistUDPNodeports, uuid, rulePosition[family])
 		rulePosition[family]++
+
+		whitelistSCTPNodeports := []string{"-p", "sctp", "-m", "comment", "--comment",
+			"allow LOCAL SCTP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+			"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
+		uuid, err = addUUIDForRuleSpec(kubeInputChainName, &whitelistSCTPNodeports)
+		if err != nil {
+			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		klog.V(2).Infof("Allow SCTP traffic to ingress towards node port range: %s for family: %s",
+			npc.serviceNodePortRange, family)
+		ensureRuleAtPosition(handler,
+			kubeInputChainName, whitelistSCTPNodeports, uuid, rulePosition[family])
+		rulePosition[family]++
 	}
 
 	for idx, externalIPRange := range npc.serviceExternalIPRanges {

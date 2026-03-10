@@ -102,6 +102,7 @@ const (
 
 	tcpProtocol         = "tcp"
 	udpProtocol         = "udp"
+	sctpProtocol        = "sctp"
 	noneProtocol        = "none"
 	tunnelInterfaceType = "tunnel"
 
@@ -705,7 +706,11 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 
 		serviceIPsSets[family] = append(serviceIPsSets[family], []string{address.String(), utils.OptionTimeout, "0"})
 
-		ipvsAddressWithPort := fmt.Sprintf("%s,%s:%d", address, protocol, port)
+		ipsetProto := protocol
+		if protocol == sctpProtocol {
+			ipsetProto = strconv.FormatUint(uint64(convertSvcProtoToSysCallProto(protocol)), 10)
+		}
+		ipvsAddressWithPort := fmt.Sprintf("%s,%s:%d", address, ipsetProto, port)
 		serviceIPPortsIPSets[family] = append(serviceIPPortsIPSets[family],
 			[]string{ipvsAddressWithPort, utils.OptionTimeout, "0"})
 

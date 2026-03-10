@@ -436,6 +436,8 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 	port, port1 := intstr.FromInt(30000), intstr.FromInt(34000)
 	ingressPort := intstr.FromInt(37000)
 	endPort, endPort1 := int32(31000), int32(35000)
+	sctpPort := intstr.FromInt(36000)
+	sctpProto := v1.ProtocolSCTP
 	testCases := []tNetpolTestCase{
 		{
 			name: "Simple Egress Destination Port",
@@ -529,6 +531,58 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
 				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -j MARK --set-xmark 0x10000/0x10000 \n" +
 				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+		},
+		{
+			name: "Simple SCTP Egress Destination Port",
+			netpol: tNetpol{name: "sctp-egress", namespace: "nsA",
+				podSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "app",
+							Operator: "In",
+							Values:   []string{"a"},
+						},
+					},
+				},
+				egress: []netv1.NetworkPolicyEgressRule{
+					{
+						Ports: []netv1.NetworkPolicyPort{
+							{
+								Protocol: &sctpProto,
+								Port:     &sctpPort,
+							},
+						},
+					},
+				},
+			},
+			expectedRule: "-A KUBE-NWPLCY-HHGHJNRMJN6UUDNA -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: sctp-egress namespace nsA\" -p SCTP --dport 36000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-HHGHJNRMJN6UUDNA -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: sctp-egress namespace nsA\" -p SCTP --dport 36000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+		},
+		{
+			name: "Simple SCTP Ingress Destination Port",
+			netpol: tNetpol{name: "sctp-ingress", namespace: "nsA",
+				podSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "app",
+							Operator: "In",
+							Values:   []string{"a"},
+						},
+					},
+				},
+				ingress: []netv1.NetworkPolicyIngressRule{
+					{
+						Ports: []netv1.NetworkPolicyPort{
+							{
+								Protocol: &sctpProto,
+								Port:     &sctpPort,
+							},
+						},
+					},
+				},
+			},
+			expectedRule: "-A KUBE-NWPLCY-BHQGYKZ6X5RBPUOB -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: sctp-ingress namespace nsA\" -p SCTP --dport 36000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-BHQGYKZ6X5RBPUOB -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: sctp-ingress namespace nsA\" -p SCTP --dport 36000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Port > EndPort (invalid condition, should drop endport)",
