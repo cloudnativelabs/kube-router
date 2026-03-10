@@ -20,7 +20,7 @@ updated for dual-stack compatibility.
 
 ## Important Notes / Known Limitations / Etc
 
-This represents a major release for kube-router and as such, user's should approach deploying this into an established
+This represents a major release for kube-router and as such, users should approach deploying this into an established
 kube-router environment carefully. While there aren't any huge bugs that the maintainers are aware of at this time,
 there are several small breaks in backwards compatibility. We'll try to detail these below as best we can.
 
@@ -69,9 +69,9 @@ previous versions of kube-router.
 While v2.X and above versions of kube-router are IPv6 compatible and advertise both IPv4 and IPv6 addresses, it still
 does this over a single BGP peering. This peering is made from what kube-router considers the node's primary IP address.
 Which is typically the first internal IP address listed in the node's Kubernetes metadata (e.g. `kubectl get node`)
-unless it is overriden by a [local-address annotation](bgp.md#bgp-peer-local-ip-configuration) configuration.
+unless it is overridden by a [local-address annotation](bgp.md#bgp-peer-local-ip-configuration) configuration.
 
-This address with be either an IPv4 or IPv6 address and kube-router will use this to make the peering. Without
+This address will be either an IPv4 or IPv6 address and kube-router will use this to make the peering. Without
 `--override-nexthop` kube-router does the work to ensure that an IP or subnet is advertised by the matching IP family
 for the IP or subnet. However, with `--override-nexthop` enabled kube-router doesn't have control over what the next-hop
 for the advertised route will be. Instead the next-hop will be overridden by the IP that is being used to peer with
@@ -89,7 +89,7 @@ kube-router nodes. This is different functionality between version v1.X of kube-
 ### kube-router.io/node.bgp.customimportreject Can Only Contain IPs of a Single Family
 
 Due to implementation restrictions with GoBGP, the annotation `kube-router.io/node.bgp.customimportreject`, which allows
-user's to add rules for rejecting specific routes sent to GoBGP, can only accept a single IP family (e.g. IPv4 or IPv6).
+users to add rules for rejecting specific routes sent to GoBGP, can only accept a single IP family (e.g. IPv4 or IPv6).
 
 Attempting to add IPs of two different families will result in a GoBGP error when it attempts to import BGP policy from
 kube-router.
@@ -125,7 +125,7 @@ The recommended action here, is that upon upgrade, you convert nodes from using 
 they are updated, this is a safe change to make before updating kube-router.
 
 If neither annotation is specified, kube-router will use the `PodCIDRs` field of the Kubernetes node spec which is
-populated by the `kube-controller-manager` as part of it's `--allocate-node-cidrs` functionality. This should be a sane
+populated by the `kube-controller-manager` as part of its `--allocate-node-cidrs` functionality. This should be a sane
 default for most users of kube-router.
 
 ### CNI Now Accepts Multiple Pod Ranges

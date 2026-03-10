@@ -8,7 +8,7 @@ it if needed. The controller doesn't enable any announcement of the addresses by
 
 ## Load balancer classes
 
-By default the controller allocates addresses for all LoadBalancer services with the where `loadBalancerClass` is empty
+By default the controller allocates addresses for all LoadBalancer services where `loadBalancerClass` is empty
 or set to one of "default" or "kube-router". If `--loadbalancer-default-class` is set to false, the controller will only
 handle services with the class set to "kube-router".
 
@@ -44,8 +44,8 @@ rules:
 
 ## Environment variables
 
-The controller uses the environment variable `POD_NAME` as the identify for the lease used for leader election.
-Using the kubernetes downward api to set `POD_NAME` to the pod name the lease identify will match the current leader.
+The controller uses the environment variable `POD_NAME` as the identity for the lease used for leader election.
+Using the kubernetes downward api to set `POD_NAME` to the pod name the lease identity will match the current leader.
 
 ```yaml
 ---
@@ -83,4 +83,4 @@ When running the controller outside a pod, both `POD_NAME` and `POD_NAMESPACE` m
 
 ## Notes
 
-It's not possible to specify the addresses for the load balancer services. A externalIP service can be used instead.
+It's not possible to specify the addresses for the load balancer services. An externalIP service can be used instead.

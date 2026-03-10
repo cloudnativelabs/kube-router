@@ -65,7 +65,7 @@ Run the full test suite:
 make test
 ```
 
-Or with formatted output (easier to understand for humans uses `gotestsum`):
+Or with formatted output (easier to understand for humans, uses `gotestsum`):
 
 ```bash
 make test-pretty

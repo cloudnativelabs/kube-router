@@ -1,9 +1,10 @@
-<!-- markdownlint-disable-next-line first-line-heading -->
+<!-- markdownlint-disable first-line-heading MD033 -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./docs/img/logo-full-light.svg">
   <source media="(prefers-color-scheme: light)" srcset="./docs/img/logo-full.svg">
   <img alt="kube-router" src="./docs/img/logo-full.svg">
 </picture>
+<!-- markdownlint-enable first-line-heading MD033 -->
 
 <!-- markdownlint-capture -->
 <!-- markdownlint-disable MD045 -->
@@ -15,7 +16,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 <!-- markdownlint-restore -->
 
-Kube-router is a turnkey solution for Kubernetes networking with aim to provide operational simplicity and high performance.
+kube-router is a turnkey solution for Kubernetes networking with the aim to provide operational simplicity and high performance.
 
 ## Primary Features
 
@@ -27,7 +28,7 @@ single DaemonSet/Binary. It doesn't get any easier.
 
 ### IPVS/LVS based service proxy | `--run-service-proxy`
 
-kube-router uses the Linux kernel's LVS/IPVS features to implement its K8s Services Proxy. Kube-router fully leverages
+kube-router uses the Linux kernel's LVS/IPVS features to implement its K8s Services Proxy. kube-router fully leverages
 power of LVS/IPVS to provide a rich set of scheduling options and unique features like DSR (Direct Server Return), L3
 load balancing with ECMP for deployments where high throughput, minimal latency and high-availability are crucial.
 
@@ -60,7 +61,7 @@ is easy with kube-router -- just add a flag to kube-router. It uses ipsets with
 iptables to ensure your firewall rules have as little performance impact on your
 cluster as possible.
 
-Kube-router supports the networking.k8s.io/NetworkPolicy API or network policy V1/GA
+kube-router supports the networking.k8s.io/NetworkPolicy API or network policy V1/GA
 [semantics](https://github.com/kubernetes/kubernetes/pull/39164#issue-197243974).
 
 Read more about kube-router's approach to Kubernetes Network Policies:
@@ -81,8 +82,8 @@ For more details please refer to the [LoadBalancer Allocator documentation](docs
 If you have other networking devices or SDN systems that talk BGP, kube-router will fit in perfectly. From a simple full
 node-to-node mesh to per-node peering configurations, most routing needs can be attained. The configuration is
 Kubernetes native (annotations) just like the rest of kube-router, so use the tools you already know! Since kube-router
-uses GoBGP, you have access to a modern BGP API platform as well right out of the box. Kube-router also provides a way
-to expose services outside the cluster by advertising ClusterIP and externalIPs to configured BGP peers. Kube-router also
+uses GoBGP, you have access to a modern BGP API platform as well right out of the box. kube-router also provides a way
+to expose services outside the cluster by advertising ClusterIP and externalIPs to configured BGP peers. kube-router also
 supports MD5 password based authentication and uses strict export policies so you can be assured routes are advertised to
 the underlay only as you intended.
 
@@ -90,9 +91,9 @@ For more details please refer to the [BGP documentation](docs/bgp.md).
 
 ### Standard Linux Networking
 
-A key design tenet of Kube-router is to use standard Linux networking stack and toolset. There is no overlays or SDN
+A key design tenet of kube-router is to use standard Linux networking stack and toolset. There are no overlays or SDN
 pixie dust, but just plain good old networking. You can use standard Linux networking tools like iptables, ipvsadm,
-ipset, iproute, traceroute, tcpdump etc. to troubleshoot or observe data path. When kube-router is ran as a daemonset,
+ipset, iproute, traceroute, tcpdump etc. to troubleshoot or observe data path. When kube-router is run as a daemonset,
 the official kube-router image also ships with these [tools](./docs/pod-toolbox.md#pod-toolbox) automatically configured
 for your cluster.
 
@@ -114,13 +115,13 @@ optimized.
 
 - [How it Works](./docs/how-it-works.md)
 - [Architecture](./docs/architecture.md)
-- [See Kube-router in action](./docs/see-it-in-action.md)
+- [See kube-router in action](./docs/see-it-in-action.md)
 - [User Guide](./docs/user-guide.md)
 - [Developer Guide](./docs/developing.md)
 
 ## Project status
 
-Kube-router is being used in several production clusters by diverse set of users ranging from financial firms, gaming
+kube-router is being used in several production clusters by a diverse set of users ranging from financial firms, gaming
 companies to universities. For years we have listened to users and incorporated feedback. The core functionality is now
 very stable.
 
@@ -136,7 +137,7 @@ for quick help. Feel free to leave feedback or raise questions by [opening an is
 
 ## Acknowledgement
 
-Kube-router build upon following libraries:
+kube-router builds upon the following libraries:
 
 - [iptables](https://github.com/coreos/go-iptables)
 - [GoBGP](https://github.com/osrg/gobgp)

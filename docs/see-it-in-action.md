@@ -1,4 +1,4 @@
-# See Kube-router in action
+# See kube-router in action
 
 ## Network Services Controller
 
@@ -6,9 +6,9 @@ Network services controller is responsible for reading the services and endpoint
 and configure IPVS on each cluster node accordingly.
 
 Please [read our blog](https://cloudnativelabs.github.io/post/2017-05-10-kube-network-service-proxy/) for design details
-and pros and cons compared to iptables based Kube-proxy
+and pros and cons compared to iptables based kube-proxy
 
-Demo of Kube-router's IPVS based Kubernetes network service proxy
+Demo of kube-router's IPVS based Kubernetes network service proxy
 
 [![asciicast](https://asciinema.org/a/120312.png)](https://asciinema.org/a/120312)
 
@@ -16,7 +16,7 @@ Features:
 
 - round robin load balancing
 - client IP based session persistence
-- source IP is preserved if service controller is used in conjuction with network routes controller (kube-router with
+- source IP is preserved if service controller is used in conjunction with network routes controller (kube-router with
   --run-router flag)
 - option to explicitly masquerade (SNAT) with --masquerade-all flag
 
@@ -25,13 +25,13 @@ Features:
 Network policy controller is responsible for reading the namespace, network policy and pods information from Kubernetes
 API server and configure iptables accordingly to provide ingress filter to the pods.
 
-Kube-router supports the networking.k8s.io/NetworkPolicy API or network policy V1/GA
+kube-router supports the networking.k8s.io/NetworkPolicy API or network policy V1/GA
 [semantics](https://github.com/kubernetes/kubernetes/pull/39164#issue-197243974).
 
 Please [read our blog](https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/) for design details of
 Network Policy controller
 
-Demo of Kube-router's iptables based implementaton of network policies
+Demo of kube-router's iptables based implementation of network policies
 
 [![asciicast](https://asciinema.org/a/120735.png)](https://asciinema.org/a/120735)
 

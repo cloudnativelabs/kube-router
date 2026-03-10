@@ -1,12 +1,12 @@
-# Welcome to Kube-router Documentation
+# Welcome to kube-router Documentation
 
 The documentation is divided into the following sections:
 
 ## Introduction
 
 - [Introduction](introduction.md)
-- [What is Kube-router?](introduction.md#what-is-kube-router)
-- [Why Kube-router?](introduction.md#why-kube-router)
+- [What is kube-router?](introduction.md#what-is-kube-router)
+- [Why kube-router?](introduction.md#why-kube-router)
 
 ## Concepts
 

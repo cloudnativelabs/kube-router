@@ -9,7 +9,7 @@ with iproute2.
 
 By default, kube-router enables the option `--enable-overlay` which will perform overlay networking based upon the
 `--overlay-type` setting (by default set to `subnet`). So out of the box, kube-router will create a tunnel for
-pod-to-pod traffic any time it comes across a kube-router enabled node that is not within the subnet of it's primary
+pod-to-pod traffic any time it comes across a kube-router enabled node that is not within the subnet of its primary
 interface.
 
 Additionally, if `--overlay-type` is set to `full` kube-router will create an tunnel for all pod-to-pod traffic and
@@ -47,6 +47,6 @@ mismatches between the encapsulation support between the two nodes as invariably
 kube-router and another node may have a previous deployment.
 
 When this happens, they will have conflicting encapsulation setup on their tunnels and traffic will not be able to be
-sent between the two nodes until they are using a consistent encapsulation protocal between them.
+sent between the two nodes until they are using a consistent encapsulation protocol between them.
 
 Once all nodes have upgraded with the destination configuration, pod-to-pod traffic patterns should return to normal.

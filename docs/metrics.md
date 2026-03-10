@@ -6,7 +6,7 @@ The scope of this document is to describe how to setup the
 [annotations](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/) needed for
 [Prometheus](https://prometheus.io/) to use
 [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) to
-discover & scape kube-router [pods](https://kubernetes.io/docs/concepts/workloads/pods/pod/).
+discover & scrape kube-router [pods](https://kubernetes.io/docs/concepts/workloads/pods/pod/).
 
 For help with installing Prometheus please see their [docs](https://prometheus.io/docs/introduction/overview/)
 
@@ -21,14 +21,15 @@ To enable kube-router metrics, start kube-router with `--metrics-port` and provi
 
 Metrics is generally exported at the same rate as the sync period for each service. Service metrics are exported real-time.
 
-The default values unless other specified is
+The default values unless otherwise specified are
 
 * iptables-sync-period - `5 min`
 * routes-sync-period - `5 min`
 
 By enabling
 [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) in
-Prometheus configuration & adding required annotations Prometheus can automaticly discover & scrape kube-router metrics
+your Prometheus configuration & adding the required annotations, Prometheus can automatically discover & scrape
+kube-router metrics.
 
 ## Available metrics
 
@@ -44,7 +45,8 @@ The following metrics are exposed by kube-router prefixed by `kube_router_`
 ### --run-router=true
 
 * bgp_peer_info
-  BGP peer information (labels: address, type, asn, state)
+  BGP peer information: address, state, and type (internal for iBGP and external for eBGP)
+  (labels: address, type, asn, state)
 * controller_bgp_advertisements_received
   Total number of BGP advertisements received since kube-router started
 * controller_bgp_advertisements_sent
@@ -119,7 +121,7 @@ To get a grouped list of CPS for each service a Prometheus query could look like
 
 ## Grafana Dashboard
 
-This repo contains a example
+This repo contains an example
 [Grafana dashboard](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/kube-router.json)
 utilizing all the above exposed metrics from kube-router.
 ![dashboard](https://raw.githubusercontent.com/cloudnativelabs/kube-router/master/dashboard/dashboard.png)

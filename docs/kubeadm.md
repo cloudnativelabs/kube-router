@@ -1,11 +1,13 @@
 # Deploying kube-router with kubeadm
 
-Please follow the [steps](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/) to install Kubernetes
-cluster with Kubeadm, however must specify `--pod-network-cidr` when you run `kubeadm init`.
+Please follow the
+[steps](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/)
+to install Kubernetes cluster with kubeadm, however you must specify `--pod-network-cidr` when you run
+`kubeadm init`.
 
 kube-router relies on kube-controller-manager to allocate pod CIDR for the nodes.
 
-kube-router provides pod networking, network policy and high perfoming IPVS/LVS based service proxy. Depending on your
+kube-router provides pod networking, network policy and high performing IPVS/LVS based service proxy. Depending on your
 choice to use kube-router for service proxy you have two options.
 
 ## kube-router Providing Pod Networking and Network Policy
@@ -38,21 +40,21 @@ To cleanup kube-proxy we can do this with docker, containerd, or cri-o:
 ### docker
 
 ```sh
-docker run --privileged -v /lib/modules:/lib/modules --net=host registry.k8s.io/kube-proxy:v1.28.2 kube-proxy --cleanup
+docker run --privileged -v /lib/modules:/lib/modules --net=host registry.k8s.io/kube-proxy:v1.33.0 kube-proxy --cleanup
 ```
 
 ### containerd
 
 ```sh
-ctr images pull registry.k8s.io/kube-proxy:v1.28.2
+ctr images pull registry.k8s.io/kube-proxy:v1.33.0
 ctr run --rm --privileged --net-host --mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro \
-    registry.k8s.io/kube-proxy:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
+    registry.k8s.io/kube-proxy:v1.33.0 kube-proxy-cleanup kube-proxy --cleanup
 ```
 
 ### cri-o
 
 ```sh
-crictl pull registry.k8s.io/kube-proxy:v1.28.2
+crictl pull registry.k8s.io/kube-proxy:v1.33.0
 crictl run --rm --privileged --net-host --mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro
-    registry.k8s.io/kube-proxy:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
+    registry.k8s.io/kube-proxy:v1.33.0 kube-proxy-cleanup kube-proxy --cleanup
 ```

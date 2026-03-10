@@ -1,6 +1,6 @@
 # Configuring BGP Peers
 
-When kube-router is used to provide pod-to-pod networking, BGP is used to exchange routes across the nodes. Kube-router
+When kube-router is used to provide pod-to-pod networking, BGP is used to exchange routes across the nodes. kube-router
 provides flexible networking models to support different deployments (public vs private cloud, routable vs non-routable
 pod IPs, service IPs, etc.).
 
@@ -19,7 +19,7 @@ iBGP. This mode is suitable in public cloud environments or small cluster deploy
 This model is used to support more than a single AS per cluster to allow for an AS per rack or an AS per node. Nodes in
 the cluster do not form full node-to-node meshes. Users have to explicitly select this mode by specifying
 `--nodes-full-mesh=false` when launching kube-router. In this mode kube-router expects each node will be configured with
-an ASN number from the node's API object annotations. Kube-router will use the node's `kube-router.io/node.asn`
+an ASN number from the node's API object annotations. kube-router will use the node's `kube-router.io/node.asn`
 annotation value as the ASN number for the node.
 
 Users can annotate node objects with the following command:
@@ -258,7 +258,7 @@ kubectl annotate node <kube-node> "kube-router.io/node.bgp.customimportreject=10
 ## BGP listen address list
 
 By default, the GoBGP server binds on the node IP address. However, in some cases nodes with multiple IP addresses
-desire to bind GoBGP to multiple local addresses. Local IP addresses on which GoGBP should listen on a node can be
+desire to bind GoBGP to multiple local addresses. Local IP addresses on which GoBGP should listen on a node can be
 configured with annotation `kube-router.io/bgp-local-addresses`.
 
 Here is sample example to make GoBGP server to listen on multiple IP address:
@@ -291,7 +291,7 @@ network.
 This configuration would have the following effects:
 
 - [Peering Outside the Cluster](https://github.com/cloudnativelabs/kube-router/blob/master/docs/bgp.md#peering-outside-the-cluster)
-  via one of themany means that kube-router makes available
+  via one of the many means that kube-router makes available
 - Overriding Next Hop
 - Enabling overlays in either full mode or with nodes in different subnets
 
