@@ -39,7 +39,7 @@ setup_cni() {
 		# If it didn't then try to install it
 		printf "CNI binary %s was missing or wasn't executable, installing it\n" "${cni_dst_path}"
 		if install -m 755 "${cni_loc_path}" "${cni_dst_path}" >/dev/null; then
-			printf "CNI install successfull\n"
+			printf "CNI install successful\n"
 		else
 			printf "Failed to install CNI binary, exiting\n"
 			return 2

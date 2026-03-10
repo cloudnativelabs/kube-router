@@ -21,14 +21,14 @@ var (
 )
 
 const (
-	// FamillyInet IPV4.
-	FamillyInet = "inet"
-	// FamillyInet6 IPV6.
-	FamillyInet6 = "inet6"
+	// FamilyInet IPV4.
+	FamilyInet = "inet"
+	// FamilyInet6 IPV6.
+	FamilyInet6 = "inet6"
 
 	// DefaultMaxElem Default OptionMaxElem value.
 	DefaultMaxElem = "65536"
-	// DefaultHasSize Defaul OptionHashSize value.
+	// DefaultHasSize Default OptionHashSize value.
 	DefaultHasSize = "1024"
 
 	// TypeHashIP The hash:ip set type uses a hash to store IP host addresses (default) or network addresses. Zero
@@ -79,7 +79,7 @@ const (
 	// set. The timeout value of already added elements can be changed by readding the element using the -exist option.
 	// When listing the set, the number of entries printed in the header might be larger than the listed number of
 	// entries for sets with the timeout extensions: the number of entries in the set is updated when elements
-	// added/deleted to the set and periodically when the garbage colletor evicts the timed out entries.
+	// added/deleted to the set and periodically when the garbage collector evicts the timed out entries.
 	OptionTimeout = "timeout"
 	// OptionCounters All set types support the optional counters option when creating a set. If the option is specified
 	// then the set is created with packet and byte counters per element support. The packet and byte counters are
@@ -135,9 +135,9 @@ const (
 	// OptionMaxElem This parameter is valid for the create command of all hash type sets. It does define the maximal
 	// number of elements which can be stored in the set, default 65536.
 	OptionMaxElem = "maxelem"
-	// OptionFamilly This parameter is valid for the create command of all hash type sets except for hash:mac. It
+	// OptionFamily This parameter is valid for the create command of all hash type sets except for hash:mac. It
 	// defines the protocol family of the IP addresses to be stored in the set. The default is inet, i.e IPv4.
-	OptionFamilly = "family"
+	OptionFamily = "family"
 	// OptionNoMatch The hash set types which can store net type of data (i.e. hash:*net*) support the optional nomatch
 	// option when adding entries. When matching elements in the set, entries marked as nomatch are skipped as if those
 	// were not added to the set, which makes possible to build up sets with exceptions. See the example at hash type
