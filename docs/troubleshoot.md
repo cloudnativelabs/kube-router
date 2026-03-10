@@ -4,6 +4,60 @@ This guide covers the most common issues encountered when running kube-router, b
 hundreds of real-world deployments. Each section describes symptoms, diagnostic commands, root causes, and
 solutions.
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [General Diagnostic Tools](#general-diagnostic-tools)
+  - [Log Verbosity](#log-verbosity)
+  - [IPVS and Service Proxy](#ipvs-and-service-proxy)
+  - [ipset](#ipset)
+  - [iptables](#iptables)
+  - [BGP and Routing](#bgp-and-routing)
+  - [Network and Interfaces](#network-and-interfaces)
+  - [Observing Dropped Traffic](#observing-dropped-traffic)
+  - [Health Endpoint](#health-endpoint)
+- [Prerequisites and Common Setup Issues](#prerequisites-and-common-setup-issues)
+  - [Required Kernel Modules](#required-kernel-modules)
+  - [iptables Backend: legacy vs nft](#iptables-backend-legacy-vs-nft)
+  - [iptables Version Compatibility](#iptables-version-compatibility)
+  - [Cleaning Up kube-proxy](#cleaning-up-kube-proxy)
+  - [Required Flags](#required-flags)
+- [Service Proxy (IPVS) Issues](#service-proxy-ipvs-issues)
+  - [Services Showing "No Destination Available"](#services-showing-no-destination-available)
+  - ["No Route to Host" for Service IPs](#no-route-to-host-for-service-ips)
+  - [NodePort Not Accessible from Outside the Node](#nodeport-not-accessible-from-outside-the-node)
+  - [High CPU Usage with Many Services](#high-cpu-usage-with-many-services)
+  - [Hairpin NAT Not Working](#hairpin-nat-not-working)
+- [BGP and Routing Issues](#bgp-and-routing-issues)
+  - [Routes Not Being Advertised](#routes-not-being-advertised)
+  - [Routes Lost After Network Interface Bounce](#routes-lost-after-network-interface-bounce)
+  - [Mismatched Local Address with External Peers](#mismatched-local-address-with-external-peers)
+  - [Slow BGP Convergence on Startup](#slow-bgp-convergence-on-startup)
+  - [Scaling Issues with Large Clusters](#scaling-issues-with-large-clusters)
+  - [PMTU / Path MTU Discovery Failures](#pmtu--path-mtu-discovery-failures)
+- [Network Policy Issues](#network-policy-issues)
+  - [Egress Policy Blocking Service Access](#egress-policy-blocking-service-access)
+  - [Pods Have Network Access Before Policy is Applied](#pods-have-network-access-before-policy-is-applied)
+  - [ipBlock Not Matching Real Client IP](#ipblock-not-matching-real-client-ip)
+- [Overlay and Tunnel Issues](#overlay-and-tunnel-issues)
+  - [Cross-Subnet Connectivity Failures](#cross-subnet-connectivity-failures)
+  - [MTU Issues with Tunnels](#mtu-issues-with-tunnels)
+- [DSR (Direct Server Return) Issues](#dsr-direct-server-return-issues)
+  - [DSR with containerd / CRI-O](#dsr-with-containerd--cri-o)
+  - [Large Packet Failures with DSR](#large-packet-failures-with-dsr)
+  - [Policy Routing Setup Failures](#policy-routing-setup-failures)
+- [System Integration Issues](#system-integration-issues)
+  - [systemd-networkd Purging Routes](#systemd-networkd-purging-routes)
+  - [Docker iptables Rules Conflicting](#docker-iptables-rules-conflicting)
+  - [CrashLoopBackOff and Liveness Probe Failures](#crashloopbackoff-and-liveness-probe-failures)
+  - [API Server Connectivity Loss](#api-server-connectivity-loss)
+- [IPv6 and Dual-Stack Issues](#ipv6-and-dual-stack-issues)
+  - [Common Dual-Stack Pitfalls](#common-dual-stack-pitfalls)
+  - [IPv6 Route Advertisement Issues](#ipv6-route-advertisement-issues)
+- [Getting Further Help](#getting-further-help)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## General Diagnostic Tools
 
 Before diving into specific problems, familiarize yourself with these essential diagnostic commands. Most can be run

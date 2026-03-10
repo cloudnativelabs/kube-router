@@ -1,5 +1,39 @@
 # User Guide
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Try kube-router with cluster installers](#try-kube-router-with-cluster-installers)
+  - [kops](#kops)
+  - [kubeadm](#kubeadm)
+  - [k0sproject](#k0sproject)
+  - [k3sproject](#k3sproject)
+  - [generic](#generic)
+  - [Amazon specific notes](#amazon-specific-notes)
+  - [Azure specific notes](#azure-specific-notes)
+- [deployment](#deployment)
+- [command line options](#command-line-options)
+- [requirements](#requirements)
+- [running as daemonset](#running-as-daemonset)
+- [running as agent](#running-as-agent)
+- [cleanup configuration](#cleanup-configuration)
+  - [Docker](#docker)
+  - [containerd](#containerd)
+- [trying kube-router as alternative to kube-proxy](#trying-kube-router-as-alternative-to-kube-proxy)
+- [Advertising IPs](#advertising-ips)
+- [Controlling Service Locality / Traffic Policies](#controlling-service-locality--traffic-policies)
+- [Hairpin Mode](#hairpin-mode)
+  - [Hairpin Mode Example](#hairpin-mode-example)
+- [SNATing Service Traffic](#snating-service-traffic)
+- [Load balancing Scheduling Algorithms](#load-balancing-scheduling-algorithms)
+- [HostPort support](#hostport-support)
+- [IPVS Graceful termination support](#ipvs-graceful-termination-support)
+- [MTU](#mtu)
+- [BGP configuration](#bgp-configuration)
+- [Metrics](#metrics)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## Try kube-router with cluster installers
 
 The best way to get started is to deploy Kubernetes with kube-router using a cluster installer.
