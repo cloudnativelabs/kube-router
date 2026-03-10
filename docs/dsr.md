@@ -111,7 +111,7 @@ containerd enabled.
 
 ## More Details About DSR
 
-In order to facilitate troubleshooting it is worth while to explain how kube-router accomplishes DSR functionality.
+In order to facilitate troubleshooting it is worthwhile to explain how kube-router accomplishes DSR functionality.
 
 1. kube-router adds iptables rules to the `mangle` table which marks incoming packets destined for DSR based services
    with a unique FW mark. This mark is then used in later stages to identify the packet and route it correctly.
@@ -129,7 +129,7 @@ In order to facilitate troubleshooting it is worth while to explain how kube-rou
    encapsulates the incoming packet in an ipip packet. It is at this point that the pod's destination IP is placed on
    the ipip packet header so that a packet can be routed to the pod via the kube-bridge on either this host or the
    destination host.
-6. kube-router then finds the targeted pod and enters it's local network namespace. Once inside the pod's linux network
+6. kube-router then finds the targeted pod and enters its local network namespace. Once inside the pod's linux network
    namespace, it sets up two new interfaces called `kube-dummy-if` and `ipip`. `kube-dummy-if` is configured with the
    externalIP address of the service.
 7. When the ipip packet arrives inside the pod, the original source packet with the externalIP is then extracted from

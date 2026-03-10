@@ -1,23 +1,23 @@
 # User Guide
 
-## Try Kube-router with cluster installers
+## Try kube-router with cluster installers
 
-The best way to get started is to deploy Kubernetes with Kube-router is with a cluster installer.
+The best way to get started is to deploy Kubernetes with kube-router using a cluster installer.
 
 ### kops
 
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/kops.md) to deploy Kubernetes
-cluster with Kube-router using [Kops](https://github.com/kubernetes/kops)
+cluster with kube-router using [Kops](https://github.com/kubernetes/kops)
 
 ### kubeadm
 
 Please see the [steps](https://github.com/cloudnativelabs/kube-router/blob/master/docs/kubeadm.md) to deploy Kubernetes
-cluster with Kube-router using [Kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/)
+cluster with kube-router using [Kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/)
 
 ### k0sproject
 
 k0s by default uses kube-router as a CNI option.
-Please see the [steps](https://docs.k0sproject.io/latest/install/) to deploy Kubernetes cluster with Kube-router using
+Please see the [steps](https://docs.k0sproject.io/latest/install/) to deploy Kubernetes cluster with kube-router using
 [k0s](https://docs.k0sproject.io/)
 
 ### k3sproject
@@ -57,7 +57,7 @@ Depending on what functionality of kube-router you want to use, multiple deploym
 the flags `--run-firewall`, `--run-router`, `--run-service-proxy`, `--run-loadbalancer` to selectively enable only
 required functionality of kube-router.
 
-Also you can choose to run kube-router as agent running on each cluster node. Alternativley you can run kube-router as
+Also you can choose to run kube-router as agent running on each cluster node. Alternatively you can run kube-router as
 pod on each node through daemonset.
 
 ## command line options
@@ -68,13 +68,13 @@ pod on each node through daemonset.
 Usage of kube-router:
       --advertise-cluster-ip                          Add Cluster IP of the service to the RIB so that it gets advertises to the BGP peers.
       --advertise-external-ip                         Add External IP of service to the RIB so that it gets advertised to the BGP peers.
-      --advertise-loadbalancer-ip                     Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
+      --advertise-loadbalancer-ip                     Add LoadBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr                            Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
       --auto-mtu                                      Auto detect and set the largest possible MTU for kube-bridge and pod interfaces (also accounts for IPIP overlay network when enabled). (default true)
       --bgp-graceful-restart                          Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
       --bgp-graceful-restart-deferral-time duration   BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h. (default 6m0s)
       --bgp-graceful-restart-time duration            BGP Graceful restart time according to RFC4724 3, maximum 4095s. (default 1m30s)
-      --bgp-holdtime duration                         This parameter is mainly used to modify the holdtime declared to BGP peer. When Kube-router goes down abnormally, the local saving time of BGP route will be affected. Holdtime must be in the range 3s to 18h12m16s. (default 1m30s)
+      --bgp-holdtime duration                         This parameter is mainly used to modify the holdtime declared to BGP peer. When kube-router goes down abnormally, the local saving time of BGP route will be affected. Holdtime must be in the range 3s to 18h12m16s. (default 1m30s)
       --bgp-port uint32                               The port open for incoming BGP connections and to use for connecting with other BGP peers. (default 179)
       --cache-sync-timeout duration                   The timeout for cache synchronization (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
       --cleanup-config                                Cleanup iptables rules, ipvs, ipset configuration and exit.
@@ -96,7 +96,7 @@ Usage of kube-router:
       --injected-routes-sync-period duration          The delay between route table synchronizations  (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 1m0s)
       --iptables-sync-period duration                 The delay between iptables rule synchronizations (e.g. '5s', '1m'). Must be greater than 0. (default 5m0s)
       --ipvs-graceful-period duration                 The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 30s)
-      --ipvs-graceful-termination                     Enables the experimental IPVS graceful terminaton capability
+      --ipvs-graceful-termination                     Enables the experimental IPVS graceful termination capability
       --ipvs-permit-all                               Enables rule to accept all incoming traffic to service VIP's on the node. (default true)
       --ipvs-sync-period duration                     The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --kubeconfig string                             Path to kubeconfig file with authorization information (the master location is set by the master flag).
@@ -140,7 +140,7 @@ Usage of kube-router:
 
 ## requirements
 
-- Kube-router need to access kubernetes API server to get information on pods, services, endpoints, network policies
+- kube-router needs to access the Kubernetes API server to get information on pods, services, endpoints, network policies
   etc. The very minimum information it requires is the details on where to access the kubernetes API server. This
   information can be passed as:
 
@@ -162,7 +162,7 @@ kube-router --master=http://192.168.1.99:6443/` or `kube-router --kubeconfig=<pa
     kube-router's userspace tooling modifies netfilter kernel definitions. See:
     [this kube-router issue](https://github.com/cloudnativelabs/kube-router/issues/1370) for more information.
 
-- If you choose to use kube-router for pod-to-pod network connecitvity then Kubernetes cluster must be configured to use
+- If you choose to use kube-router for pod-to-pod network connectivity then Kubernetes cluster must be configured to use
   CNI network plugins. On each node CNI conf file is expected to be present as /etc/cni/net.d/10-kuberouter.conf
   `bridge` CNI plugin and `host-local` for IPAM should be used. A sample conf file that can be downloaded as
 
@@ -182,7 +182,7 @@ wget -O /etc/cni/net.d/10-kuberouter.conf https://raw.githubusercontent.com/clou
 
 ## running as daemonset
 
-This is quickest way to deploy kube-router in Kubernetes (**dont forget to ensure the requirements above**).
+This is quickest way to deploy kube-router in Kubernetes (**don't forget to ensure the requirements above**).
 Just run:
 
 ```sh
@@ -196,7 +196,7 @@ arguments used to select a set of the services kube-router should run.
 
 ## running as agent
 
-You can choose to run kube-router as agent runnng on each node. For e.g if you just want kube-router to provide ingress
+You can choose to run kube-router as an agent running on each node. For e.g if you just want kube-router to provide ingress
 firewall for the pods then you can start kube-router as:
 
 ```sh
@@ -342,7 +342,7 @@ if it needs to proxy that traffic to ensure it gets to a node that has a service
 traffic. This has a potential to cause issues when network policies are applied to that service since now the traffic
 will appear to be coming from a node in your cluster instead of the traffic originator.
 
-This is an issue that is common to all proxy's and all Kubernetes service proxies in general. You can read more
+This is an issue that is common to all proxies and all Kubernetes service proxies in general. You can read more
 information about this issue at:
 [Source IP for Services](https://kubernetes.io/docs/tutorials/services/source-ip/#source-ip-for-services-with-type-nodeport)
 
@@ -352,10 +352,10 @@ information see the section above.
 
 ## Load balancing Scheduling Algorithms
 
-Kube-router uses LVS for service proxy. LVS supports a rich set of [scheduling
+kube-router uses LVS for service proxy. LVS supports a rich set of [scheduling
 algorithms](https://en.wikipedia.org/wiki/Linux_Virtual_Server#Schedulers). The
 scheduling algorithm for a service is configured by means of annotations. The
-`round-robin` scheduler is used by default when a service is lacks the
+`round-robin` scheduler is used by default when a service lacks the
 scheduler annotation.
 
 ```sh
@@ -425,12 +425,12 @@ changes required for `HostPort` functionality.
 
 ## IPVS Graceful termination support
 
-As of 0.2.6 we support experimental graceful termination of IPVS destinations. When possible the pods's
-TerminationGracePeriodSeconds is used, if it cannot be retrived for some reason the fallback period is 30 seconds and
-can be adjusted with `--ipvs-graceful-period` cli-opt
+We support experimental graceful termination of IPVS destinations. When possible, the pod's
+`TerminationGracePeriodSeconds` is used. If it cannot be retrieved for some reason, the fallback period of 30 seconds
+and can be adjusted with `--ipvs-graceful-period` cli-opt
 
 graceful termination works in such a way that when kube-router receives a delete endpoint notification for a service
-it's weight is adjusted to 0 before getting deleted after he termination grace period has passed or the Active &
+its weight is adjusted to 0 before getting deleted after the termination grace period has passed or the Active &
 Inactive connections goes down to 0.
 
 ## MTU

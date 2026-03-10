@@ -28,5 +28,5 @@ For example, if kube-router is started with
 --run-loadbalancer=true
 ```
 
-If the route controller, policy controller or service controller exits it's main loop and does not publish a heartbeat
+If the route controller, policy controller or service controller exits its main loop and does not publish a heartbeat
 the `/healthz` endpoint will return a error 500 signaling that kube-router is not healthy.

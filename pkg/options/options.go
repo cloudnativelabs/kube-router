@@ -119,7 +119,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.AdvertiseExternalIP, "advertise-external-ip", false,
 		"Add External IP of service to the RIB so that it gets advertised to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseLoadBalancerIP, "advertise-loadbalancer-ip", false,
-		"Add LoadbBalancer IP of service status as set by the LB provider to the RIB so that it gets "+
+		"Add LoadBalancer IP of service status as set by the LB provider to the RIB so that it gets "+
 			"advertised to the BGP peers.")
 	fs.BoolVar(&s.AdvertiseNodePodCidr, "advertise-pod-cidr", true,
 		"Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers.")
@@ -134,7 +134,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.DurationVar(&s.BGPGracefulRestartTime, "bgp-graceful-restart-time", s.BGPGracefulRestartTime,
 		"BGP Graceful restart time according to RFC4724 3, maximum 4095s.")
 	fs.DurationVar(&s.BGPHoldTime, "bgp-holdtime", DefaultBgpHoldTime,
-		"This parameter is mainly used to modify the holdtime declared to BGP peer. When Kube-router goes down "+
+		"This parameter is mainly used to modify the holdtime declared to BGP peer. When kube-router goes down "+
 			"abnormally, the local saving time of BGP route will be affected. "+
 			"Holdtime must be in the range 3s to 18h12m16s.")
 	fs.Uint32Var(&s.BGPPort, "bgp-port", DefaultBgpPort,
@@ -182,7 +182,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"The graceful period before removing destinations from IPVS services (e.g. '5s', '1m', '2h22m'). Must "+
 			"be greater than 0.")
 	fs.BoolVar(&s.IpvsGracefulTermination, "ipvs-graceful-termination", false,
-		"Enables the experimental IPVS graceful terminaton capability")
+		"Enables the experimental IPVS graceful termination capability")
 	fs.BoolVar(&s.IpvsPermitAll, "ipvs-permit-all", true,
 		"Enables rule to accept all incoming traffic to service VIP's on the node.")
 	fs.DurationVar(&s.IpvsSyncPeriod, "ipvs-sync-period", s.IpvsSyncPeriod,

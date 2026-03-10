@@ -1,6 +1,6 @@
 # Pod Toolbox
 
-When kube-router is ran as a Pod within your Kubernetes cluster, it also ships
+When kube-router is run as a Pod within your Kubernetes cluster, it also ships
 with a number of tools automatically configured for your cluster.  These can be
 used to troubleshoot issues and learn more about how cluster networking is
 performed.

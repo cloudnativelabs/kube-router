@@ -59,7 +59,7 @@ official kube-router remote.
 
 ## Release Build Process
 
-Once the tag is pushed to GitHub GitHub Actions will be triggered and several things will happen:
+Once the tag is pushed to GitHub, GitHub Actions will be triggered and several things will happen:
 
 * kube-router will be linted
 * kube-router will be tested

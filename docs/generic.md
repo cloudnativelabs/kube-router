@@ -1,11 +1,11 @@
-# Kube-router on generic clusters
+# kube-router on generic clusters
 
 This guide is for running kube-router as the [CNI](https://github.com/containernetworking) network provider for on
 premise and/or bare metal clusters outside of a cloud provider's environment. It assumes the initial cluster is
 bootstrapped and a networking provider needs configuration.
 
 All pod networking [CIDRs](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) are allocated by
-kube-controller-manager. Kube-router provides service/pod networking, a network policy firewall, and a high performance
+kube-controller-manager. kube-router provides service/pod networking, a network policy firewall, and a high performance
 [IPVS/LVS](http://www.linuxvirtualserver.org/software/ipvs.html) based service proxy. The network policy firewall and
 service proxy are both optional but recommended.
 
@@ -46,7 +46,7 @@ cri-o CRI configuration can be referenced via their
 If a previous CNI provider (e.g. weave-net, calico, or flannel) was used, remove old configurations from
 `/etc/cni/net.d` on each kubelet.
 
-### Note: Switching CNI providers on a running cluster requires re-creating all pods to pick up new pod IPs**
+**Note: Switching CNI providers on a running cluster requires re-creating all pods to pick up new pod IPs.**
 
 ## Configuring kube-controller-manager
 
@@ -97,23 +97,23 @@ To cleanup kube-proxy we can do this with docker, containerd, or cri-o:
 #### docker
 
 ```sh
-docker run --privileged -v /lib/modules:/lib/modules --net=host registry.k8s.io/kube-proxy:v1.28.2 kube-proxy --cleanup
+docker run --privileged -v /lib/modules:/lib/modules --net=host registry.k8s.io/kube-proxy:v1.33.0 kube-proxy --cleanup
 ```
 
 #### containerd
 
 ```sh
-ctr images pull registry.k8s.io/kube-proxy:v1.28.2
+ctr images pull registry.k8s.io/kube-proxy:v1.33.0
 ctr run --rm --privileged --net-host --mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro \
-    registry.k8s.io/kube-proxy:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
+    registry.k8s.io/kube-proxy:v1.33.0 kube-proxy-cleanup kube-proxy --cleanup
 ```
 
 #### cri-o
 
 ```sh
-crictl pull registry.k8s.io/kube-proxy:v1.28.2
+crictl pull registry.k8s.io/kube-proxy:v1.33.0
 crictl run --rm --privileged --net-host --mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro
-    registry.k8s.io/kube-proxy:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
+    registry.k8s.io/kube-proxy:v1.33.0 kube-proxy-cleanup kube-proxy --cleanup
 ```
 
 ## Running kube-router without the service proxy
