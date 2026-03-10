@@ -23,48 +23,69 @@ Metrics is generally exported at the same rate as the sync period for each servi
 
 The default values unless other specified is
 
-* iptables-sync-period - `1 min``
-* routes-sync-period - `1 min``
+* iptables-sync-period - `5 min`
+* routes-sync-period - `5 min`
 
 By enabling
 [Kubernetes SD](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#<kubernetes_sd_config>) in
 Prometheus configuration & adding required annotations Prometheus can automaticly discover & scrape kube-router metrics
 
-## Version notes
-
-kube-router v0.2.4 received a metrics overhaul where some metrics were changed into histograms, additional metrics were
-also added. Please make sure you are using the latest dashboard version with versions => v0.2.4
-
-kube-router 0.1.0-rc2 and upwards supports the runtime configuration for controlling where to expose the metrics. If
-you are using a older version, metrics path & port is locked to `/metrics` & `8080`
-
 ## Available metrics
 
 If metrics is enabled only services that are running have their metrics exposed
 
-The following metrics is exposed by kube-router prefixed by `kube_router_`
+The following metrics are exposed by kube-router prefixed by `kube_router_`
 
-### run-router = true
+### Always enabled
+
+* build_info
+  Expose version and other build information (labels: goversion, version)
+
+### --run-router=true
 
 * bgp_peer_info
-  Metric per peer that shows BGP Peer connection: address, state, and type (internal for iBGP and external for eBGP)
+  BGP peer information (labels: address, type, asn, state)
 * controller_bgp_advertisements_received
   Total number of BGP advertisements received since kube-router started
 * controller_bgp_advertisements_sent
-  Total number of BGP advertisements sent since kube-router started
+  Total number of BGP advertisements sent since kube-router started (labels: type)
 * controller_bgp_internal_peers_sync_time
   Time it took for the BGP internal peer sync loop to complete
 * controller_routes_sync_time
   Time it took for controller to sync routes
+* host_routes_sync_time
+  Time it took for the host routes controller to sync to the system
+* host_routes_synced
+  Count of host routes currently synced to the system
+* host_routes_added
+  Total count of host routes added to the system
+* host_routes_removed
+  Total count of host routes removed from the system
 
-### run-firewall=true
+### --run-firewall=true
 
 * controller_iptables_sync_time
   Time it took for the iptables sync loop to complete
+* controller_iptables_v4_save_time
+  Time it took controller to save IPv4 rules
+* controller_iptables_v6_save_time
+  Time it took for controller to save IPv6 rules
+* controller_iptables_v4_restore_time
+  Time it took for controller to restore IPv4 rules
+* controller_iptables_v6_restore_time
+  Time it took for controller to restore IPv6 rules
 * controller_policy_chains_sync_time
   Time it took for controller to sync policy chains
+* controller_policy_ipset_v4_restore_time
+  Time it took for controller to restore IPv4 ipsets
+* controller_policy_ipset_v6_restore_time
+  Time it took for controller to restore IPv6 ipsets
+* controller_policy_chains
+  Active policy chains (gauge)
+* controller_policy_ipsets
+  Active policy ipsets (gauge)
 
-### run-service-proxy = true
+### --run-service-proxy=true
 
 * controller_ipvs_services_sync_time
   Time it took for the ipvs sync loop to complete
@@ -75,19 +96,19 @@ The following metrics is exposed by kube-router prefixed by `kube_router_`
 * service_total_connections
   Total connections made to the service since creation
 * service_packets_in
-  Total n/o packets received by service
+  Total incoming packets
 * service_packets_out
-  Total n/o packets sent by service
+  Total outgoing packets
 * service_bytes_in
-  Total bytes received by the service
+  Total incoming bytes
 * service_bytes_out
-  Total bytes sent by the service
+  Total outgoing bytes
 * service_pps_in
   Incoming packets per second
 * service_pps_out
   Outgoing packets per second
 * service_cps
-  Connections per second
+  Service connections per second
 * service_bps_in
   Incoming bytes per second
 * service_bps_out

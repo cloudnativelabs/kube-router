@@ -1,5 +1,9 @@
 <!-- markdownlint-disable-next-line first-line-heading -->
-![logo](https://cdn.rawgit.com/cloudnativelabs/kube-router/64f7700e/Documentation/img/logo-full.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/img/logo-full-light.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/img/logo-full.svg">
+  <img alt="kube-router" src="./docs/img/logo-full.svg">
+</picture>
 
 <!-- markdownlint-capture -->
 <!-- markdownlint-disable MD045 -->
@@ -7,7 +11,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/cloudnativelabs/kube-router)](https://goreportcard.com/report/github.com/cloudnativelabs/kube-router)
 [![Slack](https://img.shields.io/badge/slack-join%20chat%20%E2%86%92-e01563.svg)](https://kubernetes.slack.com/messages/C8DCQGTSB/)
 [![Docker Pulls kube-router](https://img.shields.io/docker/pulls/cloudnativelabs/kube-router.svg?label=docker+pulls)](https://hub.docker.com/r/cloudnativelabs/kube-router/)
-[![](https://images.microbadger.com/badges/image/cloudnativelabs/kube-router.svg)](https://microbadger.com/images/cloudnativelabs/kube-router)
 [![](https://img.shields.io/github/release/cloudnativelabs/kube-router/all.svg?style=flat-square)](https://github.com/cloudnativelabs/kube-router/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 <!-- markdownlint-restore -->
@@ -58,11 +61,20 @@ iptables to ensure your firewall rules have as little performance impact on your
 cluster as possible.
 
 Kube-router supports the networking.k8s.io/NetworkPolicy API or network policy V1/GA
-[semantics](https://github.com/kubernetes/kubernetes/pull/39164#issue-197243974) and also network policy beta semantics.
+[semantics](https://github.com/kubernetes/kubernetes/pull/39164#issue-197243974).
 
 Read more about kube-router's approach to Kubernetes Network Policies:
 
 - [Enforcing Kubernetes network policies with iptables](https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/)
+
+### LoadBalancer IP Allocator | `--run-loadbalancer`
+
+kube-router includes a built-in LoadBalancer IP address allocator for environments where an external cloud load balancer
+is not available, such as bare-metal or on-premise clusters. It watches for Services of type `LoadBalancer` and assigns
+IP addresses from a configurable pool. When combined with `--advertise-loadbalancer-ip` and BGP peering, these addresses
+are reachable from outside the cluster.
+
+For more details please refer to the [LoadBalancer Allocator documentation](docs/load-balancer-allocator.md).
 
 ### Advanced BGP Capabilities
 
@@ -70,8 +82,8 @@ If you have other networking devices or SDN systems that talk BGP, kube-router w
 node-to-node mesh to per-node peering configurations, most routing needs can be attained. The configuration is
 Kubernetes native (annotations) just like the rest of kube-router, so use the tools you already know! Since kube-router
 uses GoBGP, you have access to a modern BGP API platform as well right out of the box. Kube-router also provides a way
-to expose services outside the cluster by advertising ClusterIP and externalIPs to configured BGP peers. Kube-routesalso
-support MD5 password based authentication and uses strict export policies so you can be assured routes are advertised to
+to expose services outside the cluster by advertising ClusterIP and externalIPs to configured BGP peers. Kube-router also
+supports MD5 password based authentication and uses strict export policies so you can be assured routes are advertised to
 the underlay only as you intended.
 
 For more details please refer to the [BGP documentation](docs/bgp.md).
@@ -88,7 +100,7 @@ for your cluster.
 
 Although it does the work of several of its peers in one binary, kube-router does it all with a relatively
 [tiny codebase](https://github.com/cloudnativelabs/kube-router/tree/master/pkg/controllers), partly because IPVS is
-already there on your Kuberneres nodes waiting to help you do amazing things. kube-router brings that and GoBGP's modern
+already there on your Kubernetes nodes waiting to help you do amazing things. kube-router brings that and GoBGP's modern
 BGP interface to you in an elegant package designed from the ground up for Kubernetes.
 
 ### High Performance
@@ -129,5 +141,4 @@ Kube-router build upon following libraries:
 - [iptables](https://github.com/coreos/go-iptables)
 - [GoBGP](https://github.com/osrg/gobgp)
 - [Netlink](https://github.com/vishvananda/netlink)
-- [ipset](https://github.com/janeczku/go-ipset)
-- [IPVS](https://github.com/docker/libnetwork/)
+- [IPVS](https://github.com/moby/ipvs)

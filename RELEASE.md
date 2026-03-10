@@ -3,9 +3,9 @@
 ## Preparing for the release
 
 * Ensure that the Golang release used is still supported. Definition happens currently in
-  [Github Workflow](.github/workflow/ci.yml) and [Makefile](Makefile).
+  [Github Workflow](.github/workflows/ci.yml) and [Makefile](Makefile).
 * Ensure that the Alpine version used in container builds is still supported. Definition happens currently in
-  [Github Workflow](.github/workflow/ci.yml) and [Makefile](Makefile).
+  [Github Workflow](.github/workflows/ci.yml) and [Makefile](Makefile).
 * Ensure that Golang dependencies are updated.
   `go list -mod=mod -u -m -f '{{.}}{{if .Indirect}} IAMINDIRECT{{end}}' all | grep -v IAMINDIRECT` lists possible
   updates.

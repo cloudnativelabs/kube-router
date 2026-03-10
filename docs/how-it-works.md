@@ -28,17 +28,16 @@ and how they got mapped to the IPVS by kube-router:
 
 Kube-router watches the Kubernetes API server to get updates on the
 Services/Endpoints and automatically syncs the IPVS configuration to reflect the
-desired state of Services. Kube-router uses IPVS masquerading mode and uses
-round robin scheduling currently. Source pod IP is preserved so that appropriate
-network policies can be applied.
+desired state of Services. Kube-router uses IPVS masquerading mode with round robin scheduling by default (other scheduling algorithms such as
+least connection, source hashing, and maglev hashing are also supported via service annotations). Source pod IP is
+preserved so that appropriate network policies can be applied.
 
 ## Pod Ingress Firewall
 
 Blog: [Enforcing Kubernetes network policies with iptables](https://cloudnativelabs.github.io/post/2017-05-1-kube-network-policies/)
 
 Kube-router provides an implementation of Kubernetes Network Policies through
-the use of iptables, ipset and conntrack.  All the Pods in a Namespace with
-'DefaultDeny' ingress isolation policy has ingress blocked. Only traffic that
+the use of iptables, ipset and conntrack.  All the Pods in a Namespace selected by a NetworkPolicy that has no ingress rules have ingress blocked by default. Only traffic that
 matches whitelist rules specified in the network policies are permitted to reach
 those Pods. The following set of iptables rules and chains in the 'filter' table
 are used to achieve the Network Policies semantics.

@@ -11,8 +11,7 @@ service proxy are both optional but recommended.
 
 ## Configuring the Worker Nodes
 
-If you choose to run kube-router as daemonset, then both kube-apiserver and kubelet must be run with
-`--allow-privileged=true` option (see our
+If you choose to run kube-router as a daemonset, the kube-router pods require privileged access (see our
 [example daemonsets for more information](https://github.com/cloudnativelabs/kube-router/tree/master/daemonset))
 
 Ensure your [Container Runtime](https://kubernetes.io/docs/setup/production-environment/container-runtimes/) is
@@ -98,23 +97,23 @@ To cleanup kube-proxy we can do this with docker, containerd, or cri-o:
 #### docker
 
 ```sh
-docker run --privileged -v /lib/modules:/lib/modules --net=host registry.k8s.io/kube-proxy-amd64:v1.28.2 kube-proxy --cleanup
+docker run --privileged -v /lib/modules:/lib/modules --net=host registry.k8s.io/kube-proxy:v1.28.2 kube-proxy --cleanup
 ```
 
 #### containerd
 
 ```sh
-ctr images pull k8s.gcr.io/kube-proxy-amd64:v1.28.2
+ctr images pull registry.k8s.io/kube-proxy:v1.28.2
 ctr run --rm --privileged --net-host --mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro \
-    registry.k8s.io/kube-proxy-amd64:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
+    registry.k8s.io/kube-proxy:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
 ```
 
 #### cri-o
 
 ```sh
-crictl pull registry.k8s.io/kube-proxy-amd64:v1.28.2
+crictl pull registry.k8s.io/kube-proxy:v1.28.2
 crictl run --rm --privileged --net-host --mount type=bind,src=/lib/modules,dst=/lib/modules,options=rbind:ro
-    registry.k8s.io/kube-proxy-amd64:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
+    registry.k8s.io/kube-proxy:v1.28.2 kube-proxy-cleanup kube-proxy --cleanup
 ```
 
 ## Running kube-router without the service proxy
