@@ -5,6 +5,7 @@
 * Aaron U'Ren [@aauren](https://github.com/aauren)
 * Manuel Rüger [@mrueg](https://github.com/mrueg)
 * Murali Reddy [@murali-reddy](https://github.com/murali-reddy)
+* Cat C [@catherinetcai](https://github.com/catherinetcai)
 
 ## emeritus maintainers
 
