@@ -101,7 +101,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		err := netlink.AddrDel(iface, naddr)
 		if err != nil {
 			if err.Error() != IfaceHasNoAddr {
-				klog.Errorf("Failed to verify is external ip %s is assocated with dummy interface %s due to %s",
+				klog.Errorf("Failed to verify is external ip %s is associated with dummy interface %s due to %s",
 					ip, iface.Attrs().Name, err.Error())
 				return err
 			} else {
@@ -215,7 +215,7 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 	}
 
 	// IPv6 address adds in iproute2 appear to create some misc routes that will interfere with the source routing that
-	// we attempt to do below and cuased the issue commented on above. We need to remove those before we attempt to
+	// we attempt to do below and caused the issue commented on above. We need to remove those before we attempt to
 	// create the source route below. See: https://github.com/cloudnativelabs/kube-router/issues/1698
 	if isIPv6 {
 		nRoute := &netlink.Route{
@@ -313,7 +313,7 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 
 				err = ln.ipvsUpdateService(svc)
 				if err != nil {
-					return svcs, nil, fmt.Errorf("failed to update IPVS persitence / session-affinity for %s due to: %v",
+					return svcs, nil, fmt.Errorf("failed to update IPVS persistence / session-affinity for %s due to: %v",
 						ipvsServiceString(svc), err)
 				}
 				klog.V(2).Infof("Updated persistence/session-affinity for service: %s",

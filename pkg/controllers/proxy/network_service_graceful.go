@@ -74,7 +74,7 @@ func (nsc *NetworkServicesController) addToGracefulQueue(req *gracefulRequest) {
 		}
 	}
 	if !alreadyExists {
-		// try to get get Termination grace period from the pod, if unsuccesfull use the default timeout
+		// try to get Termination grace period from the pod, if unsuccessful use the default timeout
 		podObj, err := nsc.getPodObjectForEndpointIP(req.ipvsDst.Address.String())
 		if err != nil {
 			klog.V(1).Infof("Failed to find endpoint with ip: %s err: %s",

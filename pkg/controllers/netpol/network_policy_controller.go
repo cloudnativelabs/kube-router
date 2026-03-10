@@ -620,7 +620,7 @@ func (npc *NetworkPolicyController) ensureCommonPolicyChain() {
 			klog.V(1).Infof("Chain %s already exists", kubeCommonNetpolChain)
 		}
 
-		// ensure statefull firewall drops INVALID state traffic from/to the pod
+		// ensure stateful firewall drops INVALID state traffic from/to the pod
 		// For full context see: https://bugzilla.netfilter.org/show_bug.cgi?id=693
 		// The NAT engine ignores any packet with state INVALID, because there's no reliable way to determine what kind of
 		// NAT should be performed. So the proper way to prevent the leakage is to drop INVALID packets.
@@ -633,7 +633,7 @@ func (npc *NetworkPolicyController) ensureCommonPolicyChain() {
 			klog.Fatalf("failed to run iptables command: %v", err)
 		}
 
-		// ensure statefull firewall that permits RELATED,ESTABLISHED traffic from/to the pod
+		// ensure stateful firewall that permits RELATED,ESTABLISHED traffic from/to the pod
 		comment = "\"rule for stateful firewall for pod\""
 		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED",
 			"-j", "ACCEPT"}

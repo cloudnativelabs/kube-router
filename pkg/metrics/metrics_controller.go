@@ -191,7 +191,7 @@ var (
 		Name:      "controller_ipvs_metrics_export_time",
 		Help:      "Time it took to export metrics",
 	})
-	// ControllerPolicyChainsSyncTime Time it took for controller to sync policys
+	// ControllerPolicyChainsSyncTime Time it took for controller to sync policies
 	ControllerPolicyChainsSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Name:      "controller_policy_chains_sync_time",

@@ -213,7 +213,7 @@ func endpointsMapsEquivalent(a, b endpointSliceInfoMap) bool {
 
 // convertSvcProtoToSysCallProto converts a string based protocol that we receive from Kubernetes via something like the
 // serviceInfo object into the uint16 syscall version of the protocol that is capable of interfacing with aspects of the
-// Linux sub-sysem like IPVS
+// Linux sub-system like IPVS
 func convertSvcProtoToSysCallProto(svcProtocol string) uint16 {
 	switch svcProtocol {
 	case tcpProtocol:
@@ -596,7 +596,7 @@ func getIPSetName(nameBase string, family v1.IPFamily) string {
 	return sb.String()
 }
 
-// getIPVSFirewallInputChainRule creates IPVS firwall input chain rule based upon the family that is passed. This is
+// getIPVSFirewallInputChainRule creates IPVS firewall input chain rule based upon the family that is passed. This is
 // used by the NSC to ensure that traffic destined for IPVS services on the INPUT table will be directed to the IPVS
 // firewall chain
 func getIPVSFirewallInputChainRule(family v1.IPFamily) []string {

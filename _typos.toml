@@ -1,0 +1,32 @@
+# See: https://github.com/crate-ci/typos/blob/master/docs/reference.md
+
+[files]
+extend-exclude = ["vendor/", "go.sum", "*_release_notes.md", "*.svg"]
+
+[default.extend-words]
+# FoU (Foo over UDP) is a real networking encapsulation type
+Fo = "Fo"
+FoU = "FoU"
+
+# RT_FILTER_OIF is a netlink constant (Output InterFace)
+OIF = "OIF"
+
+# Both "unparseable" and "unparsable" are accepted English
+unparseable = "unparseable"
+
+[default.extend-identifiers]
+# Variable abbreviation for serviceInternalTrafficPolicy
+serIntTrafPol = "serIntTrafPol"
+
+[type.testdata]
+extend-glob = ["testdata/**", "*_test.go"]
+
+[type.testdata.extend-words]
+# Ipset hash names and tunnel names contain arbitrary letter sequences
+IZ = "IZ"
+UE = "UE"
+Ba = "Ba"
+ba = "ba"
+
+# "mis-configured" is valid hyphenated usage
+mis = "mis"

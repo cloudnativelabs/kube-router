@@ -32,6 +32,8 @@ DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.8.0
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
 # See Versions: https://www.npmjs.com/package/doctoc
 DOCTOC_VERSION=2.3.0
+# See Versions: https://github.com/crate-ci/typos/releases
+TYPOS_VERSION=v1.33.1
 # See Versions: https://github.com/osrg/gobgp/releases
 GOBGP_VERSION=v4.2.0
 QEMU_IMAGE?=multiarch/qemu-user-static
@@ -115,7 +117,7 @@ endif
 	gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...
 endif
 
-lint: gofmt markdownlint
+lint: gofmt markdownlint spellcheck
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
 		-v $(GO_CACHE):/root/.cache/go-build \
@@ -132,6 +134,10 @@ markdownlint:
 
 doctoc: ## Regenerates table of contents in docs that have doctoc markers.
 	$(DOCKER) run --rm -v $(PWD):/work -w /work node:alpine npx doctoc@$(DOCTOC_VERSION) docs/ --github --maxlevel 3 --notitle --update-only
+
+spellcheck: ## Checks for spelling mistakes in code and documentation.
+	$(DOCKER) run --rm -v $(PWD):/work -w /work alpine:3.23 sh -c \
+		'wget -qO- https://github.com/crate-ci/typos/releases/download/$(TYPOS_VERSION)/typos-$(TYPOS_VERSION)-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin && typos'
 
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
@@ -272,5 +278,6 @@ help:
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs
 .PHONY: test test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
+.PHONY: spellcheck
 
 .DEFAULT: all
