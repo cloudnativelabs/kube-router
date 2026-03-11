@@ -12,6 +12,14 @@ First check if you are upgrading across one of the
 [breaking change versions](#breaking-change-version-history). If so, read the
 relevant section(s) first before proceeding with the general guidelines below.
 
+## Supported Versions
+
+kube-router generally only supports the current major.minor release. Bug fixes
+and security patches are applied to the latest release, and users are encouraged
+to stay up to date. In exceptional cases, we may backport critical fixes to the
+previous minor release on request. If you need a backport, please open an issue
+describing the bug and why upgrading to the latest release is not feasible.
+
 ## General Guidelines
 
 ### Image Pull Policy

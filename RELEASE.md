@@ -33,6 +33,10 @@ official kube-router remote.
 
 ## New patch release
 
+kube-router generally only supports the current major.minor release. Patch releases for previous minor versions are
+only created in exceptional cases. See the [supported versions](docs/upgrading.md#supported-versions) policy for
+details.
+
 * Change to the `master` branch
 * Use `git log` to identify which commits you want to bring to the new patch release
 * Change to the major/minor release branch that was created for this release
