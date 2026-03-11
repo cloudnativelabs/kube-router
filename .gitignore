@@ -49,3 +49,6 @@ go.work.sum
 /.plans
 /.reviews
 /.opencode
+
+# Personal scripts
+/.scripts
