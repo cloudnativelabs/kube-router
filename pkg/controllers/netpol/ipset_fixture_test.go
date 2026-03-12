@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/testhelpers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 
 	"github.com/stretchr/testify/require"
@@ -59,6 +60,15 @@ func TestNetworkPolicyFixtureIPSets(t *testing.T) {
 
 	linkQ := utils.NewFakeLocalLinkQuerier(collectNodeIPs(nodes), nil)
 
+	validator, validatorErr := svcip.NewValidator(svcip.Config{
+		ExternalIPCIDRs:   config.ExternalIPCIDRs,
+		LoadBalancerCIDRs: config.LoadBalancerCIDRs,
+		ClusterIPCIDRs:    config.ClusterIPCIDRs,
+		EnableIPv4:        config.EnableIPv4,
+		EnableIPv6:        config.EnableIPv6,
+	})
+	require.NoError(t, validatorErr)
+
 	controller, err := NewNetworkPolicyController(
 		client,
 		config,
@@ -75,6 +85,7 @@ func TestNetworkPolicyFixtureIPSets(t *testing.T) {
 			v1.IPv4Protocol: ipv4Handler,
 			v1.IPv6Protocol: ipv6Handler,
 		},
+		validator,
 	)
 	require.NoError(t, err)
 

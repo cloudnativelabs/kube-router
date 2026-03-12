@@ -44,7 +44,9 @@ Addresses:
 ```
 
 * Add additional `--service-cluster-ip-range` and `--service-external-ip-range` kube-router parameters for your IPv6
-  addresses.
+  addresses. If you use LoadBalancer services with IPv6, also add `--loadbalancer-ip-range` for your IPv6 ranges.
+  These ranges are used for both routing configuration and proxy-level IP validation when
+  `--strict-external-ip-validation` is enabled (the default).
 * If you use `--enable-cni=true`, ensure `kube-controller-manager` has been started with both IPv4 and IPv6 cluster
   CIDRs (e.g. `--cluster-cidr=10.242.0.0/16,2001:db8:42:1000::/56`)
 * Ensure `kube-controller-manager` & `kube-apiserver` have been started with both IPv4 and IPv6 service cluster IP

@@ -135,7 +135,7 @@ Usage of kube-router:
       --ipvs-sync-period duration                     The delay between ipvs config synchronizations (e.g. '5s', '1m', '2h22m'). Must be greater than 0. (default 5m0s)
       --kubeconfig string                             Path to kubeconfig file with authorization information (the master location is set by the master flag).
       --loadbalancer-default-class                    Handle loadbalancer services without a class (default true)
-      --loadbalancer-ip-range strings                 CIDR values from which loadbalancer services addresses are assigned (can be specified multiple times)
+      --loadbalancer-ip-range strings                 CIDR values from which loadbalancer services addresses are assigned (can be specified multiple times). Also used by the proxy module to validate loadBalancerIPs when --strict-external-ip-validation is enabled.
       --loadbalancer-sync-period duration             The delay between checking for missed services (e.g. '5s', '1m'). Must be greater than 0. (default 1m0s)
       --masquerade-all                                SNAT all traffic to cluster IP/node port.
       --master string                                 The address of the Kubernetes API server (overrides any value in kubeconfig).
@@ -162,11 +162,12 @@ Usage of kube-router:
       --run-service-proxy                             Enables Service Proxy -- sets up IPVS for Kubernetes Services. (default true)
       --runtime-endpoint string                       Path to CRI compatible container runtime socket (used for DSR mode). Currently known working with containerd.
       --service-cluster-ip-range strings              CIDR values from which service cluster IPs are assigned (can be specified up to 2 times) (default [10.96.0.0/12])
-      --service-external-ip-range strings             Specify external IP CIDRs that are used for inter-cluster communication (can be specified multiple times)
+      --service-external-ip-range strings             Specify external IP CIDRs that are used for inter-cluster communication (can be specified multiple times). Also used by the proxy module to validate externalIPs when --strict-external-ip-validation is enabled.
       --service-node-port-range string                NodePort range specified with either a hyphen or colon (default "30000-32767")
       --service-tcp-timeout duration                  Specify TCP timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves default system value (default: 0s)
       --service-tcpfin-timeout duration               Specify TCP FIN timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves default system value (default: 0s)
       --service-udp-timeout duration                  Specify UDP timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves default system value (default: 0s)
+      --strict-external-ip-validation                 When enabled, the proxy module validates externalIPs and loadBalancerIPs against configured CIDR ranges (--service-external-ip-range and --loadbalancer-ip-range). When strict mode is enabled and no range is configured, all externalIPs / loadBalancerIPs are rejected (default-deny). Disable this flag to restore previous behavior of accepting all IPs without validation. (default true)
   -v, --v string                                      log level for V logs (default "0")
   -V, --version                                       Print version information.
 ```
@@ -312,6 +313,79 @@ advertising IPs.
 Advertising LoadBalancer IPs works by inspecting the services `status.loadBalancer.ingress` IPs that are set by external
 LoadBalancers like for example MetalLb. This has been successfully tested together with
 [MetalLB](https://github.com/google/metallb) in ARP mode.
+
+**Note:** When `--strict-external-ip-validation` is enabled (the default), externalIPs and loadBalancerIPs must pass
+validation against configured CIDR ranges before they are programmed into IPVS. IPs that are rejected by the proxy
+module will not be advertised. See [External IP and LoadBalancer IP Validation](#external-ip-and-loadbalancer-ip-validation)
+for details.
+
+## External IP and LoadBalancer IP Validation
+
+Starting with v2.8.0, the service proxy (Network Services Controller) validates `externalIPs` and
+`loadBalancerIPs` before programming them into IPVS. This is controlled by the `--strict-external-ip-validation` flag,
+which defaults to `true`.
+
+**This is a breaking change.** Previously, all externalIPs and loadBalancerIPs were accepted unconditionally. Now they
+are validated against configured CIDR ranges.
+
+### How It Works
+
+When `--strict-external-ip-validation=true` (the default):
+
+- **externalIPs** are validated against `--service-external-ip-range` CIDRs
+- **loadBalancerIPs** are validated against `--loadbalancer-ip-range` CIDRs
+- **ClusterIP conflict detection**: externalIPs that fall within `--service-cluster-ip-range` are always rejected to
+  prevent denial-of-service against cluster services
+- **Default-deny**: if no range is configured for a given IP type, **all** IPs of that type are rejected
+
+When `--strict-external-ip-validation=false`:
+
+- All externalIPs and loadBalancerIPs are accepted without validation (previous behavior)
+
+### Configuration Examples
+
+Allow specific externalIP and loadBalancerIP ranges:
+
+```sh
+kube-router \
+  --run-service-proxy=true \
+  --service-external-ip-range=198.51.100.0/24 \
+  --service-external-ip-range=203.0.113.0/24 \
+  --loadbalancer-ip-range=10.255.0.0/16
+```
+
+Disable validation to restore previous behavior:
+
+```sh
+kube-router \
+  --run-service-proxy=true \
+  --strict-external-ip-validation=false
+```
+
+### Upgrading
+
+If you are upgrading from a version without this feature and you use externalIPs or LoadBalancer services, you must
+either:
+
+1. **Configure the appropriate CIDR ranges** before upgrading by adding `--service-external-ip-range` and/or
+   `--loadbalancer-ip-range` flags to your kube-router arguments
+2. **Disable strict validation** by adding `--strict-external-ip-validation=false` to your kube-router arguments
+
+If you do neither, all externalIPs and loadBalancerIPs will be rejected after the upgrade (default-deny behavior).
+
+See [Upgrading kube-router](upgrading.md) for more details.
+
+### Shared Flags
+
+The `--service-external-ip-range` and `--loadbalancer-ip-range` flags serve multiple purposes:
+
+- `--service-external-ip-range` is used by the **network policy controller** for firewall rules and by the
+  **proxy module** for externalIP validation
+- `--loadbalancer-ip-range` is used by the **load balancer allocator** for IPAM and by the **proxy module** for
+  loadBalancerIP validation
+
+If you were already using these flags for other controllers, the proxy module will automatically benefit from the same
+configuration.
 
 ## Controlling Service Locality or Traffic Policies
 

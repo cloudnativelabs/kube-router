@@ -14,6 +14,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"k8s.io/klog/v2"
@@ -64,17 +65,15 @@ var (
 
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyController struct {
-	krNode                      utils.NodeIPAndFamilyAware
-	serviceClusterIPRanges      []net.IPNet
-	serviceExternalIPRanges     []net.IPNet
-	serviceLoadBalancerIPRanges []net.IPNet
-	serviceNodePortRange        string
-	mu                          sync.Mutex
-	syncPeriod                  time.Duration
-	MetricsEnabled              bool
-	healthChan                  chan<- *healthcheck.ControllerHeartbeat
-	fullSyncRequestChan         chan struct{}
-	ipsetMutex                  *sync.Mutex
+	krNode               utils.NodeIPAndFamilyAware
+	ipRanges             svcip.RangeQuerier
+	serviceNodePortRange string
+	mu                   sync.Mutex
+	syncPeriod           time.Duration
+	MetricsEnabled       bool
+	healthChan           chan<- *healthcheck.ControllerHeartbeat
+	fullSyncRequestChan  chan struct{}
+	ipsetMutex           *sync.Mutex
 
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler
 	iptablesSaveRestore map[v1core.IPFamily]utils.IPTablesSaveRestorer
@@ -472,22 +471,18 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		}
 	}
 
-	if len(npc.serviceClusterIPRanges) > 0 {
-		for idx, serviceRange := range npc.serviceClusterIPRanges {
-			var family v1core.IPFamily
-			if serviceRange.IP.To4() != nil {
-				family = v1core.IPv4Protocol
-			} else {
-				family = v1core.IPv6Protocol
-			}
+	if len(npc.ipRanges.ClusterIPRanges()) == 0 {
+		klog.Fatalf("Primary service cluster IP range is not configured")
+	}
+	for _, family := range []v1core.IPFamily{v1core.IPv4Protocol, v1core.IPv6Protocol} {
+		for _, serviceRange := range npc.ipRanges.ClusterIPRanges(family) {
 			klog.V(2).Infof("Allow traffic to ingress towards Cluster IP Range: %s for family: %s",
 				serviceRange.String(), family)
-			npc.allowTrafficToClusterIPRange(rulePosition[family], &npc.serviceClusterIPRanges[idx],
-				addUUIDForRuleSpec, ensureRuleAtPosition, "allow traffic to primary/secondary cluster IP range")
+			npc.allowTrafficToClusterIPRange(rulePosition[family], &serviceRange,
+				addUUIDForRuleSpec, ensureRuleAtPosition,
+				"allow traffic to primary/secondary cluster IP range")
 			rulePosition[family]++
 		}
-	} else {
-		klog.Fatalf("Primary service cluster IP range is not configured")
 	}
 
 	for family, handler := range npc.iptablesCmdHandlers {
@@ -531,56 +526,40 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 		rulePosition[family]++
 	}
 
-	for idx, externalIPRange := range npc.serviceExternalIPRanges {
-		var family v1core.IPFamily
-		if externalIPRange.IP.To4() != nil {
-			family = v1core.IPv4Protocol
-		} else {
-			family = v1core.IPv6Protocol
+	for _, family := range []v1core.IPFamily{v1core.IPv4Protocol, v1core.IPv6Protocol} {
+		handler := npc.iptablesCmdHandlers[family]
+		if handler == nil {
+			continue
 		}
-		whitelistServiceVips := []string{"-m", "comment", "--comment",
-			"allow traffic to external IP range: " + externalIPRange.String(), "-d", externalIPRange.String(),
-			"-j", "RETURN"}
-		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
-		if err != nil {
-			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		for _, externalIPRange := range npc.ipRanges.ExternalIPRanges(family) {
+			whitelistServiceVips := []string{"-m", "comment", "--comment",
+				"allow traffic to external IP range: " + externalIPRange.String(),
+				"-d", externalIPRange.String(), "-j", "RETURN"}
+			uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+			if err != nil {
+				klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+			}
+			klog.V(2).Infof("Allow traffic to ingress towards External IP Range: %s for family: %s",
+				externalIPRange.String(), family)
+			ensureRuleAtPosition(handler,
+				kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
+			rulePosition[family]++
 		}
-		// Access externalIPRange via index to avoid implicit memory aliasing
-		cidrHandler, err := npc.iptablesCmdHandlerForCIDR(&npc.serviceExternalIPRanges[idx])
-		if err != nil {
-			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
-		}
-		klog.V(2).Infof("Allow traffic to ingress towards External IP Range: %s for family: %s",
-			externalIPRange.String(), family)
-		ensureRuleAtPosition(cidrHandler,
-			kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
-		rulePosition[family]++
-	}
 
-	for idx, loadBalancerIPRange := range npc.serviceLoadBalancerIPRanges {
-		var family v1core.IPFamily
-		if loadBalancerIPRange.IP.To4() != nil {
-			family = v1core.IPv4Protocol
-		} else {
-			family = v1core.IPv6Protocol
+		for _, loadBalancerIPRange := range npc.ipRanges.LoadBalancerIPRanges(family) {
+			whitelistServiceVips := []string{"-m", "comment", "--comment",
+				"allow traffic to load balancer IP range: " + loadBalancerIPRange.String(),
+				"-d", loadBalancerIPRange.String(), "-j", "RETURN"}
+			uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+			if err != nil {
+				klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+			}
+			klog.V(2).Infof("Allow traffic to ingress towards Load Balancer IP Range: %s "+
+				"for family: %s", loadBalancerIPRange.String(), family)
+			ensureRuleAtPosition(handler,
+				kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
+			rulePosition[family]++
 		}
-		whitelistServiceVips := []string{"-m", "comment", "--comment",
-			"allow traffic to load balancer IP range: " + loadBalancerIPRange.String(), "-d", loadBalancerIPRange.String(),
-			"-j", "RETURN"}
-		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
-		if err != nil {
-			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
-		}
-		// Access loadBalancerIPRange via index to avoid implicit memory aliasing
-		cidrHandler, err := npc.iptablesCmdHandlerForCIDR(&npc.serviceLoadBalancerIPRanges[idx])
-		if err != nil {
-			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
-		}
-		klog.V(2).Infof("Allow traffic to ingress towards Load Balancer IP Range: %s for family: %s",
-			loadBalancerIPRange.String(), family)
-		ensureRuleAtPosition(cidrHandler,
-			kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
-		rulePosition[family]++
 	}
 }
 
@@ -905,88 +884,42 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer,
 	ipsetMutex *sync.Mutex, linkQ utils.LocalLinkQuerier,
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler,
-	ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler) (*NetworkPolicyController, error) {
-	npc := NetworkPolicyController{ipsetMutex: ipsetMutex}
+	ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler,
+	ipRanges svcip.RangeQuerier) (*NetworkPolicyController, error) {
+	npc := NetworkPolicyController{ipsetMutex: ipsetMutex, ipRanges: ipRanges}
 
 	// Creating a single-item buffered channel to ensure that we only keep a single full sync request at a time,
 	// additional requests would be pointless to queue since after the first one was processed the system would already
 	// be up to date with all of the policy changes from any enqueued request after that
 	npc.fullSyncRequestChan = make(chan struct{}, 1)
 
-	// Validate and parse ClusterIP service range
-	if len(config.ClusterIPCIDRs) == 0 {
-		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter, the list is empty")
+	// Validate dual-stack ClusterIP configuration using pre-parsed ranges from the validator
+	clusterIPv4 := ipRanges.ClusterIPRanges(v1core.IPv4Protocol)
+	clusterIPv6 := ipRanges.ClusterIPRanges(v1core.IPv6Protocol)
+	if config.EnableIPv4 && !config.EnableIPv6 && len(clusterIPv4) == 0 {
+		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
+			"IPv4 is enabled but only IPv6 address is provided")
 	}
-
-	_, primaryIpnet, err := net.ParseCIDR(strings.TrimSpace(config.ClusterIPCIDRs[0]))
-	if err != nil {
-		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %w", err)
+	if !config.EnableIPv4 && config.EnableIPv6 && len(clusterIPv6) == 0 {
+		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
+			"IPv6 is enabled but only IPv4 address is provided")
 	}
-	npc.serviceClusterIPRanges = append(npc.serviceClusterIPRanges, *primaryIpnet)
-
-	// Validate that ClusterIP service range type matches the configuration
-	if config.EnableIPv4 && !config.EnableIPv6 {
-		if !netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[0]) {
+	if config.EnableIPv4 && config.EnableIPv6 && len(config.ClusterIPCIDRs) > 1 {
+		if len(clusterIPv4) == 0 || len(clusterIPv6) == 0 {
 			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
-				"IPv4 is enabled but only IPv6 address is provided")
+				"dual-stack is enabled, both IPv4 and IPv6 addresses should be provided")
 		}
 	}
-	if !config.EnableIPv4 && config.EnableIPv6 {
-		if !netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[0]) {
-			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
-				"IPv6 is enabled but only IPv4 address is provided")
-		}
+	if !config.EnableIPv4 && !config.EnableIPv6 && len(config.ClusterIPCIDRs) > 1 {
+		return nil, fmt.Errorf("too many CIDRs provided in --service-cluster-ip-range parameter: " +
+			"dual-stack must be enabled to provide two addresses")
 	}
 
-	if len(config.ClusterIPCIDRs) > 1 {
-		if config.EnableIPv4 && config.EnableIPv6 {
-			_, secondaryIpnet, err := net.ParseCIDR(strings.TrimSpace(config.ClusterIPCIDRs[1]))
-			if err != nil {
-				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: %v", err)
-			}
-			npc.serviceClusterIPRanges = append(npc.serviceClusterIPRanges, *secondaryIpnet)
-
-			ipv4Provided := netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[0]) ||
-				netutils.IsIPv4CIDR(&npc.serviceClusterIPRanges[1])
-			ipv6Provided := netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[0]) ||
-				netutils.IsIPv6CIDR(&npc.serviceClusterIPRanges[1])
-			if !ipv4Provided || !ipv6Provided {
-				return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
-					"dual-stack is enabled, both IPv4 and IPv6 addresses should be provided")
-			}
-		} else {
-			return nil, fmt.Errorf("too many CIDRs provided in --service-cluster-ip-range parameter: " +
-				"dual-stack must be enabled to provide two addresses")
-		}
-	}
-	if len(config.ClusterIPCIDRs) > 2 {
-		return nil, fmt.Errorf("too many CIDRs provided in --service-cluster-ip-range parameter, only two " +
-			"addresses are allowed at once for dual-stack")
-	}
+	var err error
 
 	// Validate and parse NodePort range
 	if npc.serviceNodePortRange, err = validateNodePortRange(config.NodePortRange); err != nil {
 		return nil, err
-	}
-
-	// Validate and parse ExternalIP service range
-	for _, externalIPRange := range config.ExternalIPCIDRs {
-		_, ipnet, err := net.ParseCIDR(externalIPRange)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get parse --service-external-ip-range parameter: '%s'. Error: %s",
-				externalIPRange, err.Error())
-		}
-		npc.serviceExternalIPRanges = append(npc.serviceExternalIPRanges, *ipnet)
-	}
-
-	// Validate and parse LoadBalancerIP service range
-	for _, loadBalancerIPRange := range config.LoadBalancerCIDRs {
-		_, ipnet, err := net.ParseCIDR(loadBalancerIPRange)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get parse --loadbalancer-ip-range parameter: '%s'. Error: %s",
-				loadBalancerIPRange, err.Error())
-		}
-		npc.serviceLoadBalancerIPRanges = append(npc.serviceLoadBalancerIPRanges, *ipnet)
 	}
 
 	if config.MetricsEnabled {

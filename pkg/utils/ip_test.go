@@ -342,3 +342,80 @@ func TestGetSingleIPNet(t *testing.T) {
 		})
 	}
 }
+
+func mustParseCIDR(t *testing.T, cidr string) net.IPNet {
+	t.Helper()
+	_, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		t.Fatalf("failed to parse CIDR %q: %v", cidr, err)
+	}
+	return *ipnet
+}
+
+func TestIsIPInRanges(t *testing.T) {
+	tests := []struct {
+		name   string
+		ip     string
+		ranges []string
+		want   bool
+	}{
+		{
+			name:   "IP within single range",
+			ip:     "10.0.0.5",
+			ranges: []string{"10.0.0.0/24"},
+			want:   true,
+		},
+		{
+			name:   "IP outside single range",
+			ip:     "192.168.1.1",
+			ranges: []string{"10.0.0.0/24"},
+			want:   false,
+		},
+		{
+			name:   "IP within second of two ranges",
+			ip:     "172.16.0.5",
+			ranges: []string{"10.0.0.0/24", "172.16.0.0/16"},
+			want:   true,
+		},
+		{
+			name:   "IP outside all ranges",
+			ip:     "8.8.8.8",
+			ranges: []string{"10.0.0.0/8", "172.16.0.0/12"},
+			want:   false,
+		},
+		{
+			name:   "empty ranges",
+			ip:     "10.0.0.1",
+			ranges: []string{},
+			want:   false,
+		},
+		{
+			name:   "IPv6 within range",
+			ip:     "fd00::5",
+			ranges: []string{"fd00::/64"},
+			want:   true,
+		},
+		{
+			name:   "IPv6 outside range",
+			ip:     "fe80::1",
+			ranges: []string{"fd00::/64"},
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ip := net.ParseIP(tt.ip)
+			assert.NotNil(t, ip, "test IP should be valid")
+
+			ranges := make([]net.IPNet, len(tt.ranges))
+			for i, r := range tt.ranges {
+				ranges[i] = mustParseCIDR(t, r)
+			}
+
+			got := IsIPInRanges(ip, ranges)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

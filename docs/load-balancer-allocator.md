@@ -83,4 +83,12 @@ When running the controller outside a pod, both `POD_NAME` and `POD_NAMESPACE` m
 
 ## Notes
 
-It's not possible to specify the addresses for the load balancer services. An externalIP service can be used instead.
+It's not possible to specify the addresses for the load balancer services. An externalIP service can be used instead
+(note that externalIPs are subject to validation via `--service-external-ip-range` when
+`--strict-external-ip-validation` is enabled).
+
+The `--loadbalancer-ip-range` flag serves a dual purpose: it defines the CIDR ranges used by the load balancer
+allocator for IPAM **and** is used by the proxy module to validate loadBalancerIPs when
+`--strict-external-ip-validation` is enabled (the default). If a LoadBalancer IP falls outside the configured ranges
+(for example, an IP assigned by an external controller like MetalLB), the proxy will reject it unless the range is
+expanded to include it or strict validation is disabled.

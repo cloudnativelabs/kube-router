@@ -17,6 +17,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/version"
 	"k8s.io/klog/v2"
@@ -182,9 +183,22 @@ func (kr *KubeRouter) Run() error {
 		}
 	}
 
+	ipValidator, err := svcip.NewValidator(svcip.Config{
+		ExternalIPCIDRs:   kr.Config.ExternalIPCIDRs,
+		LoadBalancerCIDRs: kr.Config.LoadBalancerCIDRs,
+		ClusterIPCIDRs:    kr.Config.ClusterIPCIDRs,
+		StrictValidation:  kr.Config.StrictExternalIPValidation,
+		EnableIPv4:        kr.Config.EnableIPv4,
+		EnableIPv6:        kr.Config.EnableIPv6,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create service IP validator: %v", err)
+	}
+	ipValidator.LogStatus()
+
 	if kr.Config.RunRouter {
 		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config,
-			nodeInformer, svcInformer, epSliceInformer, &ipsetMutex)
+			nodeInformer, svcInformer, epSliceInformer, &ipsetMutex, ipValidator)
 		if err != nil {
 			return fmt.Errorf("failed to create network routing controller: %v", err)
 		}
@@ -215,7 +229,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunServiceProxy {
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
-			svcInformer, epSliceInformer, podInformer, &ipsetMutex)
+			svcInformer, epSliceInformer, podInformer, &ipsetMutex, ipValidator)
 		if err != nil {
 			return fmt.Errorf("failed to create network services controller: %v", err)
 		}
@@ -246,7 +260,8 @@ func (kr *KubeRouter) Run() error {
 			return fmt.Errorf("failed to create iptables handlers: %v", err)
 		}
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
-			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil, iptablesCmdHandlers, ipSetHandlers)
+			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil, iptablesCmdHandlers, ipSetHandlers,
+			ipValidator)
 		if err != nil {
 			return fmt.Errorf("failed to create network policy controller: %v", err)
 		}
@@ -270,7 +285,7 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunLoadBalancer {
 		klog.V(0).Info("running load balancer allocator controller")
-		lbc, err := lballoc.NewLoadBalancerController(kr.Client, kr.Config, svcInformer)
+		lbc, err := lballoc.NewLoadBalancerController(kr.Client, kr.Config, svcInformer, ipValidator)
 		if err != nil {
 			return fmt.Errorf("failed to create load balancer allocator: %v", err)
 		}

@@ -26,6 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 )
 
@@ -835,31 +836,31 @@ func TestNetworkPolicyController(t *testing.T) {
 			"Test bad cluster CIDR (not properly formatting ip address)",
 			newMinimalKubeRouterConfig([]string{"10.10.10"}, "", "node", nil, nil, false),
 			true,
-			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10",
+			"failed to parse --service-cluster-ip-range parameter: '10.10.10': invalid CIDR address: 10.10.10",
 		},
 		{
 			"Test bad cluster CIDR (not using an ip address)",
 			newMinimalKubeRouterConfig([]string{"foo"}, "", "node", nil, nil, false),
 			true,
-			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: foo",
+			"failed to parse --service-cluster-ip-range parameter: 'foo': invalid CIDR address: foo",
 		},
 		{
 			"Test bad cluster CIDR (using an ip address that is not a CIDR)",
 			newMinimalKubeRouterConfig([]string{"10.10.10.10"}, "", "node", nil, nil, false),
 			true,
-			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10.10",
+			"failed to parse --service-cluster-ip-range parameter: '10.10.10.10': invalid CIDR address: 10.10.10.10",
 		},
 		{
 			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv4)",
-			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "10.244.0.0/16", "2001:db8:42:1::/112"}, "", "node", nil, nil, false),
+			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "10.244.0.0/16", "2001:db8:42:1::/112"}, "", "node", nil, nil, true),
 			true,
-			"too many CIDRs provided in --service-cluster-ip-range parameter: dual-stack must be enabled to provide two addresses",
+			"too many CIDRs provided in --service-cluster-ip-range parameter, only two addresses are allowed at once for dual-stack",
 		},
 		{
 			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv6)",
-			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "2001:db8:42:0::/56", "2001:db8:42:1::/112"}, "", "node", nil, nil, false),
+			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "2001:db8:42:0::/56", "2001:db8:42:1::/112"}, "", "node", nil, nil, true),
 			true,
-			"too many CIDRs provided in --service-cluster-ip-range parameter: dual-stack must be enabled to provide two addresses",
+			"too many CIDRs provided in --service-cluster-ip-range parameter, only two addresses are allowed at once for dual-stack",
 		},
 		{
 			"Test good cluster CIDR (using single IP with a /32)",
@@ -931,25 +932,25 @@ func TestNetworkPolicyController(t *testing.T) {
 			"Test bad external IP CIDR (not properly formatting ip address)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10"}, nil, false),
 			true,
-			"failed to get parse --service-external-ip-range parameter: '199.10.10'. Error: invalid CIDR address: 199.10.10",
+			"failed to parse --service-external-ip-range parameter: '199.10.10': invalid CIDR address: 199.10.10",
 		},
 		{
 			"Test bad external IP CIDR (not using an ip address)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"foo"}, nil, false),
 			true,
-			"failed to get parse --service-external-ip-range parameter: 'foo'. Error: invalid CIDR address: foo",
+			"failed to parse --service-external-ip-range parameter: 'foo': invalid CIDR address: foo",
 		},
 		{
 			"Test bad external IP CIDR (using an ip address that is not a CIDR)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10"}, nil, false),
 			true,
-			"failed to get parse --service-external-ip-range parameter: '199.10.10.10'. Error: invalid CIDR address: 199.10.10.10",
+			"failed to parse --service-external-ip-range parameter: '199.10.10.10': invalid CIDR address: 199.10.10.10",
 		},
 		{
 			"Test bad external IP CIDR (making sure that it processes all items in the list)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10/32", "199.10.10.11"}, nil, false),
 			true,
-			"failed to get parse --service-external-ip-range parameter: '199.10.10.11'. Error: invalid CIDR address: 199.10.10.11",
+			"failed to parse --service-external-ip-range parameter: '199.10.10.11': invalid CIDR address: 199.10.10.11",
 		},
 		{
 			"Test good external IP CIDR (using single IP with a /32)",
@@ -967,25 +968,25 @@ func TestNetworkPolicyController(t *testing.T) {
 			"Test bad load balancer CIDR (not properly formatting ip address)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10"}, false),
 			true,
-			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10'. Error: invalid CIDR address: 199.10.10",
+			"failed to parse --loadbalancer-ip-range parameter: '199.10.10': invalid CIDR address: 199.10.10",
 		},
 		{
 			"Test bad load balancer CIDR (not using an ip address)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"foo"}, false),
 			true,
-			"failed to get parse --loadbalancer-ip-range parameter: 'foo'. Error: invalid CIDR address: foo",
+			"failed to parse --loadbalancer-ip-range parameter: 'foo': invalid CIDR address: foo",
 		},
 		{
 			"Test bad load balancer CIDR (using an ip address that is not a CIDR)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10.10"}, false),
 			true,
-			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10.10'. Error: invalid CIDR address: 199.10.10.10",
+			"failed to parse --loadbalancer-ip-range parameter: '199.10.10.10': invalid CIDR address: 199.10.10.10",
 		},
 		{
 			"Test bad load balancer CIDR (making sure that it processes all items in the list)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10.10/32", "199.10.10.11"}, false),
 			true,
-			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10.11'. Error: invalid CIDR address: 199.10.10.11",
+			"failed to parse --loadbalancer-ip-range parameter: '199.10.10.11': invalid CIDR address: 199.10.10.11",
 		},
 		{
 			"Test good load balancer CIDR (using single IP with a /32)",
@@ -1006,13 +1007,31 @@ func TestNetworkPolicyController(t *testing.T) {
 	_, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
+			// Create validator from config — CIDR parsing errors now come from the validator
+			validator, validatorErr := svcip.NewValidator(svcip.Config{
+				ExternalIPCIDRs:   test.config.ExternalIPCIDRs,
+				LoadBalancerCIDRs: test.config.LoadBalancerCIDRs,
+				ClusterIPCIDRs:    test.config.ClusterIPCIDRs,
+				StrictValidation:  test.config.StrictExternalIPValidation,
+				EnableIPv4:        test.config.EnableIPv4,
+				EnableIPv6:        test.config.EnableIPv6,
+			})
+			if validatorErr != nil {
+				if !test.expectError {
+					t.Errorf("Validator creation should have succeeded, but failed: %s", validatorErr)
+				} else if validatorErr.Error() != test.errorText {
+					t.Errorf("Expected error: '%s' but instead got: '%s'", test.errorText, validatorErr)
+				}
+				return
+			}
+
 			// TODO: Handle IPv6
 			iptablesHandlers := make(map[v1.IPFamily]utils.IPTablesHandler, 1)
 			iptablesHandlers[v1.IPv4Protocol] = newFakeIPTables(iptables.ProtocolIPv4)
 			ipSetHandlers := make(map[v1.IPFamily]utils.IPSetHandler, 1)
 			ipSetHandlers[v1.IPv4Protocol] = &fakeIPSet{}
 			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer,
-				&sync.Mutex{}, fakeLinkQuerier, iptablesHandlers, ipSetHandlers)
+				&sync.Mutex{}, fakeLinkQuerier, iptablesHandlers, ipSetHandlers, validator)
 			if err == nil && test.expectError {
 				t.Error("This config should have failed, but it was successful instead")
 			} else if err != nil {

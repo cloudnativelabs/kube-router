@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
 	"github.com/stretchr/testify/assert"
@@ -1903,5 +1904,187 @@ func TestDSR_FWMarkCollisionCase_Issue1045(t *testing.T) {
 	} else {
 		t.Logf("Only %d FWMARK service(s) created - DSR setup may have failed due to test environment", len(fwmarkCalls))
 		t.SkipNow()
+	}
+}
+
+// =============================================================================
+// ExternalIP / LoadBalancerIP Validation Integration Tests
+//
+// Unit tests for FilterExternalIPs and FilterLoadBalancerIPs are in pkg/svcip/validator_test.go.
+// These integration tests verify that buildServicesInfo correctly uses the svcip.Filter to
+// filter IPs when building the service map.
+// =============================================================================
+
+func TestBuildServicesInfoWithStrictValidation(t *testing.T) {
+	intTrafficPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extTrafficPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	tests := []struct {
+		name                string
+		strictMode          bool
+		externalIPRanges    []string
+		lbIPRanges          []string
+		clusterIPRanges     []string
+		service             *v1core.Service
+		expectedExternalIPs []string
+		expectedLBIPs       []string
+	}{
+		{
+			name:             "strict mode filters out-of-range externalIPs",
+			strictMode:       true,
+			externalIPRanges: []string{"10.243.0.0/24"},
+			lbIPRanges:       []string{"10.255.0.0/24"},
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-strict", Namespace: "default"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "ClusterIP",
+					ClusterIP:             "10.0.0.1",
+					ExternalIPs:           []string{"10.243.0.1", "192.168.100.50"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "http", Port: 80, Protocol: "TCP"},
+					},
+				},
+			},
+			expectedExternalIPs: []string{"10.243.0.1"},
+			expectedLBIPs:       []string{},
+		},
+		{
+			name:             "strict mode filters out-of-range loadBalancerIPs",
+			strictMode:       true,
+			externalIPRanges: []string{"10.243.0.0/24"},
+			lbIPRanges:       []string{"10.255.0.0/24"},
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-strict-lb", Namespace: "default"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "LoadBalancer",
+					ClusterIP:             "10.0.0.2",
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "http", Port: 80, Protocol: "TCP"},
+					},
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{IP: "10.255.0.1"},
+							{IP: "8.8.8.8"},
+						},
+					},
+				},
+			},
+			expectedExternalIPs: []string{},
+			expectedLBIPs:       []string{"10.255.0.1"},
+		},
+		{
+			name:             "strict mode rejects externalIP that conflicts with clusterIP range",
+			strictMode:       true,
+			externalIPRanges: []string{"10.0.0.0/8"},
+			clusterIPRanges:  []string{"10.96.0.0/12"},
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-conflict", Namespace: "default"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "ClusterIP",
+					ClusterIP:             "10.96.0.1",
+					ExternalIPs:           []string{"10.96.0.10", "10.243.0.1"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "http", Port: 80, Protocol: "TCP"},
+					},
+				},
+			},
+			expectedExternalIPs: []string{"10.243.0.1"},
+			expectedLBIPs:       nil,
+		},
+		{
+			name:       "strict mode off - all IPs pass through",
+			strictMode: false,
+			service: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-nostrict", Namespace: "default"},
+				Spec: v1core.ServiceSpec{
+					Type:                  "LoadBalancer",
+					ClusterIP:             "10.0.0.3",
+					ExternalIPs:           []string{"1.1.1.1", "2.2.2.2"},
+					InternalTrafficPolicy: &intTrafficPolicyCluster,
+					ExternalTrafficPolicy: extTrafficPolicyCluster,
+					Ports: []v1core.ServicePort{
+						{Name: "http", Port: 80, Protocol: "TCP"},
+					},
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{IP: "10.255.0.1"},
+						},
+					},
+				},
+			},
+			expectedExternalIPs: []string{"1.1.1.1", "2.2.2.2"},
+			expectedLBIPs:       []string{"10.255.0.1"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clientset := fake.NewSimpleClientset()
+			_, err := clientset.CoreV1().Services("default").Create(
+				context.Background(), tc.service, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("failed to create service: %v", err)
+			}
+
+			// Build svcip.Config from test case data
+			clusterIPCIDRs := tc.clusterIPRanges
+			if len(clusterIPCIDRs) == 0 {
+				clusterIPCIDRs = []string{"10.96.0.0/12"}
+			}
+			validator, validatorErr := svcip.NewValidator(svcip.Config{
+				ExternalIPCIDRs:   tc.externalIPRanges,
+				LoadBalancerCIDRs: tc.lbIPRanges,
+				ClusterIPCIDRs:    clusterIPCIDRs,
+				StrictValidation:  tc.strictMode,
+				EnableIPv4:        true,
+			})
+			if validatorErr != nil {
+				t.Fatalf("failed to create validator: %v", validatorErr)
+			}
+
+			krNode := &utils.LocalKRNode{
+				KRNode: utils.KRNode{
+					NodeName:  "node-1",
+					PrimaryIP: net.ParseIP("10.0.0.0"),
+				},
+			}
+			nsc := &NetworkServicesController{
+				krNode:     krNode,
+				ipFilter:   validator,
+				ipsetMutex: &sync.Mutex{},
+				client:     clientset,
+				fwMarkMap:  make(map[uint32]string),
+			}
+
+			startInformersForServiceProxy(t, nsc, clientset)
+			waitForListerWithTimeout(t, nsc.svcLister, time.Second*10)
+
+			serviceMap := nsc.buildServicesInfo()
+
+			// Find the service info for the first (and only) port
+			var svcInfo *serviceInfo
+			for _, si := range serviceMap {
+				svcInfo = si
+				break
+			}
+			if svcInfo == nil {
+				t.Fatalf("expected service info to be present in the map")
+			}
+
+			assert.Equal(t, tc.expectedExternalIPs, svcInfo.externalIPs,
+				"externalIPs should be filtered correctly")
+			assert.Equal(t, tc.expectedLBIPs, svcInfo.loadBalancerIPs,
+				"loadBalancerIPs should be filtered correctly")
+		})
 	}
 }

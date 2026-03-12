@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	v1core "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -1069,5 +1070,221 @@ func getNoLocalAddressesEPs() *discoveryv1.EndpointSlice {
 				Addresses: []string{"10.1.0.2"},
 			},
 		},
+	}
+}
+
+// newTestValidator creates a svcip.Validator for use in NRC filtering tests.
+// The cluster CIDR is set to 10.0.0.0/24 (a narrow range) so that it doesn't overlap with
+// the LB test IPs (10.0.255.x) used by getLoadBalancerSvc().
+func newTestValidator(t *testing.T, externalCIDRs, lbCIDRs []string, strict bool) *svcip.Validator {
+	t.Helper()
+	v, err := svcip.NewValidator(svcip.Config{
+		ExternalIPCIDRs:   externalCIDRs,
+		LoadBalancerCIDRs: lbCIDRs,
+		ClusterIPCIDRs:    []string{"10.0.0.0/24"},
+		StrictValidation:  strict,
+		EnableIPv4:        true,
+		EnableIPv6:        true,
+	})
+	if err != nil {
+		t.Fatalf("failed to create test validator: %v", err)
+	}
+	return v
+}
+
+func Test_getExternalIPsWithFilter(t *testing.T) {
+	tests := []struct {
+		name    string
+		nrc     *NetworkRoutingController
+		svc     *v1core.Service
+		wantIPs []string
+	}{
+		{
+			name: "nil filter passes all IPs through",
+			nrc:  &NetworkRoutingController{},
+			svc:  getExternalSvc(),
+			// ipFilter is nil, so no filtering occurs
+			wantIPs: []string{"1.1.1.1"},
+		},
+		{
+			name: "strict mode with matching range allows IPs",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, []string{"1.1.1.0/24"}, nil, true),
+			},
+			svc:     getExternalSvc(),
+			wantIPs: []string{"1.1.1.1"},
+		},
+		{
+			name: "strict mode with non-matching range rejects IPs",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, []string{"2.2.2.0/24"}, nil, true),
+			},
+			svc:     getExternalSvc(),
+			wantIPs: []string{},
+		},
+		{
+			name: "strict mode with no external ranges rejects all (default-deny)",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, nil, nil, true),
+			},
+			svc:     getExternalSvc(),
+			wantIPs: nil,
+		},
+		{
+			name: "non-strict mode passes all IPs regardless of ranges",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, []string{"2.2.2.0/24"}, nil, false),
+			},
+			svc:     getExternalSvc(),
+			wantIPs: []string{"1.1.1.1"},
+		},
+		{
+			name: "strict mode rejects external IP in cluster range",
+			nrc: &NetworkRoutingController{
+				// External range covers the whole 10.0.0.0/8, but cluster range is 10.0.0.0/24
+				// so 10.0.0.50 (within the cluster CIDR) should be rejected
+				ipFilter: newTestValidator(t, []string{"10.0.0.0/8"}, nil, true),
+			},
+			svc: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-test", Namespace: "default"},
+				Spec: v1core.ServiceSpec{
+					Type:        ClusterIPST,
+					ClusterIP:   "10.0.0.1",
+					ExternalIPs: []string{"10.0.0.50"},
+				},
+			},
+			// 10.0.0.50 is in cluster range 10.0.0.0/24, so rejected
+			wantIPs: []string{},
+		},
+		{
+			name: "cluster IP type with no external IPs returns empty",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, []string{"1.1.1.0/24"}, nil, true),
+			},
+			svc:     getClusterSvc(),
+			wantIPs: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.nrc.getExternalIPs(tt.svc)
+			if !Equal(got, tt.wantIPs) {
+				t.Errorf("getExternalIPs() = %v, want %v", got, tt.wantIPs)
+			}
+		})
+	}
+}
+
+func Test_getLoadBalancerIPsWithFilter(t *testing.T) {
+	tests := []struct {
+		name    string
+		nrc     *NetworkRoutingController
+		svc     *v1core.Service
+		wantIPs []string
+	}{
+		{
+			name: "nil filter passes all LB IPs through",
+			nrc:  &NetworkRoutingController{},
+			svc:  getLoadBalancerSvc(),
+			// ipFilter is nil, so no filtering occurs
+			wantIPs: []string{"10.0.255.1", "10.0.255.2"},
+		},
+		{
+			name: "strict mode with matching range allows LB IPs",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, nil, []string{"10.0.255.0/24"}, true),
+			},
+			svc:     getLoadBalancerSvc(),
+			wantIPs: []string{"10.0.255.1", "10.0.255.2"},
+		},
+		{
+			name: "strict mode with non-matching range rejects LB IPs",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, nil, []string{"192.168.0.0/16"}, true),
+			},
+			svc:     getLoadBalancerSvc(),
+			wantIPs: []string{},
+		},
+		{
+			name: "strict mode with no LB ranges rejects all (default-deny)",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, nil, nil, true),
+			},
+			svc:     getLoadBalancerSvc(),
+			wantIPs: nil,
+		},
+		{
+			name: "non-strict mode passes all LB IPs regardless of ranges",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, nil, []string{"192.168.0.0/16"}, false),
+			},
+			svc:     getLoadBalancerSvc(),
+			wantIPs: []string{"10.0.255.1", "10.0.255.2"},
+		},
+		{
+			name: "non-LoadBalancer service type returns empty",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, nil, []string{"10.0.255.0/24"}, true),
+			},
+			svc:     getExternalSvc(),
+			wantIPs: []string{},
+		},
+		{
+			name: "strict mode rejects LB IP in cluster range",
+			nrc: &NetworkRoutingController{
+				ipFilter: newTestValidator(t, nil, []string{"10.0.0.0/8"}, true),
+			},
+			svc: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-lb-test", Namespace: "default"},
+				Spec: v1core.ServiceSpec{
+					Type:      LoadBalancerST,
+					ClusterIP: "10.0.0.1",
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{IP: "10.0.0.50"},
+						},
+					},
+				},
+			},
+			// 10.0.0.50 is in cluster range 10.0.0.0/24, so rejected
+			wantIPs: []string{},
+		},
+		{
+			name: "strict mode partial filter - some IPs match some do not",
+			nrc: &NetworkRoutingController{
+				// LB range is a narrow /30, only covers 192.168.1.0-192.168.1.3
+				ipFilter: newTestValidator(t, nil, []string{"192.168.1.0/30"}, true),
+			},
+			svc: &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "svc-lb-partial", Namespace: "default"},
+				Spec: v1core.ServiceSpec{
+					Type:      LoadBalancerST,
+					ClusterIP: "10.0.0.1",
+				},
+				Status: v1core.ServiceStatus{
+					LoadBalancer: v1core.LoadBalancerStatus{
+						Ingress: []v1core.LoadBalancerIngress{
+							{IP: "192.168.1.1"}, // in /30 (192.168.1.0-192.168.1.3)
+							{IP: "192.168.1.5"}, // outside /30
+						},
+					},
+				},
+			},
+			wantIPs: []string{"192.168.1.1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.nrc.getLoadBalancerIPs(tt.svc)
+			if !Equal(got, tt.wantIPs) {
+				t.Errorf("getLoadBalancerIPs() = %v, want %v", got, tt.wantIPs)
+			}
+		})
 	}
 }

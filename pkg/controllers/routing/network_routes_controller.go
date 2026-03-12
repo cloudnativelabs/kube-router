@@ -21,6 +21,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/routes"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/tunnels"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
@@ -157,6 +158,7 @@ type NetworkRoutingController struct {
 	routeSyncer                    RouteSyncer
 	pbr                            PolicyBasedRouter
 	tunneler                       tunnels.Tunneler
+	ipFilter                       svcip.Filter
 
 	nodeLister    cache.Indexer
 	svcLister     cache.Indexer
@@ -1239,10 +1241,11 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	kubeRouterConfig *options.KubeRouterConfig,
 	nodeInformer cache.SharedIndexInformer, svcInformer cache.SharedIndexInformer,
 	epSliceInformer cache.SharedIndexInformer, ipsetMutex *sync.Mutex,
+	ipFilter svcip.Filter,
 ) (*NetworkRoutingController, error) {
 	var err error
 
-	nrc := NetworkRoutingController{ipsetMutex: ipsetMutex}
+	nrc := NetworkRoutingController{ipsetMutex: ipsetMutex, ipFilter: ipFilter}
 	if kubeRouterConfig.MetricsEnabled {
 		// Register the metrics for this controller
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPadvertisementsReceived)

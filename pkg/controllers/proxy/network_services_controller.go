@@ -20,6 +20,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/moby/ipvs"
@@ -128,6 +129,7 @@ type NetworkServicesController struct {
 	endpointsMap        endpointSliceInfoMap
 	podCidr             string
 	excludedCidrs       []net.IPNet
+	ipFilter            svcip.Filter
 	masqueradeAll       bool
 	globalHairpin       bool
 	ipvsPermitAll       bool
@@ -907,11 +909,19 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			}
 
 			copy(svcInfo.externalIPs, svc.Spec.ExternalIPs)
+			if nsc.ipFilter != nil {
+				svcInfo.externalIPs = nsc.ipFilter.FilterExternalIPs(svcInfo.externalIPs, svc.Name,
+					svc.Namespace)
+			}
 			copy(svcInfo.clusterIPs, svc.Spec.ClusterIPs)
 			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
 				if len(lbIngress.IP) > 0 {
 					svcInfo.loadBalancerIPs = append(svcInfo.loadBalancerIPs, lbIngress.IP)
 				}
+			}
+			if nsc.ipFilter != nil {
+				svcInfo.loadBalancerIPs = nsc.ipFilter.FilterLoadBalancerIPs(svcInfo.loadBalancerIPs,
+					svc.Name, svc.Namespace)
 			}
 			svcInfo.sessionAffinity = svc.Spec.SessionAffinity == v1.ServiceAffinityClientIP
 
@@ -2002,7 +2012,7 @@ func (nsc *NetworkServicesController) setupHandlers(node *v1.Node) error {
 func NewNetworkServicesController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
 	epSliceInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer,
-	ipsetMutex *sync.Mutex) (*NetworkServicesController, error) {
+	ipsetMutex *sync.Mutex, ipFilter svcip.Filter) (*NetworkServicesController, error) {
 
 	var err error
 	ln, err := newLinuxNetworking(config.ServiceTCPTimeout, config.ServiceTCPFinTimeout, config.ServiceUDPTimeout)
@@ -2068,6 +2078,8 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 		}
 		nsc.excludedCidrs[i] = *ipnet
 	}
+
+	nsc.ipFilter = ipFilter
 
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {

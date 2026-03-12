@@ -329,6 +329,9 @@ func (nrc *NetworkRoutingController) getExternalIPs(svc *v1core.Service) []strin
 			externalIPList = append(externalIPList, svc.Spec.ExternalIPs...)
 		}
 	}
+	if nrc.ipFilter != nil {
+		externalIPList = nrc.ipFilter.FilterExternalIPs(externalIPList, svc.Name, svc.Namespace)
+	}
 	return externalIPList
 }
 
@@ -343,6 +346,9 @@ func (nrc *NetworkRoutingController) getLoadBalancerIPs(svc *v1core.Service) []s
 				}
 			}
 		}
+	}
+	if nrc.ipFilter != nil {
+		loadBalancerIPList = nrc.ipFilter.FilterLoadBalancerIPs(loadBalancerIPList, svc.Name, svc.Namespace)
 	}
 	return loadBalancerIPList
 }

@@ -4,8 +4,9 @@
 package utils
 
 import (
-	"github.com/coreos/go-iptables/iptables"
 	"sync"
+
+	"github.com/coreos/go-iptables/iptables"
 )
 
 // Ensure, that IPTablesHandlerMock does implement IPTablesHandler.

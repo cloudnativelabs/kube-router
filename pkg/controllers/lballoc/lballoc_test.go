@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
@@ -695,23 +696,41 @@ func TestNewLoadBalancerController(t *testing.T) {
 	}
 	fs := fake.NewSimpleClientset()
 
-	_, err := NewLoadBalancerController(fs, config, mf)
+	validator, validatorErr := svcip.NewValidator(svcip.Config{
+		LoadBalancerCIDRs: config.LoadBalancerCIDRs,
+		ClusterIPCIDRs:    []string{"10.96.0.0/12", "fd00::/112"},
+		EnableIPv4:        config.EnableIPv4,
+		EnableIPv6:        config.EnableIPv6,
+	})
+	if validatorErr != nil {
+		t.Fatalf("expected validator to succeed, got %s", validatorErr)
+	}
+
+	_, err := NewLoadBalancerController(fs, config, mf, validator)
 	if err != nil {
 		t.Fatalf("expected %v, got %s", nil, err)
 	}
 
-	config.EnableIPv4 = false
-	_, err = NewLoadBalancerController(fs, config, mf)
-	errExp := "IPv4 loadbalancer CIDR specified while IPv4 is disabled"
-	if err.Error() != errExp {
-		t.Fatalf("expected %s, got %s", errExp, err)
+	// Family-disabled validation is now handled by the validator at startup.
+	// Test that the validator correctly rejects IPv4 CIDRs when IPv4 is disabled.
+	_, validatorErr = svcip.NewValidator(svcip.Config{
+		LoadBalancerCIDRs: config.LoadBalancerCIDRs,
+		ClusterIPCIDRs:    []string{"fd00::/112"},
+		EnableIPv4:        false,
+		EnableIPv6:        true,
+	})
+	if validatorErr == nil {
+		t.Fatal("expected validator to fail with IPv4 disabled, but it succeeded")
 	}
 
-	config.EnableIPv4 = true
-	config.EnableIPv6 = false
-	_, err = NewLoadBalancerController(fs, config, mf)
-	errExp = "IPv6 loadbalancer CIDR specified while IPv6 is disabled"
-	if err.Error() != errExp {
-		t.Fatalf("expected %s, got %s", errExp, err)
+	// Test that the validator correctly rejects IPv6 CIDRs when IPv6 is disabled.
+	_, validatorErr = svcip.NewValidator(svcip.Config{
+		LoadBalancerCIDRs: config.LoadBalancerCIDRs,
+		ClusterIPCIDRs:    []string{"10.96.0.0/12"},
+		EnableIPv4:        true,
+		EnableIPv6:        false,
+	})
+	if validatorErr == nil {
+		t.Fatal("expected validator to fail with IPv6 disabled, but it succeeded")
 	}
 }

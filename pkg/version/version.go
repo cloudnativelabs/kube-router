@@ -28,6 +28,15 @@ var (
 				"recommends that you read the release notes carefully before deploying: " +
 				"https://github.com/cloudnativelabs/kube-router/releases/tag/v2.0.0",
 		},
+		{
+			minVersionInclusive: "v2.8.0",
+			maxVersionExclusive: "v2.10.0",
+			message: "Version v2.8.0 introduces a default feature of validating external IPs and loadbalancer IPs " +
+				"on services against the ranges that were specified via kube-router CLI parameters by default. This " +
+				"is a change from previous versions which only used those parameters for network policy decisions. " +
+				"kube-router recommends that you read the release notes carefully before deploying: " +
+				"https://github.com/cloudnativelabs/kube-router/releases/tag/v2.8.0",
+		},
 	}
 )
 

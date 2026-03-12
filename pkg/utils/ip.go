@@ -97,6 +97,16 @@ func IPNetEqual(a, b *net.IPNet) bool {
 	return a.IP.Equal(b.IP) && bytes.Equal(a.Mask, b.Mask)
 }
 
+// IsIPInRanges returns true if the given IP is contained within any of the provided CIDR ranges.
+func IsIPInRanges(ip net.IP, ranges []net.IPNet) bool {
+	for i := range ranges {
+		if ranges[i].Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // IsDefaultRoute checks if a given CIDR is a default route by comparing it to the default routes for IPv4 and IPv6
 func IsDefaultRoute(cidr *net.IPNet) (bool, error) {
 	var defaultPrefixCIDR *net.IPNet

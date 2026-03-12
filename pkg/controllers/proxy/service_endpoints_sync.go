@@ -771,15 +771,7 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 		// old: if !ok || len(endpointIDs) == 0 {
 		if !ok {
 			klog.V(3).Infof("didn't find key: %s in above map", key)
-			excluded := false
-			for _, excludedCidr := range nsc.excludedCidrs {
-				if excludedCidr.Contains(ipvsSvc.Address) {
-					excluded = true
-					break
-				}
-			}
-
-			if excluded {
+			if utils.IsIPInRanges(ipvsSvc.Address, nsc.excludedCidrs) {
 				klog.V(1).Infof("Ignoring deletion of an IPVS service %s in an excluded cidr",
 					ipvsServiceString(ipvsSvc))
 				continue

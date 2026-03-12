@@ -28,9 +28,14 @@ and how they got mapped to the IPVS by kube-router:
 
 kube-router watches the Kubernetes API server to get updates on the
 Services/Endpoints and automatically syncs the IPVS configuration to reflect the
-desired state of Services. kube-router uses IPVS masquerading mode with round robin scheduling by default
+desired state of Services.
+
+kube-router uses IPVS masquerading mode with round robin scheduling by default
 (other scheduling algorithms such as least connection, source hashing, and maglev hashing are also supported
 via service annotations). Source pod IP is preserved so that appropriate network policies can be applied.
+
+When `--strict-external-ip-validation` is enabled (the default), externalIPs and loadBalancerIPs are validated
+against configured CIDR ranges before being programmed into IPVS.
 
 ## Pod Ingress Firewall
 

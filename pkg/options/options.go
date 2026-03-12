@@ -85,6 +85,7 @@ type KubeRouterConfig struct {
 	ServiceTCPTimeout              time.Duration
 	ServiceTCPFinTimeout           time.Duration
 	ServiceUDPTimeout              time.Duration
+	StrictExternalIPValidation     bool
 	Version                        bool
 	VLevel                         string
 	// FullMeshPassword    string
@@ -192,7 +193,9 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.LoadBalancerDefaultClass, "loadbalancer-default-class", true,
 		"Handle loadbalancer services without a class")
 	fs.StringSliceVar(&s.LoadBalancerCIDRs, "loadbalancer-ip-range", s.LoadBalancerCIDRs,
-		"CIDR values from which loadbalancer services addresses are assigned (can be specified multiple times)")
+		"CIDR values from which loadbalancer services addresses are assigned (can be specified multiple "+
+			"times). Also used by the proxy module to validate loadBalancerIPs when "+
+			"--strict-external-ip-validation is enabled.")
 	fs.DurationVar(&s.LoadBalancerSyncPeriod, "loadbalancer-sync-period", s.LoadBalancerSyncPeriod,
 		"The delay between checking for missed services (e.g. '5s', '1m'). Must be greater than 0.")
 	fs.BoolVar(&s.MasqueradeAll, "masquerade-all", false,
@@ -251,9 +254,15 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 			"containerd.")
 	fs.StringSliceVar(&s.ClusterIPCIDRs, "service-cluster-ip-range", s.ClusterIPCIDRs,
 		"CIDR values from which service cluster IPs are assigned (can be specified up to 2 times)")
+	fs.BoolVar(&s.StrictExternalIPValidation, "strict-external-ip-validation", true,
+		"When enabled, the proxy module validates externalIPs and loadBalancerIPs against configured CIDR "+
+			"ranges (--service-external-ip-range and --loadbalancer-ip-range). When strict mode is enabled "+
+			"and no range is configured, all externalIPs / loadBalancerIPs are rejected (default-deny). "+
+			"Disable this flag to restore previous behavior of accepting all IPs without validation.")
 	fs.StringSliceVar(&s.ExternalIPCIDRs, "service-external-ip-range", s.ExternalIPCIDRs,
-		"Specify external IP CIDRs that are used for inter-cluster communication "+
-			"(can be specified multiple times)")
+		"Specify external IP CIDRs that are used for inter-cluster communication (can be specified "+
+			"multiple times). Also used by the proxy module to validate externalIPs when "+
+			"--strict-external-ip-validation is enabled.")
 	fs.StringVar(&s.NodePortRange, "service-node-port-range", s.NodePortRange,
 		"NodePort range specified with either a hyphen or colon")
 	fs.DurationVar(&s.ServiceTCPTimeout, "service-tcp-timeout", s.ServiceTCPTimeout,

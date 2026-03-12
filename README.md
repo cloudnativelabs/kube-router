@@ -31,6 +31,8 @@ single DaemonSet/Binary. It doesn't get any easier.
 kube-router uses the Linux kernel's LVS/IPVS features to implement its K8s Services Proxy. kube-router fully leverages
 power of LVS/IPVS to provide a rich set of scheduling options and unique features like DSR (Direct Server Return), L3
 load balancing with ECMP for deployments where high throughput, minimal latency and high-availability are crucial.
+Kube-router also provides built-in validation of externalIPs and loadBalancerIPs against configured CIDR ranges,
+preventing unauthorized VIP bindings in multi-tenant clusters.
 
 Read more about the advantages of IPVS for container load balancing:
 

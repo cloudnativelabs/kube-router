@@ -10,6 +10,8 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -143,12 +145,7 @@ func (ir *ipRanges) Len() int {
 }
 
 func (ir *ipRanges) Contains(ip net.IP) bool {
-	for _, in := range ir.ipRanges {
-		if in.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return utils.IsIPInRanges(ip, ir.ipRanges)
 }
 
 func (lbc *LoadBalancerController) runLeaderElection(ctx context.Context, isLeaderChan chan<- bool) {
@@ -471,31 +468,11 @@ func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.Controller
 
 func NewLoadBalancerController(clientset kubernetes.Interface,
 	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
+	ipRanges svcip.RangeQuerier,
 ) (*LoadBalancerController, error) {
-	ranges4 := make([]net.IPNet, 0)
-	ranges6 := make([]net.IPNet, 0)
-
-	for _, ir := range config.LoadBalancerCIDRs {
-		ip, cidr, err := net.ParseCIDR(ir)
-		if err != nil {
-			return nil, err
-		}
-		if ip.To4() != nil && !config.EnableIPv4 {
-			return nil, errors.New("IPv4 loadbalancer CIDR specified while IPv4 is disabled")
-		}
-		if ip.To4() == nil && !config.EnableIPv6 {
-			return nil, errors.New("IPv6 loadbalancer CIDR specified while IPv6 is disabled")
-		}
-		if ip.To4() != nil {
-			ranges4 = append(ranges4, *cidr)
-		} else {
-			ranges6 = append(ranges6, *cidr)
-		}
-	}
-
 	lbc := &LoadBalancerController{
-		ipv4Ranges:   newipRanges(ranges4),
-		ipv6Ranges:   newipRanges(ranges6),
+		ipv4Ranges:   newipRanges(ipRanges.LoadBalancerIPRanges(v1core.IPv4Protocol)),
+		ipv6Ranges:   newipRanges(ipRanges.LoadBalancerIPRanges(v1core.IPv6Protocol)),
 		addChan:      make(chan v1core.Service),
 		allocateChan: make(chan v1core.Service),
 		clientset:    clientset,

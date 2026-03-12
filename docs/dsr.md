@@ -19,7 +19,11 @@ Requirements:
 
 * ClusterIP type service has an externalIP set on it or is a LoadBalancer type service
 * kube-router has been started with `--service-external-ip-range` configured at least once. This option can be
-  specified multiple times for multiple ranges. The external IPs or LoadBalancer IPs must be included in these ranges.
+  specified multiple times for multiple ranges. The external IPs must be included in these ranges. For LoadBalancer
+  IPs, `--loadbalancer-ip-range` must also be configured.
+* With `--strict-external-ip-validation` enabled (the default), these same ranges are used by the proxy module to
+  validate IPs before programming them into IPVS. If you already have `--service-external-ip-range` and
+  `--loadbalancer-ip-range` configured for DSR, no additional configuration is needed.
 * kube-router must be run in service proxy mode with `--run-service-proxy` (this option is defaulted to `true` if left
   unspecified)
 * If you are advertising the service outside the cluster `--advertise-external-ip` must be set
@@ -47,6 +51,9 @@ kubectl annotate service my-service "kube-router.io/service.dsr=tunnel"
 ## Things To Lookout For
 
 * In the current implementation, **DSR will only be available to the external IPs or LoadBalancer IPs**
+* When `--strict-external-ip-validation` is enabled (the default), externalIPs and loadBalancerIPs must pass validation
+  against configured CIDR ranges before they can be programmed into IPVS for DSR. Ensure your DSR service IPs are
+  covered by `--service-external-ip-range` and/or `--loadbalancer-ip-range`.
 * **The current implementation does not support port remapping.** So you need to use same port and target port for the
   service.
 * In order for DSR to work correctly, an `ipip` tunnel to the pod is used. This reduces the
