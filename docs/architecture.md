@@ -7,7 +7,7 @@ get event updates from the watchers and act upon the events.
 
 kube-router consists of 4 core controllers and multiple watchers as depicted in the diagram below.
 
-![Arch](./img/kube-router-arch.png)
+![Arch](./img/kube-router-arch.drawio.svg)
 
 Each of the [controller](https://github.com/cloudnativelabs/kube-router/tree/master/pkg/controllers) follows below
 structure:
