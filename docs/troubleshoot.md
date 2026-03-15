@@ -34,7 +34,7 @@ solutions.
   - [Mismatched Local Address with External Peers](#mismatched-local-address-with-external-peers)
   - [Slow BGP Convergence on Startup](#slow-bgp-convergence-on-startup)
   - [Scaling Issues with Large Clusters](#scaling-issues-with-large-clusters)
-  - [PMTU / Path MTU Discovery Failures](#pmtu--path-mtu-discovery-failures)
+  - [Path MTU Discovery Failures](#path-mtu-discovery-failures)
 - [Network Policy Issues](#network-policy-issues)
   - [Egress Policy Blocking Service Access](#egress-policy-blocking-service-access)
   - [Pods Have Network Access Before Policy is Applied](#pods-have-network-access-before-policy-is-applied)
@@ -43,7 +43,7 @@ solutions.
   - [Cross-Subnet Connectivity Failures](#cross-subnet-connectivity-failures)
   - [MTU Issues with Tunnels](#mtu-issues-with-tunnels)
 - [DSR (Direct Server Return) Issues](#dsr-direct-server-return-issues)
-  - [DSR with containerd / CRI-O](#dsr-with-containerd--cri-o)
+  - [DSR with containerd or CRI-O](#dsr-with-containerd-or-cri-o)
   - [Large Packet Failures with DSR](#large-packet-failures-with-dsr)
   - [Policy Routing Setup Failures](#policy-routing-setup-failures)
 - [System Integration Issues](#system-integration-issues)
@@ -555,7 +555,7 @@ route for every service
   `kube-router.io/service.advertise.clusterip` for services that need external advertisement
 - Consider advertising aggregate subnet routes instead of individual /32s
 
-### PMTU / Path MTU Discovery Failures
+### Path MTU Discovery Failures
 
 **Symptoms:** Large TCP transfers hang or time out. Small requests work but large responses fail,
 particularly in environments with reduced MTU (VPNs, GRE tunnels, IPIP overlays).
@@ -692,7 +692,7 @@ correct MTU for kube-bridge and pod interfaces, accounting for IPIP overhead.
 
 ## DSR (Direct Server Return) Issues
 
-### DSR with containerd / CRI-O
+### DSR with containerd or CRI-O
 
 **Symptoms:** DSR mode fails with errors about Docker socket not being available, or "container ID should
 not be empty."

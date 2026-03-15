@@ -21,7 +21,7 @@
   - [containerd](#containerd)
 - [trying kube-router as alternative to kube-proxy](#trying-kube-router-as-alternative-to-kube-proxy)
 - [Advertising IPs](#advertising-ips)
-- [Controlling Service Locality / Traffic Policies](#controlling-service-locality--traffic-policies)
+- [Controlling Service Locality or Traffic Policies](#controlling-service-locality-or-traffic-policies)
 - [Hairpin Mode](#hairpin-mode)
   - [Hairpin Mode Example](#hairpin-mode-example)
 - [SNATing Service Traffic](#snating-service-traffic)
@@ -313,7 +313,7 @@ Advertising LoadBalancer IPs works by inspecting the services `status.loadBalanc
 LoadBalancers like for example MetalLb. This has been successfully tested together with
 [MetalLB](https://github.com/google/metallb) in ARP mode.
 
-## Controlling Service Locality / Traffic Policies
+## Controlling Service Locality or Traffic Policies
 
 Service availability both externally and locally (within the cluster) can be controlled via the Kubernetes standard
 [Traffic Policies](https://kubernetes.io/docs/reference/networking/virtual-ips/#traffic-policies) and via the custom
