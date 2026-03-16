@@ -84,7 +84,7 @@ Once the tag is pushed to GitHub, GitHub Actions will be triggered and several t
 * Consistent Changelog Syntax can be retrieved by running the following Git command:
 
 ```sh
-git log --format='* %h - %s `<%an>`' <tag>..<tag>
+git log --format='* %h - %s `<%an>`' --cherry-pick --right-only <tag>...<tag>
 ```
 
 * Announce the release in [#kube-router](https://app.slack.com/client/T09NY5SBT/C8DCQGTSB) on Kubernetes Slack.
