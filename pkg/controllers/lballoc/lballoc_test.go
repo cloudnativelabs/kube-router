@@ -596,7 +596,7 @@ func TestAllocateService(t *testing.T) {
 	fp := v1core.IPFamilyPolicyRequireDualStack
 	svc.Spec.IPFamilyPolicy = &fp
 	err = mlbc.allocateService(&svc)
-	errExp := "unable to allocate dual-stack addresses: no IPs left to allocate"
+	errExp := "unable to allocate dual-stack addresses: IPv4: no IPs left to allocate"
 	if errExp != err.Error() {
 		t.Fatalf("expected %s, got %s", errExp, err)
 	}
@@ -604,6 +604,7 @@ func TestAllocateService(t *testing.T) {
 	mlbc.ipv4Ranges = ir4
 	mlbc.ipv6Ranges = newipRanges(nil)
 	err = mlbc.allocateService(&svc)
+	errExp = "unable to allocate dual-stack addresses: IPv6: no IPs left to allocate"
 	if errExp != err.Error() {
 		t.Fatalf("expected %s, got %s", errExp, err)
 	}
@@ -612,7 +613,7 @@ func TestAllocateService(t *testing.T) {
 	fp = v1core.IPFamilyPolicyPreferDualStack
 	svc.Spec.IPFamilyPolicy = &fp
 	err = mlbc.allocateService(&svc)
-	errExp = "unable to allocate address: no IPs left to allocate"
+	errExp = "unable to allocate address: IPv4: no IPs left to allocate; IPv6: no IPs left to allocate"
 	if errExp != err.Error() {
 		t.Fatalf("expected %s, got %s", errExp, err)
 	}

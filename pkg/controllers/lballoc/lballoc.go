@@ -3,8 +3,10 @@ package lballoc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -391,16 +393,25 @@ func (lbc *LoadBalancerController) allocateService(svc *v1core.Service) error {
 	if want6 && !have6 {
 		ipv6, err6 = lbc.ipv6Ranges.getNextFreeIP(allocated6)
 	}
-	err := err6
+
+	// If no allocation was needed, the service already has all requested IPs
+	if ipv4 == nil && ipv6 == nil && err4 == nil && err6 == nil {
+		return nil
+	}
+
+	var errMsgs []string
 	if err4 != nil {
-		err = err4
+		errMsgs = append(errMsgs, fmt.Sprintf("IPv4: %v", err4))
+	}
+	if err6 != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("IPv6: %v", err6))
 	}
 
 	if ipv4 == nil && ipv6 == nil {
-		return errors.New("unable to allocate address: " + err.Error())
+		return fmt.Errorf("unable to allocate address: %s", strings.Join(errMsgs, "; "))
 	}
 	if (ipv4 == nil || ipv6 == nil) && requireDual {
-		return errors.New("unable to allocate dual-stack addresses: " + err.Error())
+		return fmt.Errorf("unable to allocate dual-stack addresses: %s", strings.Join(errMsgs, "; "))
 	}
 
 	// This is only non-nil during certain unit tests that need to understand when this goroutine is finished to remove
