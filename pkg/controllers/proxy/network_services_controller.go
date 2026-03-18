@@ -383,15 +383,21 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
 				klog.V(1).Info("Performing requested sync of ipvs services")
 				nsc.mu.Lock()
+				var syncErrors bool
 				err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 				if err != nil {
 					klog.Errorf("error during ipvs sync in network service controller. Error: %v", err)
+					syncErrors = true
 				}
 				err = nsc.syncHairpinIptablesRules()
 				if err != nil {
 					klog.Errorf("error syncing hairpin iptables rules: %v", err)
+					syncErrors = true
 				}
 				nsc.mu.Unlock()
+				if syncErrors {
+					err = fmt.Errorf("one or more errors during ipvs sync")
+				}
 			}
 			if err == nil {
 				healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
