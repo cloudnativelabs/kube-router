@@ -482,9 +482,9 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 			return fmt.Errorf("failed to run iptables command: %s", err.Error())
 		}
 
-		// config.IpvsPermitAll: true then create INPUT/KUBE-ROUTER-SERVICE Chain creation else return
+		// config.IpvsPermitAll: true then create INPUT/KUBE-ROUTER-SERVICE Chain creation else skip
 		if !nsc.ipvsPermitAll {
-			return nil
+			continue
 		}
 
 		var comment string
