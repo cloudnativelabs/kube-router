@@ -358,7 +358,7 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 // new node is added or old node is deleted. So peer up with new node and drop peering
 // from old node
 func (nrc *NetworkRoutingController) OnNodeUpdate(_ interface{}) {
-	if !nrc.bgpServerStarted {
+	if !nrc.bgpServerStarted.Load() {
 		return
 	}
 

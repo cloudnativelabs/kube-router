@@ -112,7 +112,7 @@ func getServiceObject(obj interface{}) (svc *v1core.Service) {
 
 func (nrc *NetworkRoutingController) handleServiceUpdate(svcOld, svcNew *v1core.Service) {
 	klog.V(2).Infof("Handling update for service: %s", svcNew)
-	if !nrc.bgpServerStarted {
+	if !nrc.bgpServerStarted.Load() {
 		klog.V(1).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
 			svcNew.Namespace, svcNew.Name)
 		return
@@ -136,7 +136,7 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svcOld, svcNew *v1core.
 
 func (nrc *NetworkRoutingController) handleServiceDelete(oldSvc *v1core.Service) {
 	klog.V(2).Infof("Handling delete for service: %s", oldSvc)
-	if !nrc.bgpServerStarted {
+	if !nrc.bgpServerStarted.Load() {
 		klog.V(1).Infof("Skipping update to service: %s/%s, controller still performing bootup full-sync",
 			oldSvc.Namespace, oldSvc.Name)
 		return
@@ -255,7 +255,7 @@ func (nrc *NetworkRoutingController) newEndpointSliceEventHandler() cache.Resour
 // OnServiceUpdate because the corresponding Endpoint resource for the
 // Service was not created yet.
 func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
-	if !nrc.bgpServerStarted {
+	if !nrc.bgpServerStarted.Load() {
 		klog.V(3).Info("Skipping OnAdd event to endpoint, controller still performing bootup full-sync")
 		return
 	}
@@ -276,7 +276,7 @@ func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
 	}
 
 	klog.V(1).Infof("Received update to endpoint slice: %s/%s from watch API", ep.Namespace, ep.Name)
-	if !nrc.bgpServerStarted {
+	if !nrc.bgpServerStarted.Load() {
 		klog.V(3).Infof("Skipping update to endpoint slice: %s/%s, controller still performing bootup full-sync",
 			ep.Namespace, ep.Name)
 		return
