@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/goccy/go-yaml"
@@ -134,7 +135,7 @@ type NetworkRoutingController struct {
 	overlayType                    string
 	peerMultihopTTL                uint8
 	MetricsEnabled                 bool
-	bgpServerStarted               bool
+	bgpServerStarted               atomic.Bool
 	bgpHoldtime                    float64
 	bgpPort                        uint32
 	goBGPAdminPort                 uint16
@@ -378,7 +379,7 @@ func (nrc *NetworkRoutingController) Run(
 		}
 	}
 
-	nrc.bgpServerStarted = true
+	nrc.bgpServerStarted.Store(true)
 	if !nrc.bgpGracefulRestart {
 		defer func() {
 			err := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
@@ -1270,7 +1271,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.activeNodes = make(map[string]bool)
 	nrc.bgpRRClient = false
 	nrc.bgpRRServer = false
-	nrc.bgpServerStarted = false
+	nrc.bgpServerStarted.Store(false)
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone = false
 	nrc.routeSyncer = routes.NewRouteSyncer(kubeRouterConfig.InjectedRoutesSyncPeriod, kubeRouterConfig.MetricsEnabled)

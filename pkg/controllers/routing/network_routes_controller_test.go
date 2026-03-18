@@ -2933,7 +2933,7 @@ func Test_OnNodeUpdate(t *testing.T) {
 					Port:     10000,
 				},
 			})
-			testcase.nrc.bgpServerStarted = true
+			testcase.nrc.bgpServerStarted.Store(true)
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
