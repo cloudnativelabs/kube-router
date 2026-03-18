@@ -981,10 +981,11 @@ func parseSchedFlags(value string) schedFlags {
 func shuffle(endPoints []endpointSliceInfo) []endpointSliceInfo {
 	for index1 := range endPoints {
 		randBitInt, err := rand.Int(rand.Reader, big.NewInt(int64(index1+1)))
-		index2 := randBitInt.Int64()
 		if err != nil {
 			klog.Warningf("unable to get a random int: %v", err)
+			continue
 		}
+		index2 := randBitInt.Int64()
 		endPoints[index1], endPoints[index2] = endPoints[index2], endPoints[index1]
 	}
 	return endPoints
