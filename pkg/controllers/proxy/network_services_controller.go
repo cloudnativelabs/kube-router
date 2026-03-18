@@ -1561,6 +1561,9 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 	var iptablesCmdHandler utils.IPTablesHandler
 	tcpMSS := nsc.mtu
 	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
 	if parsedIP.To4() != nil {
 		iptablesCmdHandler = nsc.iptablesCmdHandlers[v1.IPv4Protocol]
 		tcpMSS -= 2*ipv4.HeaderLen + tcpHeaderMinLen
@@ -1669,6 +1672,9 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 	var iptablesCmdHandler utils.IPTablesHandler
 	tcpMSS := nsc.mtu
 	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
 	if parsedIP.To4() != nil {
 		iptablesCmdHandler = nsc.iptablesCmdHandlers[v1.IPv4Protocol]
 		tcpMSS -= 2*ipv4.HeaderLen + tcpHeaderMinLen
