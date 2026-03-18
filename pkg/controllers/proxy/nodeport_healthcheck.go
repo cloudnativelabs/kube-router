@@ -24,6 +24,7 @@ type serviceHealthCheck struct {
 }
 
 type nphcServicesInfo struct {
+	mu               sync.RWMutex
 	serviceInfoMap   serviceInfoMap
 	endpointsInfoMap endpointSliceInfoMap
 }
@@ -36,8 +37,10 @@ type nphcHandler struct {
 func (nphc *nodePortHealthCheckController) UpdateServicesInfo(serviceInfoMap serviceInfoMap,
 	endpointsInfoMap endpointSliceInfoMap) error {
 	klog.V(1).Info("Running UpdateServicesInfo for NodePort health check")
+	nphc.mu.Lock()
 	nphc.serviceInfoMap = serviceInfoMap
 	nphc.endpointsInfoMap = endpointsInfoMap
+	nphc.mu.Unlock()
 
 	newActiveServices := make(map[int]bool)
 
@@ -141,7 +144,9 @@ func (nphc *nodePortHealthCheckController) stopHealthCheck(nodePort int) error {
 }
 
 func (npHandler *nphcHandler) Handler(w http.ResponseWriter, r *http.Request) {
+	npHandler.nphc.mu.RLock()
 	eps := npHandler.nphc.endpointsInfoMap[npHandler.svcHC.serviceID]
+	npHandler.nphc.mu.RUnlock()
 	endpointsOnNode := hasActiveEndpoints(eps)
 
 	var numActiveEndpoints int8
