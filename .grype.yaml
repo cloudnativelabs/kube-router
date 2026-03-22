@@ -1,0 +1,18 @@
+# Grype CVE scanning configuration.
+# See: https://github.com/anchore/grype#configuration
+
+# Only report vulnerabilities that have a fix available in the package ecosystem.
+# This prevents Alpine OS package CVEs with no upstream patch yet from blocking
+# CI and local scans. Once Alpine ships a fix, the vulnerability will automatically
+# start appearing again.
+only-fixed: true
+
+ignore:
+  # kube-router itself is reported as vulnerable to GHSA-phqm-jgc3-qf8g because
+  # Grype reads the module version embedded in the binary (v2.x.x-dirty) and
+  # matches it against the advisory. When building from HEAD we ARE the fix, so
+  # this is a false positive that cannot be resolved by a dependency update.
+  - vulnerability: GHSA-phqm-jgc3-qf8g
+    package:
+      name: github.com/cloudnativelabs/kube-router/v2
+      type: go-module

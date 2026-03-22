@@ -43,6 +43,9 @@ QEMU_IMAGE?=multiarch/qemu-user-static
 GORELEASER_VERSION=v2.13.3
 # See Versions: https://github.com/matryer/moq/releases
 MOQ_VERSION=v0.6.0
+# See Versions: https://github.com/anchore/grype/releases
+GRYPE_VERSION=v0.110.0
+GRYPE_IMAGE?=anchore/grype:$(GRYPE_VERSION)
 # See Versions: https://github.com/containernetworking/plugins/releases
 CNI_VERSION=v1.9.0
 UID?=$(shell id -u)
@@ -156,6 +159,20 @@ container: kube-router gobgp multiarch-binverify cni-download ## Builds a Docker
 		$(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
 	fi
 	@echo Finished kube-router container image build.
+
+scan: container ## Scans the locally built container image for HIGH and CRITICAL CVEs using Grype.
+	@echo Starting CVE scan of $(REGISTRY_DEV):$(subst /,,$(IMG_TAG))
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	$(DOCKER) run --rm \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(PWD):/work \
+		-w /work \
+		$(GRYPE_IMAGE) \
+		"$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))" --fail-on high
+else
+	grype "$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))" --fail-on high
+endif
+	@echo Finished CVE scan.
 
 docker-login: ## Logs into a docker registry using {DOCKER,QUAY}_{USERNAME,PASSWORD} variables.
 	@echo Starting docker login target.
@@ -306,7 +323,7 @@ else
 endif
 	@echo Finished dependency update dry-run.
 
-prep-release: update-deps doctoc lint test-pretty kube-router container ## Prepares for a release: updates deps, then runs all checks and builds.
+prep-release: update-deps doctoc lint test-pretty kube-router container scan ## Prepares for a release: updates deps, runs all checks, builds, and scans for CVEs.
 	@echo Finished prep-release. Review any dependency changes and commit before tagging.
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
@@ -314,7 +331,7 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs
+.PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan
 .PHONY: test test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
 .PHONY: spellcheck update-deps update-deps-dry prep-release
