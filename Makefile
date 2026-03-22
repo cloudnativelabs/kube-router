@@ -34,6 +34,8 @@ DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
 DOCKER_DOCTOC_IMAGE?=node:alpine
 # See Versions: https://www.npmjs.com/package/doctoc
 DOCTOC_VERSION=2.3.0
+# See Versions: https://github.com/gotestyourself/gotestsum/releases
+GOTESTSUM_VERSION=v1.13.0
 # See Versions: https://github.com/crate-ci/typos/releases
 TYPOS_VERSION=v1.33.1
 # See Versions: https://github.com/osrg/gobgp/releases
@@ -114,10 +116,10 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 		sh -c \
-		'go install gotest.tools/gotestsum@latest && CGO_ENABLED=0 gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...'
+		'go install gotest.tools/gotestsum@$(GOTESTSUM_VERSION) && CGO_ENABLED=0 gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...'
 else
 ifeq ($(shell command -v gotestsum 2>/dev/null),)
-	go install gotest.tools/gotestsum@latest
+	go install gotest.tools/gotestsum@$(GOTESTSUM_VERSION)
 endif
 	gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...
 endif
