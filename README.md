@@ -14,6 +14,7 @@
 [![Docker Pulls kube-router](https://img.shields.io/docker/pulls/cloudnativelabs/kube-router.svg?label=docker+pulls)](https://hub.docker.com/r/cloudnativelabs/kube-router/)
 [![](https://img.shields.io/github/release/cloudnativelabs/kube-router/all.svg?style=flat-square)](https://github.com/cloudnativelabs/kube-router/releases)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cloudnativelabs/kube-router/badge)](https://scorecard.dev/viewer/?uri=github.com/cloudnativelabs/kube-router)
 <!-- markdownlint-restore -->
 
 kube-router is a turnkey solution for Kubernetes networking with the aim to provide operational simplicity and high performance.

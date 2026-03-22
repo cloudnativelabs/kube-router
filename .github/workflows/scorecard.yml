@@ -1,0 +1,55 @@
+name: OpenSSF Scorecard
+
+on:
+  # Run on every push to master so the score reflects the current default branch.
+  push:
+    branches:
+    - master
+  # Run weekly to catch score changes driven by external factors (new checks, upstream CVEs, etc).
+  schedule:
+  - cron: '30 1 * * 6'
+  # Run whenever branch protection rules change, as that directly affects the score.
+  branch_protection_rule:
+
+# Required by the Scorecard publish API to verify the workflow identity via OIDC.
+# The server-side enforcement for publish_results: true requires permissions: read-all at the
+# workflow level and prohibits top-level env: or defaults: blocks.
+permissions: read-all
+
+jobs:
+  scorecard:
+    name: scorecard
+    runs-on: ubuntu-latest
+    permissions:
+      # Required to upload SARIF results to the GitHub Security tab.
+      security-events: write
+      # Required for keyless OIDC token used to publish results to the public Scorecard API.
+      id-token: write
+      # Required to read workflow files and repository contents for analysis.
+      contents: read
+      actions: read
+    steps:
+    # Checkout without persisting credentials — Scorecard's server-side enforcement requires this
+    # to prevent the workflow from being used to exfiltrate tokens.
+    - name: Checkout code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      with:
+        persist-credentials: false
+
+    # Run the Scorecard analysis against this repository. publish_results: true pushes the score
+    # to the public Scorecard API (api.scorecard.dev) and enables the README badge. Results are
+    # also uploaded to the GitHub Security tab as SARIF alerts in the next step.
+    - name: Run Scorecard analysis
+      uses: ossf/scorecard-action@99c09fe975337306107572b4fdf4db224cf8e2f2  # v2.4.3
+      id: scorecard
+      with:
+        results_file: scorecard-results.sarif
+        results_format: sarif
+        publish_results: true
+
+    # Upload Scorecard findings to the GitHub Security tab so each failing check appears as an
+    # individual code scanning alert with remediation guidance.
+    - name: Upload Scorecard results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@cb06a0a8527b2c6970741b3a0baa15231dc74a4c  # v4.34.1
+      with:
+        sarif_file: scorecard-results.sarif
