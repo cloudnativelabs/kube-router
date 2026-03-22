@@ -30,6 +30,8 @@ RUNTIME_BASE?=alpine:3.23
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.8.0
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
+# See Versions: https://hub.docker.com/_/node
+DOCKER_DOCTOC_IMAGE?=node:alpine
 # See Versions: https://www.npmjs.com/package/doctoc
 DOCTOC_VERSION=2.3.0
 # See Versions: https://github.com/crate-ci/typos/releases
@@ -133,10 +135,10 @@ markdownlint:
 	$(DOCKER) run -v $(PWD):/work $(DOCKER_MARKDOWNLINT_IMAGE) -- README.md docs
 
 doctoc: ## Regenerates table of contents in docs that have doctoc markers.
-	$(DOCKER) run --rm -v $(PWD):/work -w /work node:alpine npx doctoc@$(DOCTOC_VERSION) docs/ --github --maxlevel 3 --notitle --update-only
+	$(DOCKER) run --rm -v $(PWD):/work -w /work $(DOCKER_DOCTOC_IMAGE) npx doctoc@$(DOCTOC_VERSION) docs/ --github --maxlevel 3 --notitle --update-only
 
 spellcheck: ## Checks for spelling mistakes in code and documentation.
-	$(DOCKER) run --rm -v $(PWD):/work -w /work alpine:3.23 sh -c \
+	$(DOCKER) run --rm -v $(PWD):/work -w /work $(RUNTIME_BASE) sh -c \
 		'wget -qO- https://github.com/crate-ci/typos/releases/download/$(TYPOS_VERSION)/typos-$(TYPOS_VERSION)-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin && typos'
 
 run: kube-router ## Runs "kube-router --help".
