@@ -1,0 +1,16 @@
+name: Setup Go Environment
+description: Sets up the Go toolchain with caching. Repository must already be checked out.
+
+inputs:
+  go-version:
+    description: The Go version to use (supports semver ranges e.g. ~1.25.7)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      id: go
+      with:
+        go-version: ${{ inputs.go-version }}

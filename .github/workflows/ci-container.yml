@@ -1,0 +1,124 @@
+name: ci-container
+
+on:
+  workflow_call:
+    inputs:
+      buildtime-base:
+        description: The Docker image to use as the Go build base
+        required: true
+        type: string
+      runtime-base:
+        description: The Docker image to use as the container runtime base
+        required: true
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Builds Container only if a new push to main branch, a tag or a pull request from a source
+  # branch within the repository
+  ci-build-container:
+    name: ci-build-container
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v4
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Extract branch from github ref - New Push
+      if: ${{ startsWith(github.ref, 'refs/tags/v') != true && github.event_name != 'pull_request' }}
+      shell: bash
+      run: echo "branch=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+      id: extract_branch
+
+    - name: Extract tag from github ref - New Release
+      if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      shell: bash
+      run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+      id: extract_tag
+
+    - name: Build and push - New Push
+      uses: docker/build-push-action@v7
+      if: ${{ startsWith(github.ref, 'refs/tags/v') != true && github.event_name != 'pull_request' }}
+      with:
+        context: .
+        platforms: |
+          linux/amd64
+          linux/arm64
+          linux/arm/v7
+          linux/s390x
+          linux/ppc64le
+        push: true
+        build-args: |
+          BUILDTIME_BASE=${{ inputs.buildtime-base }}
+          RUNTIME_BASE=${{ inputs.runtime-base }}
+        tags: cloudnativelabs/kube-router-git:${{ steps.extract_branch.outputs.branch }}
+
+    - name: Build and push - New PR
+      uses: docker/build-push-action@v7
+      if: github.event_name == 'pull_request'
+      with:
+        context: .
+        # Don't build multi arch images for PR as they take more than 30 min to build
+        platforms: linux/amd64
+        push: true
+        build-args: |
+          BUILDTIME_BASE=${{ inputs.buildtime-base }}
+          RUNTIME_BASE=${{ inputs.runtime-base }}
+        tags: cloudnativelabs/kube-router-git:PR-${{ github.event.pull_request.number }}
+
+    # Tagging a release candidate, don't update latest
+    - name: Build and push - New Tag (Release Candidate)
+      uses: docker/build-push-action@v7
+      if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-rc') }}
+      with:
+        context: .
+        platforms: |
+          linux/amd64
+          linux/arm64
+          linux/arm/v7
+          linux/s390x
+          linux/ppc64le
+        push: true
+        build-args: |
+          BUILDTIME_BASE=${{ inputs.buildtime-base }}
+          RUNTIME_BASE=${{ inputs.runtime-base }}
+        tags: |
+          cloudnativelabs/kube-router:${{ steps.extract_tag.outputs.tag }}
+
+    # Tagging a proper release, update latest
+    - name: Build and push - New Tag
+      uses: docker/build-push-action@v7
+      if: ${{ startsWith(github.ref, 'refs/tags/v') && ! contains(github.ref, '-rc') }}
+      with:
+        context: .
+        platforms: |
+          linux/amd64
+          linux/arm64
+          linux/arm/v7
+          linux/s390x
+          linux/ppc64le
+        push: true
+        build-args: |
+          BUILDTIME_BASE=${{ inputs.buildtime-base }}
+          RUNTIME_BASE=${{ inputs.runtime-base }}
+        tags: |
+          cloudnativelabs/kube-router:${{ steps.extract_tag.outputs.tag }}
+          cloudnativelabs/kube-router:latest

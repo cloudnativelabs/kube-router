@@ -1,0 +1,39 @@
+name: ci-release
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: The Go version to use
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs GoReleaser to publish binaries and create a GitHub release
+  ci-goreleaser-tag:
+    name: ci-goreleaser-tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    # Check out the repository so GoReleaser has access to the full git history and source.
+    - name: Check out code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    # Install the Go toolchain at the pinned version with module caching enabled.
+    - name: Set up Go
+      uses: ./.github/actions/setup-go
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Run GoReleaser
+      uses: goreleaser/goreleaser-action@v7
+      with:
+        version: "~> v2"
+        distribution: goreleaser
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
