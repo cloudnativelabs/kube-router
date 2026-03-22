@@ -12,15 +12,22 @@ import (
 )
 
 // envLineRe matches a top-level env block value line in a GitHub workflow YAML.
-// Example:
+// It handles both plain values and lines that carry a YAML anchor (e.g. &my_anchor)
+// between the key and the quoted value — the anchor token is captured as part of
+// the preamble and round-tripped verbatim so that anchor aliases elsewhere in the
+// file continue to resolve correctly after the value is updated.
+//
+// Examples matched:
 //
 //	BUILDTIME_BASE: "golang:1.25.7-alpine3.23"
+//	BUILDTIME_BASE: &buildtime_base "golang:1.25.7-alpine3.23"
 //	GO_VERSION: "~1.25.7"
+//	GO_VERSION: &go_version "~1.25.7"
 //
-// Capture groups: (1) leading whitespace + key + colon + optional whitespace,
-// (2) optional opening quote, (3) value, (4) optional closing quote.
+// Capture groups: (1) leading whitespace + key + colon + optional anchor token + whitespace,
+// (2) optional opening quote, (3) value, (4) optional closing quote, (5) optional trailing comment.
 var envLineRe = regexp.MustCompile(
-	`^(\s+[A-Z_][A-Z0-9_]*:\s+)("?)([^"#\n]+)("?)(\s*#.*)?$`,
+	`^(\s+[A-Z_][A-Z0-9_]*:\s+(?:&\S+\s+)?)("?)([^"#\n]+)("?)(\s*#.*)?$`,
 )
 
 // semverRangeRe matches a version or semver range value like "~1.25.7" or "1.25.7".
