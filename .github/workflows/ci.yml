@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 env:
-  BUILDTIME_BASE: &buildtime_base "golang:1.25.7-alpine3.23"
-  RUNTIME_BASE: &runtime_base "alpine:3.23"
+  BUILDTIME_BASE: &buildtime_base "golang:1.25.7-alpine3.23@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced"
+  RUNTIME_BASE: &runtime_base "alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659"
   GO_VERSION: &go_version "~1.25.7"
 
 jobs:
@@ -34,9 +34,15 @@ jobs:
   # Phase 2: Build and push the container image.
   # Only runs for non-fork PRs and direct pushes — skipped for dependabot and external fork PRs
   # to prevent secret exposure to untrusted code.
+  # id-token: write — required for keyless cosign signing via Sigstore OIDC
+  # attestations: write — required for pushing SBOM attestations to DockerHub
   container:
     needs: checks
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/ci-container.yml
     with:
       buildtime-base: *buildtime_base
@@ -47,12 +53,17 @@ jobs:
 
   # Phase 3: Publish a versioned release via GoReleaser.
   # Only runs on tag pushes (v*) after the container build succeeds.
-  # contents: write is required here in the caller — called workflows cannot self-elevate permissions.
+  # contents: write — required for GoReleaser to create the GitHub release
+  # id-token: write — required for keyless cosign signing via Sigstore OIDC
+  # attestations: write — required for SLSA provenance and SBOM attestation on release binaries
+  # Called workflows cannot self-elevate permissions; all must be granted here in the caller.
   release:
     needs: container
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/ci-release.yml
     with:
       go-version: *go_version

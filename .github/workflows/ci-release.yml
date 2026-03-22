@@ -12,12 +12,14 @@ permissions:
   contents: read
 
 jobs:
-  # Runs GoReleaser to publish binaries and create a GitHub release
+  # Runs GoReleaser to publish binaries, generate a binary SBOM, and produce SLSA provenance
   ci-goreleaser-tag:
     name: ci-goreleaser-tag
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
     # Check out the repository so GoReleaser has access to the full git history and source.
     - name: Check out code
@@ -29,6 +31,8 @@ jobs:
       with:
         go-version: ${{ inputs.go-version }}
 
+    # Build multi-arch binaries, create archives, generate checksums, and publish a GitHub release.
+    # The release is created as a draft (see .goreleaser.yml) pending manual review before publish.
     - name: Run GoReleaser
       uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29  # v7.0.0
       with:
@@ -37,3 +41,21 @@ jobs:
         args: release --clean
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Generate a CycloneDX SBOM covering all release binaries in dist/ and attach it
+    # to the GitHub release as a downloadable asset for binary consumers.
+    - name: Generate SBOM for release binaries
+      uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+      with:
+        path: ./dist
+        format: cyclonedx-json
+        artifact-name: kube-router-${{ github.ref_name }}-sbom.cyclonedx.json
+        upload-release-assets: true
+
+    # Generate SLSA Build Level 2 provenance for the release binaries.
+    # Uses GitHub's native attestation (first-party action, GA since June 2024).
+    # Consumers can verify with: gh attestation verify <binary> --repo cloudnativelabs/kube-router
+    - name: Generate SLSA provenance for release binaries
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4.1.0
+      with:
+        subject-checksums: ./dist/checksums.txt
