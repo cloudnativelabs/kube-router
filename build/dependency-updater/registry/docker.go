@@ -241,6 +241,30 @@ func filterStableTags(tags []string, image, constraint string) []string {
 	return out
 }
 
+// GoVersionFromImageTag extracts the bare Go version from a resolved golang
+// Docker image tag. For example:
+//
+//	"golang:1.25.8-alpine3.23@sha256:abc" -> "1.25.8"
+//	"golang:1.25.8-alpine3.23"            -> "1.25.8"
+//
+// Returns ("", false) if the tag does not match the expected format.
+func GoVersionFromImageTag(imageRef string) (string, bool) {
+	// Strip digest if present.
+	if idx := strings.Index(imageRef, "@"); idx != -1 {
+		imageRef = imageRef[:idx]
+	}
+	// Strip image name prefix (e.g. "golang:").
+	if idx := strings.Index(imageRef, ":"); idx != -1 {
+		imageRef = imageRef[idx+1:]
+	}
+	// imageRef is now the tag, e.g. "1.25.8-alpine3.23".
+	m := alpineVariantRe.FindStringSubmatch(imageRef)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true // m[1] is the Go version portion
+}
+
 // TagGreater returns true if tag a sorts higher than b for the given image.
 func TagGreater(a, b, image string) bool {
 	// For golang alpine variant tags, compare the Go version then alpine version.

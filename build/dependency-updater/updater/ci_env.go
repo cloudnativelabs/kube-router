@@ -29,11 +29,16 @@ var semverRangeRe = regexp.MustCompile(`^~?v?\d+\.\d+`)
 // UpdateCIEnv processes all YAML files in paths and updates Docker image values
 // and Go version values found in top-level env: blocks.
 // Only files that contain a top-level "env:" section are modified.
+//
+// resolvedGoVersion, if non-empty, is used as the authoritative Go version
+// instead of querying go.dev. This ensures the CI Go version stays in sync
+// with the golang Docker image tag resolved earlier in the same run.
 func UpdateCIEnv(
 	paths []string,
 	lf *config.LockFile,
 	docker *registry.DockerClient,
 	goClient *registry.GoVersionClient,
+	resolvedGoVersion string,
 	categories Categories,
 	dryRun bool,
 	verbose bool,
@@ -42,7 +47,7 @@ func UpdateCIEnv(
 	var warnings []string
 
 	for _, path := range paths {
-		result, w, err := updateCIEnvFile(path, lf, docker, goClient, categories, dryRun, verbose)
+		result, w, err := updateCIEnvFile(path, lf, docker, goClient, resolvedGoVersion, categories, dryRun, verbose)
 		warnings = append(warnings, w...)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("skipping %s: %v", path, err))
@@ -60,6 +65,7 @@ func updateCIEnvFile(
 	lf *config.LockFile,
 	docker *registry.DockerClient,
 	goClient *registry.GoVersionClient,
+	resolvedGoVersion string,
 	categories Categories,
 	dryRun bool,
 	verbose bool,
@@ -139,15 +145,26 @@ func updateCIEnvFile(
 				prefix = "~"
 				bare = value[1:]
 			}
-			constraint := lf.GetConstraint("golang")
-			if constraint == "" {
-				constraint = "~" + strings.Join(strings.Split(bare, ".")[:2], ".")
+
+			var latest string
+			if resolvedGoVersion != "" {
+				// Use the Go version extracted from the golang Docker image tag
+				// resolved earlier in this run — guarantees atomicity with the
+				// Docker image update.
+				latest = resolvedGoVersion
+			} else {
+				constraint := lf.GetConstraint("golang")
+				if constraint == "" {
+					constraint = "~" + strings.Join(strings.Split(bare, ".")[:2], ".")
+				}
+				var err error
+				latest, err = goClient.LatestVersion(strings.TrimPrefix(constraint, "~"))
+				if err != nil {
+					warnings = append(warnings, fmt.Sprintf("skipping Go version in %s: %v", path, err))
+					continue
+				}
 			}
-			latest, err := goClient.LatestVersion(strings.TrimPrefix(constraint, "~"))
-			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("skipping Go version in %s: %v", path, err))
-				continue
-			}
+
 			updated := prefix + latest
 			if verbose && updated != value {
 				fmt.Printf("  %s (env): %s -> %s\n", path, value, updated)
