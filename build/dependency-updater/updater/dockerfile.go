@@ -25,6 +25,15 @@ var envSHARe = regexp.MustCompile(`^(ENV\s+[A-Za-z_][A-Za-z0-9_]*=)([0-9a-f]{40}
 // repoCommentRe extracts a "owner/repo" reference from a comment.
 var repoCommentRe = regexp.MustCompile(`([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)`)
 
+// githubURLRe extracts "owner/repo" from a GitHub URL token.
+// Anchored to the start of the token (with optional scheme and www. prefix) to
+// prevent matching github.com/owner/repo embedded inside a different host's URL
+// (e.g. evil.com/github.com/owner/repo).
+var githubURLRe = regexp.MustCompile(`^(?:https?://)?(?:www\.)?github\.com/([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)\b`)
+
+// urlTokenRe matches individual whitespace-separated tokens that contain github.com.
+var urlTokenRe = regexp.MustCompile(`\S*github\.com\S*`)
+
 // UpdateDockerfiles processes all Dockerfiles in paths, updating ARG default
 // values and ENV commit-SHA pins.
 func UpdateDockerfiles(
@@ -127,8 +136,12 @@ func updateDockerfile(
 	return result, warnings, nil
 }
 
-// extractRepoFromContext looks for a GitHub repo reference in the comment on
-// the current line or the nearest preceding comment line.
+// extractRepoFromContext looks for a GitHub repo reference associated with the
+// current line. It checks (in order):
+//  1. An inline comment on the current line
+//  2. Comment lines within 3 lines before the current line
+//  3. Non-comment lines within 5 lines after the current line (handles cases
+//     where a RUN line referencing the repo follows the ENV SHA line)
 func extractRepoFromContext(lines []string, idx int, inlineComment string) string {
 	// Check inline comment first.
 	if repo := findRepoInText(inlineComment); repo != "" {
@@ -143,24 +156,31 @@ func extractRepoFromContext(lines []string, idx int, inlineComment string) strin
 			}
 		}
 	}
+	// Walk forwards up to 5 lines — handles ENV SHA followed by RUN git clone <repo>.
+	for j := idx + 1; j < len(lines) && j <= idx+5; j++ {
+		if repo := findRepoInText(lines[j]); repo != "" {
+			return repo
+		}
+	}
 	return ""
 }
 
-// findRepoInText extracts the first "owner/repo" pattern from text, filtering
-// out obvious non-repo patterns.
+// findRepoInText extracts the first "owner/repo" pattern from text.
+// It first scans for whitespace-separated tokens containing github.com and
+// applies the anchored githubURLRe to each token, preventing the regex from
+// matching github.com embedded inside another host's URL. Falls back to bare
+// "owner/repo" patterns without dots for comment-only lines.
 func findRepoInText(text string) string {
-	matches := repoCommentRe.FindAllString(text, -1)
-	for _, m := range matches {
-		// Filter out things that look like file paths or version strings.
-		if strings.Contains(m, ".") {
-			continue
+	// First priority: extract owner/repo from a GitHub URL token in the text.
+	for _, token := range urlTokenRe.FindAllString(text, -1) {
+		if m := githubURLRe.FindStringSubmatch(token); m != nil {
+			// m[1] is "owner/repo" or "owner/repo.git" — strip .git suffix.
+			return strings.TrimSuffix(m[1], ".git")
 		}
-		return m
 	}
-	// Second pass: allow dots in repo names (e.g. kubernetes-sigs/iptables-wrappers).
-	for _, m := range matches {
-		parts := strings.Split(m, "/")
-		if len(parts) == 2 && len(parts[0]) > 2 && len(parts[1]) > 2 {
+	// Second: bare "owner/repo" patterns with no dots (plain names only).
+	for _, m := range repoCommentRe.FindAllString(text, -1) {
+		if !strings.Contains(m, ".") {
 			return m
 		}
 	}

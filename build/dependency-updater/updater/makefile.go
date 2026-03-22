@@ -141,8 +141,8 @@ func updateDockerImageValue(
 			return value, "", fmt.Errorf("finding latest tag for %s: %w", imageName, err)
 		}
 		tag = latest
-	} else {
-		// Check if a newer tag exists within the constraint.
+	} else if isSemverTag(tag) {
+		// Tag is semver — check if a newer version exists within the constraint.
 		latest, err := docker.LatestTag(imageName, constraint)
 		if err == nil && tagIsNewer(latest, tag, imageName) {
 			if verbose {
@@ -151,6 +151,8 @@ func updateDockerImageValue(
 			tag = latest
 		}
 	}
+	// else: tag is a non-semver word (e.g. "alpine", "latest", "lts") — the
+	// user chose it deliberately. Only resolve its digest; don't replace it.
 
 	digest, err := docker.ResolveDigest(imageName, tag)
 	if err != nil {
@@ -162,6 +164,12 @@ func updateDockerImageValue(
 		fmt.Printf("  %s: %s -> %s\n", varName, value, pinned)
 	}
 	return pinned, "", nil
+}
+
+// isSemverTag returns true if tag looks like a semver string (e.g. "1.25.8",
+// "v4.2.0", "3.23"), as opposed to a symbolic tag like "alpine" or "latest".
+func isSemverTag(tag string) bool {
+	return versionPattern.MatchString(tag)
 }
 
 // matchVPrefix returns newVer with its leading 'v' stripped if original has no

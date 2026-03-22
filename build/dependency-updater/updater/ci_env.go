@@ -119,12 +119,13 @@ func updateCIEnvFile(
 					continue
 				}
 				tag = latest
-			} else {
+			} else if isSemverTag(tag) {
 				latest, err := docker.LatestTag(imageName, constraint)
 				if err == nil && registry.TagGreater(latest, tag, imageName) {
 					tag = latest
 				}
 			}
+			// else: non-semver tag (e.g. "alpine", "latest") — only pin digest.
 
 			digest, err := docker.ResolveDigest(imageName, tag)
 			if err != nil {
