@@ -28,16 +28,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v4
+      uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v4
+      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
 
     - name: Login to DockerHub
-      uses: docker/login-action@v4
+      uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -55,7 +55,7 @@ jobs:
       id: extract_tag
 
     - name: Build and push - New Push
-      uses: docker/build-push-action@v7
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
       if: ${{ startsWith(github.ref, 'refs/tags/v') != true && github.event_name != 'pull_request' }}
       with:
         context: .
@@ -72,7 +72,7 @@ jobs:
         tags: cloudnativelabs/kube-router-git:${{ steps.extract_branch.outputs.branch }}
 
     - name: Build and push - New PR
-      uses: docker/build-push-action@v7
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
       if: github.event_name == 'pull_request'
       with:
         context: .
@@ -86,7 +86,7 @@ jobs:
 
     # Tagging a release candidate, don't update latest
     - name: Build and push - New Tag (Release Candidate)
-      uses: docker/build-push-action@v7
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
       if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-rc') }}
       with:
         context: .
@@ -105,7 +105,7 @@ jobs:
 
     # Tagging a proper release, update latest
     - name: Build and push - New Tag
-      uses: docker/build-push-action@v7
+      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
       if: ${{ startsWith(github.ref, 'refs/tags/v') && ! contains(github.ref, '-rc') }}
       with:
         context: .
