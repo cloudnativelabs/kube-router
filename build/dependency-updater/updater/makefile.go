@@ -15,9 +15,19 @@ import (
 // Captures: (1) variable name, (2) assignment operator (?= or =), (3) value, (4) optional comment.
 var makeVarRe = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)(\s*\??=\s*)([^\s#]+)(\s*#.*)?$`)
 
+// MakefileResult holds the output of UpdateMakefile.
+type MakefileResult struct {
+	Diff diff.Result
+	// ResolvedGolangImage is the fully-pinned golang image value after update
+	// (e.g. "golang:1.25.8-alpine3.23@sha256:..."). Empty if no golang image
+	// variable was processed. Used by callers to derive the canonical Go version
+	// for CI env and go.mod updates, ensuring all three stay in sync.
+	ResolvedGolangImage string
+}
+
 // UpdateMakefile reads the Makefile at path, updates all discovered dependency
-// variables, and returns a diff.Result. If dryRun is false the file is written
-// back in place.
+// variables, and returns a MakefileResult. If dryRun is false the file is
+// written back in place.
 func UpdateMakefile(
 	path string,
 	lf *config.LockFile,
@@ -26,14 +36,15 @@ func UpdateMakefile(
 	categories Categories,
 	dryRun bool,
 	verbose bool,
-) (diff.Result, []string, error) {
+) (MakefileResult, []string, error) {
 	original, err := os.ReadFile(path)
 	if err != nil {
-		return diff.Result{Path: path}, nil, fmt.Errorf("reading %s: %w", path, err)
+		return MakefileResult{Diff: diff.Result{Path: path}}, nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 
 	lines := strings.Split(string(original), "\n")
 	var warnings []string
+	var resolvedGolangImage string
 
 	for i, line := range lines {
 		m := makeVarRe.FindStringSubmatch(line)
@@ -62,6 +73,12 @@ func UpdateMakefile(
 			}
 			if updated != value {
 				lines[i] = varName + operator + updated + comment
+			}
+			// Capture the resolved golang image value so the caller can derive
+			// the canonical Go version from it.
+			imageName, _, _ := ParseImageRef(value)
+			if imageBaseName(imageName) == "golang" {
+				resolvedGolangImage = updated
 			}
 
 		case KindToolVersion:
@@ -99,11 +116,11 @@ func UpdateMakefile(
 
 	if !dryRun && result.Changed() {
 		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
-			return result, warnings, fmt.Errorf("writing %s: %w", path, err)
+			return MakefileResult{}, warnings, fmt.Errorf("writing %s: %w", path, err)
 		}
 	}
 
-	return result, warnings, nil
+	return MakefileResult{Diff: result, ResolvedGolangImage: resolvedGolangImage}, warnings, nil
 }
 
 // updateDockerImageValue resolves the latest tag and digest for a Docker image value

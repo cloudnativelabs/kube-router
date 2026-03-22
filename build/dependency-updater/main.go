@@ -120,17 +120,35 @@ func run() error {
 	var allDiffs []diff.Result
 	var allWarnings []string
 
-	// 1. Makefile
+	// resolvedGoVersion is extracted from the golang Docker image tag after the
+	// Makefile is processed. It is then used as the authoritative Go version for
+	// all derived locations (GO_VERSION in ci.yml, toolchain in go.mod), ensuring
+	// they stay in sync with the Docker image even if go.dev has a newer patch
+	// release for which no alpine Docker image exists yet.
+	var resolvedGoVersion string
+
+	// 1. Makefile — must run first so we can extract the canonical Go version.
 	if files.Makefile != "" && (cats.Docker || cats.Tools) {
 		if *flagVerbose {
 			fmt.Printf("\nProcessing Makefile...\n")
 		}
-		result, warns, err := updater.UpdateMakefile(files.Makefile, lf, docker, gh, cats, *flagDryRun, *flagVerbose)
+		mkResult, warns, err := updater.UpdateMakefile(files.Makefile, lf, docker, gh, cats, *flagDryRun, *flagVerbose)
 		allWarnings = append(allWarnings, warns...)
 		if err != nil {
 			allWarnings = append(allWarnings, fmt.Sprintf("Makefile: %v", err))
-		} else if result.Changed() {
-			allDiffs = append(allDiffs, result)
+		} else if mkResult.Diff.Changed() {
+			allDiffs = append(allDiffs, mkResult.Diff)
+		}
+		// Extract the Go version from the resolved golang image tag so that
+		// GO_VERSION in ci.yml and toolchain in go.mod are derived from the
+		// same source rather than queried independently.
+		if mkResult.ResolvedGolangImage != "" {
+			if ver, ok := registry.GoVersionFromImageTag(mkResult.ResolvedGolangImage); ok {
+				resolvedGoVersion = ver
+				if *flagVerbose {
+					fmt.Printf("  Canonical Go version from Docker image: %s\n", resolvedGoVersion)
+				}
+			}
 		}
 	}
 
@@ -148,11 +166,13 @@ func run() error {
 	}
 
 	// 3. CI env: blocks (Docker images + Go version in workflow files).
+	// Pass resolvedGoVersion so GO_VERSION is derived from the Docker image tag,
+	// not fetched independently from go.dev.
 	if len(files.GitHubYAMLs) > 0 && (cats.Docker || cats.Go) {
 		if *flagVerbose {
 			fmt.Printf("\nProcessing CI env blocks...\n")
 		}
-		results, warns, err := updater.UpdateCIEnv(files.GitHubYAMLs, lf, docker, goClient, cats, *flagDryRun, *flagVerbose)
+		results, warns, err := updater.UpdateCIEnv(files.GitHubYAMLs, lf, docker, goClient, resolvedGoVersion, cats, *flagDryRun, *flagVerbose)
 		allWarnings = append(allWarnings, warns...)
 		if err != nil {
 			allWarnings = append(allWarnings, fmt.Sprintf("CI env: %v", err))
@@ -174,12 +194,13 @@ func run() error {
 	}
 
 	// 5. go.mod toolchain directive.
+	// Pass resolvedGoVersion so toolchain matches the Docker image, not go.dev.
 	if files.GoMod != "" && cats.Go {
 		if *flagVerbose {
 			fmt.Printf("\nProcessing go.mod...\n")
 		}
 		constraint := lf.GetConstraint("golang")
-		result, warns, err := updater.UpdateGoMod(files.GoMod, goClient, constraint, *flagDryRun, *flagVerbose)
+		result, warns, err := updater.UpdateGoMod(files.GoMod, goClient, resolvedGoVersion, constraint, *flagDryRun, *flagVerbose)
 		allWarnings = append(allWarnings, warns...)
 		if err != nil {
 			allWarnings = append(allWarnings, fmt.Sprintf("go.mod: %v", err))

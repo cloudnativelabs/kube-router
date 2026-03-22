@@ -49,8 +49,8 @@ BUILD_IN_DOCKER?=true
 		t.Errorf("unexpected warnings: %v", warnings)
 	}
 	// No categories enabled — nothing should change.
-	if result.Changed() {
-		t.Errorf("expected no changes when categories are disabled, got diff:\n%s", result.Unified)
+	if result.Diff.Changed() {
+		t.Errorf("expected no changes when categories are disabled, got diff:\n%s", result.Diff.Unified)
 	}
 }
 
@@ -100,7 +100,7 @@ func TestUpdateMakefile_SkipsDerivedVars(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Changed() {
+	if result.Diff.Changed() {
 		t.Errorf("derived var was modified unexpectedly")
 	}
 }
@@ -123,7 +123,7 @@ func TestUpdateMakefile_WarnsOnUnknownVersionVar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Changed() {
+	if result.Diff.Changed() {
 		t.Errorf("unknown tool var was unexpectedly modified")
 	}
 	found := false
