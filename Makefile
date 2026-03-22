@@ -270,6 +270,43 @@ cni-download:
 		tar -xf cni-plugins-$(GOARCH).tgz -C cni-download
 		rm -f cni-plugins-$(GOARCH).tgz
 
+update-deps: ## Updates all dependency versions, resolves digests, and pins SHAs.
+	@echo Starting dependency update.
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	$(DOCKER) run --rm \
+		-v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router/build/dependency-updater \
+		-e GITHUB_TOKEN=$(GITHUB_TOKEN) \
+		-e GH_TOKEN=$(GH_TOKEN) \
+		$(DOCKER_BUILD_IMAGE) \
+		sh -c 'go run . --all --project-root=/go/src/github.com/cloudnativelabs/kube-router'
+else
+	cd $(MAKEFILE_DIR)build/dependency-updater && go run . --all --project-root=$(MAKEFILE_DIR)
+endif
+	@echo Finished dependency update.
+
+update-deps-dry: ## Shows what dependency updates would be made without applying them.
+	@echo Starting dependency update dry-run.
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	$(DOCKER) run --rm \
+		-v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router/build/dependency-updater \
+		-e GITHUB_TOKEN=$(GITHUB_TOKEN) \
+		-e GH_TOKEN=$(GH_TOKEN) \
+		$(DOCKER_BUILD_IMAGE) \
+		sh -c 'go run . --all --dry-run --project-root=/go/src/github.com/cloudnativelabs/kube-router'
+else
+	cd $(MAKEFILE_DIR)build/dependency-updater && go run . --all --dry-run --project-root=$(MAKEFILE_DIR)
+endif
+	@echo Finished dependency update dry-run.
+
+prep-release: update-deps doctoc lint test-pretty kube-router container ## Prepares for a release: updates deps, then runs all checks and builds.
+	@echo Finished prep-release. Review any dependency changes and commit before tagging.
+
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -278,6 +315,6 @@ help:
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs
 .PHONY: test test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
-.PHONY: spellcheck
+.PHONY: spellcheck update-deps update-deps-dry prep-release
 
 .DEFAULT: all

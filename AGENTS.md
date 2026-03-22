@@ -128,6 +128,36 @@ instead of running commands directly** when available.
 - `make gomoqs` - Generate all mock files using moq
 - Individual mocks: `make pkg/controllers/proxy/linux_networking_moq.go`
 
+#### Dependency Management
+
+- `make update-deps` - Update all dependency versions, resolve digests, and pin SHAs
+- `make update-deps-dry` - Preview what dependency updates would be made (dry-run with diff output)
+
+The `update-deps` target runs the `build/dependency-updater` Go tool, which:
+
+- Discovers all managed files dynamically (no static file list)
+- Updates Docker image tags to their latest versions within constraints defined in
+  `build/dependency-updater/versions.lock.yaml`
+- Resolves Docker image tags to `image:tag@sha256:digest` format for reproducibility
+- Updates tool version variables (e.g. `GOBGP_VERSION`) to their latest GitHub releases
+- Updates GitHub Action `uses:` lines from bare tags (`@v6`) or existing SHA pins to the
+  latest SHA-pinned form (`@sha256...  # vX.Y.Z`)
+- Updates the `toolchain` directive in `go.mod`
+
+Set `GITHUB_TOKEN` in your environment to avoid GitHub API rate limits (60/hr unauthenticated
+vs 5000/hr authenticated):
+
+```bash
+GITHUB_TOKEN=ghp_... make update-deps
+```
+
+#### Release Preparation
+
+- `make prep-release` - Full release preparation: update deps, run all checks, build container
+
+This is the single command to run before tagging a new release. It calls `update-deps` first,
+then runs the same steps as `all` (`doctoc lint test-pretty kube-router container`).
+
 #### Release and Distribution
 
 - `make push` - Push container image to registry

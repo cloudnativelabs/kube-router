@@ -2,21 +2,58 @@
 
 ## Preparing for the release
 
-* Ensure that the Golang release used is still supported. Definition happens currently in
-  [Github Workflow](.github/workflows/ci.yml) and [Makefile](Makefile).
-* Ensure that the Alpine version used in container builds is still supported. Definition happens currently in
-  [Github Workflow](.github/workflows/ci.yml) and [Makefile](Makefile).
-* Ensure that Golang dependencies are updated.
-  `go list -mod=mod -u -m -f '{{.}}{{if .Indirect}} IAMINDIRECT{{end}}' all | grep -v IAMINDIRECT` lists possible
-  updates.
-* Ensure that the GoBGP version is updated. See [upstream](https://github.com/osrg/gobgp/releases) and GoBGP definition
-  in [Makefile](Makefile) and [go.mod](go.mod).
-* Ensure that the Kubernetes object definitions do not contain deprecated object types. Definition currently is in
-  kube-router's [Daemonset](daemonset) folder.
-* Ensure GitHub actions are updated:
+Run the following command from the project root:
+
 ```sh
-dependabot update github_actions cloudnativelabs/kube-router
+make prep-release
 ```
+
+This single command will:
+
+1. **Update all dependencies** — Docker base image tags (golang, alpine, golangci-lint, etc.),
+   tool versions (GoBGP, GoReleaser, CNI plugins, etc.), and GitHub Action SHA pins are all
+   fetched from their upstream sources and pinned to their latest stable versions. Version
+   constraints in `build/dependency-updater/versions.lock.yaml` control which major/minor
+   boundaries are respected (e.g. golang stays on `~1.25.x`).
+2. **Run all standard checks** — doctoc, lint, tests, binary build, and container image build
+   are run in sequence against the updated dependency set.
+
+After `prep-release` completes, review and commit the changes. Use `git add --patch` (`-p`) to
+stage each dependency update as a separate commit, which keeps the history readable and makes it
+easy to bisect or revert individual updates:
+
+```sh
+git diff
+git add -p
+```
+
+For each hunk, press `y` to stage it or `n` to skip it. Commit after each logical group of
+changes (e.g. one commit per tool or image updated). Follow the conventional commit format:
+
+```sh
+git commit -m "build(deps): bump golang from 1.25.6-alpine3.23 to 1.25.7-alpine3.23"
+git add -p
+git commit -m "build(deps): bump actions/checkout from v6.0.1 to v6.0.2"
+# ... and so on for each dependency
+```
+
+Then proceed to tag the release as described below.
+
+If you only want to preview what would change without applying it, run:
+
+```sh
+make update-deps-dry
+```
+
+**Updating Go module dependencies** (separate from the above) — to check for available updates
+to Go module dependencies in `go.mod` / `go.sum`:
+
+```sh
+go list -mod=mod -u -m -f '{{.}}{{if .Indirect}} IAMINDIRECT{{end}}' all | grep -v IAMINDIRECT
+```
+
+**Checking Kubernetes manifests** — ensure that the Kubernetes object definitions in the
+[daemonset](daemonset) folder do not use deprecated API types before tagging a release.
 
 ## New major/minor release
 

@@ -1,0 +1,17 @@
+# Dependency version constraints for the dependency-updater tool.
+# Only list dependencies here that need major/minor version pinning.
+# Unlisted dependencies are updated to the absolute latest stable release.
+#
+# Constraint syntax:
+#   "~1.25"  -> >=1.25.0, <1.26.0  (patch updates only within this minor)
+#   "~v4"    -> >=v4.0.0, <v5.0.0  (minor+patch updates within this major)
+#   "~3.23"  -> >=3.23.0, <3.24.0  (patch updates only within this minor)
+
+constraints:
+  golang:
+    constraint: "~1.25"
+    # The alpine variant suffix (e.g. -alpine3.23) is matched against the alpine constraint below
+  alpine:
+    constraint: "~3.23"
+  gobgp:
+    constraint: "~v4"
