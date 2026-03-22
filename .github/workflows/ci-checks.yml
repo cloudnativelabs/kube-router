@@ -1,0 +1,86 @@
+name: ci-checks
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: The Go version to use
+        required: true
+        type: string
+      buildtime-base:
+        description: The Docker image to use as the Go build base for unit tests
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # Scans for hidden unicode characters (Trojan Source attacks) before any job that may use secrets
+  ci-unicode-check:
+    name: ci-unicode-check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v6
+
+    - name: Check for hidden unicode
+      # Scope the scan to text-based source files only. Binary files (images, PDFs) contain
+      # arbitrary byte sequences that trigger false positives in BIDI character detection.
+      run: npx anti-trojan-source --files='**/*.{go,yml,yaml,md,sh,json,toml,mod,sum,txt,svg,ts,js,cjs,cts,py,xml,conf,lock}'
+
+  # Runs Golangci-lint on the source code
+  ci-go-lint:
+    name: ci-go-lint
+    needs: ci-unicode-check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Set up Go
+      uses: ./.github/actions/setup-go
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Lint kube-router code
+      run: |
+        make lint
+
+  # Executes Unit Tests
+  ci-unit-tests:
+    name: ci-unit-tests
+    needs: ci-unicode-check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Set up Go
+      uses: ./.github/actions/setup-go
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Run unit tests for kube-router
+      run: |
+        make test-pretty
+      env:
+        DOCKER_BUILD_IMAGE: ${{ inputs.buildtime-base }}
+
+  # Builds Kube-Router binary
+  ci-build-kube-router:
+    name: ci-build-kube-router
+    needs: ci-unicode-check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Set up Go
+      uses: ./.github/actions/setup-go
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Build kube-router
+      run: |
+        make kube-router
