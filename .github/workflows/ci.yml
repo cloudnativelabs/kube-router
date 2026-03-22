@@ -25,9 +25,21 @@ env:
   GO_MOD_CACHE: "/home/runner/go/pkg/mod"
 
 jobs:
+  # Scans for hidden unicode characters (Trojan Source attacks) before any job that may use secrets
+  ci-unicode-check:
+    name: ci-unicode-check
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v6
+
+    - name: Check for hidden unicode
+      run: npx anti-trojan-source --files='**/*'
+
   # Runs Golangci-lint on the source code
   ci-go-lint:
     name: ci-go-lint
+    needs: ci-unicode-check
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
@@ -46,6 +58,7 @@ jobs:
   # Executes Unit Tests
   ci-unit-tests:
     name: ci-unit-tests
+    needs: ci-unicode-check
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
@@ -66,6 +79,7 @@ jobs:
   # Builds Kube-Router binary
   ci-build-kube-router:
     name: ci-build-kube-router
+    needs: ci-unicode-check
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
@@ -83,6 +97,7 @@ jobs:
 
   # Builds Container only if a new push to main branch, a tag or a pull request from a source branch within the repository
   ci-build-container:
+    needs: [ci-go-lint, ci-unit-tests, ci-build-kube-router]
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     steps:
@@ -184,6 +199,7 @@ jobs:
 
   # Runs Go Releaser on Tag Event
   ci-goreleaser-tag:
+    needs: [ci-go-lint, ci-unit-tests, ci-build-kube-router]
     runs-on: ubuntu-latest
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     permissions:
