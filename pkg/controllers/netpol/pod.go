@@ -4,11 +4,26 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"strings"
+	"unicode"
 
 	api "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
+
+// sanitizeForComment removes control characters (newlines, tabs, etc.) from a
+// string before it is embedded into an iptables-restore comment. This is a
+// defense-in-depth measure: Kubernetes API server validates pod/namespace names
+// to DNS label format, but we should not rely solely on external validation when
+// constructing input for iptables-restore.
+func sanitizeForComment(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
 
 func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
@@ -88,7 +103,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			}
 
 			// add rule to log the packets that will be dropped due to network policy enforcement
-			comment := "\"rule to log dropped traffic POD name:" + pod.name + " namespace: " + pod.namespace + "\""
+			comment := "\"rule to log dropped traffic POD name:" + sanitizeForComment(pod.name) + " namespace: " + sanitizeForComment(pod.namespace) + "\""
 			args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment,
 				"-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG",
 				"--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10", "\n"}
@@ -100,8 +115,8 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			filterTableRules.WriteString(strings.Join(args, " "))
 
 			// add rule to DROP if no applicable network policy permits the traffic
-			comment = "\"rule to REJECT traffic destined for POD name:" + pod.name + " namespace: " +
-				pod.namespace + "\""
+			comment = "\"rule to REJECT traffic destined for POD name:" + sanitizeForComment(pod.name) + " namespace: " +
+				sanitizeForComment(pod.namespace) + "\""
 			args = []string{"-A", podFwChainName, "-m", "comment", "--comment", comment,
 				"-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "REJECT", "\n"}
 			filterTableRules.WriteString(strings.Join(args, " "))
@@ -188,7 +203,7 @@ func (npc *NetworkPolicyController) setupPodNetpolRules(pod podInfo, podFwChainN
 			if _, ok := policy.targetPods[pod.ip]; !ok {
 				continue
 			}
-			comment := "\"run through nw policy " + policy.name + "\""
+			comment := "\"run through nw policy " + sanitizeForComment(policy.name) + "\""
 			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
 			var args []string
 			switch policy.policyType {
@@ -255,7 +270,7 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod podInfo, podF
 
 		// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting routed (coming for other node pods)
-		comment := "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
+		comment := "\"rule to jump traffic destined to POD name:" + sanitizeForComment(pod.name) + " namespace: " + sanitizeForComment(pod.namespace) +
 			" to chain " + podFwChainName + "\""
 		args := []string{"-A", kubeForwardChainName, "-m", "comment", "--comment", comment, "-d", ip,
 			"-j", podFwChainName + "\n"}
@@ -269,7 +284,7 @@ func (npc *NetworkPolicyController) interceptPodInboundTraffic(pod podInfo, podF
 
 		// ensure there is rule in filter table and forward chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting switched (coming for same node pods)
-		comment = "\"rule to jump traffic destined to POD name:" + pod.name + " namespace: " + pod.namespace +
+		comment = "\"rule to jump traffic destined to POD name:" + sanitizeForComment(pod.name) + " namespace: " + sanitizeForComment(pod.namespace) +
 			" to chain " + podFwChainName + "\""
 		args = []string{"-A", kubeForwardChainName, "-m", "physdev", "--physdev-is-bridged",
 			"-m", "comment", "--comment", comment,
@@ -294,7 +309,7 @@ func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod podInfo, pod
 			// ensure there is rule in filter table and FORWARD chain to jump to pod specific firewall chain
 			// this rule applies to the traffic getting forwarded/routed (traffic from the pod destined
 			// to pod on a different node)
-			comment := "\"rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
+			comment := "\"rule to jump traffic from POD name:" + sanitizeForComment(pod.name) + " namespace: " + sanitizeForComment(pod.namespace) +
 				" to chain " + podFwChainName + "\""
 			args := []string{"-A", chain, "-m", "comment", "--comment", comment, "-s", ip, "-j", podFwChainName, "\n"}
 			filterTableRules.WriteString(strings.Join(args, " "))
@@ -302,7 +317,7 @@ func (npc *NetworkPolicyController) interceptPodOutboundTraffic(pod podInfo, pod
 
 		// ensure there is rule in filter table and forward chain to jump to pod specific firewall chain
 		// this rule applies to the traffic getting switched (coming for same node pods)
-		comment := "\"rule to jump traffic from POD name:" + pod.name + " namespace: " + pod.namespace +
+		comment := "\"rule to jump traffic from POD name:" + sanitizeForComment(pod.name) + " namespace: " + sanitizeForComment(pod.namespace) +
 			" to chain " + podFwChainName + "\""
 		args := []string{"-A", kubeForwardChainName, "-m", "physdev", "--physdev-is-bridged",
 			"-m", "comment", "--comment", comment,
