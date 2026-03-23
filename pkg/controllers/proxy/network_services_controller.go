@@ -383,15 +383,21 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
 				klog.V(1).Info("Performing requested sync of ipvs services")
 				nsc.mu.Lock()
+				var syncErrors bool
 				err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
 				if err != nil {
 					klog.Errorf("error during ipvs sync in network service controller. Error: %v", err)
+					syncErrors = true
 				}
 				err = nsc.syncHairpinIptablesRules()
 				if err != nil {
 					klog.Errorf("error syncing hairpin iptables rules: %v", err)
+					syncErrors = true
 				}
 				nsc.mu.Unlock()
+				if syncErrors {
+					err = fmt.Errorf("one or more errors during ipvs sync")
+				}
 			}
 			if err == nil {
 				healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
@@ -482,9 +488,9 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 			return fmt.Errorf("failed to run iptables command: %s", err.Error())
 		}
 
-		// config.IpvsPermitAll: true then create INPUT/KUBE-ROUTER-SERVICE Chain creation else return
+		// config.IpvsPermitAll: true then create INPUT/KUBE-ROUTER-SERVICE Chain creation else skip
 		if !nsc.ipvsPermitAll {
-			return nil
+			continue
 		}
 
 		var comment string
@@ -981,10 +987,11 @@ func parseSchedFlags(value string) schedFlags {
 func shuffle(endPoints []endpointSliceInfo) []endpointSliceInfo {
 	for index1 := range endPoints {
 		randBitInt, err := rand.Int(rand.Reader, big.NewInt(int64(index1+1)))
-		index2 := randBitInt.Int64()
 		if err != nil {
 			klog.Warningf("unable to get a random int: %v", err)
+			continue
 		}
+		index2 := randBitInt.Int64()
 		endPoints[index1], endPoints[index2] = endPoints[index2], endPoints[index1]
 	}
 	return endPoints
@@ -1561,6 +1568,9 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 	var iptablesCmdHandler utils.IPTablesHandler
 	tcpMSS := nsc.mtu
 	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
 	if parsedIP.To4() != nil {
 		iptablesCmdHandler = nsc.iptablesCmdHandlers[v1.IPv4Protocol]
 		tcpMSS -= 2*ipv4.HeaderLen + tcpHeaderMinLen
@@ -1669,6 +1679,9 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 	var iptablesCmdHandler utils.IPTablesHandler
 	tcpMSS := nsc.mtu
 	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
 	if parsedIP.To4() != nil {
 		iptablesCmdHandler = nsc.iptablesCmdHandlers[v1.IPv4Protocol]
 		tcpMSS -= 2*ipv4.HeaderLen + tcpHeaderMinLen
