@@ -97,6 +97,7 @@ jobs:
         context: .
         platforms: linux/amd64
         push: true
+        provenance: false
         build-args: |
           BUILDTIME_BASE=${{ inputs.buildtime-base }}
           RUNTIME_BASE=${{ inputs.runtime-base }}
