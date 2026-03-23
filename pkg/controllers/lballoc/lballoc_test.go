@@ -596,7 +596,7 @@ func TestAllocateService(t *testing.T) {
 	fp := v1core.IPFamilyPolicyRequireDualStack
 	svc.Spec.IPFamilyPolicy = &fp
 	err = mlbc.allocateService(&svc)
-	errExp := "unable to allocate dual-stack addresses: no IPs left to allocate"
+	errExp := "unable to allocate dual-stack addresses: IPv4: no IPs left to allocate"
 	if errExp != err.Error() {
 		t.Fatalf("expected %s, got %s", errExp, err)
 	}
@@ -604,6 +604,7 @@ func TestAllocateService(t *testing.T) {
 	mlbc.ipv4Ranges = ir4
 	mlbc.ipv6Ranges = newipRanges(nil)
 	err = mlbc.allocateService(&svc)
+	errExp = "unable to allocate dual-stack addresses: IPv6: no IPs left to allocate"
 	if errExp != err.Error() {
 		t.Fatalf("expected %s, got %s", errExp, err)
 	}
@@ -612,11 +613,38 @@ func TestAllocateService(t *testing.T) {
 	fp = v1core.IPFamilyPolicyPreferDualStack
 	svc.Spec.IPFamilyPolicy = &fp
 	err = mlbc.allocateService(&svc)
-	errExp = "unable to allocate address: no IPs left to allocate"
+	errExp = "unable to allocate address: IPv4: no IPs left to allocate\nIPv6: no IPs left to allocate"
 	if errExp != err.Error() {
 		t.Fatalf("expected %s, got %s", errExp, err)
 	}
 
+}
+
+// TestAllocateServiceAlreadyAllocated covers the case where a service already has all
+// requested ingress IPs and no allocation is needed. Before the early-return guard in
+// allocateService, this path would fall through to the error check with nil IPs and nil
+// errors, producing a spurious error (or panic).
+func TestAllocateServiceAlreadyAllocated(t *testing.T) {
+	mlbc := &LoadBalancerController{
+		clientset:  fake.NewSimpleClientset(),
+		unitTestWG: &sync.WaitGroup{},
+	}
+	ir4, ir6 := makeIPRanges("127.127.127.127/30", "ffff::/80")
+	mlbc.ipv4Ranges = ir4
+	mlbc.ipv6Ranges = ir6
+	mi := newMockIndexer()
+	mlbc.svcLister = mi
+
+	svc := makeTestService()
+	// Give the service existing ingress IPs for both families so that
+	// allocateService has nothing to allocate.
+	appendIngressIP(&svc, net.ParseIP("127.127.127.127"))
+	appendIngressIP(&svc, net.ParseIP("ffff::1"))
+
+	err := mlbc.allocateService(&svc)
+	if err != nil {
+		t.Fatalf("expected nil error when service already has all IPs, got: %s", err)
+	}
 }
 
 type mockInformer struct {

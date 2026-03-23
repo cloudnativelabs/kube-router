@@ -392,16 +392,25 @@ func (lbc *LoadBalancerController) allocateService(svc *v1core.Service) error {
 	if want6 && !have6 {
 		ipv6, err6 = lbc.ipv6Ranges.getNextFreeIP(allocated6)
 	}
-	err := err6
+
+	// If no allocation was needed, the service already has all requested IPs
+	if ipv4 == nil && ipv6 == nil && err4 == nil && err6 == nil {
+		return nil
+	}
+
+	var errs []error
 	if err4 != nil {
-		err = err4
+		errs = append(errs, fmt.Errorf("IPv4: %w", err4))
+	}
+	if err6 != nil {
+		errs = append(errs, fmt.Errorf("IPv6: %w", err6))
 	}
 
 	if ipv4 == nil && ipv6 == nil {
-		return fmt.Errorf("unable to allocate address: %w", err)
+		return fmt.Errorf("unable to allocate address: %w", errors.Join(errs...))
 	}
 	if (ipv4 == nil || ipv6 == nil) && requireDual {
-		return fmt.Errorf("unable to allocate dual-stack addresses: %w", err)
+		return fmt.Errorf("unable to allocate dual-stack addresses: %w", errors.Join(errs...))
 	}
 
 	// This is only non-nil during certain unit tests that need to understand when this goroutine is finished to remove
