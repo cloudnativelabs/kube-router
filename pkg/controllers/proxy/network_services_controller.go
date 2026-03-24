@@ -915,7 +915,7 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 			}
 			copy(svcInfo.clusterIPs, svc.Spec.ClusterIPs)
 			for _, lbIngress := range svc.Status.LoadBalancer.Ingress {
-				if len(lbIngress.IP) > 0 {
+				if len(lbIngress.IP) > 0 && (lbIngress.IPMode == nil || *lbIngress.IPMode != v1.LoadBalancerIPModeProxy) {
 					svcInfo.loadBalancerIPs = append(svcInfo.loadBalancerIPs, lbIngress.IP)
 				}
 			}
