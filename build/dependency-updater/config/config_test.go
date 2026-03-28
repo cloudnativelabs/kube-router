@@ -70,7 +70,6 @@ func TestLookupToolRepo(t *testing.T) {
 	}{
 		{"GOBGP_VERSION", "osrg/gobgp", true},
 		{"GORELEASER_VERSION", "goreleaser/goreleaser", true},
-		{"MOQ_VERSION", "matryer/moq", true},
 		{"CNI_VERSION", "containernetworking/plugins", true},
 		{"TYPOS_VERSION", "crate-ci/typos", true},
 		{"GRYPE_VERSION", "anchore/grype", true},

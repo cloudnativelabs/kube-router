@@ -54,7 +54,6 @@ func (lf *LockFile) GetConstraint(name string) string {
 var ToolRepo = map[string]string{
 	"GOBGP_VERSION":      "osrg/gobgp",
 	"GORELEASER_VERSION": "goreleaser/goreleaser",
-	"MOQ_VERSION":        "matryer/moq",
 	"CNI_VERSION":        "containernetworking/plugins",
 	"DOCTOC_VERSION":     "thlorenz/doctoc",
 	"TYPOS_VERSION":      "crate-ci/typos",

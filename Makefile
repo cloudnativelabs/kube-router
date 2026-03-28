@@ -34,8 +34,6 @@ DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
 DOCKER_DOCTOC_IMAGE?=node:alpine
 # See Versions: https://www.npmjs.com/package/doctoc
 DOCTOC_VERSION=2.3.0
-# See Versions: https://github.com/gotestyourself/gotestsum/releases
-GOTESTSUM_VERSION=v1.13.0
 # See Versions: https://github.com/crate-ci/typos/releases
 TYPOS_VERSION=v1.33.1
 # See Versions: https://github.com/osrg/gobgp/releases
@@ -43,8 +41,6 @@ GOBGP_VERSION=v4.2.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 # See Versions: https://github.com/goreleaser/goreleaser/releases
 GORELEASER_VERSION=v2.13.3
-# See Versions: https://github.com/matryer/moq/releases
-MOQ_VERSION=v0.6.0
 # See Versions: https://github.com/anchore/grype/releases
 GRYPE_VERSION=v0.110.0
 GRYPE_IMAGE?=anchore/grype:$(GRYPE_VERSION)
@@ -116,12 +112,9 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 		sh -c \
-		'go install gotest.tools/gotestsum@$(GOTESTSUM_VERSION) && CGO_ENABLED=0 gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...'
+		'CGO_ENABLED=0 go tool gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...'
 else
-ifeq ($(shell command -v gotestsum 2>/dev/null),)
-	go install gotest.tools/gotestsum@$(GOTESTSUM_VERSION)
-endif
-	gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...
+	go tool gotestsum --format gotestdox -- -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...
 endif
 
 lint: gofmt markdownlint spellcheck
@@ -259,9 +252,8 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		-v $(GO_CACHE):/root/.cache/go-build \
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
-		sh -c 'go install github.com/matryer/moq@$(MOQ_VERSION) && go generate -v $(*).go && chown $(UID) $(*)_moq.go'
+		sh -c 'go generate -v $(*).go && chown $(UID) $(*)_moq.go'
 else
-	@test -x $(lastword $(subst :, ,$(GOPATH)))/bin/moq && exit 0; echo "ERROR: 'moq' tool is needed to update mock test files, install it with: \ngo get github.com/matryer/moq\n"; exit 1
 	go generate -v $(*).go
 endif
 
