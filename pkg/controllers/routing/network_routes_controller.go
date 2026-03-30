@@ -144,8 +144,8 @@ type NetworkRoutingController struct {
 	bgpClusterID                   string
 	cniConfFile                    string
 	disableSrcDstCheck             bool
-	initSrcDstCheckDone            bool
-	ec2IamAuthorized               bool
+	initSrcDstCheckDone            atomic.Bool
+	ec2IamAuthorized               atomic.Bool
 	pathPrependAS                  string
 	pathPrependCount               uint8
 	pathPrepend                    bool
@@ -190,7 +190,7 @@ func (nrc *NetworkRoutingController) Run(
 	// In case of cluster provisioned on AWS disable source-destination check
 	if nrc.disableSrcDstCheck {
 		nrc.disableSourceDestinationCheck()
-		nrc.initSrcDstCheckDone = true
+		nrc.initSrcDstCheckDone.Store(true)
 	}
 
 	// enable IP forwarding for the packets coming in/out from the pods
@@ -1273,7 +1273,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.bgpRRServer = false
 	nrc.bgpServerStarted.Store(false)
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
-	nrc.initSrcDstCheckDone = false
+	nrc.initSrcDstCheckDone.Store(false)
 	nrc.routeSyncer = routes.NewRouteSyncer(kubeRouterConfig.InjectedRoutesSyncPeriod, kubeRouterConfig.MetricsEnabled)
 
 	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldTime.Seconds()
@@ -1307,7 +1307,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	}
 
 	// let's start with assumption we have necessary IAM creds to access EC2 api
-	nrc.ec2IamAuthorized = true
+	nrc.ec2IamAuthorized.Store(true)
 
 	if nrc.enableCNI {
 		nrc.cniConfFile = os.Getenv("KUBE_ROUTER_CNI_CONF_FILE")
