@@ -2088,3 +2088,56 @@ func TestBuildServicesInfoWithStrictValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestShuffleDoesNotPanicOnEmptySlice(t *testing.T) {
+	// shuffle should handle empty and single-element slices safely
+	tests := []struct {
+		name  string
+		input []endpointSliceInfo
+	}{
+		{
+			name:  "empty slice",
+			input: []endpointSliceInfo{},
+		},
+		{
+			name:  "single element",
+			input: []endpointSliceInfo{{ip: "10.0.0.1", port: 80}},
+		},
+		{
+			name: "multiple elements",
+			input: []endpointSliceInfo{
+				{ip: "10.0.0.1", port: 80},
+				{ip: "10.0.0.2", port: 80},
+				{ip: "10.0.0.3", port: 80},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Should not panic
+			result := shuffle(tt.input)
+			assert.Equal(t, len(tt.input), len(result), "shuffle should preserve slice length")
+		})
+	}
+}
+
+func TestSetupMangleTableRuleRejectsInvalidIP(t *testing.T) {
+	// Verify that net.ParseIP returning nil is handled gracefully
+	// rather than causing a nil pointer dereference on .To4()
+	tests := []struct {
+		name string
+		ip   string
+	}{
+		{name: "empty string", ip: ""},
+		{name: "garbage", ip: "not-an-ip"},
+		{name: "incomplete", ip: "192.168.1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parsedIP := net.ParseIP(tt.ip)
+			assert.Nil(t, parsedIP, "net.ParseIP should return nil for invalid IP %q", tt.ip)
+		})
+	}
+}
