@@ -3032,3 +3032,39 @@ func waitForListerWithTimeout(lister cache.Indexer, timeout time.Duration, t *te
 		}
 	}
 }
+
+func TestAtomicBoolFieldsNoConcurrentDataRace(t *testing.T) {
+	// Verify that bgpServerStarted, initSrcDstCheckDone, and ec2IamAuthorized
+	// can be read and written concurrently without a data race.
+	// This test is only meaningful when run with -race.
+	nrc := &NetworkRoutingController{}
+	nrc.bgpServerStarted.Store(false)
+	nrc.initSrcDstCheckDone.Store(false)
+	nrc.ec2IamAuthorized.Store(true)
+
+	var wg sync.WaitGroup
+
+	// Writers
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			nrc.bgpServerStarted.Store(i%2 == 0)
+			nrc.initSrcDstCheckDone.Store(i%2 == 0)
+			nrc.ec2IamAuthorized.Store(i%2 != 0)
+		}
+	}()
+
+	// Readers
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			_ = nrc.bgpServerStarted.Load()
+			_ = nrc.initSrcDstCheckDone.Load()
+			_ = nrc.ec2IamAuthorized.Load()
+		}
+	}()
+
+	wg.Wait()
+}
