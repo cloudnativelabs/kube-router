@@ -32,6 +32,8 @@ var (
 	testClusterExtTrafPol = v1core.ServiceExternalTrafficPolicyCluster
 	testLocalIntTrafPol   = v1core.ServiceInternalTrafficPolicyLocal
 	testClusterIntTrafPol = v1core.ServiceInternalTrafficPolicyCluster
+	testIpModeProxy       = v1core.LoadBalancerIPModeProxy
+	testIpModeVIP         = v1core.LoadBalancerIPModeVIP
 	testNodeIPv4          = "10.1.0.1"
 	testNodeIPv6          = "2001:db8:42:2::1"
 )
@@ -901,6 +903,36 @@ func Test_getVIPsForService(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "skip loadbalancer IPs with ipMode Proxy",
+			nrc: &NetworkRoutingController{
+				advertiseClusterIP:      true,
+				advertiseExternalIP:     true,
+				advertiseLoadBalancerIP: true,
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
+				},
+			},
+			serviceAdvertisedIPs: []*ServiceAdvertisedIPs{
+				{
+					service:       getLoadBalancerProxySvc(),
+					endpoints:     getContainsLocalIPv4EPs(),
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1"},
+					withdrawnIPs:  []string{},
+					annotations:   nil,
+				},
+				{
+					service:       getLoadBalancerMixedIPModeSvc(),
+					endpoints:     getContainsLocalIPv4EPs(),
+					advertisedIPs: []string{"10.0.0.1", "1.1.1.1", "10.0.255.2"},
+					withdrawnIPs:  []string{},
+					annotations:   nil,
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -1025,6 +1057,54 @@ func getLoadBalancerSvc() *v1core.Service {
 					{
 						IP: "10.0.255.2",
 					},
+				},
+			},
+		},
+	}
+}
+
+func getLoadBalancerProxySvc() *v1core.Service {
+	return &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "svc-loadbalancer-proxy",
+			Namespace: "default",
+		},
+		Spec: v1core.ServiceSpec{
+			Type:                  LoadBalancerST,
+			ClusterIP:             "10.0.0.1",
+			ExternalIPs:           []string{"1.1.1.1"},
+			InternalTrafficPolicy: &testClusterIntTrafPol,
+			ExternalTrafficPolicy: testClusterExtTrafPol,
+		},
+		Status: v1core.ServiceStatus{
+			LoadBalancer: v1core.LoadBalancerStatus{
+				Ingress: []v1core.LoadBalancerIngress{
+					{IP: "10.0.255.1", IPMode: &testIpModeProxy},
+					{IP: "10.0.255.2", IPMode: &testIpModeProxy},
+				},
+			},
+		},
+	}
+}
+
+func getLoadBalancerMixedIPModeSvc() *v1core.Service {
+	return &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "svc-loadbalancer-mixed",
+			Namespace: "default",
+		},
+		Spec: v1core.ServiceSpec{
+			Type:                  LoadBalancerST,
+			ClusterIP:             "10.0.0.1",
+			ExternalIPs:           []string{"1.1.1.1"},
+			InternalTrafficPolicy: &testClusterIntTrafPol,
+			ExternalTrafficPolicy: testClusterExtTrafPol,
+		},
+		Status: v1core.ServiceStatus{
+			LoadBalancer: v1core.LoadBalancerStatus{
+				Ingress: []v1core.LoadBalancerIngress{
+					{IP: "10.0.255.1", IPMode: &testIpModeProxy},
+					{IP: "10.0.255.2", IPMode: &testIpModeVIP},
 				},
 			},
 		},
