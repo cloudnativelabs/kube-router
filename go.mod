@@ -12,7 +12,7 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/goccy/go-yaml v1.19.2
 	github.com/google/go-cmp v0.7.0
-	github.com/hashicorp/go-version v1.8.0
+	github.com/hashicorp/go-version v1.9.0
 	github.com/moby/ipvs v1.1.0
 	github.com/osrg/gobgp/v4 v4.2.0
 	github.com/prometheus/client_golang v1.23.2
