@@ -1127,7 +1127,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	// If the global routing peer is configured then peer with it
 	// else attempt to get peers from node specific BGP annotations.
 	if len(nrc.globalPeerRouters) == 0 {
-		klog.V(2).Infof("Attempting to construct peer configs from annotation: %+v", node.Annotations)
+		klog.V(2).Info("Attempting to construct peer configs from node annotations")
 		peerCfgs, err := bgpPeerConfigsFromAnnotations(
 			node.Annotations,
 			nrc.krNode.GetPrimaryNodeIP().String(),
