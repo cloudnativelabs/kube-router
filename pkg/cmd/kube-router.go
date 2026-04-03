@@ -107,6 +107,14 @@ func (kr *KubeRouter) Run() error {
 	defer close(healthChan)
 	stopCh := make(chan struct{})
 
+	// Verify the health address/port combo provided is listenable
+	if err := utils.TCPAddressBindable(kr.Config.HealthAddr, kr.Config.HealthPort); err != nil {
+		return fmt.Errorf("failed to listen on %s:%d for heath controller: %w",
+			kr.Config.HealthAddr,
+			int(kr.Config.HealthPort),
+			err)
+	}
+
 	hc, err := healthcheck.NewHealthController(kr.Config)
 	if err != nil {
 		return fmt.Errorf("failed to create health controller: %w", err)
