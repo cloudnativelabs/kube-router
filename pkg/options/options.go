@@ -46,6 +46,7 @@ type KubeRouterConfig struct {
 	GlobalHairpinMode              bool
 	GoBGPAdminAddress              string
 	GoBGPAdminPort                 uint16
+	HealthAddr                     string
 	HealthPort                     uint16
 	HelpRequested                  bool
 	HostnameOverride               string
@@ -174,6 +175,7 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 			"Setting this to empty string will default the address to 127.0.0.1.")
 	fs.Uint16Var(&s.GoBGPAdminPort, "gobgp-admin-port", defaultGoBGPAdminPort,
 		"Port to connect to GoBGP for administrative purposes. Setting this to 0 will disable the GoBGP gRPC server.")
+	fs.StringVar(&s.HealthAddr, "health-addr", "", "Health check address to listen on, (Default: all interfaces; ensure to configure the `livenessProbe` to use the same IP address)")
 	fs.Uint16Var(&s.HealthPort, "health-port", defaultHealthCheckPort, "Health check port, 0 = Disabled")
 	fs.BoolVarP(&s.HelpRequested, "help", "h", false,
 		"Print usage information.")
