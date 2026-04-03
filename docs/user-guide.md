@@ -20,6 +20,9 @@
   - [Docker](#docker)
   - [containerd](#containerd)
 - [trying kube-router as alternative to kube-proxy](#trying-kube-router-as-alternative-to-kube-proxy)
+- [Binding health check endpoint to a specific host IP](#binding-health-check-endpoint-to-a-specific-host-ip)
+  - [Using the primary host address via Downward API](#using-the-primary-host-address-via-downward-api)
+  - [Using a specific IP address](#using-a-specific-ip-address)
 - [Advertising IPs](#advertising-ips)
 - [External IP and LoadBalancer IP Validation](#external-ip-and-loadbalancer-ip-validation)
   - [How It Works](#how-it-works)
@@ -130,6 +133,7 @@ Usage of kube-router:
       --gobgp-admin-address string                    Address for GoBGP server. Used in combination with gobgp-admin-port to expose GoBGP for administrative purposes. Setting this to empty string will default the address to 127.0.0.1. (default "127.0.0.1")
       --gobgp-admin-port uint16                       Port to connect to GoBGP for administrative purposes. Setting this to 0 will disable the GoBGP gRPC server. (default 50051)
       --hairpin-mode                                  Add iptables rules for every Service Endpoint to support hairpin traffic.
+      --health-addr string                            Health check address to listen on (Default: all interfaces; ensure to configure the 'livenessProbe' to use the same IP address)
       --health-port uint16                            Health check port, 0 = Disabled (default 20244)
   -h, --help                                          Print usage information.
       --hostname-override string                      Overrides the NodeName of the node. Set this if kube-router is unable to determine your NodeName automatically.
@@ -289,6 +293,62 @@ and if you want to move back to kube-proxy then clean up config done by kube-rou
 ```
 
 and run kube-proxy with the configuration you have.
+
+## Binding health check endpoint to a specific host IP
+
+Using `--health-addr` you can bind health check to specific host IP.
+When using this option, you have to ensure, that the `livenessProbe` is configured to use the same IP address.
+
+### Using the primary host address via Downward API
+
+You can use the Kubernetes [Downward API](https://kubernetes.io/docs/concepts/workloads/pods/downward-api/) to determine
+the primary IP address of the node to which the Pod is assigned and use it for the health check.
+
+```yaml
+env:
+  - name: HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+args:
+  - --health-addr=$(HOST_IP)
+```
+
+Ensure to configure the `livenessProbe` to use the `HOST_IP` as the `host` value.
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 20244
+    host: $(HOST_IP)
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+```
+
+### Using a specific IP address
+
+You can also use a specific IP address for the health check. For example 127.0.0.1 to bind locally, or any other
+available IP address.
+
+```yaml
+args:
+  - --health-addr=127.0.0.1
+```
+
+You still need to configure the `livenessProbe` to use the chosen IP address for the `host` value.
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 20244
+    host: 127.0.0.1
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+```
 
 ## Advertising IPs
 
