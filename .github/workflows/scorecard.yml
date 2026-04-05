@@ -40,7 +40,7 @@ jobs:
     # to the public Scorecard API (api.scorecard.dev) and enables the README badge. Results are
     # also uploaded to the GitHub Security tab as SARIF alerts in the next step.
     - name: Run Scorecard analysis
-      uses: ossf/scorecard-action@99c09fe975337306107572b4fdf4db224cf8e2f2  # v2.4.3
+      uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a  # v2.4.3
       id: scorecard
       with:
         results_file: scorecard-results.sarif
