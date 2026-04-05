@@ -1,6 +1,8 @@
 # Process for creating a kube-router release
 
-## Preparing for the release
+## New major/minor release
+
+### Preparing for the release
 
 Run the following command from the project root:
 
@@ -55,7 +57,7 @@ go list -mod=mod -u -m -f '{{.}}{{if .Indirect}} IAMINDIRECT{{end}}' all | grep 
 **Checking Kubernetes manifests** — ensure that the Kubernetes object definitions in the
 [daemonset](daemonset) folder do not use deprecated API types before tagging a release.
 
-## New major/minor release
+### Performing major/minor release
 
 * Create a branch named v$MAJOR.$MINOR from the default branch (currently: master)
 * Create a new tag with the release tag v$MAJOR.$MINOR.0
@@ -69,6 +71,9 @@ Note: your remote for the main kube-router repo may not be origin, please correc
 official kube-router remote.
 
 ## New patch release
+
+Patch releases are typically kept minimal, containing only key fixes that are critical to kube-router's functionality or
+improving the security posture of the current release.
 
 kube-router generally only supports the current major.minor release. Patch releases for previous minor versions are
 only created in exceptional cases. See the [supported versions](docs/upgrading.md#supported-versions) policy for
