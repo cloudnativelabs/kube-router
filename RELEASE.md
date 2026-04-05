@@ -1,6 +1,8 @@
 # Process for creating a kube-router release
 
-## Preparing for the release
+## New major/minor release
+
+### Preparing for the release
 
 Run the following command from the project root:
 
@@ -55,10 +57,10 @@ go list -mod=mod -u -m -f '{{.}}{{if .Indirect}} IAMINDIRECT{{end}}' all | grep 
 **Checking Kubernetes manifests** — ensure that the Kubernetes object definitions in the
 [daemonset](daemonset) folder do not use deprecated API types before tagging a release.
 
-## New major/minor release
+### Creating the Release
 
-* Create a branch named v$MAJOR.$MINOR from the default branch (currently: master)
-* Create a new tag with the release tag v$MAJOR.$MINOR.0
+- Create a branch named v$MAJOR.$MINOR from the default branch (currently: master)
+- Create a new tag with the release tag v$MAJOR.$MINOR.0
 
 ```sh
 git tag <tag_name>
@@ -74,11 +76,12 @@ kube-router generally only supports the current major.minor release. Patch relea
 only created in exceptional cases. See the [supported versions](docs/upgrading.md#supported-versions) policy for
 details.
 
-* Change to the `master` branch
-* Use `git log` to identify which commits you want to bring to the new patch release
-* Change to the major/minor release branch that was created for this release
-* Cherry-Pick the changes from the `master` branch into the release branch
-* Create a new tag from the v$MAJOR.$MINOR release branch with the release tag v$MAJOR.$MINOR.$PATCH
+- Change to the `master` branch
+- Use `git log` to identify which commits you want to bring to the new patch release
+- Change to the major/minor release branch that was created for this release (e.g. `git checkout v2.8` if that is the branch for the most recent release)
+- Cherry-Pick the changes from the `master` branch into the release branch
+- Run `make` to ensure after cherry-picking that your changes are linted and pass tests
+- Create a new tag from the v$MAJOR.$MINOR release branch with the release tag v$MAJOR.$MINOR.$PATCH
 
 Example:
 
@@ -96,32 +99,32 @@ official kube-router remote.
 
 ## Release Candidates
 
-* Follow above instructions and ensure that the tag contains `-rc`. Don't mark the pre-release as a proper release.
+- Follow above instructions and ensure that the tag contains `-rc`. Don't mark the pre-release as a proper release.
 
 ## Release Build Process
 
 Once the tag is pushed to GitHub, GitHub Actions will be triggered and several things will happen:
 
-* kube-router will be linted
-* kube-router will be tested
-* The actions will run a test build of the kube-router binary
-* Containers for [defined architectures](https://github.com/cloudnativelabs/kube-router/blob/master/.github/workflows/ci.yml)
+- kube-router will be linted
+- kube-router will be tested
+- The actions will run a test build of the kube-router binary
+- Containers for [defined architectures](https://github.com/cloudnativelabs/kube-router/blob/master/.github/workflows/ci.yml)
   (see `platforms` section in yaml) will be built and pushed to
   [DockerHub](https://hub.docker.com/r/cloudnativelabs/kube-router) via the `docker buildx` command
-* [goreleaser](https://goreleaser.com) will be run and will:
-  * Generate a draft release on GitHub where maintainers can later choose to update it and release it
-  * Brief release notes will be added to the draft release
-  * Build all of the binary releases for [defined architectures](https://github.com/cloudnativelabs/kube-router/blob/master/.goreleaser.yml)
+- [goreleaser](https://goreleaser.com) will be run and will:
+  - Generate a draft release on GitHub where maintainers can later choose to update it and release it
+  - Brief release notes will be added to the draft release
+  - Build all of the binary releases for [defined architectures](https://github.com/cloudnativelabs/kube-router/blob/master/.goreleaser.yml)
     and attach them to the draft release on GitHub
 
 ## After the release
 
-* Go to the [GitHub releases page for the kube-router project](https://github.com/cloudnativelabs/kube-router/releases)
-* Find the draft release
-* Consistent Changelog Syntax can be retrieved by running the following Git command:
+- Go to the [GitHub releases page for the kube-router project](https://github.com/cloudnativelabs/kube-router/releases)
+- Find the draft release
+- Consistent Changelog Syntax can be retrieved by running the following Git command:
 
 ```sh
 git log --format='* %h - %s `<%an>`' --cherry-pick --right-only <tag>...<tag>
 ```
 
-* Announce the release in [#kube-router](https://app.slack.com/client/T09NY5SBT/C8DCQGTSB) on Kubernetes Slack.
+- Announce the release in [#kube-router](https://app.slack.com/client/T09NY5SBT/C8DCQGTSB) on Kubernetes Slack.
