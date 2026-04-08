@@ -116,9 +116,9 @@ func looksLikeImage(value string) bool {
 // Returns name, tag, digest (digest may be empty).
 func ParseImageRef(ref string) (name, tag, digest string) {
 	// Strip digest if present.
-	if idx := strings.Index(ref, "@sha256:"); idx != -1 {
-		digest = ref[idx+1:] // "sha256:abc123..."
-		ref = ref[:idx]
+	if before, after, found := strings.Cut(ref, "@sha256:"); found {
+		digest = "sha256:" + after
+		ref = before
 	}
 
 	// Split on last colon for tag (but avoid splitting registry:port).

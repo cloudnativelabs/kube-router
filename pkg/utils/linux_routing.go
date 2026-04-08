@@ -44,17 +44,17 @@ func RouteTableAdd(tableNumber int, tableName string) error {
 
 	b, err := os.ReadFile(rtTablesLoc)
 	if err != nil {
-		return fmt.Errorf("failed to read: %s", err.Error())
+		return fmt.Errorf("failed to read: %w", err)
 	}
 
 	if !strings.Contains(string(b), tableName) {
 		f, err := os.OpenFile(rtTablesLoc, os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
-			return fmt.Errorf("failed to open: %s", err.Error())
+			return fmt.Errorf("failed to open: %w", err)
 		}
 		defer CloseCloserDisregardError(f)
 		if _, err = f.WriteString(fmt.Sprint(tableNumber) + " " + tableName + "\n"); err != nil {
-			return fmt.Errorf("failed to write: %s", err.Error())
+			return fmt.Errorf("failed to write: %w", err)
 		}
 	}
 

@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -41,9 +40,7 @@ const (
 	KubeTunnelIfv6    = "kube-tunnel-v6"
 	KubeBridgeIf      = "kube-bridge"
 	IfaceNotFound     = "Link not found"
-	IfaceHasAddr      = "file exists"
 	IfaceHasNoAddr    = "cannot assign requested address"
-	IpvsServerExists  = "file exists"
 	IpvsMaglevHashing = "mh"
 	IpvsSvcFSched1    = "flag-1"
 	IpvsSvcFSched2    = "flag-2"
@@ -465,18 +462,18 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		// Create ipset for local addresses.
 		_, err = ipSetHandler.Create(localIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("failed to create ipset: %s - %v", localIPsIPSetName, err)
+			return fmt.Errorf("failed to create ipset: %s - %w", localIPsIPSetName, err)
 		}
 
 		// Create 2 ipsets for services. One for 'ip' and one for 'ip,port'
 		_, err = ipSetHandler.Create(serviceIPsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("failed to create ipset: %s - %v", serviceIPsIPSetName, err)
+			return fmt.Errorf("failed to create ipset: %s - %w", serviceIPsIPSetName, err)
 		}
 
 		_, err = ipSetHandler.Create(serviceIPPortsSetName, utils.TypeHashIPPort, utils.OptionTimeout, "0")
 		if err != nil {
-			return fmt.Errorf("failed to create ipset: %s - %v", serviceIPPortsSetName, err)
+			return fmt.Errorf("failed to create ipset: %s - %w", serviceIPPortsSetName, err)
 		}
 	}
 
@@ -485,7 +482,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 		// ClearChain either clears an existing chain or creates a new one.
 		err = iptablesCmdHandler.ClearChain("filter", ipvsFirewallChainName)
 		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %w", err)
 		}
 
 		// config.IpvsPermitAll: true then create INPUT/KUBE-ROUTER-SERVICE Chain creation else skip
@@ -512,7 +509,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 				icmpRule.IPTablesType, icmpRule.ICMPType, "-j", "ACCEPT"}
 			err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, icmpArgs...)
 			if err != nil {
-				return fmt.Errorf("failed to run iptables command: %v", err)
+				return fmt.Errorf("failed to run iptables command: %w", err)
 			}
 		}
 
@@ -522,7 +519,7 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 			"--match-set", getIPSetName(serviceIPPortsSetName, family), "dst,dst", "-j", "ACCEPT"}
 		err := iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %w", err)
 		}
 
 		// We exclude the local addresses here as that would otherwise block all traffic to local addresses if any
@@ -533,19 +530,19 @@ func (nsc *NetworkServicesController) setupIpvsFirewall() error {
 			"-j", "REJECT", "--reject-with", icmpRejectType}
 		err = iptablesCmdHandler.AppendUnique("filter", ipvsFirewallChainName, args...)
 		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %w", err)
 		}
 
 		// Pass incoming traffic into our custom chain.
 		ipvsFirewallInputChainRule := getIPVSFirewallInputChainRule(family)
 		exists, err = iptablesCmdHandler.Exists("filter", "INPUT", ipvsFirewallInputChainRule...)
 		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %w", err)
 		}
 		if !exists {
 			err = iptablesCmdHandler.Insert("filter", "INPUT", 1, ipvsFirewallInputChainRule...)
 			if err != nil {
-				return fmt.Errorf("failed to run iptables command: %s", err.Error())
+				return fmt.Errorf("failed to run iptables command: %w", err)
 			}
 		}
 	}
@@ -635,7 +632,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	// Populate local addresses ipset.
 	addrsMap, err := getAllLocalIPs()
 	if err != nil {
-		return fmt.Errorf("failed to get local IPs: %s", err)
+		return fmt.Errorf("failed to get local IPs: %w", err)
 	}
 
 	for family, addrs := range addrsMap {
@@ -660,7 +657,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	// Populate service ipsets.
 	ipvsServices, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return errors.New("Failed to list IPVS services: " + err.Error())
+		return fmt.Errorf("Failed to list IPVS services: %w", err)
 	}
 
 	serviceIPsSets := make(map[v1.IPFamily][][]string)
@@ -734,7 +731,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 		)
 		err := setHandler.RestoreSets(multiFamilySetNames)
 		if err != nil {
-			return fmt.Errorf("could not save ipset for service firewall: %v", err)
+			return fmt.Errorf("could not save ipset for service firewall: %w", err)
 		}
 	}
 
@@ -1110,12 +1107,12 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 		if nsc.masqueradeAll {
 			err := iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 			if err != nil {
-				return fmt.Errorf("failed to create iptables rule to masquerade all outbound IPVS traffic: %v", err)
+				return fmt.Errorf("failed to create iptables rule to masquerade all outbound IPVS traffic: %w", err)
 			}
 		} else {
 			exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 			if err != nil {
-				return fmt.Errorf("failed to lookup iptables rule to masquerade all outbound IPVS traffic: %v", err)
+				return fmt.Errorf("failed to lookup iptables rule to masquerade all outbound IPVS traffic: %w", err)
 			}
 			if exists {
 				err = iptablesCmdHandler.Delete("nat", "POSTROUTING", args...)
@@ -1138,7 +1135,7 @@ func (nsc *NetworkServicesController) ensureMasqueradeIptablesRule() error {
 
 			err := iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", args...)
 			if err != nil {
-				return fmt.Errorf("failed to run iptables command: %v", err)
+				return fmt.Errorf("failed to run iptables command: %w", err)
 			}
 		}
 	}
@@ -1183,7 +1180,7 @@ func (nsc *NetworkServicesController) deleteBadMasqueradeIptablesRules() error {
 		for _, args := range argsBad {
 			exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", args...)
 			if err != nil {
-				return fmt.Errorf("failed to lookup iptables rule: %v", err)
+				return fmt.Errorf("failed to lookup iptables rule: %w", err)
 			}
 
 			if exists {
@@ -1299,14 +1296,14 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 		klog.V(1).Info("No IPv4 hairpin-mode enabled services found -- no hairpin rules created")
 		err := nsc.deleteHairpinIptablesRules(v1.IPv4Protocol)
 		if err != nil {
-			return fmt.Errorf("error deleting hairpin rules: %v", err)
+			return fmt.Errorf("error deleting hairpin rules: %w", err)
 		}
 	}
 	if len(ipv6RulesNeeded) == 0 && nsc.krNode.IsIPv6Capable() {
 		klog.V(1).Info("No IPv6 hairpin-mode enabled services found -- no hairpin rules created")
 		err := nsc.deleteHairpinIptablesRules(v1.IPv6Protocol)
 		if err != nil {
-			return fmt.Errorf("error deleting hairpin rules: %v", err)
+			return fmt.Errorf("error deleting hairpin rules: %w", err)
 		}
 	}
 	// If both rulesets are blank, then return now as our work is done
@@ -1332,7 +1329,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 
 		rulesFromNode, err := iptablesCmdHandler.List("nat", ipvsHairpinChainName)
 		if err != nil {
-			return fmt.Errorf("failed to get rules from iptables chain \"%s\": %v", ipvsHairpinChainName, err)
+			return fmt.Errorf("failed to get rules from iptables chain \"%s\": %w", ipvsHairpinChainName, err)
 		}
 
 		// Apply the rules we need
@@ -1347,7 +1344,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 			if !ruleExists {
 				err = iptablesCmdHandler.AppendUnique("nat", ipvsHairpinChainName, ruleArgs...)
 				if err != nil {
-					return fmt.Errorf("failed to apply hairpin iptables rule: %v", err)
+					return fmt.Errorf("failed to apply hairpin iptables rule: %w", err)
 				}
 			}
 		}
@@ -1389,7 +1386,7 @@ func (nsc *NetworkServicesController) deleteHairpinIptablesRules(family v1.IPFam
 	// TODO: Factor out this code
 	chains, err := iptablesCmdHandler.ListChains("nat")
 	if err != nil {
-		return errors.New("Failed to list iptables chains: " + err.Error())
+		return fmt.Errorf("Failed to list iptables chains: %w", err)
 	}
 
 	// TODO: Factor these variables out
@@ -1412,7 +1409,7 @@ func (nsc *NetworkServicesController) deleteHairpinIptablesRules(family v1.IPFam
 	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", ipvsHairpinChainName}
 	hasHairpinJumpRule, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", jumpArgs...)
 	if err != nil {
-		return fmt.Errorf("failed to search POSTROUTING iptables rules: %v", err)
+		return fmt.Errorf("failed to search POSTROUTING iptables rules: %w", err)
 	}
 
 	// Delete the jump rule to the hairpin chain
@@ -1428,11 +1425,11 @@ func (nsc *NetworkServicesController) deleteHairpinIptablesRules(family v1.IPFam
 	// Flush and delete the chain for hairpin rules
 	err = iptablesCmdHandler.ClearChain("nat", ipvsHairpinChainName)
 	if err != nil {
-		return fmt.Errorf("failed to flush iptables chain \"%s\": %v", ipvsHairpinChainName, err)
+		return fmt.Errorf("failed to flush iptables chain \"%s\": %w", ipvsHairpinChainName, err)
 	}
 	err = iptablesCmdHandler.DeleteChain("nat", ipvsHairpinChainName)
 	if err != nil {
-		return fmt.Errorf("failed to delete iptables chain \"%s\": %v", ipvsHairpinChainName, err)
+		return fmt.Errorf("failed to delete iptables chain \"%s\": %w", ipvsHairpinChainName, err)
 	}
 
 	return nil
@@ -1442,13 +1439,13 @@ func (nsc *NetworkServicesController) deleteMasqueradeIptablesRule() error {
 	for _, iptablesCmdHandler := range nsc.iptablesCmdHandlers {
 		postRoutingChainRules, err := iptablesCmdHandler.List("nat", "POSTROUTING")
 		if err != nil {
-			return errors.New("Failed to list iptables rules in POSTROUTING chain in nat table" + err.Error())
+			return fmt.Errorf("Failed to list iptables rules in POSTROUTING chain in nat table: %w", err)
 		}
 		for i, rule := range postRoutingChainRules {
 			if strings.Contains(rule, "ipvs") && strings.Contains(rule, "SNAT") {
 				err = iptablesCmdHandler.Delete("nat", "POSTROUTING", strconv.Itoa(i))
 				if err != nil {
-					return errors.New("Failed to run iptables command" + err.Error())
+					return fmt.Errorf("Failed to run iptables command: %w", err)
 				}
 				klog.V(2).Infof("Deleted iptables masquerade rule: %s", rule)
 				break
@@ -1512,7 +1509,7 @@ func ipvsSetPersistence(svc *ipvs.Service, p bool, timeout int32) error {
 	if p {
 		uTimeout, err := safecast.Convert[uint32](timeout)
 		if err != nil {
-			return fmt.Errorf("failed to convert timeout to uint32: %v", err)
+			return fmt.Errorf("failed to convert timeout to uint32: %w", err)
 		}
 
 		svc.Flags |= ipvsPersistentFlagHex
@@ -1582,11 +1579,11 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 	args := []string{"-d", ip, "-m", protocol, "-p", protocol, "--dport", port, "-j", "MARK", "--set-mark", fwmark}
 	err := iptablesCmdHandler.AppendUnique("mangle", "PREROUTING", args...)
 	if err != nil {
-		return fmt.Errorf("failed to run iptables command to set up FWMARK due to %v", err)
+		return fmt.Errorf("failed to run iptables command to set up FWMARK due to %w", err)
 	}
 	err = iptablesCmdHandler.AppendUnique("mangle", "OUTPUT", args...)
 	if err != nil {
-		return fmt.Errorf("failed to run iptables command to set up FWMARK due to %v", err)
+		return fmt.Errorf("failed to run iptables command to set up FWMARK due to %w", err)
 	}
 
 	// setup iptables rule TCPMSS for DSR mode to fix mtu problem
@@ -1596,7 +1593,7 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 			"--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", strconv.Itoa(tcpMSS)}
 		err = iptablesCmdHandler.AppendUnique("mangle", "PREROUTING", mtuArgs...)
 		if err != nil {
-			return fmt.Errorf("failed to run iptables command to set up TCPMSS due to %v", err)
+			return fmt.Errorf("failed to run iptables command to set up TCPMSS due to %w", err)
 		}
 	}
 
@@ -1609,13 +1606,13 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 		klog.V(2).Infof("looking for mangle rule with: %s -t mangle %s", chain, prevMTUArgs)
 		exists, err := iptablesCmdHandler.Exists("mangle", chain, prevMTUArgs...)
 		if err != nil {
-			return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
+			return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %w", err)
 		}
 		if exists {
 			klog.V(2).Infof("removing mangle rule with: iptables -D %s -t mangle %s", chain, prevMTUArgs)
 			err = iptablesCmdHandler.Delete("mangle", chain, prevMTUArgs...)
 			if err != nil {
-				return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
+				return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %w", err)
 			}
 		}
 	}
@@ -1640,14 +1637,14 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 					"--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", strconv.Itoa(oldIncorrectIPv6MSS)}
 				exists, err := iptablesCmdHandler.Exists("mangle", chain, oldIncorrectArgs...)
 				if err != nil {
-					return fmt.Errorf("failed to check for old incorrect IPv6 TCPMSS rule in %s due to %v", chain, err)
+					return fmt.Errorf("failed to check for old incorrect IPv6 TCPMSS rule in %s due to %w", chain, err)
 				}
 				if exists {
 					klog.V(2).Infof("removing old incorrect IPv6 TCPMSS rule with MSS %d: ip6tables -D %s -t mangle %v",
 						oldIncorrectIPv6MSS, chain, oldIncorrectArgs)
 					err = iptablesCmdHandler.Delete("mangle", chain, oldIncorrectArgs...)
 					if err != nil {
-						return fmt.Errorf("failed to delete old incorrect IPv6 TCPMSS rule from %s due to %v", chain, err)
+						return fmt.Errorf("failed to delete old incorrect IPv6 TCPMSS rule from %s due to %w", chain, err)
 					}
 				}
 			}
@@ -1658,14 +1655,14 @@ func (nsc *NetworkServicesController) setupMangleTableRule(ip string, protocol s
 				"--set-mss", strconv.Itoa(oldIncorrectIPv6MSS)}
 			exists, err := iptablesCmdHandler.Exists("mangle", "PREROUTING", currentFormatOldMSS...)
 			if err != nil {
-				return fmt.Errorf("failed to check for old incorrect IPv6 TCPMSS rule (current format) due to %v", err)
+				return fmt.Errorf("failed to check for old incorrect IPv6 TCPMSS rule (current format) due to %w", err)
 			}
 			if exists {
 				klog.V(2).Infof("removing old incorrect IPv6 TCPMSS rule (current format) with MSS %d",
 					oldIncorrectIPv6MSS)
 				err = iptablesCmdHandler.Delete("mangle", "PREROUTING", currentFormatOldMSS...)
 				if err != nil {
-					return fmt.Errorf("failed to delete old incorrect IPv6 TCPMSS rule (current format) due to %v", err)
+					return fmt.Errorf("failed to delete old incorrect IPv6 TCPMSS rule (current format) due to %w", err)
 				}
 			}
 		}
@@ -1693,24 +1690,24 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 	args := []string{"-d", ip, "-m", protocol, "-p", protocol, "--dport", port, "-j", "MARK", "--set-mark", fwmark}
 	exists, err := iptablesCmdHandler.Exists("mangle", "PREROUTING", args...)
 	if err != nil {
-		return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %v", err)
+		return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %w", err)
 	}
 	if exists {
 		klog.V(2).Infof("removing mangle rule with: iptables -D PREROUTING -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "PREROUTING", args...)
 		if err != nil {
-			return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %v", err)
+			return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %w", err)
 		}
 	}
 	exists, err = iptablesCmdHandler.Exists("mangle", "OUTPUT", args...)
 	if err != nil {
-		return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %v", err)
+		return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %w", err)
 	}
 	if exists {
 		klog.V(2).Infof("removing mangle rule with: iptables -D OUTPUT -t mangle %s", args)
 		err = iptablesCmdHandler.Delete("mangle", "OUTPUT", args...)
 		if err != nil {
-			return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %v", err)
+			return fmt.Errorf("failed to cleanup iptables command to set up FWMARK due to %w", err)
 		}
 	}
 
@@ -1721,13 +1718,13 @@ func (nsc *NetworkServicesController) cleanupMangleTableRule(ip string, protocol
 			"--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", strconv.Itoa(tcpMSS)}
 		exists, err = iptablesCmdHandler.Exists("mangle", "PREROUTING", mtuArgs...)
 		if err != nil {
-			return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
+			return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %w", err)
 		}
 		if exists {
 			klog.V(2).Infof("removing mangle rule with: iptables -D PREROUTING -t mangle %s", args)
 			err = iptablesCmdHandler.Delete("mangle", "PREROUTING", mtuArgs...)
 			if err != nil {
-				return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %v", err)
+				return fmt.Errorf("failed to cleanup iptables command to set up TCPMSS due to %w", err)
 			}
 		}
 	}
@@ -1754,7 +1751,7 @@ var routeVIPTrafficToDirector = func(fwmark uint32, family v1.IPFamily) error {
 	routes, err := nlretry.RuleListFiltered(context.Background(), nFamily, nRule,
 		netlink.RT_FILTER_MARK|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_PRIORITY)
 	if err != nil {
-		return fmt.Errorf("failed to verify if `ip rule` exists due to: %v", err)
+		return fmt.Errorf("failed to verify if `ip rule` exists due to: %w", err)
 	}
 
 	if len(routes) < 1 {
@@ -2068,18 +2065,18 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	if config.RunRouter {
 		node, err := utils.GetNodeObject(nsc.client, config.HostnameOverride)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get node object due to: %v", err.Error())
+			return nil, fmt.Errorf("failed to get node object due to: %w", err)
 		}
 
 		cidr, err := utils.GetPodCidrFromNodeSpec(node)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %v", err)
+			return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %w", err)
 		}
 		nsc.podCidr = cidr
 
 		nsc.podIPv4CIDRs, nsc.podIPv6CIDRs, err = utils.GetPodCIDRsFromNodeSpecDualStack(node)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get pod CIDRs detail from Node.spec: %v", err)
+			return nil, fmt.Errorf("failed to get pod CIDRs detail from Node.spec: %w", err)
 		}
 	}
 
@@ -2087,7 +2084,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	for i, excludedCidr := range config.ExcludedCidrs {
 		_, ipnet, err := net.ParseCIDR(excludedCidr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get excluded CIDR details: %v", err)
+			return nil, fmt.Errorf("failed to get excluded CIDR details: %w", err)
 		}
 		nsc.excludedCidrs[i] = *ipnet
 	}

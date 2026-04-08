@@ -3,7 +3,6 @@ package netpol
 import (
 	"crypto/sha256"
 	"encoding/base32"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -724,7 +723,7 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 		namespaceSelector, _ := v1.LabelSelectorAsSelector(peer.NamespaceSelector)
 		namespaces, err := npc.ListNamespaceByLabels(namespaceSelector)
 		if err != nil {
-			return nil, errors.New("Failed to build network policies info due to " + err.Error())
+			return nil, fmt.Errorf("Failed to build network policies info due to: %w", err)
 		}
 
 		podSelector := labels.Everything()
@@ -734,7 +733,7 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 		for _, namespace := range namespaces {
 			namespacePods, err := npc.ListPodsByNamespaceAndLabels(namespace.Name, podSelector)
 			if err != nil {
-				return nil, errors.New("Failed to build network policies info due to " + err.Error())
+				return nil, fmt.Errorf("Failed to build network policies info due to: %w", err)
 			}
 			matchingPods = append(matchingPods, namespacePods...)
 		}

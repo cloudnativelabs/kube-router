@@ -3,7 +3,7 @@ package testhelpers
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -179,7 +179,7 @@ func (h *FakeIPSetHandler) Snapshot() map[string]IPSetExpectation {
 		for i, entry := range state.entries {
 			entries[i] = NormalizeSnapshotEntry(strings.Join(entry, " "))
 		}
-		sort.Strings(entries)
+		slices.Sort(entries)
 		res[name] = IPSetExpectation{SetType: state.setType, Entries: entries}
 	}
 	return res
@@ -276,7 +276,7 @@ func ParseSnapshotWithFilter(t *testing.T, path string, includeFn func(string) b
 		}
 	}
 	for name, exp := range result {
-		sort.Strings(exp.Entries)
+		slices.Sort(exp.Entries)
 		if exp.Entries == nil {
 			exp.Entries = []string{}
 		}
@@ -362,7 +362,7 @@ func ParseRestoreScript(script string) map[string]IPSetExpectation {
 			seen[entry] = struct{}{}
 			deduped = append(deduped, entry)
 		}
-		sort.Strings(deduped)
+		slices.Sort(deduped)
 		exp.Entries = deduped
 		result[name] = exp
 	}
@@ -386,6 +386,6 @@ func ExpectedKeys(m map[string]IPSetExpectation) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }

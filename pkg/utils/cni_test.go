@@ -590,7 +590,11 @@ func TestCniNetworkConfig_InsertPodCIDRIntoIPAM(t *testing.T) {
 
 			for _, cidr := range testcase.insertRanges {
 				err = cni.InsertPodCIDRIntoIPAM(cidr)
-				assert.Equal(t, testcase.err, err)
+				if testcase.err != nil {
+					assert.EqualError(t, err, testcase.err.Error())
+				} else {
+					assert.NoError(t, err)
+				}
 			}
 
 			expectedSubnets := make([]string, 0)

@@ -115,12 +115,12 @@ func IsDefaultRoute(cidr *net.IPNet) (bool, error) {
 	if cidr.IP.To4() != nil {
 		_, defaultPrefixCIDR, err = net.ParseCIDR(IPv4DefaultRoute)
 		if err != nil {
-			return false, fmt.Errorf("failed to parse default route: %s", err.Error())
+			return false, fmt.Errorf("failed to parse default route: %w", err)
 		}
 	} else {
 		_, defaultPrefixCIDR, err = net.ParseCIDR(IPv6DefaultRoute)
 		if err != nil {
-			return false, fmt.Errorf("failed to parse default route: %s", err.Error())
+			return false, fmt.Errorf("failed to parse default route: %w", err)
 		}
 	}
 	return IPNetEqual(defaultPrefixCIDR, cidr), nil

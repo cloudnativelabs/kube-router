@@ -117,7 +117,7 @@ func (nsc *NetworkServicesController) lookupServiceByFWMark(fwMark uint32) (stri
 	}
 	port, err := strconv.ParseInt(serviceKeySplit[2], 10, 32)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("port number for service key for found FW mark was not a 32-bit int: %v", err)
+		return "", "", 0, fmt.Errorf("port number for service key for found FW mark was not a 32-bit int: %w", err)
 	}
 	return serviceKeySplit[0], serviceKeySplit[1], int(port), nil
 }
@@ -145,7 +145,7 @@ func (nsc *NetworkServicesController) isValidKubeRouterServiceArtifact(address n
 			if nsc.nodeportBindOnAllIP {
 				addrMap, err := getAllLocalIPs()
 				if err != nil {
-					return false, fmt.Errorf("failed to get all local IPs: %v", err)
+					return false, fmt.Errorf("failed to get all local IPs: %w", err)
 				}
 				var addresses []net.IP
 				if address.To4() != nil {
@@ -289,7 +289,7 @@ func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, 
 
 	hostNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
-		return fmt.Errorf("failed to get namespace due to %v", err)
+		return fmt.Errorf("failed to get namespace due to %w", err)
 	}
 	defer utils.CloseCloserDisregardError(&hostNetworkNamespaceHandle)
 
@@ -306,7 +306,7 @@ func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, 
 		// ugly workaround, refactoring of pkg/Proxy is required
 		pid, err = nsc.ln.getContainerPidWithCRI(nsc.dsr.runtimeEndpoint, containerID)
 		if err != nil {
-			return fmt.Errorf("failed to prepare endpoint %s to do DSR due to: %v", endpointIP, err)
+			return fmt.Errorf("failed to prepare endpoint %s to do DSR due to: %w", endpointIP, err)
 		}
 	}
 
@@ -521,7 +521,7 @@ func ensureHairpinChain(iptablesCmdHandler utils.IPTablesHandler) error {
 	hasHairpinChain := false
 	chains, err := iptablesCmdHandler.ListChains("nat")
 	if err != nil {
-		return fmt.Errorf("failed to list iptables chains: %v", err)
+		return fmt.Errorf("failed to list iptables chains: %w", err)
 	}
 	for _, chain := range chains {
 		if chain == ipvsHairpinChainName {
@@ -533,7 +533,7 @@ func ensureHairpinChain(iptablesCmdHandler utils.IPTablesHandler) error {
 	if !hasHairpinChain {
 		err = iptablesCmdHandler.NewChain("nat", ipvsHairpinChainName)
 		if err != nil {
-			return fmt.Errorf("failed to create iptables chain \"%s\": %v", ipvsHairpinChainName, err)
+			return fmt.Errorf("failed to create iptables chain \"%s\": %w", ipvsHairpinChainName, err)
 		}
 	}
 
@@ -541,7 +541,7 @@ func ensureHairpinChain(iptablesCmdHandler utils.IPTablesHandler) error {
 	jumpArgs := []string{"-m", "ipvs", "--vdir", "ORIGINAL", "-j", ipvsHairpinChainName}
 	err = iptablesCmdHandler.AppendUnique("nat", "POSTROUTING", jumpArgs...)
 	if err != nil {
-		return fmt.Errorf("failed to add hairpin iptables jump rule: %v", err)
+		return fmt.Errorf("failed to add hairpin iptables jump rule: %w", err)
 	}
 
 	return nil
@@ -555,7 +555,7 @@ func getAllLocalIPs() (map[v1.IPFamily][]net.IP, error) {
 	v6Map := make(map[string]bool)
 	links, err := nlretry.LinkList(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("could not load list of net interfaces: %v", err)
+		return nil, fmt.Errorf("could not load list of net interfaces: %w", err)
 	}
 
 	for _, link := range links {
@@ -569,7 +569,7 @@ func getAllLocalIPs() (map[v1.IPFamily][]net.IP, error) {
 
 		linkAddrs, err := nlretry.AddrList(context.Background(), link, netlink.FAMILY_ALL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get IPs for interface: %v", err)
+			return nil, fmt.Errorf("failed to get IPs for interface: %w", err)
 		}
 
 		for _, addr := range linkAddrs {

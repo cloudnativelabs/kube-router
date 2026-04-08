@@ -45,7 +45,7 @@ func NewPolicyBasedRules(nfa utils.NodeFamilyAware, podIPv4CIDRs, podIPv6CIDRs [
 func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 	_, nSrc, err := net.ParseCIDR(cidr)
 	if err != nil {
-		return fmt.Errorf("failed to parse CIDR: %s", err.Error())
+		return fmt.Errorf("failed to parse CIDR: %w", err)
 	}
 
 	nRule := netlink.NewRule()
@@ -59,7 +59,7 @@ func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 	rules := make([]netlink.Rule, 0)
 	isDefaultRoute, err := utils.IsDefaultRoute(nSrc)
 	if err != nil {
-		return fmt.Errorf("failed to check if CIDR is a default route: %v", err)
+		return fmt.Errorf("failed to check if CIDR is a default route: %w", err)
 	}
 
 	ctx := context.Background()
@@ -67,7 +67,7 @@ func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 		var tmpRules []netlink.Rule
 		tmpRules, err = nlretry.RuleListFiltered(ctx, ipFamily, nRule, netlink.RT_FILTER_TABLE)
 		if err != nil {
-			return fmt.Errorf("failed to list rules: %s", err.Error())
+			return fmt.Errorf("failed to list rules: %w", err)
 		}
 
 		// Check if one or more of the rules returned are a default route rule
@@ -80,17 +80,17 @@ func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 	} else {
 		rules, err = nlretry.RuleListFiltered(ctx, ipFamily, nRule, netlink.RT_FILTER_SRC|netlink.RT_FILTER_TABLE)
 		if err != nil {
-			return fmt.Errorf("failed to list rules: %s", err.Error())
+			return fmt.Errorf("failed to list rules: %w", err)
 		}
 	}
 
 	if ipOp == PBRRuleDel && len(rules) > 0 {
 		if err := netlink.RuleDel(nRule); err != nil {
-			return fmt.Errorf("failed to delete rule: %s", err.Error())
+			return fmt.Errorf("failed to delete rule: %w", err)
 		}
 	} else if ipOp == PBRRuleAdd && len(rules) < 1 {
 		if err := netlink.RuleAdd(nRule); err != nil {
-			return fmt.Errorf("failed to add rule: %s", err.Error())
+			return fmt.Errorf("failed to add rule: %w", err)
 		}
 	}
 
@@ -102,7 +102,7 @@ func ipRuleAbstraction(ipFamily int, ipOp int, cidr string) error {
 func (pbr *PolicyBasedRules) Enable() error {
 	err := utils.RouteTableAdd(CustomTableID, CustomTableName)
 	if err != nil {
-		return fmt.Errorf("failed to update rt_tables file: %s", err)
+		return fmt.Errorf("failed to update rt_tables file: %w", err)
 	}
 
 	if pbr.nfa.IsIPv4Capable() {
@@ -127,7 +127,7 @@ func (pbr *PolicyBasedRules) Enable() error {
 func (pbr *PolicyBasedRules) Disable() error {
 	err := utils.RouteTableAdd(CustomTableID, CustomTableName)
 	if err != nil {
-		return fmt.Errorf("failed to update rt_tables file: %s", err)
+		return fmt.Errorf("failed to update rt_tables file: %w", err)
 	}
 
 	if pbr.nfa.IsIPv4Capable() {

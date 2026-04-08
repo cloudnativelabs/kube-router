@@ -114,7 +114,7 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 	endpointsInfoMap endpointSliceInfoMap, activeServiceEndpointMap map[string][]string) error {
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return fmt.Errorf("failed get list of IPVS services due to: %v", err)
+		return fmt.Errorf("failed get list of IPVS services due to: %w", err)
 	}
 
 	for k, svc := range serviceInfoMap {
@@ -133,11 +133,11 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		ipv6NodeIP := nsc.krNode.FindBestIPv6NodeAddress()
 		dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
 		if err != nil {
-			return fmt.Errorf("failed creating dummy interface: %v", err)
+			return fmt.Errorf("failed creating dummy interface: %w", err)
 		}
 		sPort, err := safecast.Convert[uint16](svc.port)
 		if err != nil {
-			return fmt.Errorf("failed to convert service port to uint16: %v", err)
+			return fmt.Errorf("failed to convert service port to uint16: %w", err)
 		}
 
 		for family, famClusIPs := range clusterIPs {
@@ -270,7 +270,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 	endpointsInfoMap endpointSliceInfoMap, activeServiceEndpointMap map[string][]string) error {
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return errors.New("Failed get list of IPVS services due to: " + err.Error())
+		return fmt.Errorf("Failed get list of IPVS services due to: %w", err)
 	}
 
 	// For each Service in our service map
@@ -293,7 +293,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 
 		nPort, err := safecast.Convert[uint16](svc.nodePort)
 		if err != nil {
-			return fmt.Errorf("failed to convert node port to uint16: %v", err)
+			return fmt.Errorf("failed to convert node port to uint16: %w", err)
 		}
 
 		var svcID string
@@ -385,7 +385,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 					// that was generated to add this external IP to the activeServiceEndpointMap
 					err := nsc.setupExternalIPForDSRService(svc, externalIP, endpoints, activeServiceEndpointMap)
 					if err != nil {
-						return fmt.Errorf("failed to setup DSR endpoint %s: %v", externalIP, err)
+						return fmt.Errorf("failed to setup DSR endpoint %s: %w", externalIP, err)
 					}
 					continue
 				}
@@ -394,7 +394,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 				// and port to add this external IP to the activeServiceEndpointMap
 				err := nsc.setupExternalIPForService(svc, externalIP, endpoints, activeServiceEndpointMap)
 				if err != nil {
-					return fmt.Errorf("failed to setup service endpoint %s: %v", externalIP, err)
+					return fmt.Errorf("failed to setup service endpoint %s: %w", externalIP, err)
 				}
 			}
 		}
@@ -445,22 +445,22 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 
 	dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
 	if err != nil {
-		return fmt.Errorf("failed creating dummy interface: %v", err)
+		return fmt.Errorf("failed creating dummy interface: %w", err)
 	}
 
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return fmt.Errorf("failed get list of IPVS services due to: %v", err)
+		return fmt.Errorf("failed get list of IPVS services due to: %w", err)
 	}
 
 	sPort, err := safecast.Convert[uint16](svc.port)
 	if err != nil {
-		return fmt.Errorf("failed to convert service port to uint16: %v", err)
+		return fmt.Errorf("failed to convert service port to uint16: %w", err)
 	}
 
 	// ensure director with vip assigned
 	err = nsc.ln.ipAddrAdd(dummyVipInterface, externalIP.String(), nodeIP.String(), true)
-	if err != nil && err.Error() != IfaceHasAddr {
+	if err != nil && !errors.Is(err, syscall.EEXIST) {
 		return fmt.Errorf("failed to assign external ip %s to dummy interface %s due to %v",
 			externalIP, KubeDummyIf, err)
 	}
@@ -480,7 +480,7 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 		klog.V(2).Infof("the following service '%s:%s:%d' had fwMark associated with it: %d doing "+
 			"additional cleanup", externalIP, svc.protocol, svc.port, fwMark)
 		if err = nsc.cleanupDSRService(fwMark); err != nil {
-			return fmt.Errorf("failed to cleanup DSR service: %v", err)
+			return fmt.Errorf("failed to cleanup DSR service: %w", err)
 		}
 	}
 
@@ -538,12 +538,12 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 
 	dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
 	if err != nil {
-		return errors.New("Failed getting dummy interface: " + err.Error())
+		return fmt.Errorf("Failed getting dummy interface: %w", err)
 	}
 
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return errors.New("Failed get list of IPVS services due to: " + err.Error())
+		return fmt.Errorf("Failed get list of IPVS services due to: %w", err)
 	}
 
 	fwMark, err := nsc.generateUniqueFWMark(externalIP.String(), svcIn.protocol, strconv.Itoa(svcIn.port))
@@ -553,7 +553,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 
 	sInPort, err := safecast.Convert[uint16](svcIn.port)
 	if err != nil {
-		return fmt.Errorf("failed to convert serviceIn port to uint16: %v", err)
+		return fmt.Errorf("failed to convert serviceIn port to uint16: %w", err)
 	}
 
 	ipvsExternalIPSvc, err := nsc.ln.ipvsAddFWMarkService(ipvsSvcs, fwMark, sysFamily, protocol, sInPort,
@@ -574,7 +574,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 	// ensure VIP less director. we dont assign VIP to any interface
 	err = nsc.ln.ipAddrDel(dummyVipInterface, externalIP.String(), nodeIP.String())
 	if err != nil && err.Error() != IfaceHasNoAddr {
-		return fmt.Errorf("failed to delete external ip address from dummyVipInterface due to %v", err)
+		return fmt.Errorf("failed to delete external ip address from dummyVipInterface due to %w", err)
 	}
 
 	// do policy routing to deliver the packet locally so that IPVS can pick the packet
@@ -617,7 +617,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 
 		ePort, err := safecast.Convert[uint16](endpoint.port)
 		if err != nil {
-			return fmt.Errorf("failed to convert endpoint port to uint16: %v", err)
+			return fmt.Errorf("failed to convert endpoint port to uint16: %w", err)
 		}
 
 		// create the basic IPVS destination record
@@ -640,7 +640,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 		if endpoint.isLocal {
 			// add the external IP to a virtual interface inside the pod so that the pod can receive it
 			if err = nsc.addDSRIPInsidePodNetNamespace(externalIP.String(), endpoint.ip); err != nil {
-				return fmt.Errorf("unable to setup DSR receiver inside pod: %v", err)
+				return fmt.Errorf("unable to setup DSR receiver inside pod: %w", err)
 			}
 		}
 
@@ -655,7 +655,7 @@ func (nsc *NetworkServicesController) setupForDSR(serviceInfoMap serviceInfoMap)
 	klog.V(1).Infof("Setting up policy routing required for Direct Server Return functionality.")
 	err := nsc.ln.setupPolicyRoutingForDSR(nsc.krNode.IsIPv4Capable(), nsc.krNode.IsIPv6Capable())
 	if err != nil {
-		return errors.New("Failed setup PBR for DSR due to: " + err.Error())
+		return fmt.Errorf("Failed setup PBR for DSR due to: %w", err)
 	}
 	klog.V(1).Infof("Custom routing table %s required for Direct Server Return is setup as expected.",
 		customDSRRouteTableName)
@@ -691,7 +691,7 @@ func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap 
 	cleanupStaleVIPsForFamily := func(intfc netlink.Link, netlinkFamily int) error {
 		addrs, err := nlretry.AddrList(context.Background(), intfc, netlinkFamily)
 		if err != nil {
-			return errors.New("Failed to list dummy interface IPs: " + err.Error())
+			return fmt.Errorf("Failed to list dummy interface IPs: %w", err)
 		}
 		for _, addr := range addrs {
 			isActive := addrActive[addr.IP.String()]
@@ -718,15 +718,15 @@ func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap 
 
 	dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
 	if err != nil {
-		return fmt.Errorf("failed creating dummy interface: %v", err)
+		return fmt.Errorf("failed creating dummy interface: %w", err)
 	}
 	err = cleanupStaleVIPsForFamily(dummyVipInterface, netlink.FAMILY_V4)
 	if err != nil {
-		return fmt.Errorf("failed to remove stale IPv4 VIPs: %v", err)
+		return fmt.Errorf("failed to remove stale IPv4 VIPs: %w", err)
 	}
 	err = cleanupStaleVIPsForFamily(dummyVipInterface, netlink.FAMILY_V6)
 	if err != nil {
-		return fmt.Errorf("failed to remove stale IPv6 VIPs: %v", err)
+		return fmt.Errorf("failed to remove stale IPv6 VIPs: %w", err)
 	}
 
 	return nil
@@ -735,7 +735,7 @@ func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap 
 func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpointMap map[string][]string) error {
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return errors.New("failed get list of IPVS services due to: " + err.Error())
+		return fmt.Errorf("failed get list of IPVS services due to: %w", err)
 	}
 
 	// cleanup stale ipvs service and servers

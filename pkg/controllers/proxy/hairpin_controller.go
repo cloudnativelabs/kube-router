@@ -72,7 +72,7 @@ func (hpc *hairpinController) ensureHairpinEnabledForPodInterface(endpointIP str
 
 	hostNetworkNSHandle, err := netns.Get()
 	if err != nil {
-		return fmt.Errorf("failed to get namespace due to %v", err)
+		return fmt.Errorf("failed to get namespace due to %w", err)
 	}
 	defer utils.CloseCloserDisregardError(&hostNetworkNSHandle)
 
@@ -81,14 +81,14 @@ func (hpc *hairpinController) ensureHairpinEnabledForPodInterface(endpointIP str
 		// WARN: This method is deprecated and will be removed once docker-shim is removed from kubelet.
 		pid, err = hpc.nsc.ln.getContainerPidWithDocker(containerID)
 		if err != nil {
-			return fmt.Errorf("failed to get pod's (%s) pid for hairpinning due to %v", endpointIP, err)
+			return fmt.Errorf("failed to get pod's (%s) pid for hairpinning due to %w", endpointIP, err)
 		}
 	} else {
 		// We expect CRI compliant runtimes here
 		// ugly workaround, refactoring of pkg/Proxy is required
 		pid, err = hpc.nsc.ln.getContainerPidWithCRI(hpc.nsc.dsr.runtimeEndpoint, containerID)
 		if err != nil {
-			return fmt.Errorf("failed to get pod's (%s) pid for hairpinning due to %v", endpointIP, err)
+			return fmt.Errorf("failed to get pod's (%s) pid for hairpinning due to %w", endpointIP, err)
 		}
 	}
 	klog.V(2).Infof("Found PID %d for endpoint IP %s", pid, endpointIP)
