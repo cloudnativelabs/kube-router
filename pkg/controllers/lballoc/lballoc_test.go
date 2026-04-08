@@ -620,6 +620,32 @@ func TestAllocateService(t *testing.T) {
 
 }
 
+func TestAllocateServiceAlreadyAllocated(t *testing.T) {
+	// Verify that allocateService returns nil (no panic) when the service
+	// already has all requested IPs and no allocation is needed.
+	// Previously this would panic due to calling .Error() on a nil error.
+	mlbc := &LoadBalancerController{
+		clientset:  fake.NewSimpleClientset(),
+		unitTestWG: &sync.WaitGroup{},
+	}
+	ir4, ir6 := makeIPRanges("127.127.127.127/30", "ffff::/80")
+	mlbc.ipv4Ranges = ir4
+	mlbc.ipv6Ranges = ir6
+	mi := newMockIndexer()
+	mlbc.svcLister = mi
+
+	svc := makeTestService()
+	// Simulate a service that already has an ingress IP assigned
+	svc.Status.LoadBalancer.Ingress = []v1core.LoadBalancerIngress{
+		{IP: "127.127.127.124"},
+	}
+
+	err := mlbc.allocateService(&svc)
+	if err != nil {
+		t.Fatalf("expected nil error for already-allocated service, got: %v", err)
+	}
+}
+
 type mockInformer struct {
 }
 
