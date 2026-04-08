@@ -22,7 +22,7 @@ func NewCNINetworkConfig(cniConfFilePath string) (*cniNetworkConfig, error) {
 
 	cniFileBytes, err := os.ReadFile(cniConfFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %v", cniConfFilePath, err)
+		return nil, fmt.Errorf("error reading %s: %w", cniConfFilePath, err)
 	}
 
 	// If we're working with a conflist setup
@@ -30,7 +30,7 @@ func NewCNINetworkConfig(cniConfFilePath string) (*cniNetworkConfig, error) {
 		confList := new(ConfList)
 		err = json.Unmarshal(cniFileBytes, confList)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load CNI conflist file: %v", err)
+			return nil, fmt.Errorf("failed to load CNI conflist file: %w", err)
 		}
 		if len(confList.Plugins) == 0 {
 			return nil, fmt.Errorf("CNI config list %s has no plugins", cniConfFilePath)
@@ -41,7 +41,7 @@ func NewCNINetworkConfig(cniConfFilePath string) (*cniNetworkConfig, error) {
 		conf := new(Conf)
 		err = json.Unmarshal(cniFileBytes, conf)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load CNI conf file: %v", err)
+			return nil, fmt.Errorf("failed to load CNI conf file: %w", err)
 		}
 		if conf.Type == "" {
 			return nil, fmt.Errorf("error load CNI config, file appears to have no type: %s", cniConfFilePath)
@@ -139,7 +139,7 @@ func (c *cniNetworkConfig) InsertPodCIDRIntoIPAM(cidr string) error {
 	// too safe...
 	_, _, err := net.ParseCIDR(cidr)
 	if err != nil {
-		return fmt.Errorf("unable to parse input cidr: %s - %v", cidr, err)
+		return fmt.Errorf("unable to parse input cidr: %s - %w", cidr, err)
 	}
 
 	// Check that we don't already have the cidr in our list of ranges already, if so, consider it a no-op
@@ -169,18 +169,18 @@ func (c *cniNetworkConfig) WriteCNIConfig() error {
 	if c.IsConfList() {
 		cniBytes, err = json.Marshal(c.ConfList)
 		if err != nil {
-			return fmt.Errorf("unable to marshal CNI ConfList: %v", err)
+			return fmt.Errorf("unable to marshal CNI ConfList: %w", err)
 		}
 	} else {
 		cniBytes, err = json.Marshal(c.Conf)
 		if err != nil {
-			return fmt.Errorf("unable to marshal CNI Conf: %v", err)
+			return fmt.Errorf("unable to marshal CNI Conf: %w", err)
 		}
 	}
 
 	err = os.WriteFile(c.FilePath, cniBytes, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to write into CNI conf file: %v", err)
+		return fmt.Errorf("failed to write into CNI conf file: %w", err)
 	}
 
 	return nil

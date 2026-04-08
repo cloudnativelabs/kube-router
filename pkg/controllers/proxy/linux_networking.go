@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -89,7 +90,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 	addrList, err := nlretry.AddrList(context.Background(), iface, nFamily)
 	nIfaceHasAddr := false
 	if err != nil {
-		return fmt.Errorf("failed to list addresses for interface %s due to: %v", iface.Attrs().Name, err)
+		return fmt.Errorf("failed to list addresses for interface %s due to: %w", iface.Attrs().Name, err)
 	}
 	for _, addr := range addrList {
 		if addr.IP.Equal(parsedIP) {
@@ -125,7 +126,7 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 	routes, err := nlretry.RouteListFiltered(context.Background(), netlink.FAMILY_ALL, nRoute,
 		netlink.RT_FILTER_TYPE|netlink.RT_FILTER_DST|netlink.RT_FILTER_OIF|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_SRC)
 	if err != nil {
-		return fmt.Errorf("failed to list filtered routes for route %s: %v", nRoute, err)
+		return fmt.Errorf("failed to list filtered routes for route %s: %w", nRoute, err)
 	}
 
 	// Let the user know if we found more than 1 route that matched a single route filter
@@ -143,8 +144,8 @@ func (ln *linuxNetworking) ipAddrDel(iface netlink.Link, ip string, nodeIP strin
 		klog.V(1).Infof("Found %d routes for interface %s, deleting them...", len(routes), iface.Attrs().Name)
 		err = netlink.RouteDel(nRoute)
 		if err != nil {
-			if !strings.Contains(err.Error(), "no such process") {
-				return fmt.Errorf("failed to delete route %s: %v", nRoute, err)
+			if !errors.Is(err, syscall.ESRCH) {
+				return fmt.Errorf("failed to delete route %s: %w", nRoute, err)
 			}
 			klog.Warningf("got a No such process error while trying to remove route %s: %v (this is not normally bad "+
 				"enough to stop processing)", nRoute, err)
@@ -180,8 +181,8 @@ func (ln *linuxNetworking) ipAddrAdd(iface netlink.Link, ip string, nodeIP strin
 	ipPrefix := utils.GetSingleIPNet(parsedIP)
 	naddr := &netlink.Addr{IPNet: ipPrefix, Scope: syscall.RT_SCOPE_LINK}
 	err := netlink.AddrAdd(iface, naddr)
-	if err != nil && err.Error() != IfaceHasAddr {
-		klog.Errorf("failed to assign cluster ip %s to dummy interface: %s", naddr.IP.String(), err.Error())
+	if err != nil && !errors.Is(err, syscall.EEXIST) {
+		klog.Errorf("failed to assign cluster ip %s to dummy interface: %v", naddr.IP.String(), err)
 		return err
 	}
 
@@ -300,7 +301,7 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 			klog.V(2).Info("Service matched VIP")
 			ptim, err := safecast.Convert[uint32](persistentTimeout)
 			if err != nil {
-				return svcs, nil, fmt.Errorf("failed to convert persistent timeout to uint32: %v", err)
+				return svcs, nil, fmt.Errorf("failed to convert persistent timeout to uint32: %w", err)
 			}
 			if (persistent && (svc.Flags&ipvsPersistentFlagHex) == 0) ||
 				(!persistent && (svc.Flags&ipvsPersistentFlagHex) != 0) ||
@@ -375,7 +376,7 @@ func (ln *linuxNetworking) ipvsAddService(svcs []*ipvs.Service, vip net.IP, prot
 		ipvsServiceString(&svc))
 	err = ln.ipvsNewService(&svc)
 	if err != nil {
-		return svcs, nil, fmt.Errorf("failed to create new service %s due to: %v", ipvsServiceString(&svc), err)
+		return svcs, nil, fmt.Errorf("failed to create new service %s due to: %w", ipvsServiceString(&svc), err)
 	}
 
 	// We add the just created service to the list of existing IPVS services because the calling logic here is a little
@@ -470,7 +471,7 @@ func (ln *linuxNetworking) ipvsAddFWMarkService(svcs []*ipvs.Service, fwMark uin
 
 	err := ipvsSetPersistence(&svc, persistent, persistentTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to set persistence for service %s due to: %v", ipvsServiceString(&svc), err)
+		return nil, fmt.Errorf("failed to set persistence for service %s due to: %w", ipvsServiceString(&svc), err)
 	}
 	ipvsSetSchedFlags(&svc, flags)
 
@@ -490,17 +491,17 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 		return nil
 	}
 
-	if strings.Contains(err.Error(), IpvsServerExists) {
+	if errors.Is(err, syscall.EEXIST) {
 		err = ln.ipvsUpdateDestination(service, dest)
 		if err != nil {
-			return fmt.Errorf("failed to update ipvs destination %s to the ipvs service %s due to : %s",
-				ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
+			return fmt.Errorf("failed to update ipvs destination %s to the ipvs service %s due to : %w",
+				ipvsDestinationString(dest), ipvsServiceString(service), err)
 		}
 		klog.V(2).Infof("ipvs destination %s already exists in the ipvs service %s so not adding destination",
 			ipvsDestinationString(dest), ipvsServiceString(service))
 	} else {
-		return fmt.Errorf("failed to add ipvs destination %s to the ipvs service %s due to : %s",
-			ipvsDestinationString(dest), ipvsServiceString(service), err.Error())
+		return fmt.Errorf("failed to add ipvs destination %s to the ipvs service %s due to : %w",
+			ipvsDestinationString(dest), ipvsServiceString(service), err)
 	}
 	return nil
 }
@@ -511,12 +512,12 @@ func (ln *linuxNetworking) ipvsAddServer(service *ipvs.Service, dest *ipvs.Desti
 func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) error {
 	err := utils.RouteTableAdd(customDSRRouteTableID, customDSRRouteTableName)
 	if err != nil {
-		return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
+		return fmt.Errorf("failed to setup policy routing required for DSR due to %w", err)
 	}
 
 	loNetLink, err := nlretry.LinkByName(context.Background(), "lo")
 	if err != nil {
-		return fmt.Errorf("failed to get loopback interface due to %v", err)
+		return fmt.Errorf("failed to get loopback interface due to %w", err)
 	}
 
 	if setupIPv4 {
@@ -539,7 +540,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 		if err != nil || len(routes) < 1 {
 			err = netlink.RouteAdd(nRoute)
 			if err != nil {
-				return fmt.Errorf("failed to add route to custom route table for DSR due to: %v", err)
+				return fmt.Errorf("failed to add route to custom route table for DSR due to: %w", err)
 			}
 		}
 	}
@@ -564,7 +565,7 @@ func (ln *linuxNetworking) setupPolicyRoutingForDSR(setupIPv4, setupIPv6 bool) e
 		if err != nil || len(routes) < 1 {
 			err = netlink.RouteAdd(nRoute)
 			if err != nil {
-				return fmt.Errorf("failed to add route to custom route table for DSR due to: %v", err)
+				return fmt.Errorf("failed to add route to custom route table for DSR due to: %w", err)
 			}
 		}
 	}
@@ -580,7 +581,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 	setupIPv4, setupIPv6 bool) error {
 	err := utils.RouteTableAdd(externalIPRouteTableID, externalIPRouteTableName)
 	if err != nil {
-		return fmt.Errorf("failed to setup policy routing required for DSR due to %v", err)
+		return fmt.Errorf("failed to setup policy routing required for DSR due to %w", err)
 	}
 
 	setupIPRulesAndRoutes := func(isIPv6 bool) error {
@@ -639,7 +640,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		// service from the local node to an non-local traffic policy service.
 		/* kubeBridgeLink, err := nlretry.LinkByName(context.Background(), KubeBridgeIf)
 		if err != nil {
-			return fmt.Errorf("failed to get kube-bridge interface due to %v", err)
+			return fmt.Errorf("failed to get kube-bridge interface due to %w", err)
 		}
 
 		activeExternalIPs := make(map[string]bool)
@@ -668,7 +669,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 				routes, err := nlretry.RouteListFiltered(context.Background(), nFamily, nRoute,
 					netlink.RT_FILTER_DST|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_OIF)
 				if err != nil {
-					return fmt.Errorf("failed to list route for external IP's due to: %s", err)
+					return fmt.Errorf("failed to list route for external IP's due to: %w", err)
 				}
 				if len(routes) < 1 {
 					err = netlink.RouteAdd(nRoute)
@@ -692,7 +693,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 		}
 		routes, err := nlretry.RouteListFiltered(context.Background(), nFamily, nRoute, netlink.RT_FILTER_TABLE)
 		if err != nil {
-			return fmt.Errorf("failed to list route for external IP's due to: %s", err)
+			return fmt.Errorf("failed to list route for external IP's due to: %w", err)
 		}
 		for idx, route := range routes {
 			ip := route.Dst.IP.String()
@@ -729,13 +730,13 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 func (ln *linuxNetworking) getContainerPidWithDocker(containerID string) (int, error) {
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get docker client due to %v", err)
+		return 0, fmt.Errorf("failed to get docker client due to %w", err)
 	}
 	defer utils.CloseCloserDisregardError(dockerClient)
 
 	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get docker container spec due to %v", err)
+		return 0, fmt.Errorf("failed to get docker container spec due to %w", err)
 	}
 
 	return containerSpec.State.Pid, nil
@@ -851,7 +852,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	// This is just for logging, and that is why we close it immediately after getting it
 	activeNetworkNamespaceHandle, err := netns.Get()
 	if err != nil {
-		return fmt.Errorf("failed to get activeNetworkNamespace due to %v", err)
+		return fmt.Errorf("failed to get activeNetworkNamespace due to %w", err)
 	}
 	klog.V(2).Infof("Current network namespace after netns. Set to container network namespace: %s",
 		activeNetworkNamespaceHandle.String())
@@ -872,7 +873,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 		err = netlink.LinkAdd(ipTunLink)
 		if err != nil {
 			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return fmt.Errorf("failed to add ipip tunnel interface in endpoint namespace due to %v", err)
+			return fmt.Errorf("failed to add ipip tunnel interface in endpoint namespace due to %w", err)
 		}
 
 		// this is ugly, but ran into issue multiple times where interface did not come up quickly.
@@ -893,7 +894,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 
 		if err != nil {
 			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-			return fmt.Errorf("failed to get %s tunnel interface handle due to %v", ipTunLink.Attrs().Name, err)
+			return fmt.Errorf("failed to get %s tunnel interface handle due to %w", ipTunLink.Attrs().Name, err)
 		}
 
 		klog.V(2).Infof("Successfully created tunnel interface %s in endpoint %s.",
@@ -904,12 +905,12 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	err = netlink.LinkSetUp(tunIf)
 	if err != nil {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
-		return fmt.Errorf("failed to bring up ipip tunnel interface in endpoint namespace due to %v", err)
+		return fmt.Errorf("failed to bring up ipip tunnel interface in endpoint namespace due to %w", err)
 	}
 
 	// assign VIP to the KUBE_TUNNEL_IF interface
 	err = ln.ipAddrAdd(tunIf, vip, "", false)
-	if err != nil && err.Error() != IfaceHasAddr {
+	if err != nil && !errors.Is(err, syscall.EEXIST) {
 		attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 		return fmt.Errorf("failed to assign vip %s to kube-tunnel-if interface", vip)
 	}
@@ -939,11 +940,11 @@ func (ln *linuxNetworking) configureContainerForDSR(
 
 	err = netns.Set(hostNetworkNamespaceHandle)
 	if err != nil {
-		return fmt.Errorf("failed to set hostNetworkNamespace handle due to %v", err)
+		return fmt.Errorf("failed to set hostNetworkNamespace handle due to %w", err)
 	}
 	activeNetworkNamespaceHandle, err = netns.Get()
 	if err != nil {
-		return fmt.Errorf("failed to get activeNetworkNamespace handle due to %v", err)
+		return fmt.Errorf("failed to get activeNetworkNamespace handle due to %w", err)
 	}
 	klog.Infof("Current network namespace after revert namespace to host network namespace: %s",
 		activeNetworkNamespaceHandle.String())
@@ -960,15 +961,15 @@ func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 			KubeDummyIf)
 		err = netlink.LinkAdd(&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: KubeDummyIf}})
 		if err != nil {
-			return nil, fmt.Errorf("failed to add dummy interface: %v", err)
+			return nil, fmt.Errorf("failed to add dummy interface: %w", err)
 		}
 		dummyVipInterface, err = nlretry.LinkByName(ctx, KubeDummyIf)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get dummy interface: %v", err)
+			return nil, fmt.Errorf("failed to get dummy interface: %w", err)
 		}
 		err = netlink.LinkSetUp(dummyVipInterface)
 		if err != nil {
-			return nil, fmt.Errorf("failed to bring dummy interface up: %v", err)
+			return nil, fmt.Errorf("failed to bring dummy interface up: %w", err)
 		}
 	}
 	return dummyVipInterface, nil
@@ -987,7 +988,7 @@ func newLinuxNetworking(tcpTimeout, tcpFinTimeout, udpTimeout time.Duration) (*l
 	}
 	err = ipvsHandle.SetConfig(ipvsConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to configure IPVS config with timeouts: %v", err)
+		return nil, fmt.Errorf("failed to configure IPVS config with timeouts: %w", err)
 	}
 	ln.ipvsHandle = ipvsHandle
 	return ln, nil

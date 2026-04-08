@@ -764,7 +764,7 @@ func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, err
 		Address: peerIP,
 	}, peerFunc)
 	if err != nil {
-		return false, fmt.Errorf("unable to list peers to see if tunnel & routes need to be removed: %v", err)
+		return false, fmt.Errorf("unable to list peers to see if tunnel & routes need to be removed: %w", err)
 	}
 
 	return peerConnected, nil
@@ -896,7 +896,7 @@ func (nrc *NetworkRoutingController) syncNodeIPSets() error {
 		multiFamilySetNames := utils.GenerateMultiFamilySetNames([]string{podSubnetsIPSetName, nodeAddrsIPSetName})
 		err = ipSetHandler.RestoreSets(multiFamilySetNames)
 		if err != nil {
-			return fmt.Errorf("failed to sync pod subnets / node addresses ipsets: %v", err)
+			return fmt.Errorf("failed to sync pod subnets / node addresses ipsets: %w", err)
 		}
 	}
 	return nil
@@ -911,12 +911,12 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		args := []string{"-m", "comment", "--comment", comment, "-i", "kube-bridge", "-j", "ACCEPT"}
 		exists, err := iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %w", err)
 		}
 		if !exists {
 			err := iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 			if err != nil {
-				return fmt.Errorf("failed to run iptables command: %s", err.Error())
+				return fmt.Errorf("failed to run iptables command: %w", err)
 			}
 		}
 
@@ -924,12 +924,12 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		args = []string{"-m", "comment", "--comment", comment, "-o", "kube-bridge", "-j", "ACCEPT"}
 		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %w", err)
 		}
 		if !exists {
 			err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 			if err != nil {
-				return fmt.Errorf("failed to run iptables command: %s", err.Error())
+				return fmt.Errorf("failed to run iptables command: %w", err)
 			}
 		}
 
@@ -937,12 +937,12 @@ func (nrc *NetworkRoutingController) enableForwarding() error {
 		args = []string{"-m", "comment", "--comment", comment, "-o", nrc.krNode.GetNodeInterfaceName(), "-j", "ACCEPT"}
 		exists, err = iptablesCmdHandler.Exists("filter", "FORWARD", args...)
 		if err != nil {
-			return fmt.Errorf("failed to run iptables command: %s", err.Error())
+			return fmt.Errorf("failed to run iptables command: %w", err)
 		}
 		if !exists {
 			err = iptablesCmdHandler.Insert("filter", "FORWARD", 1, args...)
 			if err != nil {
-				return fmt.Errorf("failed to run iptables command: %s", err.Error())
+				return fmt.Errorf("failed to run iptables command: %w", err)
 			}
 		}
 	}
@@ -954,7 +954,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	var nodeAsnNumber uint32
 	node, err := utils.GetNodeObject(nrc.clientset, nrc.hostnameOverride)
 	if err != nil {
-		return errors.New("failed to get node object from api server: " + err.Error())
+		return fmt.Errorf("failed to get node object from api server: %w", err)
 	}
 
 	if nrc.bgpFullMeshMode {
@@ -1108,7 +1108,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 
 	intBGPPort, err := safecast.Convert[int32](nrc.bgpPort)
 	if err != nil {
-		return fmt.Errorf("failed to convert BGP port to int32: %v", err)
+		return fmt.Errorf("failed to convert BGP port to int32: %w", err)
 	}
 
 	global := &gobgpapi.Global{
@@ -1119,7 +1119,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	if err := nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{Global: global}); err != nil {
-		return fmt.Errorf("failed to start BGP server due to: %v", err)
+		return fmt.Errorf("failed to start BGP server due to: %w", err)
 	}
 
 	go nrc.watchBgpUpdates()
@@ -1156,7 +1156,7 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 				klog.Errorf("Failed to stop bgpServer: %s", err2)
 			}
 
-			return fmt.Errorf("failed to process Global Peer Router configs: %s", err)
+			return fmt.Errorf("failed to process Global Peer Router configs: %w", err)
 		}
 
 		nrc.nodePeerRouters = peerCfgs.RemoteIPStrings()
@@ -1197,7 +1197,7 @@ func (nrc *NetworkRoutingController) setupHandlers(node *v1core.Node) error {
 		if err != nil {
 			klog.Fatalf("Failed to get pod CIDRs from node spec. kube-router relies on kube-controller-manager to"+
 				"allocate pod CIDRs for the node or an annotation `kube-router.io/pod-cidrs`. Error: %v", err)
-			return fmt.Errorf("failed to get pod CIDRs detail from Node.spec: %v", err)
+			return fmt.Errorf("failed to get pod CIDRs detail from Node.spec: %w", err)
 		}
 	}
 
@@ -1285,7 +1285,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.hostnameOverride = kubeRouterConfig.HostnameOverride
 	node, err := utils.GetNodeObject(clientset, nrc.hostnameOverride)
 	if err != nil {
-		return nil, errors.New("failed getting node object from API server: " + err.Error())
+		return nil, fmt.Errorf("failed getting node object from API server: %w", err)
 	}
 
 	nrc.krNode, err = utils.NewKRNode(node, nil, kubeRouterConfig.EnableIPv4, kubeRouterConfig.EnableIPv6)
@@ -1323,7 +1323,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	if err != nil {
 		klog.Fatalf("Failed to get pod CIDR from node spec. kube-router relies on kube-controller-manager to "+
 			"allocate pod CIDR for the node or an annotation `kube-router.io/pod-cidr`. Error: %v", err)
-		return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %v", err)
+		return nil, fmt.Errorf("failed to get pod CIDR details from Node.spec: %w", err)
 	}
 	nrc.podCidr = cidr
 
@@ -1385,7 +1385,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	for _, i := range kubeRouterConfig.PeerASNs {
 		ui, err := safecast.Convert[uint32](i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert Peer ASNs to uint32: %s", err)
+			return nil, fmt.Errorf("failed to convert Peer ASNs to uint32: %w", err)
 		}
 
 		peerASNs = append(peerASNs, ui)
@@ -1396,7 +1396,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	for _, i := range kubeRouterConfig.PeerPorts {
 		ui, err := safecast.Convert[uint32](i)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert Peer Port to uint32: %s", err)
+			return nil, fmt.Errorf("failed to convert Peer Port to uint32: %w", err)
 		}
 
 		peerPorts = append(peerPorts, ui)
@@ -1407,18 +1407,18 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	if len(kubeRouterConfig.PeerPasswords) != 0 {
 		peerPasswords, err = stringSliceB64Decode(kubeRouterConfig.PeerPasswords)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse CLI Peer Passwords flag: %s", err)
+			return nil, fmt.Errorf("failed to parse CLI Peer Passwords flag: %w", err)
 		}
 	} else if len(kubeRouterConfig.PeerPasswordsFile) != 0 {
 		// Contents of the pw file should be in the same format as pw from CLI arg
 		pwFileBytes, err := os.ReadFile(kubeRouterConfig.PeerPasswordsFile)
 		if err != nil {
-			return nil, fmt.Errorf("error loading Peer Passwords File : %s", err)
+			return nil, fmt.Errorf("error loading Peer Passwords File : %w", err)
 		}
 		pws := strings.Split(string(pwFileBytes), ",")
 		peerPasswords, err = stringSliceB64Decode(pws)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode CLI Peer Passwords file: %s", err)
+			return nil, fmt.Errorf("failed to decode CLI Peer Passwords file: %w", err)
 		}
 	}
 
@@ -1445,7 +1445,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		nrc.krNode.GetPrimaryNodeIP().String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error processing Global Peer Router configs: %s", err)
+		return nil, fmt.Errorf("error processing Global Peer Router configs: %w", err)
 	}
 
 	bgpLocalAddressListAnnotation, ok := node.Annotations[bgpLocalAddressAnnotation]

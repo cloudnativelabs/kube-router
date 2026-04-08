@@ -250,12 +250,12 @@ func filterStableTags(tags []string, image, constraint string) []string {
 // Returns ("", false) if the tag does not match the expected format.
 func GoVersionFromImageTag(imageRef string) (string, bool) {
 	// Strip digest if present.
-	if idx := strings.Index(imageRef, "@"); idx != -1 {
-		imageRef = imageRef[:idx]
+	if before, _, found := strings.Cut(imageRef, "@"); found {
+		imageRef = before
 	}
 	// Strip image name prefix (e.g. "golang:").
-	if idx := strings.Index(imageRef, ":"); idx != -1 {
-		imageRef = imageRef[idx+1:]
+	if _, after, found := strings.Cut(imageRef, ":"); found {
+		imageRef = after
 	}
 	// imageRef is now the tag, e.g. "1.25.8-alpine3.23".
 	m := alpineVariantRe.FindStringSubmatch(imageRef)

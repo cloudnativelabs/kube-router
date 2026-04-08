@@ -36,15 +36,15 @@ func Main() error {
 	// https://github.com/kubernetes/kubernetes/issues/17162
 	err := flag.CommandLine.Parse([]string{})
 	if err != nil {
-		return fmt.Errorf("failed to parse flags: %s", err)
+		return fmt.Errorf("failed to parse flags: %w", err)
 	}
 	err = flag.Set("logtostderr", "true")
 	if err != nil {
-		return fmt.Errorf("failed to set flag: %s", err)
+		return fmt.Errorf("failed to set flag: %w", err)
 	}
 	err = flag.Set("v", config.VLevel)
 	if err != nil {
-		return fmt.Errorf("failed to set flag: %s", err)
+		return fmt.Errorf("failed to set flag: %w", err)
 	}
 
 	if config.HelpRequested {
@@ -68,7 +68,7 @@ func Main() error {
 
 	kubeRouter, err := cmd.NewKubeRouterDefault(config)
 	if err != nil {
-		return fmt.Errorf("failed to parse kube-router config: %v", err)
+		return fmt.Errorf("failed to parse kube-router config: %w", err)
 	}
 
 	if config.EnablePprof {
@@ -84,7 +84,7 @@ func Main() error {
 
 	err = kubeRouter.Run()
 	if err != nil {
-		return fmt.Errorf("failed to run kube-router: %v", err)
+		return fmt.Errorf("failed to run kube-router: %w", err)
 	}
 
 	return nil

@@ -350,7 +350,7 @@ func (o *OverlayTunnel) ensureFOUPort(config *tunnelConfig) error {
 	}
 
 	if err := netlink.FouAdd(*fouPort); err != nil {
-		return fmt.Errorf("failed to set FoU tunnel port - error: %v", err)
+		return fmt.Errorf("failed to set FoU tunnel port - error: %w", err)
 	}
 
 	return nil
@@ -387,7 +387,7 @@ func (o *OverlayTunnel) bringTunnelUp(tunnelName string) (netlink.Link, error) {
 	}
 
 	if err = netlink.LinkSetUp(link); err != nil {
-		return nil, fmt.Errorf("failed to bring tunnel interface %s up due to: %v", tunnelName, err)
+		return nil, fmt.Errorf("failed to bring tunnel interface %s up due to: %w", tunnelName, err)
 	}
 
 	return link, nil
@@ -411,12 +411,12 @@ func (o *OverlayTunnel) addTunnelRoute(link netlink.Link, nextHop net.IP, isIPv6
 	routeList, err := nlretry.RouteListFiltered(context.Background(), routeFamily, route,
 		netlink.RT_FILTER_OIF|netlink.RT_FILTER_TABLE|netlink.RT_FILTER_DST)
 	if err != nil {
-		return fmt.Errorf("failed to list routes in custom table: %v", err)
+		return fmt.Errorf("failed to list routes in custom table: %w", err)
 	}
 
 	if len(routeList) < 1 {
 		if err = netlink.RouteAdd(route); err != nil {
-			return fmt.Errorf("failed to add route in custom route table, err: %v", err)
+			return fmt.Errorf("failed to add route in custom route table, err: %w", err)
 		}
 	} else {
 		klog.V(2).Infof("Route for %s already exists in custom table", nextHop.String())
@@ -495,7 +495,7 @@ func fouPortAndProtoExist(port EncapPort, isIPv6 bool) bool {
 func linkFOUEnabled(linkName string) (bool, error) {
 	link, err := nlretry.LinkByName(context.Background(), linkName)
 	if err != nil {
-		return false, fmt.Errorf("failed to get link by name: %v", err)
+		return false, fmt.Errorf("failed to get link by name: %w", err)
 	}
 
 	switch link := link.(type) {

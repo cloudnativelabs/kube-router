@@ -23,6 +23,7 @@ linters:
     - nakedret
     - noctx
     - nolintlint
+    - perfsprint
     - staticcheck
     - unconvert
     - unparam

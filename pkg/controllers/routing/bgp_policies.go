@@ -2,12 +2,10 @@ package routing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -124,7 +122,7 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 			for _, cidr := range cidrs {
 				_, ipNet, err := net.ParseCIDR(cidr)
 				if err != nil {
-					return fmt.Errorf("couldn't parse CIDR: %s - %v", cidr, err)
+					return fmt.Errorf("couldn't parse CIDR: %s - %w", cidr, err)
 				}
 				cidrLen, _ := ipNet.Mask.Size()
 				var cidrMax int
@@ -138,7 +136,7 @@ func (nrc *NetworkRoutingController) addPodCidrDefinedSet() error {
 				}
 				uCIDRLen, err := safecast.Convert[uint32](cidrLen)
 				if err != nil {
-					return fmt.Errorf("failed to convert CIDR length to uint32: %v", err)
+					return fmt.Errorf("failed to convert CIDR length to uint32: %w", err)
 				}
 				prefixes = append(prefixes, &gobgpapi.Prefix{
 					IpPrefix:      cidr,
@@ -217,13 +215,15 @@ func (nrc *NetworkRoutingController) addServiceVIPsDefinedSet() error {
 		}
 
 		currentPrefixes := currentDefinedSet.Prefixes
-		sort.SliceStable(advIPPrefixList, func(i, j int) bool {
-			return advIPPrefixList[i].IpPrefix < advIPPrefixList[j].IpPrefix
+		slices.SortStableFunc(advIPPrefixList, func(a, b *gobgpapi.Prefix) int {
+			return strings.Compare(a.IpPrefix, b.IpPrefix)
 		})
-		sort.SliceStable(currentPrefixes, func(i, j int) bool {
-			return currentPrefixes[i].IpPrefix < currentPrefixes[j].IpPrefix
+		slices.SortStableFunc(currentPrefixes, func(a, b *gobgpapi.Prefix) int {
+			return strings.Compare(a.IpPrefix, b.IpPrefix)
 		})
-		if reflect.DeepEqual(advIPPrefixList, currentPrefixes) {
+		if slices.EqualFunc(advIPPrefixList, currentPrefixes, func(a, b *gobgpapi.Prefix) bool {
+			return a.IpPrefix == b.IpPrefix && a.MaskLengthMin == b.MaskLengthMin && a.MaskLengthMax == b.MaskLengthMax
+		}) {
 			continue
 		}
 		toAdd := make([]*gobgpapi.Prefix, 0)
@@ -326,7 +326,7 @@ func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
 
 			uIntMask, err := safecast.Convert[uint32](mask)
 			if err != nil {
-				return fmt.Errorf("failed to convert mask to uint32: %v", err)
+				return fmt.Errorf("failed to convert mask to uint32: %w", err)
 			}
 
 			prefix.MaskLengthMin = uIntMask
@@ -392,9 +392,9 @@ func (nrc *NetworkRoutingController) addiBGPPeersDefinedSet() (map[v1core.IPFami
 		}
 
 		currentCIDRs := currentDefinedSet.List
-		sort.Strings(iBGPPeerCIDRs[family])
-		sort.Strings(currentCIDRs)
-		if reflect.DeepEqual(iBGPPeerCIDRs, currentCIDRs) {
+		slices.Sort(iBGPPeerCIDRs[family])
+		slices.Sort(currentCIDRs)
+		if slices.Equal(iBGPPeerCIDRs[family], currentCIDRs) {
 			continue
 		}
 		toAdd := make([]string, 0)
@@ -604,7 +604,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	if nrc.pathPrepend {
 		prependAsn, err := strconv.ParseUint(nrc.pathPrependAS, 10, asnMaxBitSize)
 		if err != nil {
-			return errors.New("Invalid value for kube-router.io/path-prepend.as: " + err.Error())
+			return fmt.Errorf("Invalid value for kube-router.io/path-prepend.as: %w", err)
 		}
 		bgpActions = gobgpapi.Actions{
 			AsPrepend: &gobgpapi.AsPrependAction{
@@ -647,7 +647,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 				Name:    podSet + iBGPPeerSet,
 			}
 			if err = nrc.ensureStatementExists(&statement); err != nil {
-				return fmt.Errorf("could not check or create statement: %s - %v", statement.Name, err)
+				return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
 			}
 			statementNames = append(statementNames, statement.Name)
 		}
@@ -709,7 +709,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 					Name:    serviceVIPSet + peerSet,
 				}
 				if err = nrc.ensureStatementExists(&statement); err != nil {
-					return fmt.Errorf("could not check or create statement: %s - %v", statement.Name, err)
+					return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
 				}
 				statementNames = append(statementNames, statement.Name)
 			}
@@ -744,7 +744,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 						Name:    podSet + peerSet,
 					}
 					if err = nrc.ensureStatementExists(&statement); err != nil {
-						return fmt.Errorf("could not check or create statement: %s - %v", statement.Name, err)
+						return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
 					}
 					statementNames = append(statementNames, statement.Name)
 				}
@@ -775,7 +775,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	}
 	err := nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{}, checkExistingPolicy)
 	if err != nil {
-		return errors.New("Failed to verify if kube-router BGP export policy exists: " + err.Error())
+		return fmt.Errorf("Failed to verify if kube-router BGP export policy exists: %w", err)
 	}
 
 	// If this is the first time this is run and there is no current policy in GoBGP initialize it before sending it off
@@ -794,14 +794,14 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	klog.Infof("Current policy does not appear to match new policy: %s - creating new policy",
 		newPolicy.Name)
 	if err = nrc.incrementAndCreatePolicy(currentPolicyName, &newPolicy); err != nil {
-		return fmt.Errorf("could not increment and create new policy: %v", err)
+		return fmt.Errorf("could not increment and create new policy: %w", err)
 	}
 
 	klog.Infof("Ensuring that policy %s is assigned", newPolicy.Name)
 	err = nrc.assignPolicyByName(&newPolicy, gobgpapi.PolicyDirection_POLICY_DIRECTION_EXPORT,
 		gobgpapi.RouteAction_ROUTE_ACTION_REJECT)
 	if err != nil {
-		return fmt.Errorf("could not assign policy by name: %v", err)
+		return fmt.Errorf("could not assign policy by name: %w", err)
 	}
 
 	if currentPolicyFound {
@@ -809,7 +809,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 			newPolicy.Name, currentPolicyName)
 		if err = nrc.unassignAndRemovePolicy(currentPolicyName, gobgpapi.PolicyDirection_POLICY_DIRECTION_EXPORT,
 			gobgpapi.RouteAction_ROUTE_ACTION_REJECT); err != nil {
-			return fmt.Errorf("could not clean up old policy: %v", err)
+			return fmt.Errorf("could not clean up old policy: %w", err)
 		}
 	}
 
@@ -864,7 +864,7 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 				Name:    vipSet + peerSet,
 			}
 			if err = nrc.ensureStatementExists(&statement); err != nil {
-				return fmt.Errorf("could not check or create statement: %s - %v", statement.Name, err)
+				return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
 			}
 			statementNames = append(statementNames, statement.Name)
 		}
@@ -884,7 +884,7 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 			Name:    defaultRouteSet + peerSet,
 		}
 		if err = nrc.ensureStatementExists(&statement); err != nil {
-			return fmt.Errorf("could not check or create statement: %s - %v", statement.Name, err)
+			return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
 		}
 		statementNames = append(statementNames, statement.Name)
 
@@ -904,7 +904,7 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 				Name:    customImportRejectSet + peerSet,
 			}
 			if err = nrc.ensureStatementExists(&statement); err != nil {
-				return fmt.Errorf("could not check or create statement: %s - %v", statement.Name, err)
+				return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
 			}
 			statementNames = append(statementNames, statement.Name)
 		}
@@ -933,7 +933,7 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 	}
 	err := nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{}, checkExistingPolicy)
 	if err != nil {
-		return errors.New("Failed to verify if kube-router BGP export policy exists: " + err.Error())
+		return fmt.Errorf("Failed to verify if kube-router BGP export policy exists: %w", err)
 	}
 
 	// If this is the first time this is run and there is no current policy in GoBGP initialize it before sending it off
@@ -952,14 +952,14 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 	klog.Infof("Current policy does not appear to match new policy: %s - creating new policy",
 		newPolicy.Name)
 	if err = nrc.incrementAndCreatePolicy(currentPolicyName, &newPolicy); err != nil {
-		return fmt.Errorf("could not increment and create new policy: %v", err)
+		return fmt.Errorf("could not increment and create new policy: %w", err)
 	}
 
 	klog.Infof("Ensuring that policy %s is assigned", newPolicy.Name)
 	err = nrc.assignPolicyByName(&newPolicy, gobgpapi.PolicyDirection_POLICY_DIRECTION_IMPORT,
 		gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT)
 	if err != nil {
-		return fmt.Errorf("could not assign policy by name: %v", err)
+		return fmt.Errorf("could not assign policy by name: %w", err)
 	}
 
 	if currentPolicyFound {
@@ -967,7 +967,7 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 			newPolicy.Name, currentPolicyName)
 		if err = nrc.unassignAndRemovePolicy(currentPolicyName, gobgpapi.PolicyDirection_POLICY_DIRECTION_IMPORT,
 			gobgpapi.RouteAction_ROUTE_ACTION_ACCEPT); err != nil {
-			return fmt.Errorf("could not clean up old policy: %v", err)
+			return fmt.Errorf("could not clean up old policy: %w", err)
 		}
 	}
 
@@ -1026,7 +1026,7 @@ func (nrc *NetworkRoutingController) ensureStatementExists(st *gobgpapi.Statemen
 			}
 		})
 	if err != nil {
-		return fmt.Errorf("could not list statements: %v", err)
+		return fmt.Errorf("could not list statements: %w", err)
 	}
 
 	if found {
@@ -1037,7 +1037,7 @@ func (nrc *NetworkRoutingController) ensureStatementExists(st *gobgpapi.Statemen
 		Statement: st,
 	})
 	if err != nil {
-		return fmt.Errorf("could not add statement: %v", err)
+		return fmt.Errorf("could not add statement: %w", err)
 	}
 
 	return nil
@@ -1061,7 +1061,7 @@ func (nrc *NetworkRoutingController) incrementAndCreatePolicy(curPolName string,
 	case 3:
 		polBaseName = matches[1]
 		if polVer, err = strconv.Atoi(matches[2]); err != nil {
-			return fmt.Errorf("failed to parse %s GoBGP policy name: %v", curPolName, err)
+			return fmt.Errorf("failed to parse %s GoBGP policy name: %w", curPolName, err)
 		}
 	default:
 		return fmt.Errorf("failed to parse %s GoBGP policy name via regex", curPolName)
@@ -1074,7 +1074,7 @@ func (nrc *NetworkRoutingController) incrementAndCreatePolicy(curPolName string,
 		ReferExistingStatements: true,
 	})
 	if err != nil {
-		return errors.New("Failed to add policy: " + err.Error())
+		return fmt.Errorf("Failed to add policy: %w", err)
 	}
 
 	return nil
@@ -1096,7 +1096,7 @@ func (nrc *NetworkRoutingController) assignPolicyByName(newPolicy *gobgpapi.Poli
 		&gobgpapi.ListPolicyAssignmentRequest{Name: "global", Direction: polDir},
 		checkExistingPolicyAssignment)
 	if err != nil {
-		return errors.New("Failed to verify if kube-router BGP export policy assignment exists: " + err.Error())
+		return fmt.Errorf("Failed to verify if kube-router BGP export policy assignment exists: %w", err)
 	}
 	if policyAssignmentExists {
 		return nil
@@ -1112,7 +1112,7 @@ func (nrc *NetworkRoutingController) assignPolicyByName(newPolicy *gobgpapi.Poli
 	err = nrc.bgpServer.AddPolicyAssignment(context.Background(),
 		&gobgpapi.AddPolicyAssignmentRequest{Assignment: &policyAssignment})
 	if err != nil {
-		return errors.New("Failed to add policy assignment: " + err.Error())
+		return fmt.Errorf("Failed to add policy assignment: %w", err)
 	}
 
 	return nil
@@ -1133,7 +1133,7 @@ func (nrc *NetworkRoutingController) unassignAndRemovePolicy(policyName string,
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("could not delete policy assignment for: %s - %v", policyName, err)
+		return fmt.Errorf("could not delete policy assignment for: %s - %w", policyName, err)
 	}
 
 	err = nrc.bgpServer.DeletePolicy(context.Background(), &gobgpapi.DeletePolicyRequest{
@@ -1142,7 +1142,7 @@ func (nrc *NetworkRoutingController) unassignAndRemovePolicy(policyName string,
 		All:                true, // All here tells GoBGP to delete the policy instead of just clearing the statements
 	})
 	if err != nil {
-		return fmt.Errorf("could not delete policy for: %s - %v", policyName, err)
+		return fmt.Errorf("could not delete policy for: %s - %w", policyName, err)
 	}
 
 	return nil

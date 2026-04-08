@@ -1,6 +1,7 @@
 package lballoc
 
 import (
+	"fmt"
 	"context"
 	"errors"
 	"net"
@@ -397,10 +398,10 @@ func (lbc *LoadBalancerController) allocateService(svc *v1core.Service) error {
 	}
 
 	if ipv4 == nil && ipv6 == nil {
-		return errors.New("unable to allocate address: " + err.Error())
+		return fmt.Errorf("unable to allocate address: %w", err)
 	}
 	if (ipv4 == nil || ipv6 == nil) && requireDual {
-		return errors.New("unable to allocate dual-stack addresses: " + err.Error())
+		return fmt.Errorf("unable to allocate dual-stack addresses: %w", err)
 	}
 
 	// This is only non-nil during certain unit tests that need to understand when this goroutine is finished to remove

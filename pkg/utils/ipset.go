@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os/exec"
 	"slices"
-	"sort"
 	"strings"
 
 	"k8s.io/klog/v2"
@@ -300,7 +299,7 @@ func (ipset *IPSet) Create(setName string, createOptions ...string) (*Set, error
 		klog.V(2).Infof("running ipset command: %s", args)
 		_, err := ipset.run(args...)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create ipset set on system: %s", err)
+			return nil, fmt.Errorf("failed to create ipset set on system: %w", err)
 		}
 	}
 	return ipset.sets[ipsetName], nil
@@ -541,7 +540,7 @@ func BuildIPSetRestore(ipset *IPSet, setIncludeNames []string) string {
 		setNames = append(setNames, setName)
 	}
 
-	sort.Strings(setNames)
+	slices.Sort(setNames)
 
 	tmpSets := map[string]string{}
 	ipSetRestore := &strings.Builder{}
@@ -582,7 +581,7 @@ func BuildIPSetRestore(ipset *IPSet, setIncludeNames []string) string {
 		setsToDestroy = append(setsToDestroy, tmpSetName)
 	}
 	// need to destroy the sets in a predictable order for unit test!
-	sort.Strings(setsToDestroy)
+	slices.Sort(setsToDestroy)
 	for _, tmpSetName := range setsToDestroy {
 		// finally, destroy the tmp sets.
 		fmt.Fprintf(ipSetRestore, "destroy %s\n", tmpSetName)

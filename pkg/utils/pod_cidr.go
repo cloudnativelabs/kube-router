@@ -21,7 +21,7 @@ func GetPodCidrFromNodeSpec(node *v1core.Node) (string, error) {
 	if cidr, ok := node.Annotations[podCIDRAnnotation]; ok {
 		_, _, err := net.ParseCIDR(cidr)
 		if err != nil {
-			return "", fmt.Errorf("error parsing pod CIDR in node annotation: %v", err)
+			return "", fmt.Errorf("error parsing pod CIDR in node annotation: %w", err)
 		}
 
 		return cidr, nil
@@ -42,7 +42,7 @@ func GetPodCIDRsFromNodeSpecDualStack(node *v1core.Node) ([]string, []string, er
 	if podCIDRs, ok := node.Annotations[podCIDRsAnnotation]; ok {
 		for _, cidr := range strings.Split(podCIDRs, ",") {
 			if _, _, err := net.ParseCIDR(cidr); err != nil {
-				return podIPv4CIDRs, podIPv6CIDRs, fmt.Errorf("error parsing pod CIDR in node annotation: %v", err)
+				return podIPv4CIDRs, podIPv6CIDRs, fmt.Errorf("error parsing pod CIDR in node annotation: %w", err)
 			}
 			if netutils.IsIPv4CIDRString(cidr) {
 				podIPv4CIDRs = append(podIPv4CIDRs, cidr)
