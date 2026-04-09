@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/vishvananda/netlink"
@@ -53,7 +54,7 @@ func RouteTableAdd(tableNumber int, tableName string) error {
 			return fmt.Errorf("failed to open: %w", err)
 		}
 		defer CloseCloserDisregardError(f)
-		if _, err = f.WriteString(fmt.Sprint(tableNumber) + " " + tableName + "\n"); err != nil {
+		if _, err = f.WriteString(strconv.Itoa(tableNumber) + " " + tableName + "\n"); err != nil {
 			return fmt.Errorf("failed to write: %w", err)
 		}
 	}

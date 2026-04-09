@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -246,8 +247,8 @@ func TestIsValidKubeRouterServiceArtifact(t *testing.T) {
 		{net.ParseIP("172.16.0.2"), 0, true, nil},
 		{net.ParseIP("192.168.1.10"), 30000, true, nil},
 		{net.ParseIP("192.168.1.10"), 30001, true, nil},
-		{net.ParseIP("192.168.1.4"), 0, false, fmt.Errorf("service not found for address 192.168.1.4")},
-		{net.ParseIP("192.168.1.10"), 0, false, fmt.Errorf("service not found for address 192.168.1.10")},
+		{net.ParseIP("192.168.1.4"), 0, false, errors.New("service not found for address 192.168.1.4")},
+		{net.ParseIP("192.168.1.10"), 0, false, errors.New("service not found for address 192.168.1.10")},
 	}
 
 	for _, test := range tests {

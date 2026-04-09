@@ -571,7 +571,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	if nrc.krNode.IsIPv4Capable() {
 		nodePrimaryIPv4IP := nrc.krNode.FindBestIPv4NodeAddress()
 		if nodePrimaryIPv4IP == nil {
-			return fmt.Errorf("previous logic marked this node as IPv4 capable, but we couldn't find any " +
+			return errors.New("previous logic marked this node as IPv4 capable, but we couldn't find any " +
 				"available IPv4 node IPs, this shouldn't happen")
 		}
 
@@ -584,7 +584,7 @@ func (nrc *NetworkRoutingController) advertisePodRoute() error {
 	if nrc.krNode.IsIPv6Capable() {
 		nodePrimaryIPv6IP := nrc.krNode.FindBestIPv6NodeAddress()
 		if nodePrimaryIPv6IP == nil {
-			return fmt.Errorf(
+			return errors.New(
 				"previous logic marked this node as IPv6 capable, but we couldn't find any " +
 					"available IPv6 node IPs, this shouldn't happen",
 			)

@@ -73,7 +73,7 @@ func (n *SysctlConfig) WriteVal(val int8) *SysctlError {
 }
 
 func sysctlStat(path string, hasValue bool, value int) (string, *SysctlError) {
-	sysctlPath := fmt.Sprintf("/proc/sys/%s", path)
+	sysctlPath := "/proc/sys/" + path
 	if _, err := os.Stat(sysctlPath); err != nil {
 		if os.IsNotExist(err) {
 			return sysctlPath, &SysctlError{

@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"regexp"
@@ -604,7 +605,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	if nrc.pathPrepend {
 		prependAsn, err := strconv.ParseUint(nrc.pathPrependAS, 10, asnMaxBitSize)
 		if err != nil {
-			return fmt.Errorf("Invalid value for kube-router.io/path-prepend.as: %w", err)
+			return fmt.Errorf("invalid value for kube-router.io/path-prepend.as: %w", err)
 		}
 		bgpActions = gobgpapi.Actions{
 			AsPrepend: &gobgpapi.AsPrependAction{
@@ -775,7 +776,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	}
 	err := nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{}, checkExistingPolicy)
 	if err != nil {
-		return fmt.Errorf("Failed to verify if kube-router BGP export policy exists: %w", err)
+		return fmt.Errorf("failed to verify if kube-router BGP export policy exists: %w", err)
 	}
 
 	// If this is the first time this is run and there is no current policy in GoBGP initialize it before sending it off
@@ -933,7 +934,7 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 	}
 	err := nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{}, checkExistingPolicy)
 	if err != nil {
-		return fmt.Errorf("Failed to verify if kube-router BGP export policy exists: %w", err)
+		return fmt.Errorf("failed to verify if kube-router BGP export policy exists: %w", err)
 	}
 
 	// If this is the first time this is run and there is no current policy in GoBGP initialize it before sending it off
@@ -1051,7 +1052,7 @@ func (nrc *NetworkRoutingController) incrementAndCreatePolicy(curPolName string,
 	var err error
 	// sanity check
 	if curPolName == "" {
-		return fmt.Errorf("we require that curPolName be non-blank before calling this method")
+		return errors.New("we require that curPolName be non-blank before calling this method")
 	}
 
 	matches := rePolicyVersionExtractor.FindStringSubmatch(curPolName)
@@ -1074,7 +1075,7 @@ func (nrc *NetworkRoutingController) incrementAndCreatePolicy(curPolName string,
 		ReferExistingStatements: true,
 	})
 	if err != nil {
-		return fmt.Errorf("Failed to add policy: %w", err)
+		return fmt.Errorf("failed to add policy: %w", err)
 	}
 
 	return nil
@@ -1096,7 +1097,7 @@ func (nrc *NetworkRoutingController) assignPolicyByName(newPolicy *gobgpapi.Poli
 		&gobgpapi.ListPolicyAssignmentRequest{Name: "global", Direction: polDir},
 		checkExistingPolicyAssignment)
 	if err != nil {
-		return fmt.Errorf("Failed to verify if kube-router BGP export policy assignment exists: %w", err)
+		return fmt.Errorf("failed to verify if kube-router BGP export policy assignment exists: %w", err)
 	}
 	if policyAssignmentExists {
 		return nil
@@ -1112,7 +1113,7 @@ func (nrc *NetworkRoutingController) assignPolicyByName(newPolicy *gobgpapi.Poli
 	err = nrc.bgpServer.AddPolicyAssignment(context.Background(),
 		&gobgpapi.AddPolicyAssignmentRequest{Assignment: &policyAssignment})
 	if err != nil {
-		return fmt.Errorf("Failed to add policy assignment: %w", err)
+		return fmt.Errorf("failed to add policy assignment: %w", err)
 	}
 
 	return nil

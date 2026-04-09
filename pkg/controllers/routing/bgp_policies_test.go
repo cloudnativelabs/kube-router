@@ -1593,7 +1593,7 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 	if !policyAssignmentExists {
 		t.Errorf("%s policy assignment 'kube_router_%s' was not added", direction, direction)
 	}
-	err = testcase.nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{Name: fmt.Sprintf("kube_router_%s", direction)}, func(foundPolicy *gobgpapi.Policy) {
+	err = testcase.nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{Name: "kube_router_" + direction}, func(foundPolicy *gobgpapi.Policy) {
 		for _, expectedStatement := range policyStatements {
 			found := false
 			for _, statement := range foundPolicy.Statements {

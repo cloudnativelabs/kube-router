@@ -1782,7 +1782,7 @@ func TestDSR_TwoDSRServicesSameIPDifferentPorts(t *testing.T) {
 	for i, svcName := range []string{"dsr-svc-1", "dsr-svc-2"} {
 		endpointSlice := &discoveryv1.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      fmt.Sprintf("%s-slice", svcName),
+				Name:      svcName + "-slice",
 				Namespace: "default",
 				Labels:    map[string]string{discoveryv1.LabelServiceName: svcName},
 			},
@@ -1935,7 +1935,7 @@ func TestDSR_FWMarkCollisionCase_Issue1045(t *testing.T) {
 	// Create minimal endpoints
 	for i, svcName := range []string{"collision-svc-1", "collision-svc-2"} {
 		endpointSlice := &discoveryv1.EndpointSlice{
-			ObjectMeta:  metav1.ObjectMeta{Name: fmt.Sprintf("%s-slice", svcName), Namespace: "default", Labels: map[string]string{discoveryv1.LabelServiceName: svcName}},
+			ObjectMeta:  metav1.ObjectMeta{Name: svcName + "-slice", Namespace: "default", Labels: map[string]string{discoveryv1.LabelServiceName: svcName}},
 			AddressType: discoveryv1.AddressTypeIPv4,
 			Endpoints:   []discoveryv1.Endpoint{{Addresses: []string{fmt.Sprintf("172.20.1.%d", i+1)}, NodeName: testutils.ValToPtr("localnode-1"), Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)}}},
 			Ports:       []discoveryv1.EndpointPort{{Name: testutils.ValToPtr("port"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)}},

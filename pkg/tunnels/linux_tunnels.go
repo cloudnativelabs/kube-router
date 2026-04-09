@@ -8,6 +8,7 @@ package tunnels
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os/exec"
@@ -459,7 +460,7 @@ func GenerateTunnelName(nodeIP string) string {
 	h.Write([]byte(strippedIP))
 	sum := h.Sum(nil)
 
-	return "tun-" + fmt.Sprintf("%x", sum)[0:11]
+	return "tun-" + hex.EncodeToString(sum)[0:11]
 }
 
 // fouPortAndProtoExist checks to see if the given FoU port is already configured on the system via iproute2

@@ -270,7 +270,7 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 	endpointsInfoMap endpointSliceInfoMap, activeServiceEndpointMap map[string][]string) error {
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return fmt.Errorf("Failed get list of IPVS services due to: %w", err)
+		return fmt.Errorf("failed get list of IPVS services due to: %w", err)
 	}
 
 	// For each Service in our service map
@@ -538,17 +538,17 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 
 	dummyVipInterface, err := nsc.ln.getKubeDummyInterface()
 	if err != nil {
-		return fmt.Errorf("Failed getting dummy interface: %w", err)
+		return fmt.Errorf("failed getting dummy interface: %w", err)
 	}
 
 	ipvsSvcs, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return fmt.Errorf("Failed get list of IPVS services due to: %w", err)
+		return fmt.Errorf("failed get list of IPVS services due to: %w", err)
 	}
 
 	fwMark, err := nsc.generateUniqueFWMark(externalIP.String(), svcIn.protocol, strconv.Itoa(svcIn.port))
 	if err != nil {
-		return fmt.Errorf("failed to generate FW mark")
+		return errors.New("failed to generate FW mark")
 	}
 
 	sInPort, err := safecast.Convert[uint16](svcIn.port)
@@ -563,12 +563,12 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 			fwMark, externalIP, err.Error())
 	}
 
-	externalIPServiceID := fmt.Sprint(fwMark)
+	externalIPServiceID := strconv.FormatUint(uint64(fwMark), 10)
 
 	// ensure there is iptables mangle table rule to FWMARK the packet
 	err = nsc.setupMangleTableRule(externalIP.String(), svcIn.protocol, strconv.Itoa(svcIn.port), externalIPServiceID)
 	if err != nil {
-		return fmt.Errorf("failed to setup mangle table rule to forward the traffic to external IP")
+		return errors.New("failed to setup mangle table rule to forward the traffic to external IP")
 	}
 
 	// ensure VIP less director. we dont assign VIP to any interface
@@ -655,7 +655,7 @@ func (nsc *NetworkServicesController) setupForDSR(serviceInfoMap serviceInfoMap)
 	klog.V(1).Infof("Setting up policy routing required for Direct Server Return functionality.")
 	err := nsc.ln.setupPolicyRoutingForDSR(nsc.krNode.IsIPv4Capable(), nsc.krNode.IsIPv6Capable())
 	if err != nil {
-		return fmt.Errorf("Failed setup PBR for DSR due to: %w", err)
+		return fmt.Errorf("failed setup PBR for DSR due to: %w", err)
 	}
 	klog.V(1).Infof("Custom routing table %s required for Direct Server Return is setup as expected.",
 		customDSRRouteTableName)
@@ -691,7 +691,7 @@ func (nsc *NetworkServicesController) cleanupStaleVIPs(activeServiceEndpointMap 
 	cleanupStaleVIPsForFamily := func(intfc netlink.Link, netlinkFamily int) error {
 		addrs, err := nlretry.AddrList(context.Background(), intfc, netlinkFamily)
 		if err != nil {
-			return fmt.Errorf("Failed to list dummy interface IPs: %w", err)
+			return fmt.Errorf("failed to list dummy interface IPs: %w", err)
 		}
 		for _, addr := range addrs {
 			isActive := addrActive[addr.IP.String()]
@@ -761,7 +761,7 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 		case ipvsSvc.Address != nil:
 			key = generateIPPortID(ipvsSvc.Address.String(), protocol, strconv.Itoa(int(ipvsSvc.Port)))
 		case ipvsSvc.FWMark != 0:
-			key = fmt.Sprint(ipvsSvc.FWMark)
+			key = strconv.FormatUint(uint64(ipvsSvc.FWMark), 10)
 		default:
 			continue
 		}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base32"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -350,7 +351,7 @@ func (npc *NetworkPolicyController) iptablesCmdHandlerForCIDR(cidr *net.IPNet) (
 		return npc.iptablesCmdHandlers[v1core.IPv6Protocol], nil
 	}
 
-	return nil, fmt.Errorf("invalid CIDR")
+	return nil, errors.New("invalid CIDR")
 }
 
 func (npc *NetworkPolicyController) allowTrafficToClusterIPRange(
@@ -897,21 +898,21 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	clusterIPv4 := ipRanges.ClusterIPRanges(v1core.IPv4Protocol)
 	clusterIPv6 := ipRanges.ClusterIPRanges(v1core.IPv6Protocol)
 	if config.EnableIPv4 && !config.EnableIPv6 && len(clusterIPv4) == 0 {
-		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
+		return nil, errors.New("failed to get parse --service-cluster-ip-range parameter: " +
 			"IPv4 is enabled but only IPv6 address is provided")
 	}
 	if !config.EnableIPv4 && config.EnableIPv6 && len(clusterIPv6) == 0 {
-		return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
+		return nil, errors.New("failed to get parse --service-cluster-ip-range parameter: " +
 			"IPv6 is enabled but only IPv4 address is provided")
 	}
 	if config.EnableIPv4 && config.EnableIPv6 && len(config.ClusterIPCIDRs) > 1 {
 		if len(clusterIPv4) == 0 || len(clusterIPv6) == 0 {
-			return nil, fmt.Errorf("failed to get parse --service-cluster-ip-range parameter: " +
+			return nil, errors.New("failed to get parse --service-cluster-ip-range parameter: " +
 				"dual-stack is enabled, both IPv4 and IPv6 addresses should be provided")
 		}
 	}
 	if !config.EnableIPv4 && !config.EnableIPv6 && len(config.ClusterIPCIDRs) > 1 {
-		return nil, fmt.Errorf("too many CIDRs provided in --service-cluster-ip-range parameter: " +
+		return nil, errors.New("too many CIDRs provided in --service-cluster-ip-range parameter: " +
 			"dual-stack must be enabled to provide two addresses")
 	}
 
@@ -956,7 +957,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 
 	if config.EnableIPv4 {
 		if !npc.krNode.IsIPv4Capable() {
-			return nil, fmt.Errorf("IPv4 was enabled but no IPv4 address was found on node")
+			return nil, errors.New("IPv4 was enabled but no IPv4 address was found on node")
 		}
 		klog.V(2).Infof("IPv4 is enabled")
 		npc.iptablesSaveRestore[v1core.IPv4Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv4Protocol)
@@ -965,7 +966,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 	if config.EnableIPv6 {
 		if !npc.krNode.IsIPv6Capable() {
-			return nil, fmt.Errorf("IPv6 was enabled but no IPv6 address was found on node")
+			return nil, errors.New("IPv6 was enabled but no IPv6 address was found on node")
 		}
 		klog.V(2).Infof("IPv6 is enabled")
 		npc.iptablesSaveRestore[v1core.IPv6Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv6Protocol)

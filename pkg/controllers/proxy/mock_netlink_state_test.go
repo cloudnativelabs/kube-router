@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"fmt"
 	"net"
 
@@ -125,12 +126,12 @@ func (m *mockNetlinkState) addInterface(name string, attrs netlink.LinkAttrs) {
 // getInterface retrieves a mock interface by name
 func (m *mockNetlinkState) getInterface(name string) (netlink.Link, error) {
 	if m.errorMode.interfaceNotFound {
-		return nil, fmt.Errorf("Link not found")
+		return nil, errors.New("Link not found")
 	}
 
 	link, exists := m.interfaces[name]
 	if !exists {
-		return nil, fmt.Errorf("Link not found")
+		return nil, errors.New("Link not found")
 	}
 	return link, nil
 }
@@ -138,7 +139,7 @@ func (m *mockNetlinkState) getInterface(name string) (netlink.Link, error) {
 // addAddress adds an IP address to a mock interface
 func (m *mockNetlinkState) addAddress(ifaceName string, ip net.IP, ipNet *net.IPNet, family, scope int) error {
 	if m.errorMode.permissionDenied {
-		return fmt.Errorf("operation not permitted")
+		return errors.New("operation not permitted")
 	}
 
 	if _, exists := m.interfaces[ifaceName]; !exists {
@@ -149,7 +150,7 @@ func (m *mockNetlinkState) addAddress(ifaceName string, ip net.IP, ipNet *net.IP
 	for _, addr := range m.addresses[ifaceName] {
 		if addr.ip.Equal(ip) {
 			if m.errorMode.addressExists {
-				return fmt.Errorf("file exists")
+				return errors.New("file exists")
 			}
 			// Address already exists, this is idempotent
 			return nil
@@ -168,7 +169,7 @@ func (m *mockNetlinkState) addAddress(ifaceName string, ip net.IP, ipNet *net.IP
 // deleteAddress removes an IP address from a mock interface
 func (m *mockNetlinkState) deleteAddress(ifaceName string, ip net.IP) error {
 	if m.errorMode.permissionDenied {
-		return fmt.Errorf("operation not permitted")
+		return errors.New("operation not permitted")
 	}
 
 	if _, exists := m.interfaces[ifaceName]; !exists {
@@ -184,7 +185,7 @@ func (m *mockNetlinkState) deleteAddress(ifaceName string, ip net.IP) error {
 	}
 
 	// Address not found - return "cannot assign requested address"
-	return fmt.Errorf("cannot assign requested address")
+	return errors.New("cannot assign requested address")
 }
 
 // listAddresses returns all addresses for an interface with the specified family
@@ -193,7 +194,7 @@ func (m *mockNetlinkState) deleteAddress(ifaceName string, ip net.IP) error {
 //nolint:unused // Reserved for future test extensions and external package usage
 func (m *mockNetlinkState) listAddresses(ifaceName string, family int) ([]*mockAddress, error) {
 	if m.errorMode.permissionDenied {
-		return nil, fmt.Errorf("operation not permitted")
+		return nil, errors.New("operation not permitted")
 	}
 
 	if _, exists := m.interfaces[ifaceName]; !exists {
@@ -212,7 +213,7 @@ func (m *mockNetlinkState) listAddresses(ifaceName string, family int) ([]*mockA
 // addRoute adds a route to the specified routing table
 func (m *mockNetlinkState) addRoute(route *mockRoute) error {
 	if m.errorMode.permissionDenied {
-		return fmt.Errorf("operation not permitted")
+		return errors.New("operation not permitted")
 	}
 
 	if m.routes[route.table] == nil {
@@ -226,12 +227,12 @@ func (m *mockNetlinkState) addRoute(route *mockRoute) error {
 // deleteRoute removes a route from the routing table
 func (m *mockNetlinkState) deleteRoute(route *mockRoute) error {
 	if m.errorMode.permissionDenied {
-		return fmt.Errorf("operation not permitted")
+		return errors.New("operation not permitted")
 	}
 
 	routes, exists := m.routes[route.table]
 	if !exists {
-		return fmt.Errorf("no such process")
+		return errors.New("no such process")
 	}
 
 	for i, r := range routes {
@@ -241,7 +242,7 @@ func (m *mockNetlinkState) deleteRoute(route *mockRoute) error {
 		}
 	}
 
-	return fmt.Errorf("no such process")
+	return errors.New("no such process")
 }
 
 // listRoutes returns routes matching the filter
@@ -250,7 +251,7 @@ func (m *mockNetlinkState) deleteRoute(route *mockRoute) error {
 //nolint:unused // Reserved for future test extensions and external package usage
 func (m *mockNetlinkState) listRoutes(family, table int, dst *net.IPNet) ([]*mockRoute, error) {
 	if m.errorMode.permissionDenied {
-		return nil, fmt.Errorf("operation not permitted")
+		return nil, errors.New("operation not permitted")
 	}
 
 	var result []*mockRoute
@@ -286,7 +287,7 @@ func (m *mockNetlinkState) listRoutes(family, table int, dst *net.IPNet) ([]*moc
 // addRule adds a policy routing rule
 func (m *mockNetlinkState) addRule(rule *mockRule) error {
 	if m.errorMode.permissionDenied {
-		return fmt.Errorf("operation not permitted")
+		return errors.New("operation not permitted")
 	}
 
 	m.rules = append(m.rules, rule)
@@ -296,7 +297,7 @@ func (m *mockNetlinkState) addRule(rule *mockRule) error {
 // listRules returns policy routing rules matching the filter
 func (m *mockNetlinkState) listRules(family, table, priority int) ([]*mockRule, error) {
 	if m.errorMode.permissionDenied {
-		return nil, fmt.Errorf("operation not permitted")
+		return nil, errors.New("operation not permitted")
 	}
 
 	var result []*mockRule

@@ -2,7 +2,7 @@ package utils
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net"
 
 	"github.com/stretchr/testify/mock"
@@ -59,7 +59,7 @@ func (f *FakeLocalLinkQuerier) AddrList(_ context.Context, link netlink.Link, fa
 	addrs := make([]netlink.Addr, 1)
 	addrs[0] = netlink.Addr{IPNet: f.addrs[link.Attrs().Index]}
 	if link.Attrs().MTU == 0 {
-		return nil, fmt.Errorf("MTU was set to 0 to simulate an error")
+		return nil, errors.New("MTU was set to 0 to simulate an error")
 	}
 	return addrs, nil
 }

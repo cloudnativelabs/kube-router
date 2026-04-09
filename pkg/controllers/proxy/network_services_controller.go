@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -393,7 +394,7 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 				}
 				nsc.mu.Unlock()
 				if syncErrors {
-					err = fmt.Errorf("one or more errors during ipvs sync")
+					err = errors.New("one or more errors during ipvs sync")
 				}
 			}
 			if err == nil {
@@ -657,7 +658,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 	// Populate service ipsets.
 	ipvsServices, err := nsc.ln.ipvsGetServices()
 	if err != nil {
-		return fmt.Errorf("Failed to list IPVS services: %w", err)
+		return fmt.Errorf("failed to list IPVS services: %w", err)
 	}
 
 	serviceIPsSets := make(map[v1.IPFamily][][]string)
@@ -1386,7 +1387,7 @@ func (nsc *NetworkServicesController) deleteHairpinIptablesRules(family v1.IPFam
 	// TODO: Factor out this code
 	chains, err := iptablesCmdHandler.ListChains("nat")
 	if err != nil {
-		return fmt.Errorf("Failed to list iptables chains: %w", err)
+		return fmt.Errorf("failed to list iptables chains: %w", err)
 	}
 
 	// TODO: Factor these variables out
@@ -1439,13 +1440,13 @@ func (nsc *NetworkServicesController) deleteMasqueradeIptablesRule() error {
 	for _, iptablesCmdHandler := range nsc.iptablesCmdHandlers {
 		postRoutingChainRules, err := iptablesCmdHandler.List("nat", "POSTROUTING")
 		if err != nil {
-			return fmt.Errorf("Failed to list iptables rules in POSTROUTING chain in nat table: %w", err)
+			return fmt.Errorf("failed to list iptables rules in POSTROUTING chain in nat table: %w", err)
 		}
 		for i, rule := range postRoutingChainRules {
 			if strings.Contains(rule, "ipvs") && strings.Contains(rule, "SNAT") {
 				err = iptablesCmdHandler.Delete("nat", "POSTROUTING", strconv.Itoa(i))
 				if err != nil {
-					return fmt.Errorf("Failed to run iptables command: %w", err)
+					return fmt.Errorf("failed to run iptables command: %w", err)
 				}
 				klog.V(2).Infof("Deleted iptables masquerade rule: %s", rule)
 				break

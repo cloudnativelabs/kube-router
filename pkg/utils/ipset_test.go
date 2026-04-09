@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -270,13 +269,13 @@ func Test_buildIPSetRestore_setIncludeNames(t *testing.T) {
 
 			// Check that expected sets are included
 			for _, expectedSet := range tt.expectedSets {
-				assert.Contains(t, result, fmt.Sprintf("create %s", expectedSet),
+				assert.Contains(t, result, "create "+expectedSet,
 					"Expected set %s should be created", expectedSet)
 			}
 
 			// Check that excluded sets are not included
 			for _, excludedSet := range tt.excludedSets {
-				assert.NotContains(t, result, fmt.Sprintf("create %s", excludedSet),
+				assert.NotContains(t, result, "create "+excludedSet,
 					"Excluded set %s should not be created", excludedSet)
 			}
 
@@ -621,10 +620,10 @@ func Test_buildIPSetRestore_integrationRealWorldSets(t *testing.T) {
 				}
 
 				if shouldBeIncluded {
-					assert.Contains(t, result, fmt.Sprintf("create %s", setName),
+					assert.Contains(t, result, "create "+setName,
 						"Set %s should be included in restore", setName)
 				} else {
-					assert.NotContains(t, result, fmt.Sprintf("create %s", setName),
+					assert.NotContains(t, result, "create "+setName,
 						"Set %s should not be included in restore", setName)
 				}
 			}
