@@ -64,7 +64,7 @@ func (p PeerConfig) Port() *uint32 {
 func (p PeerConfig) String() string {
 	var fields []string
 	if p.localIP != "" {
-		fields = append(fields, fmt.Sprintf("LocalIP: %s", p.localIP))
+		fields = append(fields, "LocalIP: "+p.localIP)
 	}
 	if p.port != nil {
 		fields = append(fields, fmt.Sprintf("Port: %d", *p.port))

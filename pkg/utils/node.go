@@ -231,12 +231,12 @@ func NewKRNode(node *apiv1.Node, linkQ LocalLinkQuerier, enableIPv4, enableIPv6 
 	ipv4Addrs, ipv6Addrs := getAllNodeIPs(node)
 	if enableIPv4 && len(ipv4Addrs[apiv1.NodeInternalIP]) < 1 &&
 		len(ipv4Addrs[apiv1.NodeExternalIP]) < 1 {
-		return nil, fmt.Errorf("IPv4 was enabled, but no IPv4 address was found on the node")
+		return nil, errors.New("IPv4 was enabled, but no IPv4 address was found on the node")
 	}
 
 	if enableIPv6 && len(ipv6Addrs[apiv1.NodeInternalIP]) < 1 &&
 		len(ipv6Addrs[apiv1.NodeExternalIP]) < 1 {
-		return nil, fmt.Errorf("IPv6 was enabled, but no IPv6 address was found on the node")
+		return nil, errors.New("IPv6 was enabled, but no IPv6 address was found on the node")
 	}
 
 	_, nodeInterfaceName, err := GetNodeSubnet(primaryNodeIP, linkQ)

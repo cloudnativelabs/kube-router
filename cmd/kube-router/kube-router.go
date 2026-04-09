@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -58,7 +59,7 @@ func Main() error {
 	}
 
 	if os.Geteuid() != 0 {
-		return fmt.Errorf("kube-router needs to be run with privileges to execute iptables, ipset and configure ipvs")
+		return errors.New("kube-router needs to be run with privileges to execute iptables, ipset and configure ipvs")
 	}
 
 	if config.CleanupConfig {

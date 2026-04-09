@@ -3,6 +3,7 @@ package netpol
 import (
 	"crypto/sha256"
 	"encoding/base32"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -515,7 +516,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 		policy, ok := policyObj.(*networking.NetworkPolicy)
 		podSelector, _ := v1.LabelSelectorAsSelector(&policy.Spec.PodSelector)
 		if !ok {
-			return nil, fmt.Errorf("failed to convert")
+			return nil, errors.New("failed to convert")
 		}
 		newPolicy := networkPolicyInfo{
 			name:        policy.Name,
@@ -723,7 +724,7 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 		namespaceSelector, _ := v1.LabelSelectorAsSelector(peer.NamespaceSelector)
 		namespaces, err := npc.ListNamespaceByLabels(namespaceSelector)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to build network policies info due to: %w", err)
+			return nil, fmt.Errorf("failed to build network policies info due to: %w", err)
 		}
 
 		podSelector := labels.Everything()
@@ -733,7 +734,7 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 		for _, namespace := range namespaces {
 			namespacePods, err := npc.ListPodsByNamespaceAndLabels(namespace.Name, podSelector)
 			if err != nil {
-				return nil, fmt.Errorf("Failed to build network policies info due to: %w", err)
+				return nil, fmt.Errorf("failed to build network policies info due to: %w", err)
 			}
 			matchingPods = append(matchingPods, namespacePods...)
 		}

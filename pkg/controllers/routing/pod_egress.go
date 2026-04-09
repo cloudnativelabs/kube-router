@@ -61,7 +61,7 @@ func (nrc *NetworkRoutingController) deletePodEgressRule() error {
 
 		exists, err := iptablesCmdHandler.Exists("nat", "POSTROUTING", podEgressArgs...)
 		if err != nil {
-			return fmt.Errorf("Failed to lookup iptables rule to masquerade outbound traffic from pods: %w", err)
+			return fmt.Errorf("failed to lookup iptables rule to masquerade outbound traffic from pods: %w", err)
 		}
 
 		if exists {

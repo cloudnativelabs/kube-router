@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -329,14 +330,14 @@ func TestNewCNINetworkConfig(t *testing.T) {
 			filename:   "10-kuberouter.conf",
 			isConfList: false,
 			content:    getConfWithNoType(),
-			err:        fmt.Errorf("error load CNI config, file appears to have no type: "),
+			err:        errors.New("error load CNI config, file appears to have no type: "),
 		},
 		{
 			name:       "Ensure error upon reading from conflist with no plugins",
 			filename:   "10-kuberouter.conflist",
 			isConfList: true,
 			content:    getConfListWithNoPlugins(),
-			err:        fmt.Errorf("CNI config list "),
+			err:        errors.New("CNI config list "),
 		},
 		{
 			name:       "Ensure conf subnet get consolidated into ranges when only subnet exists",

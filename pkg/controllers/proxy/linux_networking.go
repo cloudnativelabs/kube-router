@@ -594,7 +594,7 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 			defaultPrefixCIDR = utils.GetDefaultIPv6Route()
 		}
 		if defaultPrefixCIDR == nil {
-			return fmt.Errorf("failed to parse default route (this is statically defined, so if you see this " +
+			return errors.New("failed to parse default route (this is statically defined, so if you see this " +
 				"error please report because something has gone very wrong)")
 		}
 
@@ -746,7 +746,7 @@ func (ln *linuxNetworking) getContainerPidWithDocker(containerID string) (int, e
 // among other things, for us to enter the network namespace of the pod
 func (ln *linuxNetworking) getContainerPidWithCRI(runtimeEndpoint string, containerID string) (int, error) {
 	if runtimeEndpoint == "" {
-		return 0, fmt.Errorf("runtimeEndpoint is not specified")
+		return 0, errors.New("runtimeEndpoint is not specified")
 	}
 
 	rs, err := cri.NewRemoteRuntimeService(runtimeEndpoint, cri.DefaultConnectionTimeout)

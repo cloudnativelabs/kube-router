@@ -179,7 +179,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 				// add rr options with clusterId
 				n.RouteReflector = &gobgpapi.RouteReflector{
 					RouteReflectorClient:    true,
-					RouteReflectorClusterId: fmt.Sprint(nrc.bgpClusterID),
+					RouteReflectorClusterId: nrc.bgpClusterID,
 				}
 			}
 		}

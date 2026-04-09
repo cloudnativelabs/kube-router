@@ -1,9 +1,9 @@
 package lballoc
 
 import (
-	"fmt"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"sync"

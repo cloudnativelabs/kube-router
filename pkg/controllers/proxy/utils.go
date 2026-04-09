@@ -62,7 +62,7 @@ func (nsc *NetworkServicesController) generateUniqueFWMark(ip, protocol, port st
 		if increment == 0 {
 			_, err = h.Write([]byte(ip + "-" + protocol + "-" + port))
 		} else {
-			_, err = h.Write([]byte(ip + "-" + protocol + "-" + port + "-" + fmt.Sprintf("%d", increment)))
+			_, err = h.Write([]byte(ip + "-" + protocol + "-" + port + "-" + strconv.Itoa(increment)))
 		}
 		if err != nil {
 			return 0, err
@@ -109,11 +109,11 @@ func (nsc *NetworkServicesController) lookupFWMarkByService(ip, protocol, port s
 func (nsc *NetworkServicesController) lookupServiceByFWMark(fwMark uint32) (string, string, int, error) {
 	serviceKey, ok := nsc.fwMarkMap[fwMark]
 	if !ok {
-		return "", "", 0, fmt.Errorf("could not find service matching the given FW mark")
+		return "", "", 0, errors.New("could not find service matching the given FW mark")
 	}
 	serviceKeySplit := strings.Split(serviceKey, "-")
 	if len(serviceKeySplit) != 3 {
-		return "", "", 0, fmt.Errorf("service key for found FW mark did not have 3 parts, this shouldn't be possible")
+		return "", "", 0, errors.New("service key for found FW mark did not have 3 parts, this shouldn't be possible")
 	}
 	port, err := strconv.ParseInt(serviceKeySplit[2], 10, 32)
 	if err != nil {
@@ -616,5 +616,5 @@ func getLabelFromMap(label string, labels map[string]string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("label doesn't exist in map")
+	return "", errors.New("label doesn't exist in map")
 }
