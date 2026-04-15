@@ -24,6 +24,7 @@ RUN git clone https://github.com/kubernetes-sigs/iptables-wrappers.git . \
 FROM ${RUNTIME_BASE}
 
 RUN apk add --no-cache \
+      nftables \
       iptables \
       iptables-legacy \
       ipset \

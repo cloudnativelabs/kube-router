@@ -22,7 +22,7 @@ import (
 	netutils "k8s.io/utils/net"
 )
 
-func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.ResourceEventHandler {
+func (npc *NetworkPolicyControllerBase) newNetworkPolicyEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			npc.OnNetworkPolicyUpdate(obj)
@@ -39,14 +39,14 @@ func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.Resourc
 }
 
 // OnNetworkPolicyUpdate handles updates to network policy from the kubernetes api server
-func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
+func (npc *NetworkPolicyControllerBase) OnNetworkPolicyUpdate(obj interface{}) {
 	netpol := obj.(*networking.NetworkPolicy)
 	klog.V(2).Infof("Received update for network policy: %s/%s", netpol.Namespace, netpol.Name)
 
 	npc.RequestFullSync()
 }
 
-func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
+func (npc *NetworkPolicyControllerBase) handleNetworkPolicyDelete(obj interface{}) {
 	netpol, ok := obj.(*networking.NetworkPolicy)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -69,7 +69,7 @@ func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
 // is used for matching destination ip address. Each ingress rule in the network
 // policyspec is evaluated to set of matching pods, which are grouped in to a
 // ipset used for source ip addr matching.
-func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo []networkPolicyInfo,
+func (npc *NetworkPolicyControllerIptables) syncNetworkPolicyChains(networkPoliciesInfo []networkPolicyInfo,
 	version string) (map[string]bool, map[string]bool, error) {
 	start := time.Now()
 	defer func() {
@@ -180,7 +180,7 @@ func (npc *NetworkPolicyController) syncNetworkPolicyChains(networkPoliciesInfo 
 	return activePolicyChains, activePolicyIPSets, nil
 }
 
-func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo,
+func (npc *NetworkPolicyControllerIptables) processIngressRules(policy networkPolicyInfo,
 	targetDestPodIPSetName string, activePolicyIPSets map[string]bool, version string,
 	ipFamily api.IPFamily) error {
 
@@ -342,7 +342,7 @@ func (npc *NetworkPolicyController) processIngressRules(policy networkPolicyInfo
 	return nil
 }
 
-func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
+func (npc *NetworkPolicyControllerIptables) processEgressRules(policy networkPolicyInfo,
 	targetSourcePodIPSetName string, activePolicyIPSets map[string]bool, version string,
 	ipFamily api.IPFamily) error {
 
@@ -468,7 +468,7 @@ func (npc *NetworkPolicyController) processEgressRules(policy networkPolicyInfo,
 	return nil
 }
 
-func (npc *NetworkPolicyController) appendRuleToPolicyChain(policyChainName, comment, srcIPSetName, dstIPSetName,
+func (npc *NetworkPolicyControllerIptables) appendRuleToPolicyChain(policyChainName, comment, srcIPSetName, dstIPSetName,
 	protocol, dPort, endDport string, ipFamily api.IPFamily) error {
 
 	args := make([]string, 0)
@@ -505,11 +505,11 @@ func (npc *NetworkPolicyController) appendRuleToPolicyChain(policyChainName, com
 	return nil
 }
 
-func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyInfo, error) {
+func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
-	_, isIPv4Enabled := npc.ipSetHandlers[api.IPv4Protocol]
-	_, isIPv6Enabled := npc.ipSetHandlers[api.IPv6Protocol]
+	_, isIPv4Enabled := npc.filterTableRules[api.IPv4Protocol]
+	_, isIPv6Enabled := npc.filterTableRules[api.IPv6Protocol]
 
 	for _, policyObj := range npc.npLister.List() {
 
@@ -713,7 +713,7 @@ func (npc *NetworkPolicyController) buildNetworkPoliciesInfo() ([]networkPolicyI
 	return NetworkPolicies, nil
 }
 
-func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy,
+func (npc *NetworkPolicyControllerBase) evalPodPeer(policy *networking.NetworkPolicy,
 	peer networking.NetworkPolicyPeer) ([]*api.Pod, error) {
 
 	var matchingPods []*api.Pod
@@ -746,7 +746,7 @@ func (npc *NetworkPolicyController) evalPodPeer(policy *networking.NetworkPolicy
 	return matchingPods, err
 }
 
-func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networking.NetworkPolicyPort,
+func (npc *NetworkPolicyControllerBase) processNetworkPolicyPorts(npPorts []networking.NetworkPolicyPort,
 	namedPort2eps namedPort2eps) (numericPorts []protocolAndPort, namedPorts []endPoints) {
 	numericPorts, namedPorts = make([]protocolAndPort, 0), make([]endPoints, 0)
 	for _, npPort := range npPorts {
@@ -776,7 +776,7 @@ func (npc *NetworkPolicyController) processNetworkPolicyPorts(npPorts []networki
 	return
 }
 
-func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace string,
+func (npc *NetworkPolicyControllerBase) ListPodsByNamespaceAndLabels(namespace string,
 	podSelector labels.Selector) (ret []*api.Pod, err error) {
 	podLister := listers.NewPodLister(npc.podLister)
 	allMatchedNameSpacePods, err := podLister.Pods(namespace).List(podSelector)
@@ -786,7 +786,7 @@ func (npc *NetworkPolicyController) ListPodsByNamespaceAndLabels(namespace strin
 	return allMatchedNameSpacePods, nil
 }
 
-func (npc *NetworkPolicyController) ListNamespaceByLabels(namespaceSelector labels.Selector) ([]*api.Namespace, error) {
+func (npc *NetworkPolicyControllerBase) ListNamespaceByLabels(namespaceSelector labels.Selector) ([]*api.Namespace, error) {
 	namespaceLister := listers.NewNamespaceLister(npc.nsLister)
 	matchedNamespaces, err := namespaceLister.List(namespaceSelector)
 	if err != nil {
@@ -795,7 +795,7 @@ func (npc *NetworkPolicyController) ListNamespaceByLabels(namespaceSelector labe
 	return matchedNamespaces, nil
 }
 
-func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolicyPeer) map[api.IPFamily][][]string {
+func (npc *NetworkPolicyControllerBase) evalIPBlockPeer(peer networking.NetworkPolicyPeer) map[api.IPFamily][][]string {
 	ipBlock := make(map[api.IPFamily][][]string, 0)
 	if peer.PodSelector == nil && peer.NamespaceSelector == nil && peer.IPBlock != nil {
 		cidr := peer.IPBlock.CIDR
@@ -860,7 +860,7 @@ func (npc *NetworkPolicyController) evalIPBlockPeer(peer networking.NetworkPolic
 	return ipBlock
 }
 
-func (npc *NetworkPolicyController) grabNamedPortFromPod(pod *api.Pod, namedPort2eps *namedPort2eps) {
+func (npc *NetworkPolicyControllerBase) grabNamedPortFromPod(pod *api.Pod, namedPort2eps *namedPort2eps) {
 	if pod == nil || namedPort2eps == nil {
 		return
 	}

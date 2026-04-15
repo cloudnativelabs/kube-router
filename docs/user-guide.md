@@ -173,6 +173,7 @@ Usage of kube-router:
       --service-tcpfin-timeout duration               Specify TCP FIN timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves default system value (default: 0s)
       --service-udp-timeout duration                  Specify UDP timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves default system value (default: 0s)
       --strict-external-ip-validation                 When enabled, the proxy module validates externalIPs and loadBalancerIPs against configured CIDR ranges (--service-external-ip-range and --loadbalancer-ip-range). When strict mode is enabled and no range is configured, all externalIPs / loadBalancerIPs are rejected (default-deny). Disable this flag to restore previous behavior of accepting all IPs without validation. (default true)
+      --use-nftables-for-netpol                       Use nftables instead of iptables for the network policy controller. Requires nft >= 1.0.1 and kernel nftables support.
   -v, --v string                                      log level for V logs (default "0")
   -V, --version                                       Print version information.
 ```

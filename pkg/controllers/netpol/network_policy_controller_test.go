@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
+	"sigs.k8s.io/knftables"
 
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -26,7 +27,6 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
-	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 )
 
@@ -199,9 +199,9 @@ func newFakeNode(name string, addrs []string) *v1.Node {
 
 // newUneventfulNetworkPolicyController returns new NetworkPolicyController object without any event handler
 func newUneventfulNetworkPolicyController(podInformer cache.SharedIndexInformer,
-	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) *NetworkPolicyController {
+	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer) *NetworkPolicyControllerIptables {
 
-	npc := NetworkPolicyController{}
+	npc := NetworkPolicyControllerIptables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
 	npc.syncPeriod = time.Hour
 
 	npc.iptablesCmdHandlers = make(map[v1.IPFamily]utils.IPTablesHandler)
@@ -437,8 +437,6 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 	port, port1 := intstr.FromInt(30000), intstr.FromInt(34000)
 	ingressPort := intstr.FromInt(37000)
 	endPort, endPort1 := int32(31000), int32(35000)
-	sctpPort := intstr.FromInt(36000)
-	sctpProto := v1.ProtocolSCTP
 	testCases := []tNetpolTestCase{
 		{
 			name: "Simple Egress Destination Port",
@@ -532,58 +530,6 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
 				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -j MARK --set-xmark 0x10000/0x10000 \n" +
 				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
-		},
-		{
-			name: "Simple SCTP Egress Destination Port",
-			netpol: tNetpol{name: "sctp-egress", namespace: "nsA",
-				podSelector: metav1.LabelSelector{
-					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      "app",
-							Operator: "In",
-							Values:   []string{"a"},
-						},
-					},
-				},
-				egress: []netv1.NetworkPolicyEgressRule{
-					{
-						Ports: []netv1.NetworkPolicyPort{
-							{
-								Protocol: &sctpProto,
-								Port:     &sctpPort,
-							},
-						},
-					},
-				},
-			},
-			expectedRule: "-A KUBE-NWPLCY-HHGHJNRMJN6UUDNA -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: sctp-egress namespace nsA\" -p SCTP --dport 36000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-HHGHJNRMJN6UUDNA -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: sctp-egress namespace nsA\" -p SCTP --dport 36000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
-		},
-		{
-			name: "Simple SCTP Ingress Destination Port",
-			netpol: tNetpol{name: "sctp-ingress", namespace: "nsA",
-				podSelector: metav1.LabelSelector{
-					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      "app",
-							Operator: "In",
-							Values:   []string{"a"},
-						},
-					},
-				},
-				ingress: []netv1.NetworkPolicyIngressRule{
-					{
-						Ports: []netv1.NetworkPolicyPort{
-							{
-								Protocol: &sctpProto,
-								Port:     &sctpPort,
-							},
-						},
-					},
-				},
-			},
-			expectedRule: "-A KUBE-NWPLCY-BHQGYKZ6X5RBPUOB -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: sctp-ingress namespace nsA\" -p SCTP --dport 36000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-BHQGYKZ6X5RBPUOB -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: sctp-ingress namespace nsA\" -p SCTP --dport 36000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Port > EndPort (invalid condition, should drop endport)",
@@ -836,31 +782,31 @@ func TestNetworkPolicyController(t *testing.T) {
 			"Test bad cluster CIDR (not properly formatting ip address)",
 			newMinimalKubeRouterConfig([]string{"10.10.10"}, "", "node", nil, nil, false),
 			true,
-			"failed to parse --service-cluster-ip-range parameter: '10.10.10': invalid CIDR address: 10.10.10",
+			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10",
 		},
 		{
 			"Test bad cluster CIDR (not using an ip address)",
 			newMinimalKubeRouterConfig([]string{"foo"}, "", "node", nil, nil, false),
 			true,
-			"failed to parse --service-cluster-ip-range parameter: 'foo': invalid CIDR address: foo",
+			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: foo",
 		},
 		{
 			"Test bad cluster CIDR (using an ip address that is not a CIDR)",
 			newMinimalKubeRouterConfig([]string{"10.10.10.10"}, "", "node", nil, nil, false),
 			true,
-			"failed to parse --service-cluster-ip-range parameter: '10.10.10.10': invalid CIDR address: 10.10.10.10",
+			"failed to get parse --service-cluster-ip-range parameter: invalid CIDR address: 10.10.10.10",
 		},
 		{
 			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv4)",
-			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "10.244.0.0/16", "2001:db8:42:1::/112"}, "", "node", nil, nil, true),
+			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "10.244.0.0/16", "2001:db8:42:1::/112"}, "", "node", nil, nil, false),
 			true,
-			"too many CIDRs provided in --service-cluster-ip-range parameter, only two addresses are allowed at once for dual-stack",
+			"too many CIDRs provided in --service-cluster-ip-range parameter: dual-stack must be enabled to provide two addresses",
 		},
 		{
 			"Test bad cluster CIDRs (using more than 2 ip addresses, including 2 ipv6)",
-			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "2001:db8:42:0::/56", "2001:db8:42:1::/112"}, "", "node", nil, nil, true),
+			newMinimalKubeRouterConfig([]string{"10.96.0.0/12", "2001:db8:42:0::/56", "2001:db8:42:1::/112"}, "", "node", nil, nil, false),
 			true,
-			"too many CIDRs provided in --service-cluster-ip-range parameter, only two addresses are allowed at once for dual-stack",
+			"too many CIDRs provided in --service-cluster-ip-range parameter: dual-stack must be enabled to provide two addresses",
 		},
 		{
 			"Test good cluster CIDR (using single IP with a /32)",
@@ -932,25 +878,25 @@ func TestNetworkPolicyController(t *testing.T) {
 			"Test bad external IP CIDR (not properly formatting ip address)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10"}, nil, false),
 			true,
-			"failed to parse --service-external-ip-range parameter: '199.10.10': invalid CIDR address: 199.10.10",
+			"failed to get parse --service-external-ip-range parameter: '199.10.10'. Error: invalid CIDR address: 199.10.10",
 		},
 		{
 			"Test bad external IP CIDR (not using an ip address)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"foo"}, nil, false),
 			true,
-			"failed to parse --service-external-ip-range parameter: 'foo': invalid CIDR address: foo",
+			"failed to get parse --service-external-ip-range parameter: 'foo'. Error: invalid CIDR address: foo",
 		},
 		{
 			"Test bad external IP CIDR (using an ip address that is not a CIDR)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10"}, nil, false),
 			true,
-			"failed to parse --service-external-ip-range parameter: '199.10.10.10': invalid CIDR address: 199.10.10.10",
+			"failed to get parse --service-external-ip-range parameter: '199.10.10.10'. Error: invalid CIDR address: 199.10.10.10",
 		},
 		{
 			"Test bad external IP CIDR (making sure that it processes all items in the list)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", []string{"199.10.10.10/32", "199.10.10.11"}, nil, false),
 			true,
-			"failed to parse --service-external-ip-range parameter: '199.10.10.11': invalid CIDR address: 199.10.10.11",
+			"failed to get parse --service-external-ip-range parameter: '199.10.10.11'. Error: invalid CIDR address: 199.10.10.11",
 		},
 		{
 			"Test good external IP CIDR (using single IP with a /32)",
@@ -968,25 +914,25 @@ func TestNetworkPolicyController(t *testing.T) {
 			"Test bad load balancer CIDR (not properly formatting ip address)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10"}, false),
 			true,
-			"failed to parse --loadbalancer-ip-range parameter: '199.10.10': invalid CIDR address: 199.10.10",
+			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10'. Error: invalid CIDR address: 199.10.10",
 		},
 		{
 			"Test bad load balancer CIDR (not using an ip address)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"foo"}, false),
 			true,
-			"failed to parse --loadbalancer-ip-range parameter: 'foo': invalid CIDR address: foo",
+			"failed to get parse --loadbalancer-ip-range parameter: 'foo'. Error: invalid CIDR address: foo",
 		},
 		{
 			"Test bad load balancer CIDR (using an ip address that is not a CIDR)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10.10"}, false),
 			true,
-			"failed to parse --loadbalancer-ip-range parameter: '199.10.10.10': invalid CIDR address: 199.10.10.10",
+			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10.10'. Error: invalid CIDR address: 199.10.10.10",
 		},
 		{
 			"Test bad load balancer CIDR (making sure that it processes all items in the list)",
 			newMinimalKubeRouterConfig([]string{""}, "", "node", nil, []string{"199.10.10.10/32", "199.10.10.11"}, false),
 			true,
-			"failed to parse --loadbalancer-ip-range parameter: '199.10.10.11': invalid CIDR address: 199.10.10.11",
+			"failed to get parse --loadbalancer-ip-range parameter: '199.10.10.11'. Error: invalid CIDR address: 199.10.10.11",
 		},
 		{
 			"Test good load balancer CIDR (using single IP with a /32)",
@@ -1005,50 +951,473 @@ func TestNetworkPolicyController(t *testing.T) {
 	fakeLinkQuerier := utils.NewFakeLocalLinkQuerier(fakeNodeIPs, nil)
 	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", fakeNodeIPs)}})
 	_, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
-	for _, test := range testCases {
-		t.Run(test.name, func(t *testing.T) {
-			// Create validator from config — CIDR parsing errors now come from the validator
-			validator, validatorErr := svcip.NewValidator(svcip.Config{
-				ExternalIPCIDRs:   test.config.ExternalIPCIDRs,
-				LoadBalancerCIDRs: test.config.LoadBalancerCIDRs,
-				ClusterIPCIDRs:    test.config.ClusterIPCIDRs,
-				StrictValidation:  test.config.StrictExternalIPValidation,
-				EnableIPv4:        test.config.EnableIPv4,
-				EnableIPv6:        test.config.EnableIPv6,
+	for _, useNfTables := range []bool{false, true} {
+		for _, test := range testCases {
+			testName := test.name
+			if useNfTables {
+				testName = fmt.Sprintf("%s_nft", test.name)
+			}
+			t.Run(testName, func(t *testing.T) {
+				iptablesHandlers := make(map[v1.IPFamily]utils.IPTablesHandler, 1)
+				iptablesHandlers[v1.IPv4Protocol] = newFakeIPTables(iptables.ProtocolIPv4)
+				ipSetHandlers := make(map[v1.IPFamily]utils.IPSetHandler, 1)
+				ipSetHandlers[v1.IPv4Protocol] = &fakeIPSet{}
+				knftInterfaces := make(map[v1.IPFamily]knftables.Interface, 2)
+				knftInterfaces[v1.IPv4Protocol] = &knftables.Fake{}
+				// Provide an IPv6 fake interface whenever the test config enables IPv6,
+				// so that NewNetworkPolicyControllerNftables doesn't reject the config
+				// because the interface for that family is missing.
+				if test.config.EnableIPv6 {
+					knftInterfaces[v1.IPv6Protocol] = &knftables.Fake{}
+				}
+				_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer,
+					&sync.Mutex{}, fakeLinkQuerier, iptablesHandlers, ipSetHandlers, knftInterfaces, useNfTables)
+				if err == nil && test.expectError {
+					t.Error("This config should have failed, but it was successful instead")
+				} else if err != nil {
+					// Unfortunately without doing a ton of extra refactoring work, we can't remove this reference easily
+					// from the controllers start up. Luckily it's one of the last items to be processed in the controller
+					// so for now we'll consider that if we hit this error that we essentially didn't hit an error at all
+					// TODO: refactor NPC to use an injectable interface for ipset operations
+					if !test.expectError && err.Error() != "Ipset utility not found" {
+						t.Errorf("This config should have been successful, but it failed instead. Error: %s", err)
+					} else if test.expectError && err.Error() != test.errorText {
+						t.Errorf("Expected error: '%s' but instead got: '%s'", test.errorText, err)
+					}
+				}
 			})
-			if validatorErr != nil {
-				if !test.expectError {
-					t.Errorf("Validator creation should have succeeded, but failed: %s", validatorErr)
-				} else if validatorErr.Error() != test.errorText {
-					t.Errorf("Expected error: '%s' but instead got: '%s'", test.errorText, validatorErr)
-				}
-				return
-			}
-
-			// TODO: Handle IPv6
-			iptablesHandlers := make(map[v1.IPFamily]utils.IPTablesHandler, 1)
-			iptablesHandlers[v1.IPv4Protocol] = newFakeIPTables(iptables.ProtocolIPv4)
-			ipSetHandlers := make(map[v1.IPFamily]utils.IPSetHandler, 1)
-			ipSetHandlers[v1.IPv4Protocol] = &fakeIPSet{}
-			_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer,
-				&sync.Mutex{}, fakeLinkQuerier, iptablesHandlers, ipSetHandlers, validator)
-			if err == nil && test.expectError {
-				t.Error("This config should have failed, but it was successful instead")
-			} else if err != nil {
-				// Unfortunately without doing a ton of extra refactoring work, we can't remove this reference easily
-				// from the controllers start up. Luckily it's one of the last items to be processed in the controller
-				// so for now we'll consider that if we hit this error that we essentially didn't hit an error at all
-				// TODO: refactor NPC to use an injectable interface for ipset operations
-				if !test.expectError && err.Error() != "Ipset utility not found" {
-					t.Errorf("This config should have been successful, but it failed instead. Error: %s", err)
-				} else if test.expectError && err.Error() != test.errorText {
-					t.Errorf("Expected error: '%s' but instead got: '%s'", test.errorText, err)
-				}
-			}
-		})
+		}
 	}
 }
 
 // Ref:
 // https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/podgc/gc_controller_test.go
 // https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/testutil/test_utils.go
+
+// TestBuildNetworkPoliciesInfoEdgeCases verifies that buildNetworkPoliciesInfo correctly
+// parses all relevant edge-case rule permutations: allow-all, ports-only, ipBlock with and
+// without except, explicit and inferred policyTypes, and proper exclusion of non-actionable pods.
+func TestBuildNetworkPoliciesInfoEdgeCases(t *testing.T) {
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
+	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	informerFactory.Start(ctx.Done())
+	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
+
+	npc := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
+	tCreateFakePods(t, podInformer, nsInformer)
+
+	// Extra special-case pods for exclusion tests, all with app=z so a single
+	// policy can target them without disturbing other test cases.
+	tAddToInformerStore(t, podInformer, &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "hostnet-pod", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
+		Spec:       v1.PodSpec{HostNetwork: true},
+		Status:     v1.PodStatus{PodIP: "10.0.100.1"},
+	})
+	tAddToInformerStore(t, podInformer, &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
+		Status:     v1.PodStatus{PodIP: "1.9.9.1", Phase: v1.PodSucceeded},
+	})
+	tAddToInformerStore(t, podInformer, &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "failed-pod", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
+		Status:     v1.PodStatus{PodIP: "1.9.9.2", Phase: v1.PodFailed},
+	})
+	tAddToInformerStore(t, podInformer, &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "no-ip-pod", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
+		Status:     v1.PodStatus{PodIP: ""},
+	})
+	// One normal running pod selected by app=z so we know the selector itself is correct.
+	tAddToInformerStore(t, podInformer, &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "running-z", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
+		Status:     v1.PodStatus{PodIP: "1.9.9.3", Phase: v1.PodRunning, PodIPs: []v1.PodIP{{IP: "1.9.9.3"}}},
+	})
+
+	proto := v1.ProtocolTCP
+	port80 := intstr.FromInt(80)
+	cidr := "192.168.1.0/24"
+	except := "192.168.1.50/32"
+
+	add := func(np *netv1.NetworkPolicy) {
+		tAddToInformerStore(t, netpolInformer, np)
+	}
+
+	// 1. Ingress allow-all: empty rule {}.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-all-ingress", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress:     []netv1.NetworkPolicyIngressRule{{}},
+		},
+	})
+	// 2. Egress allow-all: empty rule {}.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-all-egress", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
+			Egress:      []netv1.NetworkPolicyEgressRule{{}},
+		},
+	})
+	// 3. Ingress ports-only (no From → matchAllSource).
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "ingress-ports-only", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{{
+				Ports: []netv1.NetworkPolicyPort{{Protocol: &proto, Port: &port80}},
+			}},
+		},
+	})
+	// 4. Egress ports-only (no To → matchAllDestinations).
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "egress-ports-only", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
+			Egress: []netv1.NetworkPolicyEgressRule{{
+				Ports: []netv1.NetworkPolicyPort{{Protocol: &proto, Port: &port80}},
+			}},
+		},
+	})
+	// 5. Ingress from ipBlock CIDR (no except).
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "ipblock-ingress", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{{
+				From: []netv1.NetworkPolicyPeer{{IPBlock: &netv1.IPBlock{CIDR: cidr}}},
+			}},
+		},
+	})
+	// 6. Ingress from ipBlock with except.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "ipblock-ingress-except", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{{
+				From: []netv1.NetworkPolicyPeer{{IPBlock: &netv1.IPBlock{CIDR: cidr, Except: []string{except}}}},
+			}},
+		},
+	})
+	// 7. Egress to ipBlock with except.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "ipblock-egress-except", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
+			Egress: []netv1.NetworkPolicyEgressRule{{
+				To: []netv1.NetworkPolicyPeer{{IPBlock: &netv1.IPBlock{CIDR: cidr, Except: []string{except}}}},
+			}},
+		},
+	})
+	// 8. Explicit Ingress policyType.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "explicit-ingress-type", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress:     []netv1.NetworkPolicyIngressRule{{}},
+		},
+	})
+	// 9. Explicit Egress policyType.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "explicit-egress-type", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
+			Egress:      []netv1.NetworkPolicyEgressRule{{}},
+		},
+	})
+	// 10. Both policyTypes explicit.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "explicit-both-types", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
+			Ingress:     []netv1.NetworkPolicyIngressRule{{}},
+			Egress:      []netv1.NetworkPolicyEgressRule{{}},
+		},
+	})
+	// 11. No explicit PolicyTypes → defaults to kubeIngressPolicyType.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "no-policy-types", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			// Deliberately omit PolicyTypes to test default behaviour.
+			Ingress: []netv1.NetworkPolicyIngressRule{{}},
+			Egress:  []netv1.NetworkPolicyEgressRule{{}},
+		},
+	})
+	// 12-15. Pod exclusion policy selects all app=z pods.
+	add(&netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod-exclusion-test", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "z"}},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress:     []netv1.NetworkPolicyIngressRule{{}},
+		},
+	})
+
+	netpols, err := npc.buildNetworkPoliciesInfo()
+	if err != nil {
+		t.Fatalf("buildNetworkPoliciesInfo() failed: %v", err)
+	}
+
+	find := func(name string) *networkPolicyInfo {
+		for i := range netpols {
+			if netpols[i].namespace == "nsA" && netpols[i].name == name {
+				return &netpols[i]
+			}
+		}
+		return nil
+	}
+
+	t.Run("ingress allow-all sets matchAllSource and matchAllPorts", func(t *testing.T) {
+		np := find("allow-all-ingress")
+		if np == nil {
+			t.Fatal("policy 'allow-all-ingress' not found")
+		}
+		if len(np.ingressRules) != 1 {
+			t.Fatalf("expected 1 ingress rule, got %d", len(np.ingressRules))
+		}
+		r := np.ingressRules[0]
+		if !r.matchAllSource {
+			t.Error("expected matchAllSource=true for empty From")
+		}
+		if !r.matchAllPorts {
+			t.Error("expected matchAllPorts=true for empty Ports")
+		}
+	})
+
+	t.Run("egress allow-all sets matchAllDestinations and matchAllPorts", func(t *testing.T) {
+		np := find("allow-all-egress")
+		if np == nil {
+			t.Fatal("policy 'allow-all-egress' not found")
+		}
+		if len(np.egressRules) != 1 {
+			t.Fatalf("expected 1 egress rule, got %d", len(np.egressRules))
+		}
+		r := np.egressRules[0]
+		if !r.matchAllDestinations {
+			t.Error("expected matchAllDestinations=true for empty To")
+		}
+		if !r.matchAllPorts {
+			t.Error("expected matchAllPorts=true for empty Ports")
+		}
+	})
+
+	t.Run("ingress ports-only sets matchAllSource with specific ports", func(t *testing.T) {
+		np := find("ingress-ports-only")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		if len(np.ingressRules) != 1 {
+			t.Fatalf("expected 1 ingress rule, got %d", len(np.ingressRules))
+		}
+		r := np.ingressRules[0]
+		if !r.matchAllSource {
+			t.Error("expected matchAllSource=true when From is omitted")
+		}
+		if r.matchAllPorts {
+			t.Error("expected matchAllPorts=false when Ports is specified")
+		}
+		if len(r.ports) != 1 {
+			t.Fatalf("expected 1 port, got %d", len(r.ports))
+		}
+		if r.ports[0].port != "80" {
+			t.Errorf("expected port 80, got %s", r.ports[0].port)
+		}
+	})
+
+	t.Run("egress ports-only sets matchAllDestinations with specific ports", func(t *testing.T) {
+		np := find("egress-ports-only")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		if len(np.egressRules) != 1 {
+			t.Fatalf("expected 1 egress rule, got %d", len(np.egressRules))
+		}
+		r := np.egressRules[0]
+		if !r.matchAllDestinations {
+			t.Error("expected matchAllDestinations=true when To is omitted")
+		}
+		if r.matchAllPorts {
+			t.Error("expected matchAllPorts=false when Ports is specified")
+		}
+		if len(r.ports) != 1 {
+			t.Fatalf("expected 1 port, got %d", len(r.ports))
+		}
+	})
+
+	t.Run("ingress ipBlock CIDR populates srcIPBlocks", func(t *testing.T) {
+		np := find("ipblock-ingress")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		if len(np.ingressRules) != 1 {
+			t.Fatalf("expected 1 ingress rule, got %d", len(np.ingressRules))
+		}
+		r := np.ingressRules[0]
+		blocks := r.srcIPBlocks[v1.IPv4Protocol]
+		if len(blocks) != 1 {
+			t.Fatalf("expected 1 IPv4 srcIPBlock entry, got %d", len(blocks))
+		}
+		if blocks[0][0] != cidr {
+			t.Errorf("expected CIDR %s, got %s", cidr, blocks[0][0])
+		}
+		// Must not be tagged nomatch.
+		if len(blocks[0]) >= 4 && blocks[0][3] == utils.OptionNoMatch {
+			t.Error("main CIDR entry must not be tagged nomatch")
+		}
+	})
+
+	t.Run("ingress ipBlock with except tags except CIDR as nomatch", func(t *testing.T) {
+		np := find("ipblock-ingress-except")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		r := np.ingressRules[0]
+		blocks := r.srcIPBlocks[v1.IPv4Protocol]
+		// Expect two entries: the main CIDR and the except CIDR.
+		if len(blocks) != 2 {
+			t.Fatalf("expected 2 srcIPBlock entries (cidr + except), got %d", len(blocks))
+		}
+		foundMain, foundExcept := false, false
+		for _, entry := range blocks {
+			if entry[0] == cidr {
+				foundMain = true
+				if len(entry) >= 4 && entry[3] == utils.OptionNoMatch {
+					t.Error("main CIDR must not be tagged nomatch")
+				}
+			}
+			if entry[0] == except {
+				foundExcept = true
+				if len(entry) < 4 || entry[3] != utils.OptionNoMatch {
+					t.Error("except CIDR must be tagged nomatch")
+				}
+			}
+		}
+		if !foundMain {
+			t.Errorf("main CIDR %s not found in srcIPBlocks", cidr)
+		}
+		if !foundExcept {
+			t.Errorf("except CIDR %s not found in srcIPBlocks", except)
+		}
+	})
+
+	t.Run("egress ipBlock with except tags except CIDR as nomatch", func(t *testing.T) {
+		np := find("ipblock-egress-except")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		r := np.egressRules[0]
+		blocks := r.dstIPBlocks[v1.IPv4Protocol]
+		if len(blocks) != 2 {
+			t.Fatalf("expected 2 dstIPBlock entries, got %d", len(blocks))
+		}
+		for _, entry := range blocks {
+			if entry[0] == except {
+				if len(entry) < 4 || entry[3] != utils.OptionNoMatch {
+					t.Error("except CIDR must be tagged nomatch in dstIPBlocks")
+				}
+				return
+			}
+		}
+		t.Errorf("except CIDR %s not found in dstIPBlocks", except)
+	})
+
+	t.Run("explicit Ingress policyType → kubeIngressPolicyType", func(t *testing.T) {
+		np := find("explicit-ingress-type")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		if np.policyType != kubeIngressPolicyType {
+			t.Errorf("expected policyType %s, got %s", kubeIngressPolicyType, np.policyType)
+		}
+	})
+
+	t.Run("explicit Egress policyType → kubeEgressPolicyType", func(t *testing.T) {
+		np := find("explicit-egress-type")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		if np.policyType != kubeEgressPolicyType {
+			t.Errorf("expected policyType %s, got %s", kubeEgressPolicyType, np.policyType)
+		}
+	})
+
+	t.Run("explicit Ingress+Egress policyTypes → kubeBothPolicyType", func(t *testing.T) {
+		np := find("explicit-both-types")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		if np.policyType != kubeBothPolicyType {
+			t.Errorf("expected policyType %s, got %s", kubeBothPolicyType, np.policyType)
+		}
+	})
+
+	t.Run("no explicit PolicyTypes defaults to kubeIngressPolicyType", func(t *testing.T) {
+		np := find("no-policy-types")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		if np.policyType != kubeIngressPolicyType {
+			t.Errorf("expected default policyType %s, got %s", kubeIngressPolicyType, np.policyType)
+		}
+	})
+
+	t.Run("host-network pod excluded from targetPods", func(t *testing.T) {
+		np := find("pod-exclusion-test")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		for _, pod := range np.targetPods {
+			if pod.name == "hostnet-pod" {
+				t.Error("host-network pod must not appear in targetPods")
+			}
+		}
+		// The running-z pod should still be present.
+		found := false
+		for _, pod := range np.targetPods {
+			if pod.name == "running-z" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("running-z pod must be present in targetPods")
+		}
+	})
+
+	t.Run("completed pod excluded from targetPods", func(t *testing.T) {
+		np := find("pod-exclusion-test")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		for _, pod := range np.targetPods {
+			if pod.name == "completed-pod" {
+				t.Error("completed (PodSucceeded) pod must not appear in targetPods")
+			}
+			if pod.name == "failed-pod" {
+				t.Error("failed (PodFailed) pod must not appear in targetPods")
+			}
+		}
+	})
+
+	t.Run("pod with no IP excluded from targetPods", func(t *testing.T) {
+		np := find("pod-exclusion-test")
+		if np == nil {
+			t.Fatal("policy not found")
+		}
+		for _, pod := range np.targetPods {
+			if pod.name == "no-ip-pod" {
+				t.Error("pod with empty PodIP must not appear in targetPods")
+			}
+		}
+	})
+}

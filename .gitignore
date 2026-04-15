@@ -16,7 +16,7 @@ worktrees
 # Ignore common IDE directories
 /.vscode
 /.idea
-
+/.zed
 
 #### Go Lang Ignores ####
 # If you prefer the allow list template instead of the deny list, see community template:

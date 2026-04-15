@@ -1,0 +1,792 @@
+package netpol
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base32"
+	"fmt"
+	"net"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
+	"github.com/coreos/go-iptables/iptables"
+	v1core "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
+	netutils "k8s.io/utils/net"
+)
+
+type NetworkPolicyControllerIptables struct {
+	*NetworkPolicyControllerBase
+
+	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler
+	iptablesSaveRestore map[v1core.IPFamily]utils.IPTablesSaveRestorer
+	ipSetHandlers       map[v1core.IPFamily]utils.IPSetHandler
+}
+
+// Run runs forever till we receive notification on stopCh
+func (npc *NetworkPolicyControllerIptables) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},
+	wg *sync.WaitGroup) {
+	t := time.NewTicker(npc.syncPeriod)
+	defer t.Stop()
+	defer wg.Done()
+
+	klog.Info("Starting network policy controller")
+	npc.healthChan = healthChan
+
+	// setup kube-router specific top level custom chains (KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT)
+	npc.ensureTopLevelChains()
+
+	// setup default network policy chain that is applied to traffic from/to the pods that does not match any network
+	// policy
+	npc.ensureDefaultNetworkPolicyChain()
+
+	// setup common network policy chain that is applied to all bi-directional traffic
+	npc.ensureCommonPolicyChain()
+
+	// Full syncs of the network policy controller take a lot of time and can only be processed one at a time,
+	// therefore, we start it in it's own goroutine and request a sync through a single item channel
+	klog.Info("Starting network policy controller full sync goroutine")
+	wg.Add(1)
+	go func(fullSyncRequest <-chan struct{}, stopCh <-chan struct{}, wg *sync.WaitGroup) {
+		defer wg.Done()
+		for {
+			// Add an additional non-blocking select to ensure that if the stopCh channel is closed it is handled first
+			select {
+			case <-stopCh:
+				klog.Info("Shutting down network policies full sync goroutine")
+				return
+			default:
+			}
+			select {
+			case <-stopCh:
+				klog.Info("Shutting down network policies full sync goroutine")
+				return
+			case <-fullSyncRequest:
+				klog.V(3).Info("Received request for a full sync, processing")
+				npc.fullPolicySync() // fullPolicySync() is a blocking request here
+			}
+		}
+	}(npc.fullSyncRequestChan, stopCh, wg)
+
+	// loop forever till notified to stop on stopCh
+	for {
+		klog.V(1).Info("Requesting periodic sync of iptables to reflect network policies")
+		npc.RequestFullSync()
+		select {
+		case <-stopCh:
+			klog.Infof("Shutting down network policies controller")
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// Sync synchronizes iptables to desired state of network policies
+func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
+
+	var err error
+	var networkPoliciesInfo []networkPolicyInfo
+	npc.mu.Lock()
+	defer npc.mu.Unlock()
+
+	for ipFamily := range npc.ipSetHandlers {
+		// Ensure that we start with clean handlers that don't contain previous save data
+		var err error
+		//nolint:exhaustive // we don't need a default condition here because we control this ourselves
+		switch ipFamily {
+		case v1core.IPv4Protocol:
+			npc.ipSetHandlers[ipFamily], err = utils.NewIPSet(false)
+		case v1core.IPv6Protocol:
+			npc.ipSetHandlers[ipFamily], err = utils.NewIPSet(true)
+		}
+		if err != nil {
+			klog.Errorf("failed to create ipset handler: %v", err)
+			return
+		}
+	}
+
+	healthcheck.SendHeartBeat(npc.healthChan, healthcheck.NetworkPolicyController)
+	start := time.Now()
+	syncVersion := strconv.FormatInt(start.UnixNano(), syncVersionBase)
+	defer func() {
+		endTime := time.Since(start)
+		if npc.MetricsEnabled {
+			metrics.ControllerIptablesSyncTime.Observe(endTime.Seconds())
+		}
+		klog.V(1).Infof("sync iptables took %v", endTime)
+	}()
+
+	klog.V(1).Infof("Starting sync of iptables with version: %s", syncVersion)
+
+	// ensure kube-router specific top level chains and corresponding rules exist
+	npc.ensureTopLevelChains()
+
+	// ensure default network policy chain that is applied to traffic from/to the pods that does not match any network
+	// policy
+	npc.ensureDefaultNetworkPolicyChain()
+
+	// ensure common network policy chain that is applied to all bi-directional traffic
+	npc.ensureCommonPolicyChain()
+
+	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
+	if err != nil {
+		klog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
+		return
+	}
+
+	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
+		npc.filterTableRules[ipFamily].Reset()
+		saveStart := time.Now()
+		err := iptablesSaveRestore.SaveInto("filter", npc.filterTableRules[ipFamily])
+		saveEndTime := time.Since(saveStart)
+		if npc.MetricsEnabled {
+			//nolint:exhaustive // we don't need exhaustive searching for IP Families
+			switch ipFamily {
+			case v1core.IPv4Protocol:
+				metrics.ControllerIptablesV4SaveTime.Observe(saveEndTime.Seconds())
+			case v1core.IPv6Protocol:
+				metrics.ControllerIptablesV6SaveTime.Observe(saveEndTime.Seconds())
+			}
+		}
+		klog.V(1).Infof("Saving %v iptables rules took %v", ipFamily, saveEndTime)
+
+		if err != nil {
+			klog.Errorf("Aborting sync. Failed to run iptables-save: %v", err.Error())
+			return
+		}
+	}
+
+	activePolicyChains, activePolicyIPSets, err := npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
+	if err != nil {
+		klog.Errorf("Aborting sync. Failed to sync network policy chains: %v", err.Error())
+		return
+	}
+
+	activePodFwChains := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+
+	// Makes sure that the ACCEPT rules for packets marked with "0x20000" are added to the end of each of kube-router's
+	// top level chains
+	npc.ensureExplicitAccept()
+
+	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains, false)
+	if err != nil {
+		klog.Errorf("Aborting sync. Failed to cleanup stale iptables rules: %v", err.Error())
+		return
+	}
+
+	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
+		restoreStart := time.Now()
+		err := iptablesSaveRestore.Restore("filter", npc.filterTableRules[ipFamily].Bytes())
+		restoreEndTime := time.Since(restoreStart)
+		if npc.MetricsEnabled {
+			//nolint:exhaustive // we don't need exhaustive searching for IP Families
+			switch ipFamily {
+			case v1core.IPv4Protocol:
+				metrics.ControllerIptablesV4RestoreTime.Observe(restoreEndTime.Seconds())
+			case v1core.IPv6Protocol:
+				metrics.ControllerIptablesV6RestoreTime.Observe(restoreEndTime.Seconds())
+			}
+		}
+		klog.V(1).Infof("Restoring %v iptables rules took %v", ipFamily, restoreEndTime)
+
+		if err != nil {
+			klog.Errorf("Aborting sync. Failed to run iptables-restore: %v\n%s",
+				err.Error(), npc.filterTableRules[ipFamily].String())
+			return
+		}
+	}
+
+	err = npc.cleanupStaleIPSets(activePolicyIPSets)
+	if err != nil {
+		klog.Errorf("Failed to cleanup stale ipsets: %v", err.Error())
+		return
+	}
+}
+
+func (npc *NetworkPolicyControllerIptables) iptablesCmdHandlerForCIDR(cidr *net.IPNet) (utils.IPTablesHandler, error) {
+	if netutils.IsIPv4CIDR(cidr) {
+		return npc.iptablesCmdHandlers[v1core.IPv4Protocol], nil
+	}
+	if netutils.IsIPv6CIDR(cidr) {
+		return npc.iptablesCmdHandlers[v1core.IPv6Protocol], nil
+	}
+
+	return nil, fmt.Errorf("invalid CIDR")
+}
+
+func (npc *NetworkPolicyControllerIptables) allowTrafficToClusterIPRange(
+	serviceVIPPosition int,
+	serviceClusterIPRange *net.IPNet,
+	addUUIDForRuleSpec func(chain string, ruleSpec *[]string) (string, error),
+	ensureRuleAtPosition func(iptablesCmdHandler utils.IPTablesHandler,
+		chain string, ruleSpec []string, uuid string, position int),
+	comment string) {
+	whitelistServiceVips := []string{"-m", "comment", "--comment", comment,
+		"-d", serviceClusterIPRange.String(), "-j", "RETURN"}
+	uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+	if err != nil {
+		klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+	}
+	iptablesCmdHandler, err := npc.iptablesCmdHandlerForCIDR(serviceClusterIPRange)
+	if err != nil {
+		klog.Fatalf("Failed to get iptables handler: %s", err.Error())
+	}
+	ensureRuleAtPosition(iptablesCmdHandler,
+		kubeInputChainName, whitelistServiceVips, uuid, serviceVIPPosition)
+}
+
+// Creates custom chains KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT
+// and following rules in the filter table to jump from builtin chain to custom chain
+// -A INPUT   -m comment --comment "kube-router netpol" -j KUBE-ROUTER-INPUT
+// -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
+// -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
+func (npc *NetworkPolicyControllerIptables) ensureTopLevelChains() {
+	const serviceVIPPosition = 1
+	rulePosition := map[v1core.IPFamily]int{v1core.IPv4Protocol: 1, v1core.IPv6Protocol: 1}
+
+	addUUIDForRuleSpec := func(chain string, ruleSpec *[]string) (string, error) {
+		hash := sha256.Sum256([]byte(chain + strings.Join(*ruleSpec, "")))
+		encoded := base32.StdEncoding.EncodeToString(hash[:])[:16]
+		for idx, part := range *ruleSpec {
+			if part == "--comment" {
+				(*ruleSpec)[idx+1] = (*ruleSpec)[idx+1] + " - " + encoded
+				return encoded, nil
+			}
+		}
+		return "", fmt.Errorf("could not find a comment in the ruleSpec string given: %s",
+			strings.Join(*ruleSpec, " "))
+	}
+
+	ensureRuleAtPosition := func(
+		iptablesCmdHandler utils.IPTablesHandler, chain string, ruleSpec []string, uuid string, position int) {
+		exists, err := iptablesCmdHandler.Exists("filter", chain, ruleSpec...)
+		if err != nil {
+			klog.Fatalf("Failed to verify rule exists in %s chain due to %s", chain, err.Error())
+		}
+		if !exists {
+			klog.V(2).Infof("Rule '%s' doesn't exist in chain %s, inserting at position %d",
+				strings.Join(ruleSpec, " "), chain, position)
+			err := iptablesCmdHandler.Insert("filter", chain, position, ruleSpec...)
+			if err != nil {
+				klog.Fatalf("Failed to run iptables command to insert in %s chain %s", chain, err.Error())
+			}
+			return
+		}
+		rules, err := iptablesCmdHandler.List("filter", chain)
+		if err != nil {
+			klog.Fatalf("failed to list rules in filter table %s chain due to %s", chain, err.Error())
+		}
+
+		var ruleNo, ruleIndexOffset int
+		for i, rule := range rules {
+			rule = strings.Replace(rule, "\"", "", 2) // removes quote from comment string
+			if strings.HasPrefix(rule, "-P") || strings.HasPrefix(rule, "-N") {
+				// if this chain has a default policy, then it will show as rule #1 from iptablesCmdHandler.List so we
+				// need to account for this offset
+				ruleIndexOffset++
+				continue
+			}
+			if strings.Contains(rule, uuid) {
+				// range uses a 0 index, but iptables uses a 1 index so we need to increase ruleNo by 1
+				ruleNo = i + 1 - ruleIndexOffset
+				break
+			}
+		}
+		if ruleNo != position {
+			klog.V(2).Infof("Rule '%s' existed in chain %s, but was in position %d instead of %d, "+
+				"moving...", strings.Join(ruleSpec, " "), chain, ruleNo, position)
+			err = iptablesCmdHandler.Insert("filter", chain, position, ruleSpec...)
+			if err != nil {
+				klog.Fatalf("Failed to run iptables command to insert in %s chain %s", chain, err.Error())
+			}
+			err = iptablesCmdHandler.Delete("filter", chain, strconv.Itoa(ruleNo+1))
+			if err != nil {
+				klog.Fatalf("Failed to delete incorrect rule in %s chain due to %s", chain, err.Error())
+			}
+		}
+	}
+
+	for _, handler := range npc.iptablesCmdHandlers {
+		for builtinChain, customChain := range defaultChains {
+			exists, err := handler.ChainExists("filter", customChain)
+			if err != nil {
+				klog.Fatalf("failed to run iptables command to create %s chain due to %s", customChain,
+					err.Error())
+			}
+			if !exists {
+				klog.V(2).Infof("Custom chain was missing, creating: %s in filter table", customChain)
+				err = handler.NewChain("filter", customChain)
+				if err != nil {
+					klog.Fatalf("failed to run iptables command to create %s chain due to %s", customChain,
+						err.Error())
+				}
+			}
+			args := []string{"-m", "comment", "--comment", "kube-router netpol", "-j", customChain}
+			uuid, err := addUUIDForRuleSpec(builtinChain, &args)
+			if err != nil {
+				klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+			}
+			klog.V(2).Infof("Ensuring jump to chain %s from %s at position %d", customChain, builtinChain,
+				serviceVIPPosition)
+			ensureRuleAtPosition(handler, builtinChain, args, uuid, serviceVIPPosition)
+		}
+	}
+
+	if len(npc.serviceClusterIPRanges) > 0 {
+		for idx, serviceRange := range npc.serviceClusterIPRanges {
+			var family v1core.IPFamily
+			if serviceRange.IP.To4() != nil {
+				family = v1core.IPv4Protocol
+			} else {
+				family = v1core.IPv6Protocol
+			}
+			klog.V(2).Infof("Allow traffic to ingress towards Cluster IP Range: %s for family: %s",
+				serviceRange.String(), family)
+			npc.allowTrafficToClusterIPRange(rulePosition[family], &npc.serviceClusterIPRanges[idx],
+				addUUIDForRuleSpec, ensureRuleAtPosition, "allow traffic to primary/secondary cluster IP range")
+			rulePosition[family]++
+		}
+	} else {
+		klog.Fatalf("Primary service cluster IP range is not configured")
+	}
+
+	for family, handler := range npc.iptablesCmdHandlers {
+		whitelistTCPNodeports := []string{"-p", "tcp", "-m", "comment", "--comment",
+			"allow LOCAL TCP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+			"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
+		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistTCPNodeports)
+		if err != nil {
+			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		klog.V(2).Infof("Allow TCP traffic to ingress towards node port range: %s for family: %s",
+			npc.serviceNodePortRange, family)
+		ensureRuleAtPosition(handler,
+			kubeInputChainName, whitelistTCPNodeports, uuid, rulePosition[family])
+		rulePosition[family]++
+
+		whitelistUDPNodeports := []string{"-p", "udp", "-m", "comment", "--comment",
+			"allow LOCAL UDP traffic to node ports", "-m", "addrtype", "--dst-type", "LOCAL",
+			"-m", "multiport", "--dports", npc.serviceNodePortRange, "-j", "RETURN"}
+		uuid, err = addUUIDForRuleSpec(kubeInputChainName, &whitelistUDPNodeports)
+		if err != nil {
+			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		klog.V(2).Infof("Allow UDP traffic to ingress towards node port range: %s for family: %s",
+			npc.serviceNodePortRange, family)
+		ensureRuleAtPosition(handler,
+			kubeInputChainName, whitelistUDPNodeports, uuid, rulePosition[family])
+		rulePosition[family]++
+	}
+
+	for idx, externalIPRange := range npc.serviceExternalIPRanges {
+		var family v1core.IPFamily
+		if externalIPRange.IP.To4() != nil {
+			family = v1core.IPv4Protocol
+		} else {
+			family = v1core.IPv6Protocol
+		}
+		whitelistServiceVips := []string{"-m", "comment", "--comment",
+			"allow traffic to external IP range: " + externalIPRange.String(), "-d", externalIPRange.String(),
+			"-j", "RETURN"}
+		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+		if err != nil {
+			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		// Access externalIPRange via index to avoid implicit memory aliasing
+		cidrHandler, err := npc.iptablesCmdHandlerForCIDR(&npc.serviceExternalIPRanges[idx])
+		if err != nil {
+			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
+		}
+		klog.V(2).Infof("Allow traffic to ingress towards External IP Range: %s for family: %s",
+			externalIPRange.String(), family)
+		ensureRuleAtPosition(cidrHandler,
+			kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
+		rulePosition[family]++
+	}
+
+	for idx, loadBalancerIPRange := range npc.serviceLoadBalancerIPRanges {
+		var family v1core.IPFamily
+		if loadBalancerIPRange.IP.To4() != nil {
+			family = v1core.IPv4Protocol
+		} else {
+			family = v1core.IPv6Protocol
+		}
+		whitelistServiceVips := []string{"-m", "comment", "--comment",
+			"allow traffic to load balancer IP range: " + loadBalancerIPRange.String(), "-d", loadBalancerIPRange.String(),
+			"-j", "RETURN"}
+		uuid, err := addUUIDForRuleSpec(kubeInputChainName, &whitelistServiceVips)
+		if err != nil {
+			klog.Fatalf("Failed to get uuid for rule: %s", err.Error())
+		}
+		// Access loadBalancerIPRange via index to avoid implicit memory aliasing
+		cidrHandler, err := npc.iptablesCmdHandlerForCIDR(&npc.serviceLoadBalancerIPRanges[idx])
+		if err != nil {
+			klog.Fatalf("Failed to get iptables handler: %s", err.Error())
+		}
+		klog.V(2).Infof("Allow traffic to ingress towards Load Balancer IP Range: %s for family: %s",
+			loadBalancerIPRange.String(), family)
+		ensureRuleAtPosition(cidrHandler,
+			kubeInputChainName, whitelistServiceVips, uuid, rulePosition[family])
+		rulePosition[family]++
+	}
+}
+
+func (npc *NetworkPolicyControllerIptables) ensureExplicitAccept() {
+	// for the traffic to/from the local pod's let network policy controller be
+	// authoritative entity to ACCEPT the traffic if it complies to network policies
+	for _, filterTableRules := range npc.filterTableRules {
+		for _, chain := range defaultChains {
+			comment := "\"rule to explicitly ACCEPT traffic that comply to network policies\""
+			args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "--mark", "0x20000/0x20000",
+				"-j", "ACCEPT"}
+			utils.AppendUnique(filterTableRules, chain, args)
+		}
+	}
+}
+
+// Creates custom chain KUBE-NWPLCY-COMMON which holds rules that are applicable to all bi-directional traffic. Which
+// includes the following:
+// - Accept Related & Established traffic
+// - Drop Invalid state traffic
+// - ICMP rules
+func (npc *NetworkPolicyControllerIptables) ensureCommonPolicyChain() {
+	klog.V(1).Infof("Ensuring common policy chain")
+	for family, iptablesCmdHandler := range npc.iptablesCmdHandlers {
+		exists, err := iptablesCmdHandler.ChainExists("filter", kubeCommonNetpolChain)
+		if err != nil {
+			klog.Fatalf("failed to check for the existence of chain %s, error: %v", kubeCommonNetpolChain, err)
+		}
+		if !exists {
+			klog.V(1).Infof("Creating chain %s", kubeCommonNetpolChain)
+			err = iptablesCmdHandler.NewChain("filter", kubeCommonNetpolChain)
+			if err != nil {
+				klog.Fatalf("failed to run iptables command to create %s chain due to %s", kubeCommonNetpolChain,
+					err.Error())
+			}
+		} else {
+			klog.V(1).Infof("Chain %s already exists", kubeCommonNetpolChain)
+		}
+
+		// ensure statefull firewall drops INVALID state traffic from/to the pod
+		// For full context see: https://bugzilla.netfilter.org/show_bug.cgi?id=693
+		// The NAT engine ignores any packet with state INVALID, because there's no reliable way to determine what kind of
+		// NAT should be performed. So the proper way to prevent the leakage is to drop INVALID packets.
+		// In the future, if we ever allow services or nodes to disable conntrack checking, we may need to make this
+		// conditional so that non-tracked traffic doesn't get dropped as invalid.
+		comment := "\"rule to drop invalid state for pod\""
+		args := []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "INVALID", "-j", "DROP"}
+		err = iptablesCmdHandler.AppendUnique("filter", kubeCommonNetpolChain, args...)
+		if err != nil {
+			klog.Fatalf("failed to run iptables command: %v", err)
+		}
+
+		// ensure statefull firewall that permits RELATED,ESTABLISHED traffic from/to the pod
+		comment = "\"rule for stateful firewall for pod\""
+		args = []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED",
+			"-j", "ACCEPT"}
+		err = iptablesCmdHandler.AppendUnique("filter", kubeCommonNetpolChain, args...)
+		if err != nil {
+			klog.Fatalf("failed to run iptables command: %v", err)
+		}
+
+		icmpRules := utils.CommonICMPRules(family)
+		for _, icmpRule := range icmpRules {
+			icmpArgs := []string{"-m", "comment", "--comment", icmpRule.Comment, "-p", icmpRule.IPTablesProto,
+				icmpRule.IPTablesType, icmpRule.ICMPType, "-j", "ACCEPT"}
+			err = iptablesCmdHandler.AppendUnique("filter", kubeCommonNetpolChain, icmpArgs...)
+			if err != nil {
+				klog.Fatalf("failed to run iptables command: %v", err)
+			}
+		}
+	}
+}
+
+// Creates custom chains KUBE-NWPLCY-DEFAULT which holds rules for the default network policy. This is applied to
+// traffic which is not selected by any network policy and is primarily used to allow traffic that is accepted by
+// default.
+//
+// NOTE: This chain is only targeted by unidirectional network traffic selectors.
+func (npc *NetworkPolicyControllerIptables) ensureDefaultNetworkPolicyChain() {
+	for _, iptablesCmdHandler := range npc.iptablesCmdHandlers {
+		exists, err := iptablesCmdHandler.ChainExists("filter", kubeDefaultNetpolChain)
+		if err != nil {
+			klog.Fatalf("failed to check for the existence of chain %s, error: %v", kubeDefaultNetpolChain, err)
+		}
+		if !exists {
+			err = iptablesCmdHandler.NewChain("filter", kubeDefaultNetpolChain)
+			if err != nil {
+				klog.Fatalf("failed to run iptables command to create %s chain due to %s",
+					kubeDefaultNetpolChain, err.Error())
+			}
+		}
+
+		// Start off by marking traffic with an invalid mark so that we can allow list only traffic accepted by a
+		// matching policy. Anything that still has 0x10000
+		markArgs := make([]string, 0)
+		markComment := "rule to mark traffic matching a network policy"
+		markArgs = append(markArgs, "-j", "MARK", "-m", "comment", "--comment", markComment,
+			"--set-xmark", "0x10000/0x10000")
+		err = iptablesCmdHandler.AppendUnique("filter", kubeDefaultNetpolChain, markArgs...)
+		if err != nil {
+			klog.Fatalf("Failed to run iptables command: %s", err.Error())
+		}
+	}
+}
+
+func (npc *NetworkPolicyControllerIptables) cleanupStaleRules(activePolicyChains, activePodFwChains map[string]bool,
+	deleteDefaultChains bool) error {
+
+	cleanupPodFwChains := make([]string, 0)
+	cleanupPolicyChains := make([]string, 0)
+
+	for ipFamily, iptablesCmdHandler := range npc.iptablesCmdHandlers {
+		// find iptables chains and ipsets that are no longer used by comparing current to the active maps we were passed
+		chains, err := iptablesCmdHandler.ListChains("filter")
+		if err != nil {
+			return fmt.Errorf("unable to list chains: %w", err)
+		}
+		for _, chain := range chains {
+			if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) {
+				if chain == kubeDefaultNetpolChain {
+					continue
+				}
+				if chain == kubeCommonNetpolChain {
+					continue
+				}
+				if _, ok := activePolicyChains[chain]; !ok {
+					cleanupPolicyChains = append(cleanupPolicyChains, chain)
+					continue
+				}
+			}
+			if strings.HasPrefix(chain, kubePodFirewallChainPrefix) {
+				if _, ok := activePodFwChains[chain]; !ok {
+					cleanupPodFwChains = append(cleanupPodFwChains, chain)
+					continue
+				}
+			}
+		}
+
+		var newChains, newRules, desiredFilterTable bytes.Buffer
+		rules := strings.Split(npc.filterTableRules[ipFamily].String(), "\n")
+		if len(rules) > 0 && rules[len(rules)-1] == "" {
+			rules = rules[:len(rules)-1]
+		}
+		for _, rule := range rules {
+			skipRule := false
+			for _, podFWChainName := range cleanupPodFwChains {
+				if strings.Contains(rule, podFWChainName) {
+					skipRule = true
+					break
+				}
+			}
+			for _, policyChainName := range cleanupPolicyChains {
+				if strings.Contains(rule, policyChainName) {
+					skipRule = true
+					break
+				}
+			}
+			if deleteDefaultChains {
+				for _, chain := range []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName,
+					kubeDefaultNetpolChain, kubeCommonNetpolChain} {
+					if strings.Contains(rule, chain) {
+						skipRule = true
+						break
+					}
+				}
+			}
+			if strings.Contains(rule, "COMMIT") || strings.HasPrefix(rule, "# ") {
+				skipRule = true
+			}
+			if skipRule {
+				continue
+			}
+			if strings.HasPrefix(rule, ":") {
+				newChains.WriteString(rule + " - [0:0]\n")
+			}
+			if strings.HasPrefix(rule, "-") {
+				newRules.WriteString(rule + "\n")
+			}
+		}
+		desiredFilterTable.WriteString("*filter" + "\n")
+		desiredFilterTable.Write(newChains.Bytes())
+		desiredFilterTable.Write(newRules.Bytes())
+		desiredFilterTable.WriteString("COMMIT" + "\n")
+		npc.filterTableRules[ipFamily] = &desiredFilterTable
+	}
+
+	return nil
+}
+
+func (npc *NetworkPolicyControllerIptables) cleanupStaleIPSets(activePolicyIPSets map[string]bool) error {
+	// There are certain actions like Cleanup() actions that aren't working with full instantiations of the controller
+	// and in these instances the mutex may not be present and may not need to be present as they are operating out of a
+	// single goroutine where there is no need for locking
+	if nil != npc.ipsetMutex {
+		klog.V(1).Infof("Attempting to attain ipset mutex lock")
+		npc.ipsetMutex.Lock()
+		klog.V(1).Infof("Attained ipset mutex lock, continuing...")
+		defer func() {
+			npc.ipsetMutex.Unlock()
+			klog.V(1).Infof("Returned ipset mutex lock")
+		}()
+	}
+
+	for _, ipsets := range npc.ipSetHandlers {
+		cleanupPolicyIPSets := make([]*utils.Set, 0)
+		if err := ipsets.Save(); err != nil {
+			klog.Fatalf("failed to initialize ipsets command executor due to %s", err.Error())
+		}
+		for _, set := range ipsets.Sets() {
+			if set.HasPrefix(kubeSourceIPSetPrefix) ||
+				set.HasPrefix(kubeDestinationIPSetPrefix) {
+				if _, ok := activePolicyIPSets[set.Name]; !ok {
+					cleanupPolicyIPSets = append(cleanupPolicyIPSets, set)
+				}
+			}
+		}
+		// cleanup network policy ipsets
+		for _, set := range cleanupPolicyIPSets {
+			if err := set.Destroy(); err != nil {
+				return fmt.Errorf("failed to delete ipset %s due to %s", set.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+// Cleanup cleanup configurations done
+func (npc *NetworkPolicyControllerIptables) Cleanup() {
+	klog.Info("Cleaning up NetworkPolicyController configurations...")
+
+	if len(npc.iptablesCmdHandlers) < 1 {
+		iptablesCmdHandlers, ipSetHandlers, err := NewIPTablesHandlers(nil)
+		if err != nil {
+			klog.Errorf("unable to get iptables and ipset handlers: %v", err)
+			return
+		}
+		npc.iptablesCmdHandlers = iptablesCmdHandlers
+		npc.ipSetHandlers = ipSetHandlers
+
+		// Make other structures that we rely on
+		npc.iptablesSaveRestore = make(map[v1core.IPFamily]utils.IPTablesSaveRestorer, 2)
+		npc.iptablesSaveRestore[v1core.IPv4Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv4Protocol)
+		npc.iptablesSaveRestore[v1core.IPv6Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv6Protocol)
+		npc.filterTableRules = make(map[v1core.IPFamily]*bytes.Buffer, 2)
+		var buf bytes.Buffer
+		npc.filterTableRules[v1core.IPv4Protocol] = &buf
+		var buf2 bytes.Buffer
+		npc.filterTableRules[v1core.IPv6Protocol] = &buf2
+	}
+
+	var emptySet map[string]bool
+	// Take a dump (iptables-save) of the current filter table for cleanupStaleRules() to work on
+	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
+		if err := iptablesSaveRestore.SaveInto("filter", npc.filterTableRules[ipFamily]); err != nil {
+			klog.Errorf("error encountered attempting to list iptables rules for cleanup: %v", err)
+			return
+		}
+	}
+	// Run cleanupStaleRules() to get rid of most of the kube-router rules (this is the same logic that runs as
+	// part NPC's runtime loop). Setting the last parameter to true causes even the default chains are removed.
+	err := npc.cleanupStaleRules(emptySet, emptySet, true)
+	if err != nil {
+		klog.Errorf("error encountered attempting to cleanup iptables rules: %v", err)
+		return
+	}
+	// Restore (iptables-restore) npc's cleaned up version of the iptables filter chain
+	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
+		if err = iptablesSaveRestore.Restore("filter", npc.filterTableRules[ipFamily].Bytes()); err != nil {
+			klog.Errorf(
+				"error encountered while loading running iptables-restore: %v\n%s", err,
+				npc.filterTableRules[ipFamily].String())
+		}
+	}
+
+	// Cleanup ipsets
+	err = npc.cleanupStaleIPSets(emptySet)
+	if err != nil {
+		klog.Errorf("error encountered while cleaning ipsets: %v", err)
+		return
+	}
+
+	klog.Infof("Successfully cleaned the NetworkPolicyController configurations done by kube-router")
+}
+
+func NewIPTablesHandlers(config *options.KubeRouterConfig) (
+	map[v1core.IPFamily]utils.IPTablesHandler, map[v1core.IPFamily]utils.IPSetHandler, error) {
+	iptablesCmdHandlers := make(map[v1core.IPFamily]utils.IPTablesHandler, 2)
+	ipSetHandlers := make(map[v1core.IPFamily]utils.IPSetHandler, 2)
+
+	if config == nil || config.EnableIPv4 {
+		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv4)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create iptables handler: %w", err)
+		}
+		iptablesCmdHandlers[v1core.IPv4Protocol] = iptHandler
+
+		ipset, err := utils.NewIPSet(false)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create ipset handler: %w", err)
+		}
+		ipSetHandlers[v1core.IPv4Protocol] = ipset
+	}
+	if config == nil || config.EnableIPv6 {
+		iptHandler, err := iptables.NewWithProtocol(iptables.ProtocolIPv6)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create iptables handler: %w", err)
+		}
+		iptablesCmdHandlers[v1core.IPv6Protocol] = iptHandler
+
+		ipset, err := utils.NewIPSet(true)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create ipset handler: %w", err)
+		}
+		ipSetHandlers[v1core.IPv6Protocol] = ipset
+	}
+	return iptablesCmdHandlers, ipSetHandlers, nil
+}
+
+// NewNetworkPolicyControllerIptables returns new NetworkPolicyControllerIptables object
+func NewNetworkPolicyControllerIptables(
+	npcBase *NetworkPolicyControllerBase, clientset kubernetes.Interface,
+	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
+	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer,
+	linkQ utils.LocalLinkQuerier,
+	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler,
+	ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler) (*NetworkPolicyControllerIptables, error) {
+
+	npc := NetworkPolicyControllerIptables{NetworkPolicyControllerBase: npcBase}
+
+	npc.iptablesCmdHandlers = iptablesCmdHandlers
+	npc.iptablesSaveRestore = make(map[v1core.IPFamily]utils.IPTablesSaveRestorer, 2)
+	npc.ipSetHandlers = ipSetHandlers
+
+	if config.EnableIPv4 {
+		if !npc.krNode.IsIPv4Capable() {
+			return nil, fmt.Errorf("IPv4 was enabled but no IPv4 address was found on node")
+		}
+		klog.V(2).Infof("IPv4 is enabled")
+		npc.iptablesSaveRestore[v1core.IPv4Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv4Protocol)
+		var buf bytes.Buffer
+		npc.filterTableRules[v1core.IPv4Protocol] = &buf
+	}
+	if config.EnableIPv6 {
+		if !npc.krNode.IsIPv6Capable() {
+			return nil, fmt.Errorf("IPv6 was enabled but no IPv6 address was found on node")
+		}
+		klog.V(2).Infof("IPv6 is enabled")
+		npc.iptablesSaveRestore[v1core.IPv6Protocol] = utils.NewIPTablesSaveRestore(v1core.IPv6Protocol)
+		var buf bytes.Buffer
+		npc.filterTableRules[v1core.IPv6Protocol] = &buf
+	}
+
+	return &npc, nil
+}
