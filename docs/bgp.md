@@ -20,6 +20,7 @@ pod IPs, service IPs, etc.).
   - [BGP Communities](#bgp-communities)
   - [Custom BGP Import Policy Reject](#custom-bgp-import-policy-reject)
 - [BGP listen address list](#bgp-listen-address-list)
+- [GoBGP Admin gRPC Server](#gobgp-admin-grpc-server)
 - [Overriding the next hop](#overriding-the-next-hop)
 - [Overriding the next hop and enable IPIP/tunnel](#overriding-the-next-hop-and-enable-ipiptunnel)
 
@@ -287,6 +288,38 @@ Here is sample example to make GoBGP server to listen on multiple IP address:
 ```shell
 kubectl annotate node ip-172-20-46-87.us-west-2.compute.internal "kube-router.io/bgp-local-addresses=172.20.56.25,192.168.1.99"
 ```
+
+## GoBGP Admin gRPC Server
+
+Starting in kube-router version >=2.9.0, the gRPC admin server, if enabled, binds to `127.0.0.1` by default. This
+change was made to address a security vulnerability — in previous versions, the admin server
+bound to the node's primary IP address, exposing the GoBGP gRPC API to the cluster without authentication. While this
+allowed easy remote debugging of the BGP state from other nodes in the cluster, it also permitted unauthenticated
+remote access to the GoBGP control plane.
+
+### Restoring pre-2.9.0 behavior
+
+To bind the GoBGP admin server to the node's primary IP as in versions <=2.8.1,
+use the Kubernetes downward API to pass the
+node's IP as an environment variable, then reference it in the `--gobgp-admin-address` flag:
+
+```yaml
+spec:
+  template:
+    spec:
+      containers:
+        - name: kube-router
+          image: docker.io/cloudnativelabs/kube-router
+          args:
+            - --gobgp-admin-address=$(NODE_IP)
+          env:
+            - name: NODE_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+```
+
+Since kube-router DaemonSets run with `hostNetwork: true`, `status.podIP` would also work for the downward API.
 
 ## Overriding the next hop
 

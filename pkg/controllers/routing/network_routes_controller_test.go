@@ -2792,6 +2792,64 @@ func Test_bgpPeerConfigsFromIndividualAnnotations(t *testing.T) {
 	}
 }
 
+func Test_goBGPListenAddrs(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name              string
+		adminAddress      string
+		expectedAddresses []string
+	}{
+		{
+			name:              "empty string returns loopback address with port",
+			adminAddress:      "",
+			expectedAddresses: []string{"127.0.0.1:50051"},
+		},
+		{
+			name:              "invalid IP return loopback address with port",
+			adminAddress:      "invalid",
+			expectedAddresses: []string{"127.0.0.1:50051"},
+		},
+		{
+			name:              "IPv4 loopback address returns only loopback address with port",
+			adminAddress:      "127.0.0.1",
+			expectedAddresses: []string{"127.0.0.1:50051"},
+		},
+		{
+			name:              "IPv4 unspecified address returns only unspecified address with port",
+			adminAddress:      "0.0.0.0",
+			expectedAddresses: []string{"0.0.0.0:50051"},
+		},
+		{
+			name:              "IPv6 loopback address returns only loopback address with port",
+			adminAddress:      "::1",
+			expectedAddresses: []string{"[::1]:50051"},
+		},
+		{
+			name:              "IPv6 unspecified only returns only unspecified address with port",
+			adminAddress:      "::",
+			expectedAddresses: []string{"[::]:50051"},
+		},
+		{
+			name:              "IPv4 non-loopback/non-unspecified address returns list of addresses with address and loopback",
+			adminAddress:      "10.0.0.1",
+			expectedAddresses: []string{"10.0.0.1:50051", "127.0.0.1:50051"},
+		},
+		{
+			name:              "IPv6 non-loopback/non-unspecified address returns list of addresses with address and loopback",
+			adminAddress:      "2001:db8::1",
+			expectedAddresses: []string{"[2001:db8::1]:50051", "127.0.0.1:50051"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.expectedAddresses, goBGPListenAddrs(tc.adminAddress, uint16(50051)))
+		})
+	}
+}
+
 /* Disabling test for now. OnNodeUpdate() behaviour is changed. test needs to be adopted.
 func Test_OnNodeUpdate(t *testing.T) {
 	testcases := []struct {
