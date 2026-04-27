@@ -138,6 +138,7 @@ type NetworkRoutingController struct {
 	bgpServerStarted               atomic.Bool
 	bgpHoldtime                    float64
 	bgpPort                        uint32
+	goBGPAdminAddress              string
 	goBGPAdminPort                 uint16
 	bgpRRClient                    bool
 	bgpRRServer                    bool
@@ -1056,10 +1057,9 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	}
 
 	if grpcServer && nrc.goBGPAdminPort != 0 {
-		nrc.bgpServer = gobgp.NewBgpServer(
-			gobgp.GrpcListenAddress(net.JoinHostPort(nrc.krNode.GetPrimaryNodeIP().String(),
-				strconv.FormatUint(uint64(nrc.goBGPAdminPort), 10)) + "," +
-				fmt.Sprintf("127.0.0.1:%d", nrc.goBGPAdminPort)))
+		listenAddrs := strings.Join(goBGPListenAddrs(nrc.goBGPAdminAddress, nrc.goBGPAdminPort), ",")
+		klog.V(2).Infof("GoBGP admin server listening on %s", listenAddrs)
+		nrc.bgpServer = gobgp.NewBgpServer(gobgp.GrpcListenAddress(listenAddrs))
 	} else {
 		nrc.bgpServer = gobgp.NewBgpServer()
 	}
@@ -1378,7 +1378,15 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.CNIFirewallSetup = sync.NewCond(&sync.Mutex{})
 
 	nrc.bgpPort = kubeRouterConfig.BGPPort
+
 	nrc.goBGPAdminPort = kubeRouterConfig.GoBGPAdminPort
+	nrc.goBGPAdminAddress = kubeRouterConfig.GoBGPAdminAddress
+	if nrc.goBGPAdminAddress == "" {
+		klog.Infof("--gobgp-admin-address set to empty string, defaulting to 127.0.0.1")
+		nrc.goBGPAdminAddress = "127.0.0.1"
+	} else if nrc.goBGPAdminPort == 0 {
+		klog.Warning("--gobgp-admin-port is 0 but --gobgp-admin-address is non-empty, not binding GoBGP socket to an address")
+	}
 
 	// Convert ints to uint32s
 	peerASNs := make([]uint32, 0)
@@ -1590,4 +1598,19 @@ func bgpPeerConfigsFromIndividualAnnotations(
 	}
 
 	return bgp.NewPeerConfigs(ipStrings, peerASNs, ports, passwords, localIPs, localAddress)
+}
+
+func goBGPListenAddrs(adminAddress string, adminPort uint16) []string {
+	port := strconv.FormatUint(uint64(adminPort), 10)
+	localAddr := net.JoinHostPort("127.0.0.1", port)
+	ip := net.ParseIP(adminAddress)
+	// empty or invalid IP passed in for adminAddress, return loopback
+	if ip == nil {
+		return []string{localAddr}
+	}
+	addrs := []string{net.JoinHostPort(adminAddress, port)}
+	if !ip.IsLoopback() && !ip.IsUnspecified() {
+		addrs = append(addrs, localAddr)
+	}
+	return addrs
 }

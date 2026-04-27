@@ -127,6 +127,7 @@ Usage of kube-router:
       --enable-pod-egress                             SNAT traffic from Pods to destinations outside the cluster. (default true)
       --enable-pprof                                  Enables pprof for debugging performance and memory leak issues.
       --excluded-cidrs strings                        Excluded CIDRs are used to exclude IPVS rules from deletion.
+      --gobgp-admin-address string                    Address for GoBGP server. Used in combination with gobgp-admin-port to expose GoBGP for administrative purposes. Setting this to empty string will default the address to 127.0.0.1. (default "127.0.0.1")
       --gobgp-admin-port uint16                       Port to connect to GoBGP for administrative purposes. Setting this to 0 will disable the GoBGP gRPC server. (default 50051)
       --hairpin-mode                                  Add iptables rules for every Service Endpoint to support hairpin traffic.
       --health-port uint16                            Health check port, 0 = Disabled (default 20244)

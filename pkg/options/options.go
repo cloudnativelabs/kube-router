@@ -13,6 +13,7 @@ const (
 	DefaultBgpHoldTime                   = 90 * time.Second
 	defaultHealthCheckPort               = 20244
 	defaultOverlayTunnelEncapPort uint16 = 5555
+	defaultGoBGPAdminAddress             = "127.0.0.1"
 	defaultGoBGPAdminPort         uint16 = 50051
 )
 
@@ -43,6 +44,7 @@ type KubeRouterConfig struct {
 	ExternalIPCIDRs                []string
 	FullMeshMode                   bool
 	GlobalHairpinMode              bool
+	GoBGPAdminAddress              string
 	GoBGPAdminPort                 uint16
 	HealthPort                     uint16
 	HelpRequested                  bool
@@ -167,6 +169,9 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Excluded CIDRs are used to exclude IPVS rules from deletion.")
 	fs.BoolVar(&s.GlobalHairpinMode, "hairpin-mode", false,
 		"Add iptables rules for every Service Endpoint to support hairpin traffic.")
+	fs.StringVar(&s.GoBGPAdminAddress, "gobgp-admin-address", defaultGoBGPAdminAddress,
+		"Address for GoBGP server. Used in combination with gobgp-admin-port to expose GoBGP for administrative purposes. "+
+			"Setting this to empty string will default the address to 127.0.0.1.")
 	fs.Uint16Var(&s.GoBGPAdminPort, "gobgp-admin-port", defaultGoBGPAdminPort,
 		"Port to connect to GoBGP for administrative purposes. Setting this to 0 will disable the GoBGP gRPC server.")
 	fs.Uint16Var(&s.HealthPort, "health-port", defaultHealthCheckPort, "Health check port, 0 = Disabled")
