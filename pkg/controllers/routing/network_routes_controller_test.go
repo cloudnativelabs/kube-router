@@ -2682,6 +2682,7 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 }
 
 func Test_bgpPeerConfigsFromIndividualAnnotations(t *testing.T) {
+	// #nosec G101: not real passwords
 	testCases := []struct {
 		name            string
 		nodeAnnotations map[string]string
