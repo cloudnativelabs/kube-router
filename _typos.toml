@@ -23,10 +23,13 @@ extend-glob = ["testdata/**", "*_test.go"]
 
 [type.testdata.extend-words]
 # Ipset hash names and tunnel names contain arbitrary letter sequences
-IZ = "IZ"
 UE = "UE"
 Ba = "Ba"
 ba = "ba"
 
 # "mis-configured" is valid hyphenated usage
 mis = "mis"
+
+[type.txt.extend-words]
+# Ipset hash names and tunnel names contain arbitrary letter sequences
+IZ = "IZ"

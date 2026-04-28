@@ -1979,6 +1979,9 @@ func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
 
 // setupHandlers Here we test to see whether the node is IPv6 capable, if the user has enabled IPv6 (via command-line
 // options) and the node has an IPv6 address, the following method will return an IPv6 address
+// TODO: replace klog.Fatalf with Errorf and return error, then remove nolint comment below
+//
+//nolint:unparam
 func (nsc *NetworkServicesController) setupHandlers(node *v1.Node) error {
 	nsc.ipSetHandlers = make(map[v1.IPFamily]utils.IPSetHandler)
 	nsc.iptablesCmdHandlers = make(map[v1.IPFamily]utils.IPTablesHandler)

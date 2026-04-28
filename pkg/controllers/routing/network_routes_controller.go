@@ -1187,6 +1187,9 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 	return nil
 }
 
+// TODO: replace klog.Fatalf with Errorf and return error, then remove nolint comment below
+//
+//nolint:unparam
 func (nrc *NetworkRoutingController) setupHandlers(node *v1core.Node) error {
 	var err error
 
@@ -1314,6 +1317,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		if nrc.cniConfFile == "" {
 			nrc.cniConfFile = "/etc/cni/net.d/10-kuberouter.conf"
 		}
+		// #nosec G703: cniConfFile is not untrusted user input
 		if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
 			return nil, errors.New("CNI conf file " + nrc.cniConfFile + " does not exist.")
 		}

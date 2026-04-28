@@ -21,6 +21,7 @@ pod IPs, service IPs, etc.).
   - [Custom BGP Import Policy Reject](#custom-bgp-import-policy-reject)
 - [BGP listen address list](#bgp-listen-address-list)
 - [GoBGP Admin gRPC Server](#gobgp-admin-grpc-server)
+  - [Restoring pre-2.9.0 behavior](#restoring-pre-290-behavior)
 - [Overriding the next hop](#overriding-the-next-hop)
 - [Overriding the next hop and enable IPIP/tunnel](#overriding-the-next-hop-and-enable-ipiptunnel)
 
