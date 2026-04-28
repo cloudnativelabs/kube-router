@@ -1,5 +1,5 @@
-ARG BUILDTIME_BASE=golang:1-alpine
-ARG RUNTIME_BASE=alpine:latest
+ARG BUILDTIME_BASE=golang:1-alpine@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1
+ARG RUNTIME_BASE=alpine:latest@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
 ARG TARGETPLATFORM
 ARG CNI_VERSION
 FROM ${BUILDTIME_BASE} AS builder
@@ -14,7 +14,7 @@ RUN apk add --no-cache make git tar curl \
 
 WORKDIR /iptables-wrappers
 # This is the latest commit on the master branch.
-ENV IPTABLES_WRAPPERS_VERSION=c6b9b2d4ee8701f3d476768ab8732d1b85ec7fef
+ENV IPTABLES_WRAPPERS_VERSION=bfef9e5087a198b50a4124bb9ce9d2c7c99025dd
 RUN git clone https://github.com/kubernetes-sigs/iptables-wrappers.git . \
     && git checkout "${IPTABLES_WRAPPERS_VERSION}" \
     && make build \

@@ -18,34 +18,34 @@ MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
 # See Versions: https://hub.docker.com/_/golang
-DOCKER_BUILD_IMAGE?=golang:1.25.7-alpine3.23@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced
+DOCKER_BUILD_IMAGE?=golang:1.25.9-alpine3.23@sha256:5caaf1cca9dc351e13deafbc3879fd4754801acba8653fa9540cea125d01a71f
 ## These variables are used by the Dockerfile as the bases for building and creating the runtime container
 ## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
 GO_CACHE?=$(shell go env GOCACHE)
 GO_MOD_CACHE?=$(shell go env GOMODCACHE)
 BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 # See Versions: https://hub.docker.com/_/alpine
-RUNTIME_BASE?=alpine:3.23@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+RUNTIME_BASE?=alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
 # See Versions: https://hub.docker.com/r/golangci/golangci-lint/tags
-DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.8.0
+DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.11.4@sha256:67dfc9eeeb0eb13fc1a36329c2c378197dc561f1edf1a7792e3f771606bb0e15
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
-DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0
+DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0@sha256:a9509a9d50a82781aa4cd0a48f182da55233071fb19454bc70cecc2782359c3c
 # See Versions: https://hub.docker.com/_/node
-DOCKER_DOCTOC_IMAGE?=node:alpine
+DOCKER_DOCTOC_IMAGE?=node:alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4
 # See Versions: https://www.npmjs.com/package/doctoc
-DOCTOC_VERSION=2.3.0
+DOCTOC_VERSION=2.4.1
 # See Versions: https://github.com/crate-ci/typos/releases
-TYPOS_VERSION=v1.33.1
+TYPOS_VERSION=v1.45.2
 # See Versions: https://github.com/osrg/gobgp/releases
-GOBGP_VERSION=v4.2.0
-QEMU_IMAGE?=multiarch/qemu-user-static
+GOBGP_VERSION=v4.4.0
+QEMU_IMAGE?=multiarch/qemu-user-static:7.2.0-1@sha256:fe60359c92e86a43cc87b3d906006245f77bfc0565676b80004cc666e4feb9f0
 # See Versions: https://github.com/goreleaser/goreleaser/releases
-GORELEASER_VERSION=v2.13.3
+GORELEASER_VERSION=v2.15.4
 # See Versions: https://github.com/anchore/grype/releases
-GRYPE_VERSION=v0.110.0
+GRYPE_VERSION=v0.111.1
 GRYPE_IMAGE?=anchore/grype:$(GRYPE_VERSION)
 # See Versions: https://github.com/containernetworking/plugins/releases
-CNI_VERSION=v1.9.0
+CNI_VERSION=v1.9.1
 UID?=$(shell id -u)
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
