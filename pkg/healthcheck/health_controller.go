@@ -48,6 +48,7 @@ type ControllerHeartbeat struct {
 
 // HealthController reports the health of the controller loops as a http endpoint
 type HealthController struct {
+	HealthAddr  string
 	HealthPort  uint16
 	HTTPEnabled bool
 	Status      HealthStats
@@ -225,7 +226,7 @@ func (hc *HealthController) RunServer(stopCh <-chan struct{}, wg *sync.WaitGroup
 	mux := http.NewServeMux()
 
 	srv := &http.Server{
-		Addr:              ":" + strconv.Itoa(int(hc.HealthPort)),
+		Addr:              hc.HealthAddr + ":" + strconv.Itoa(int(hc.HealthPort)),
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -290,6 +291,7 @@ func (hc *HealthController) SetAlive() {
 func NewHealthController(config *options.KubeRouterConfig) (*HealthController, error) {
 	hc := HealthController{
 		Config:     config,
+		HealthAddr: config.HealthAddr,
 		HealthPort: config.HealthPort,
 		Status: HealthStats{
 			Healthy: true,
