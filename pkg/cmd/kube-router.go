@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -29,7 +30,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-const healthControllerChannelLength = 10
+const (
+	healthControllerChannelLength = 10
+	nftablesInitTimeout           = 30 * time.Second
+)
 
 // KubeRouter holds the information needed to run server
 type KubeRouter struct {
@@ -81,9 +85,14 @@ func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error)
 }
 
 // CleanupConfigAndExit performs Cleanup on all three controllers
-func CleanupConfigAndExit() {
-	npc := netpol.NetworkPolicyController{}
-	npc.Cleanup()
+func CleanupConfigAndExit(config *options.KubeRouterConfig) {
+	if config != nil && config.UseNftablesForNetpol {
+		npc := netpol.NetworkPolicyControllerNftables{NetworkPolicyControllerBase: &netpol.NetworkPolicyControllerBase{}}
+		npc.Cleanup()
+	} else {
+		npc := netpol.NetworkPolicyControllerIptables{NetworkPolicyControllerBase: &netpol.NetworkPolicyControllerBase{}}
+		npc.Cleanup()
+	}
 
 	nsc := proxy.NetworkServicesController{}
 	nsc.Cleanup()
@@ -259,22 +268,28 @@ func (kr *KubeRouter) Run() error {
 		if err != nil {
 			return fmt.Errorf("failed to create iptables handlers: %w", err)
 		}
+		nftCtx, nftCancel := context.WithTimeout(context.Background(), nftablesInitTimeout)
+		knftablesInterfaces, err := netpol.NewKnftablesInterfaces(nftCtx, kr.Config)
+		nftCancel()
+		if err != nil {
+			return fmt.Errorf("failed to create nftables interfaces: %v", err)
+		}
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
-			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil, iptablesCmdHandlers, ipSetHandlers,
-			ipValidator)
+			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil,
+			iptablesCmdHandlers, ipSetHandlers, ipValidator, knftablesInterfaces, kr.Config.UseNftablesForNetpol)
 		if err != nil {
 			return fmt.Errorf("failed to create network policy controller: %w", err)
 		}
 
-		_, err = podInformer.AddEventHandler(npc.PodEventHandler)
+		_, err = podInformer.AddEventHandler(npc.PodEventHandler())
 		if err != nil {
 			return fmt.Errorf("failed to add PodEventHandler: %w", err)
 		}
-		_, err = nsInformer.AddEventHandler(npc.NamespaceEventHandler)
+		_, err = nsInformer.AddEventHandler(npc.NamespaceEventHandler())
 		if err != nil {
 			return fmt.Errorf("failed to add NamespaceEventHandler: %w", err)
 		}
-		_, err = npInformer.AddEventHandler(npc.NetworkPolicyEventHandler)
+		_, err = npInformer.AddEventHandler(npc.NetworkPolicyEventHandler())
 		if err != nil {
 			return fmt.Errorf("failed to add NetworkPolicyEventHandler: %w", err)
 		}
