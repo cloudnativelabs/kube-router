@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
     - name: Set up Go 1.x
       uses: actions/setup-go@v6
@@ -111,14 +111,14 @@ jobs:
     - name: Load kube-router image into kind
       run: kind load docker-image "${{ env.KUBE_ROUTER_IMAGE }}" --name e2e
 
-    - name: Deploy kube-router (${{ matrix.netpol-backend }} NetworkPolicy backend)
+    - name: Deploy kube-router (${{ matrix.backend }} NetworkPolicy backend)
       run: |
         MANIFEST=$(cat daemonset/generic-kuberouter.yaml \
           | sed 's|[^ ]*cloudnativelabs/kube-router[^ ]*|kube-router:e2e-test|g' \
           | sed 's|imagePullPolicy: Always|imagePullPolicy: Never|g')
-        if [[ "${{ matrix.netpol-backend }}" == "nftables" ]]; then
+        if [[ "${{ matrix.backend }}" == "nftables" ]]; then
           MANIFEST=$(echo "$MANIFEST" \
-            | yq '(select(.kind == "DaemonSet") | .spec.template.spec.containers[0].args) += ["--use-nftables-for-netpol=true"]')
+            | sed 's|"--bgp-graceful-restart=true"|"--bgp-graceful-restart=true"\n        - "--use-nftables-for-netpol=true"|')
         fi
         # debug: output the final manifest to be applied
         echo "=== Final kube-router DaemonSet manifest ==="

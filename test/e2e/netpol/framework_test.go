@@ -3,6 +3,7 @@ package netpol_e2e
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -272,9 +273,16 @@ func execInPod(ns, podName, containerName string, cmd []string) (string, string,
 	})
 	exitCode := 0
 	if err != nil {
-		// remotecommand wraps non-zero exit codes as errors; treat them as
-		// connection failures rather than fatal test errors.
-		exitCode = 1
+		// remotecommand wraps non-zero exit codes as an error implementing
+		// ExitStatus(); treat those as a non-zero exit while keeping err==nil
+		// so callers can distinguish a command failure from a transport failure.
+		var exitErr interface{ ExitStatus() int }
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitStatus()
+		} else {
+			// Real transport / stream failure — propagate it.
+			return stdout.String(), stderr.String(), -1, fmt.Errorf("stream: %w", err)
+		}
 	}
 	return stdout.String(), stderr.String(), exitCode, nil
 }
