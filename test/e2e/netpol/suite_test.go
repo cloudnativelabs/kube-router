@@ -1,6 +1,6 @@
-// Package netpol_e2e contains end-to-end tests for the kube-router nftables
+// Package netpol_e2e contains end-to-end tests for the kube-router
 // NetworkPolicy implementation. Tests require a running Kubernetes cluster
-// with kube-router deployed in –run-firewall mode.
+// with kube-router deployed in --run-firewall mode.
 //
 // Run with:
 //
