@@ -1014,6 +1014,3 @@ var _ = Describe("NetworkPolicy", func() {
 		})
 	})
 })
-
-// Ensure the intstr import is used (named port helper).
-var _ = intstr.FromString
