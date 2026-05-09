@@ -43,6 +43,9 @@ var (
 	// Examples: v4.2.0  v2.13.3  2.3.0  v1.33.1
 	versionPattern = regexp.MustCompile(`^v?[0-9]+\.[0-9]`)
 
+	// commitSHAPattern matches a 40-character lowercase hex string (git commit SHA).
+	commitSHAPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
 	// makefileExpansion matches values that contain $(VAR) expansions.
 	makefileExpansion = regexp.MustCompile(`\$\(`)
 
@@ -87,9 +90,11 @@ func ClassifyMakeVar(name, value string) DepKind {
 		}
 	}
 
-	// Check for tool version variables.
-	if strings.HasSuffix(upperName, "_VERSION") && versionPattern.MatchString(value) {
-		return KindToolVersion
+	// Check for tool version variables (semver tags or commit SHAs from prior pinning).
+	if strings.HasSuffix(upperName, "_VERSION") {
+		if versionPattern.MatchString(value) || commitSHAPattern.MatchString(value) {
+			return KindToolVersion
+		}
 	}
 
 	return KindUnknown

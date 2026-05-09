@@ -96,14 +96,33 @@ func UpdateMakefile(
 				warnings = append(warnings, fmt.Sprintf("skipping %s: %v", varName, err))
 				continue
 			}
-			// Preserve the v-prefix style of the original value: if the original
-			// had no leading 'v' (e.g. "2.3.0") strip it from the fetched tag.
-			latest = matchVPrefix(value, latest)
-			if verbose {
-				fmt.Printf("  %s: %s -> %s\n", varName, value, latest)
-			}
-			if latest != value {
-				lines[i] = varName + operator + latest + comment
+
+			if config.ShouldPinBySHA(varName) {
+				// Resolve the release tag to its upstream commit SHA for an
+				// immutable reference that cannot be changed by force-pushing
+				// a tag. The version tag is preserved as a trailing comment.
+				sha, err := gh.ResolveTagToSHA(repo, latest)
+				if err != nil {
+					warnings = append(warnings, fmt.Sprintf("skipping %s SHA resolution: %v", varName, err))
+					continue
+				}
+				versionComment := "  # " + latest
+				if verbose {
+					fmt.Printf("  %s: %s -> %s (%s)\n", varName, value, sha, latest)
+				}
+				if sha != value {
+					lines[i] = varName + operator + sha + versionComment
+				}
+			} else {
+				// Preserve the v-prefix style of the original value: if the original
+				// had no leading 'v' (e.g. "2.3.0") strip it from the fetched tag.
+				latest = matchVPrefix(value, latest)
+				if verbose {
+					fmt.Printf("  %s: %s -> %s\n", varName, value, latest)
+				}
+				if latest != value {
+					lines[i] = varName + operator + latest + comment
+				}
 			}
 
 		case KindDerived, KindUnknown:

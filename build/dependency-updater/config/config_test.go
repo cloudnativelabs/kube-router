@@ -72,7 +72,6 @@ func TestLookupToolRepo(t *testing.T) {
 		{"GORELEASER_VERSION", "goreleaser/goreleaser", true},
 		{"CNI_VERSION", "containernetworking/plugins", true},
 		{"TYPOS_VERSION", "crate-ci/typos", true},
-		{"GRYPE_VERSION", "anchore/grype", true},
 		{"UNKNOWN_VERSION", "", false},
 	}
 	for _, tt := range tests {
@@ -84,6 +83,28 @@ func TestLookupToolRepo(t *testing.T) {
 			}
 			if ok && got != tt.want {
 				t.Errorf("LookupToolRepo(%q) = %q, want %q", tt.varName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShouldPinBySHA(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		varName string
+		want    bool
+	}{
+		{"GOBGP_VERSION", true},
+		{"TYPOS_VERSION", false},
+		{"GORELEASER_VERSION", false},
+		{"UNKNOWN_VERSION", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.varName, func(t *testing.T) {
+			t.Parallel()
+			got := config.ShouldPinBySHA(tt.varName)
+			if got != tt.want {
+				t.Errorf("ShouldPinBySHA(%q) = %v, want %v", tt.varName, got, tt.want)
 			}
 		})
 	}
