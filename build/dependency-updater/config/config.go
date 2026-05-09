@@ -57,11 +57,25 @@ var ToolRepo = map[string]string{
 	"CNI_VERSION":        "containernetworking/plugins",
 	"DOCTOC_VERSION":     "thlorenz/doctoc",
 	"TYPOS_VERSION":      "crate-ci/typos",
-	"GRYPE_VERSION":      "anchore/grype",
+}
+
+// ToolPinBySHA lists _VERSION variable names whose value should be pinned by the
+// upstream git commit SHA rather than the version tag. This is used for tools
+// installed via `go install pkg@<ref>`, where a commit SHA provides an immutable
+// reference that cannot be changed by force-pushing a tag. The version tag is
+// preserved as a trailing comment for readability (e.g. "abc123...  # v4.5.0").
+var ToolPinBySHA = map[string]bool{
+	"GOBGP_VERSION": true,
 }
 
 // LookupToolRepo returns the GitHub repo for a _VERSION variable, and whether it was found.
 func LookupToolRepo(varName string) (string, bool) {
 	repo, ok := ToolRepo[varName]
 	return repo, ok
+}
+
+// ShouldPinBySHA reports whether the given _VERSION variable should be pinned
+// by commit SHA instead of version tag.
+func ShouldPinBySHA(varName string) bool {
+	return ToolPinBySHA[varName]
 }
