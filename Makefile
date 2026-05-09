@@ -105,6 +105,18 @@ else
 	go test -v -timeout 30s github.com/cloudnativelabs/kube-router/v2/cmd/kube-router/ github.com/cloudnativelabs/kube-router/v2/...
 endif
 
+test-privileged: ## Runs only privileged tests (netlink, netns, etc) that require root. Use Docker or run as root.
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	$(DOCKER) run --privileged -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+		sh -c \
+		'CGO_ENABLED=0 go test -v -timeout 30s -tags privileged -run "^TestPrivileged" $$(find . -name "*_privileged_test.go" -exec dirname {} + | sort -u)'
+else
+	go test -v -timeout 30s -tags privileged -run '^TestPrivileged' $$(find . -name '*_privileged_test.go' -exec dirname {} + | sort -u)
+endif
+
 test-pretty: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
@@ -326,7 +338,7 @@ help:
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan
-.PHONY: test test-pretty lint docker-login push-manifest push-manifest-release
+.PHONY: test test-privileged test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
 .PHONY: spellcheck update-deps update-deps-dry prep-release
 
