@@ -22,7 +22,7 @@ func TestUpdateMakefile_PreservesStructure(t *testing.T) {
 GOBGP_VERSION=v4.2.0
 QEMU_IMAGE?=multiarch/qemu-user-static
 # derived, should be skipped
-GRYPE_IMAGE?=anchore/grype:$(GRYPE_VERSION)
+BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 BUILD_IN_DOCKER?=true
 `
 	dir := t.TempDir()
@@ -86,7 +86,7 @@ func TestUpdateMakefile_DryRunDoesNotWrite(t *testing.T) {
 // (those containing $(...) expansions) are never modified.
 func TestUpdateMakefile_SkipsDerivedVars(t *testing.T) {
 	t.Parallel()
-	content := "GRYPE_IMAGE?=anchore/grype:$(GRYPE_VERSION)\n"
+	content := "BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)\n"
 	dir := t.TempDir()
 	path := filepath.Join(dir, "Makefile")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
