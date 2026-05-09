@@ -29,7 +29,6 @@ func TestClassifyMakeVar(t *testing.T) {
 		// Tool version — commit SHA from prior SHA-pinning run
 		{"GOBGP_VERSION", "abc123def456789012345678901234567890abcd", updater.KindToolVersion},
 		// Derived (Makefile expansion)
-		{"GRYPE_IMAGE", "anchore/grype:$(GRYPE_VERSION)", updater.KindDerived},
 		{"BUILDTIME_BASE", "$(DOCKER_BUILD_IMAGE)", updater.KindDerived},
 		// Unknown / non-dep
 		{"GIT_COMMIT", "$(shell git describe --tags --dirty)", updater.KindDerived},

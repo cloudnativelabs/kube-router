@@ -41,9 +41,8 @@ GOBGP_VERSION=5f191066a78e2c1e929c54b5b75fe2c683c166e4  # v4.5.0
 QEMU_IMAGE?=multiarch/qemu-user-static:7.2.0-1@sha256:fe60359c92e86a43cc87b3d906006245f77bfc0565676b80004cc666e4feb9f0
 # See Versions: https://github.com/goreleaser/goreleaser/releases
 GORELEASER_VERSION=v2.15.4
-# See Versions: https://github.com/anchore/grype/releases
-GRYPE_VERSION=v0.111.1
-GRYPE_IMAGE?=anchore/grype:$(GRYPE_VERSION)
+# See Versions: https://hub.docker.com/r/anchore/grype/tags
+GRYPE_IMAGE?=anchore/grype:v0.112.0@sha256:391bfda62888fb4e98ff5c4c81598f7431a3c1eac3f8519d69d1ff00df247c1d
 # See Versions: https://github.com/containernetworking/plugins/releases
 CNI_VERSION=v1.9.1
 UID?=$(shell id -u)
