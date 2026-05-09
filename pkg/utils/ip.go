@@ -2,7 +2,6 @@ package utils
 
 import (
 	"bytes"
-	"fmt"
 	"net"
 )
 
@@ -105,23 +104,4 @@ func IsIPInRanges(ip net.IP, ranges []net.IPNet) bool {
 		}
 	}
 	return false
-}
-
-// IsDefaultRoute checks if a given CIDR is a default route by comparing it to the default routes for IPv4 and IPv6
-func IsDefaultRoute(cidr *net.IPNet) (bool, error) {
-	var defaultPrefixCIDR *net.IPNet
-	var err error
-
-	if cidr.IP.To4() != nil {
-		_, defaultPrefixCIDR, err = net.ParseCIDR(IPv4DefaultRoute)
-		if err != nil {
-			return false, fmt.Errorf("failed to parse default route: %w", err)
-		}
-	} else {
-		_, defaultPrefixCIDR, err = net.ParseCIDR(IPv6DefaultRoute)
-		if err != nil {
-			return false, fmt.Errorf("failed to parse default route: %w", err)
-		}
-	}
-	return IPNetEqual(defaultPrefixCIDR, cidr), nil
 }
