@@ -84,7 +84,7 @@ const (
 
 	// kubernetes standard labels / annotations
 	svcProxyNameLabel = "service.kubernetes.io/service-proxy-name"
-	svcHeadlessLabel  = "service.kubernetes.io/headless"
+	headlessLabel     = "service.kubernetes.io/headless"
 
 	// All IPSET names need to be less than 31 characters in order for the Kernel to accept them. Keep in mind that the
 	// actual formulation for this may be inet6:<setNameBase> depending on ip family, plus when we change ipsets we use
@@ -861,7 +861,7 @@ func (nsc *NetworkServicesController) buildServicesInfo() serviceInfoMap {
 
 		// We handle headless service labels differently from a "None" or blank ClusterIP because ClusterIP is
 		// guaranteed to be immuteable whereas labels can be added / removed
-		_, err = getLabelFromMap(svcHeadlessLabel, svc.Labels)
+		_, err = getLabelFromMap(headlessLabel, svc.Labels)
 		if err == nil {
 			klog.V(2).Infof("Skipping service name:%s namespace:%s due to headless label being set", svc.Name,
 				svc.Namespace)
@@ -1002,6 +1002,13 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 		var isIPv4, isIPv6 bool
 		es := obj.(*discoveryv1.EndpointSlice)
 		klog.V(2).Infof("Building endpoint info for EndpointSlice: %s/%s", es.Namespace, es.Name)
+
+		if _, hasHeadless := es.Labels[headlessLabel]; hasHeadless {
+			klog.V(2).Infof("Skipping EndpointSlice %s/%s due to headless label being set",
+				es.Namespace, es.Name)
+			continue
+		}
+
 		switch es.AddressType {
 		case discoveryv1.AddressTypeIPv4:
 			isIPv4 = true
