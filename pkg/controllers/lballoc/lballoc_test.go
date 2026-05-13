@@ -380,6 +380,12 @@ func (mi *mockIndexer) List() []interface{} {
 	return mi.objects
 }
 
+func (mi *mockIndexer) Bookmark(_ string) {}
+
+func (mi *mockIndexer) LastStoreSyncResourceVersion() string {
+	return ""
+}
+
 func newMockIndexer(objects ...interface{}) *mockIndexer {
 	mi := &mockIndexer{
 		objects: make([]interface{}, 0),
@@ -690,6 +696,28 @@ func (mf *mockInformer) RunWithContext(_ context.Context) {
 
 func (mf *mockInformer) HasSynced() bool {
 	return false
+}
+
+// mockDoneChecker is a minimal cache.DoneChecker implementation used by the
+// mockInformer to satisfy the SharedInformer interface introduced in
+// client-go v0.36. The channel is closed up-front so callers waiting on
+// Done() unblock immediately, matching the previous "no actual sync" semantics
+// of the surrounding tests.
+type mockDoneChecker struct {
+	done chan struct{}
+}
+
+func newMockDoneChecker() *mockDoneChecker {
+	ch := make(chan struct{})
+	close(ch)
+	return &mockDoneChecker{done: ch}
+}
+
+func (m *mockDoneChecker) Name() string          { return "mockInformer" }
+func (m *mockDoneChecker) Done() <-chan struct{} { return m.done }
+
+func (mf *mockInformer) HasSyncedChecker() cache.DoneChecker {
+	return newMockDoneChecker()
 }
 
 func (mf *mockInformer) LastSyncResourceVersion() string {

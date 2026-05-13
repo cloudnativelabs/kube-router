@@ -41,8 +41,8 @@ var (
 type ServiceAdvertisedIPs struct {
 	service               *v1core.Service
 	endpoints             *discoveryv1.EndpointSlice
-	internalTrafficPolicy *v1core.ServiceInternalTrafficPolicyType
-	externalTrafficPolicy *v1core.ServiceExternalTrafficPolicyType
+	internalTrafficPolicy *v1core.ServiceInternalTrafficPolicy
+	externalTrafficPolicy *v1core.ServiceExternalTrafficPolicy
 	advertisedIPs         []string
 	withdrawnIPs          []string
 	annotations           map[string]string
