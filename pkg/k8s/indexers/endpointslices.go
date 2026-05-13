@@ -11,7 +11,7 @@ const ServiceNameIndex = "service-name"
 
 // ServiceNameIndexFunc creates an index key based on an EndpointSlice's parent Service.
 // The key is in the format "<namespace>/<service-name>".
-func ServiceNameIndexFunc(obj interface{}) ([]string, error) {
+func ServiceNameIndexFunc(obj any) ([]string, error) {
 	slice, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		return []string{}, nil

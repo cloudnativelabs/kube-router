@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -799,13 +800,7 @@ func (nsc *NetworkServicesController) cleanupStaleIPVSConfig(activeServiceEndpoi
 				klog.Errorf("Failed to get list of servers from ipvs service")
 			}
 			for _, dst := range dsts {
-				validEp := false
-				for _, epID := range endpointIDs {
-					if epID == generateEndpointID(dst.Address.String(), strconv.Itoa(int(dst.Port))) {
-						validEp = true
-						break
-					}
-				}
+				validEp := slices.Contains(endpointIDs, generateEndpointID(dst.Address.String(), strconv.Itoa(int(dst.Port))))
 				if !validEp {
 					klog.V(1).Infof("Found a destination %s in service %s which is no longer needed so "+
 						"cleaning up", ipvsDestinationString(dst), ipvsServiceString(ipvsSvc))

@@ -3,6 +3,7 @@ package routing
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
@@ -88,19 +89,19 @@ func (nrc *NetworkRoutingController) withdrawVIPs(vips []string) {
 
 func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			nrc.OnServiceCreate(obj)
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			nrc.OnServiceUpdate(oldObj, newObj)
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			nrc.OnServiceDelete(obj)
 		},
 	}
 }
 
-func getServiceObject(obj interface{}) (svc *v1core.Service) {
+func getServiceObject(obj any) (svc *v1core.Service) {
 	if obj == nil {
 		return
 	}
@@ -164,14 +165,14 @@ func (nrc *NetworkRoutingController) handleServiceDelete(oldSvc *v1core.Service)
 	withdrawVIPs := make([]string, 0)
 	for _, serviceVIP := range allIPList {
 		// withdraw VIP only if deleted service is the last service using the VIP
-		if !utils.SliceContainsString(serviceVIP, activeVIPs) {
+		if !slices.Contains(activeVIPs, serviceVIP) {
 			withdrawVIPs = append(withdrawVIPs, serviceVIP)
 		}
 	}
 	nrc.withdrawVIPs(withdrawVIPs)
 }
 
-func (nrc *NetworkRoutingController) tryHandleServiceUpdate(objOld, objNew interface{}) {
+func (nrc *NetworkRoutingController) tryHandleServiceUpdate(objOld, objNew any) {
 	svcOld := getServiceObject(objOld)
 	svcNew := getServiceObject(objNew)
 
@@ -195,7 +196,7 @@ func (nrc *NetworkRoutingController) tryHandleServiceUpdate(objOld, objNew inter
 	nrc.handleServiceUpdate(svcOld, svcNew)
 }
 
-func (nrc *NetworkRoutingController) tryHandleServiceDelete(oldObj interface{}, logMsgFormat string) {
+func (nrc *NetworkRoutingController) tryHandleServiceDelete(oldObj any, logMsgFormat string) {
 	oldSvc, ok := oldObj.(*v1core.Service)
 	if !ok {
 		tombstone, ok := oldObj.(cache.DeletedFinalStateUnknown)
@@ -220,29 +221,29 @@ func (nrc *NetworkRoutingController) tryHandleServiceDelete(oldObj interface{}, 
 }
 
 // OnServiceCreate handles new service create event from the kubernetes API server
-func (nrc *NetworkRoutingController) OnServiceCreate(obj interface{}) {
+func (nrc *NetworkRoutingController) OnServiceCreate(obj any) {
 	nrc.tryHandleServiceUpdate(nil, obj)
 }
 
 // OnServiceUpdate handles the service relates updates from the kubernetes API server
-func (nrc *NetworkRoutingController) OnServiceUpdate(objOld interface{}, objNew interface{}) {
+func (nrc *NetworkRoutingController) OnServiceUpdate(objOld any, objNew any) {
 	nrc.tryHandleServiceUpdate(objOld, objNew)
 }
 
 // OnServiceDelete handles the service delete updates from the kubernetes API server
-func (nrc *NetworkRoutingController) OnServiceDelete(oldObj interface{}) {
+func (nrc *NetworkRoutingController) OnServiceDelete(oldObj any) {
 	nrc.tryHandleServiceDelete(oldObj, "Received event to delete service: %s/%s from watch API")
 }
 
 func (nrc *NetworkRoutingController) newEndpointSliceEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			nrc.OnEndpointsAdd(obj)
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			nrc.OnEndpointsUpdate(newObj)
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			// don't do anything if an endpoints resource is deleted since
 			// the service delete event handles route withdrawals
 		},
@@ -254,7 +255,7 @@ func (nrc *NetworkRoutingController) newEndpointSliceEventHandler() cache.Resour
 // Calling AddPolicies here covers the edge case where AddPolicies fails in
 // OnServiceUpdate because the corresponding Endpoint resource for the
 // Service was not created yet.
-func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
+func (nrc *NetworkRoutingController) OnEndpointsAdd(obj any) {
 	if !nrc.bgpServerStarted.Load() {
 		klog.V(3).Info("Skipping OnAdd event to endpoint, controller still performing bootup full-sync")
 		return
@@ -264,7 +265,7 @@ func (nrc *NetworkRoutingController) OnEndpointsAdd(obj interface{}) {
 }
 
 // OnEndpointsUpdate handles the endpoint updates from the kubernetes API server
-func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj interface{}) {
+func (nrc *NetworkRoutingController) OnEndpointsUpdate(obj any) {
 	ep, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		klog.Errorf("cache indexer returned obj that is not type *discoveryv1.EndpointSlice")
@@ -305,13 +306,7 @@ func (nrc *NetworkRoutingController) getClusterIP(svc *v1core.Service) []string 
 			clusterIPList = append(clusterIPList, svc.Spec.ClusterIPs...)
 			// check to ensure ClusterIP is contained within ClusterIPs - This should always be the case, but we check
 			// just to make extra sure
-			clusterIPFound := false
-			for _, clusterIP := range clusterIPList {
-				if svc.Spec.ClusterIP == clusterIP {
-					clusterIPFound = true
-					break
-				}
-			}
+			clusterIPFound := slices.Contains(clusterIPList, svc.Spec.ClusterIP)
 			if !clusterIPFound {
 				clusterIPList = append(clusterIPList, svc.Spec.ClusterIP)
 			}
@@ -392,7 +387,7 @@ func (nrc *NetworkRoutingController) getChangedVIPs(oldSvc, newSvc *v1core.Servi
 	toAdvertiseListFinal := newAdvertiseServiceVIPs
 	toWithdrawList := newUnadvertiseServiceVIPs
 	for _, oldServiceVIP := range oldAllServiceVIPs {
-		if !utils.SliceContainsString(oldServiceVIP, toAdvertiseListFinal) {
+		if !slices.Contains(toAdvertiseListFinal, oldServiceVIP) {
 			toWithdrawList = append(toWithdrawList, oldServiceVIP)
 		}
 	}
@@ -405,7 +400,7 @@ func (nrc *NetworkRoutingController) getChangedVIPs(oldSvc, newSvc *v1core.Servi
 		return nil, nil, err
 	}
 	for _, withdrawVIP := range toWithdrawList {
-		if !utils.SliceContainsString(withdrawVIP, allVIPsOnServer) {
+		if !slices.Contains(allVIPsOnServer, withdrawVIP) {
 			toWithdrawListFinal = append(toWithdrawListFinal, withdrawVIP)
 		}
 	}
@@ -439,7 +434,7 @@ func (nrc *NetworkRoutingController) getVIPs() ([]string, []string, error) {
 	// one active endpoint on the node, or we might introduce a service disruption.
 	finalToWithdrawList := make([]string, 0)
 	for _, withdrawVIP := range toWithdrawList {
-		if !utils.SliceContainsString(withdrawVIP, toAdvertiseList) {
+		if !slices.Contains(toAdvertiseList, withdrawVIP) {
 			finalToWithdrawList = append(finalToWithdrawList, withdrawVIP)
 		}
 	}

@@ -173,7 +173,7 @@ func unsortedListsEquivalent(a, b []endpointSliceInfo) bool {
 		return false
 	}
 
-	values := make(map[interface{}]int)
+	values := make(map[any]int)
 	for _, val := range a {
 		values[val] = 1
 	}
