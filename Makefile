@@ -18,7 +18,7 @@ MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 UPSTREAM_IMPORT_PATH=$(GOPATH)/src/github.com/cloudnativelabs/kube-router/
 BUILD_IN_DOCKER?=true
 # See Versions: https://hub.docker.com/_/golang
-DOCKER_BUILD_IMAGE?=golang:1.25.9-alpine3.23@sha256:5caaf1cca9dc351e13deafbc3879fd4754801acba8653fa9540cea125d01a71f
+DOCKER_BUILD_IMAGE?=golang:1.26.3-alpine3.23@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d
 ## These variables are used by the Dockerfile as the bases for building and creating the runtime container
 ## During CI these come from .github/workflows/ci.yaml below we define for local builds as well
 GO_CACHE?=$(shell go env GOCACHE)
