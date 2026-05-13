@@ -336,7 +336,7 @@ func PartialJSONUnmarshal(r rawMapAble, bytes []byte) error {
 func isNilOrEmpty(v reflect.Value) bool {
 	//nolint:exhaustive // we don't care about all of the potential types here, only the ones that might trip us up
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Map, reflect.Array, reflect.Chan, reflect.Slice:
+	case reflect.Pointer, reflect.Map, reflect.Array, reflect.Chan, reflect.Slice:
 		return v.IsNil()
 	case reflect.String:
 		return v.Interface() == ""

@@ -19,6 +19,12 @@ const (
 	ICMPv4Type  = "--icmp-type"
 	ICMPv6Proto = "ipv6-icmp"
 	ICMPv6Type  = "--icmpv6-type"
+
+	icmpTypeDestinationUnreachable = "destination-unreachable"
+
+	icmpEchoRequestComment            = "allow icmp echo requests"
+	icmpDestinationUnreachableComment = "allow icmp destination unreachable messages"
+	icmpTimeExceededComment           = "allow icmp time exceeded messages"
 )
 
 // IPTablesHandler interface based on the IPTables struct from github.com/coreos/go-iptables
@@ -213,11 +219,11 @@ func CommonICMPRules(family v1core.IPFamily) []ICMPRule {
 	}
 
 	icmpRules := []ICMPRule{
-		{icmpProto, icmpType, "echo-request", "allow icmp echo requests"},
+		{icmpProto, icmpType, "echo-request", icmpEchoRequestComment},
 		// destination-unreachable here is also responsible for handling / allowing PMTU
 		// (https://en.wikipedia.org/wiki/Path_MTU_Discovery) responses
-		{icmpProto, icmpType, "destination-unreachable", "allow icmp destination unreachable messages"},
-		{icmpProto, icmpType, "time-exceeded", "allow icmp time exceeded messages"},
+		{icmpProto, icmpType, icmpTypeDestinationUnreachable, icmpDestinationUnreachableComment},
+		{icmpProto, icmpType, "time-exceeded", icmpTimeExceededComment},
 	}
 
 	if family == v1core.IPv6Protocol {
