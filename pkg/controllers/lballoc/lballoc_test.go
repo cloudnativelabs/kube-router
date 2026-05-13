@@ -349,10 +349,10 @@ func TestShouldAllocate(t *testing.T) {
 
 type mockIndexer struct {
 	cache.FakeCustomStore
-	objects []interface{}
+	objects []any
 }
 
-func (mi *mockIndexer) Index(_ string, _ interface{}) ([]interface{}, error) {
+func (mi *mockIndexer) Index(_ string, _ any) ([]any, error) {
 	return nil, errors.New("unsupported")
 }
 
@@ -364,7 +364,7 @@ func (mi *mockIndexer) ListIndexFuncValues(_ string) []string {
 	return nil
 }
 
-func (mi *mockIndexer) ByIndex(_, _ string) ([]interface{}, error) {
+func (mi *mockIndexer) ByIndex(_, _ string) ([]any, error) {
 	return nil, errors.New("unsupported")
 }
 
@@ -376,7 +376,7 @@ func (mi *mockIndexer) AddIndexers(_ cache.Indexers) error {
 	return errors.New("unsupported")
 }
 
-func (mi *mockIndexer) List() []interface{} {
+func (mi *mockIndexer) List() []any {
 	return mi.objects
 }
 
@@ -386,9 +386,9 @@ func (mi *mockIndexer) LastStoreSyncResourceVersion() string {
 	return ""
 }
 
-func newMockIndexer(objects ...interface{}) *mockIndexer {
+func newMockIndexer(objects ...any) *mockIndexer {
 	mi := &mockIndexer{
-		objects: make([]interface{}, 0),
+		objects: make([]any, 0),
 	}
 	mi.objects = append(mi.objects, objects...)
 	return mi

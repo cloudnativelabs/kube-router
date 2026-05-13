@@ -4,7 +4,6 @@ import (
 	"net"
 	"testing"
 
-	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/assert"
@@ -26,7 +25,7 @@ func TestPeerConfig_String(t *testing.T) {
 		{
 			name: "Port",
 			config: PeerConfig{
-				port: testutils.ValToPtr(uint32(179)),
+				port: new(uint32(179)),
 			},
 			expected: "PeerConfig{Port: 179}",
 		},
@@ -63,7 +62,7 @@ func TestPeerConfig_String(t *testing.T) {
 			config: PeerConfig{
 				localIP:   "192.168.1.1",
 				password:  utils.Base64String("password"),
-				port:      testutils.ValToPtr(uint32(179)),
+				port:      new(uint32(179)),
 				remoteASN: uint32(65000),
 				remoteIP:  net.ParseIP("10.0.0.1"),
 			},
@@ -163,7 +162,7 @@ func TestPeerConfigs_String(t *testing.T) {
 				{
 					localIP:   "192.168.1.1",
 					password:  utils.Base64String("secret"),
-					port:      testutils.ValToPtr(uint32(179)),
+					port:      new(uint32(179)),
 					remoteASN: uint32(65000),
 					remoteIP:  net.ParseIP("10.0.0.1"),
 				},
@@ -180,7 +179,7 @@ func TestPeerConfigs_String(t *testing.T) {
 					remoteIP:  net.ParseIP("10.0.0.1"),
 				},
 				{
-					port:      testutils.ValToPtr(uint32(179)),
+					port:      new(uint32(179)),
 					remoteASN: uint32(65001),
 					remoteIP:  net.ParseIP("10.0.0.2"),
 				},

@@ -1,6 +1,7 @@
 package testhelpers
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -223,7 +224,7 @@ func LoadServiceList(t *testing.T, path string) *v1.ServiceList {
 	return &list
 }
 
-func loadYAML(t *testing.T, path string, obj interface{}) {
+func loadYAML(t *testing.T, path string, obj any) {
 	t.Helper()
 	content, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
@@ -300,8 +301,8 @@ func NormalizeSnapshotEntry(entry string) string {
 func ParseRestoreScript(script string) map[string]IPSetExpectation {
 	result := make(map[string]IPSetExpectation)
 	tmpEntries := make(map[string][]string)
-	lines := strings.Split(script, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(script, "\n")
+	for line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) == 0 {
 			continue
@@ -370,12 +371,10 @@ func ParseRestoreScript(script string) map[string]IPSetExpectation {
 }
 
 // MergeExpectations merges multiple expectation maps.
-func MergeExpectations(maps ...map[string]IPSetExpectation) map[string]IPSetExpectation {
+func MergeExpectations(expectations ...map[string]IPSetExpectation) map[string]IPSetExpectation {
 	merged := make(map[string]IPSetExpectation)
-	for _, m := range maps {
-		for k, v := range m {
-			merged[k] = v
-		}
+	for _, m := range expectations {
+		maps.Copy(merged, m)
 	}
 	return merged
 }

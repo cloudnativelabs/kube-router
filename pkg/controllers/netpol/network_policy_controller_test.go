@@ -2,7 +2,6 @@ package netpol
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -45,7 +44,7 @@ type tNamespaceMeta struct {
 }
 
 // Add resources to Informer Store object to simulate updating the Informer
-func tAddToInformerStore(t *testing.T, informer cache.SharedIndexInformer, obj interface{}) {
+func tAddToInformerStore(t *testing.T, informer cache.SharedIndexInformer, obj any) {
 	err := informer.GetStore().Add(obj)
 	if err != nil {
 		t.Fatalf("error injecting object to Informer Store: %v", err)
@@ -131,7 +130,7 @@ func (t tPodNamespaceMap) toStrSlice() (r []string) {
 func tNewPodNamespaceMapFromTC(target map[string]string) tPodNamespaceMap {
 	newMap := make(tPodNamespaceMap)
 	for ns, pods := range target {
-		for _, pod := range strings.Split(pods, ",") {
+		for pod := range strings.SplitSeq(pods, ",") {
 			newMap.addNSPodInfo(ns, pod)
 		}
 	}
@@ -405,8 +404,7 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 
 	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 	krNetPol := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
@@ -615,8 +613,7 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 
 	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode("node", []string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 	krNetPol := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
