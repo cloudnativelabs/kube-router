@@ -27,7 +27,7 @@ BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 # See Versions: https://hub.docker.com/_/alpine
 RUNTIME_BASE?=alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
 # See Versions: https://hub.docker.com/r/golangci/golangci-lint/tags
-DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.11.4@sha256:67dfc9eeeb0eb13fc1a36329c2c378197dc561f1edf1a7792e3f771606bb0e15
+DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.12.2@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0@sha256:a9509a9d50a82781aa4cd0a48f182da55233071fb19454bc70cecc2782359c3c
 # See Versions: https://hub.docker.com/_/node
