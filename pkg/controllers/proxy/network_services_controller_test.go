@@ -1104,7 +1104,7 @@ func TestTrafficPolicy_LoadBalancer_MixedPolicies(t *testing.T) {
 //nolint:unparam // namespace parameter kept for API clarity and potential future multi-namespace tests
 func createDSRService(name, namespace, clusterIP, externalIP string, port int32,
 	intPolicy *v1core.ServiceInternalTrafficPolicy,
-	extPolicy v1core.ServiceExternalTrafficPolicyType) *v1core.Service {
+	extPolicy v1core.ServiceExternalTrafficPolicy) *v1core.Service {
 	return &v1core.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
