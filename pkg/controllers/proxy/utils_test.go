@@ -3,6 +3,7 @@ package proxy
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"strconv"
 	"testing"
@@ -169,9 +170,7 @@ func TestNetworkServicesController_getLabelFromMap(t *testing.T) {
 	}
 	copyLabels := func(srcLbls map[string]string) map[string]string {
 		dstLbls := map[string]string{}
-		for k, v := range srcLbls {
-			dstLbls[k] = v
-		}
+		maps.Copy(dstLbls, srcLbls)
 		return dstLbls
 	}
 	t.Run("return blank when passed labels don't contain service-proxy-name label", func(t *testing.T) {

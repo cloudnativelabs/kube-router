@@ -16,14 +16,12 @@ func TestMainHelp(t *testing.T) {
 
 	stderrBuf := bytes.NewBuffer(nil)
 	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, err := io.Copy(stderrBuf, stderrR)
 		if err != nil {
 			panic(err)
 		}
-	}()
+	})
 
 	origArgs := os.Args
 	os.Args = []string{"kube-router", "--help"}

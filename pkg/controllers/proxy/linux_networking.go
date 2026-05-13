@@ -878,7 +878,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 		}
 
 		// this is ugly, but ran into issue multiple times where interface did not come up quickly.
-		for retry := 0; retry < 60; retry++ {
+		for range 60 {
 			time.Sleep(interfaceWaitSleepTime)
 			tunIf, err = nlretry.LinkByName(ctx, ipTunLink.Attrs().Name)
 			if err == nil {

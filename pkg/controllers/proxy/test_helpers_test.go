@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
@@ -251,16 +250,16 @@ func setupTestControllerWithEndpoints(t *testing.T, service *v1core.Service,
 		for _, ip := range localEndpoints {
 			endpoints = append(endpoints, discoveryv1.Endpoint{
 				Addresses:  []string{ip},
-				NodeName:   testutils.ValToPtr(localNodeName),
-				Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
+				NodeName:   new(localNodeName),
+				Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 			})
 		}
 
 		for _, ip := range remoteEndpoints {
 			endpoints = append(endpoints, discoveryv1.Endpoint{
 				Addresses:  []string{ip},
-				NodeName:   testutils.ValToPtr(remoteNodeName),
-				Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
+				NodeName:   new(remoteNodeName),
+				Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 			})
 		}
 
@@ -275,7 +274,7 @@ func setupTestControllerWithEndpoints(t *testing.T, service *v1core.Service,
 			AddressType: discoveryv1.AddressTypeIPv4,
 			Endpoints:   endpoints,
 			Ports: []discoveryv1.EndpointPort{
-				{Name: testutils.ValToPtr("http"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
+				{Name: new("http"), Port: new(int32(80)), Protocol: new(v1core.ProtocolTCP)},
 			},
 		}
 

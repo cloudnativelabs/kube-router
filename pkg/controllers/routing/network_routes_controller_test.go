@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/bgp"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/k8s/indexers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
@@ -1785,11 +1784,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 				Endpoints: []discoveryv1.Endpoint{
 					{
 						Addresses: []string{"172.20.1.1"},
-						NodeName:  testutils.ValToPtr("node-1"),
+						NodeName:  new("node-1"),
 					},
 					{
 						Addresses: []string{"172.20.1.2"},
-						NodeName:  testutils.ValToPtr("node-2"),
+						NodeName:  new("node-2"),
 					},
 				},
 			},
@@ -1830,11 +1829,11 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 				Endpoints: []discoveryv1.Endpoint{
 					{
 						Addresses: []string{"172.20.1.1"},
-						NodeName:  testutils.ValToPtr("node-2"),
+						NodeName:  new("node-2"),
 					},
 					{
 						Addresses: []string{"172.20.1.2"},
-						NodeName:  testutils.ValToPtr("node-3"),
+						NodeName:  new("node-3"),
 					},
 				},
 			},
@@ -3104,26 +3103,22 @@ func TestAtomicBoolFieldsNoConcurrentDataRace(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Writers
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 1000; i++ {
+	wg.Go(func() {
+		for i := range 1000 {
 			nrc.bgpServerStarted.Store(i%2 == 0)
 			nrc.initSrcDstCheckDone.Store(i%2 == 0)
 			nrc.ec2IamAuthorized.Store(i%2 != 0)
 		}
-	}()
+	})
 
 	// Readers
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 1000; i++ {
+	wg.Go(func() {
+		for range 1000 {
 			_ = nrc.bgpServerStarted.Load()
 			_ = nrc.initSrcDstCheckDone.Load()
 			_ = nrc.ec2IamAuthorized.Load()
 		}
-	}()
+	})
 
 	wg.Wait()
 }

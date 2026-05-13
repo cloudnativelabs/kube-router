@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -92,7 +93,7 @@ func (ir *ipRanges) inc() {
 	// Increment the current IP address
 	// 10.0.0.3 will increment to 10.0.0.4
 	// 10.0.0.255 will increment to 10.0.1.0
-	for i := len(ci) - 1; i >= 0; i-- {
+	for i := range slices.Backward(ci) {
 		ci[i]++
 		if ci[i] > 0 { // if the byte didn't overflow to zero, don't increment the byte to the left
 			break
@@ -168,16 +169,16 @@ func (lbc *LoadBalancerController) runLeaderElection(ctx context.Context, isLead
 	})
 }
 
-func (lbc *LoadBalancerController) OnAdd(obj interface{}, isInitialList bool) {
+func (lbc *LoadBalancerController) OnAdd(obj any, isInitialList bool) {
 	if svc, ok := obj.(*v1core.Service); ok {
 		lbc.addChan <- *svc
 	}
 }
 
-func (lbc *LoadBalancerController) OnDelete(obj interface{}) {
+func (lbc *LoadBalancerController) OnDelete(obj any) {
 }
 
-func (lbc *LoadBalancerController) OnUpdate(oldObj interface{}, newObj interface{}) {
+func (lbc *LoadBalancerController) OnUpdate(oldObj any, newObj any) {
 	if svc, ok := newObj.(*v1core.Service); ok {
 		lbc.addChan <- *svc
 	}

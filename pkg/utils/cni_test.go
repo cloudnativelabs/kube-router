@@ -397,7 +397,7 @@ func TestNewCNINetworkConfig(t *testing.T) {
 					"subnet of cniNetworkConfig should always be empty because it should be consolidated with "+
 						"ranges upon creation")
 
-				foundSubnets := make(map[string]interface{}, 0)
+				foundSubnets := make(map[string]any, 0)
 				for _, rangeSet := range cni.getBridgePlugin().IPAM.Ranges {
 					for _, rangeSubnet := range rangeSet {
 						foundSubnets[rangeSubnet.Subnet] = struct{}{}
@@ -731,7 +731,7 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 					"subnet of cniNetworkConfig should always be empty because it should be consolidated with "+
 						"ranges upon creation")
 
-				foundSubnets := make(map[string]interface{}, 0)
+				foundSubnets := make(map[string]any, 0)
 				for _, rangeSet := range cni.getBridgePlugin().IPAM.Ranges {
 					for _, rangeSubnet := range rangeSet {
 						foundSubnets[rangeSubnet.Subnet] = struct{}{}
