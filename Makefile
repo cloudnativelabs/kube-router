@@ -339,6 +339,6 @@ help:
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan
 .PHONY: test test-privileged test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
-.PHONY: spellcheck update-deps update-deps-dry prep-release
+.PHONY: spellcheck update-deps update-deps-dry prep-release kube-router gobgp
 
 .DEFAULT: all
