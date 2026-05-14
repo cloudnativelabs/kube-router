@@ -16,3 +16,15 @@ ignore:
     package:
       name: github.com/cloudnativelabs/kube-router/v2
       type: go-module
+
+  # CNI plugins are pulled as prebuilt binaries from upstream
+  # https://github.com/containernetworking/plugins/releases (see CNI_VERSION in
+  # the Makefile). We do not recompile these from source, so any CVEs in them
+  # (stdlib or otherwise) can only be addressed by bumping CNI_VERSION to a
+  # release that upstream has rebuilt with newer Go and updated dependencies.
+  # The location glob keeps this rule scoped to /usr/libexec/cni/* so it does
+  # NOT mask findings in any other Go binary in the image (kube-router, gobgp,
+  # iptables-wrapper), which ARE rebuilt with our pinned BUILDTIME_BASE.
+  - reason: "Upstream-prebuilt CNI plugins (containernetworking/plugins); CVEs tracked upstream, addressed by bumping CNI_VERSION"
+    package:
+      location: "/usr/libexec/cni/**"
