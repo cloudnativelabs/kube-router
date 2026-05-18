@@ -38,6 +38,7 @@ solutions.
 - [Network Policy Issues](#network-policy-issues)
   - [Egress Policy Blocking Service Access](#egress-policy-blocking-service-access)
   - [Pods Have Network Access Before Policy is Applied](#pods-have-network-access-before-policy-is-applied)
+  - [NetworkPolicy not enforced on freshly-launched pods](#networkpolicy-not-enforced-on-freshly-launched-pods)
   - [ipBlock Not Matching Real Client IP](#ipblock-not-matching-real-client-ip)
 - [Overlay and Tunnel Issues](#overlay-and-tunnel-issues)
   - [Cross-Subnet Connectivity Failures](#cross-subnet-connectivity-failures)
@@ -620,7 +621,103 @@ this window persist because `ESTABLISHED,RELATED` flows are always allowed
 
 **Solution:** This is an architectural limitation. Modern versions sync policies within a few seconds. For
 critical workloads, add an `initContainer` that waits for network readiness before starting the main
-container.
+container. For a stricter posture, set `--netpol-default-deny=true` so kube-router REJECTs traffic
+during this window instead of allowing it — see
+[NetworkPolicy not enforced on freshly-launched pods](#networkpolicy-not-enforced-on-freshly-launched-pods)
+for the operational details.
+
+### NetworkPolicy not enforced on freshly-launched pods
+
+**Symptoms:** A pod is launched with a NetworkPolicy that should block some of its outbound or
+inbound traffic, but during the first few seconds of the pod's lifecycle the traffic the policy
+should reject succeeds anyway. Short-lived workloads such as CronJobs sometimes complete before
+the policy ever takes effect, and long-running connections that get established in this window
+keep working forever afterwards because conntrack lets `ESTABLISHED,RELATED` flows through.
+
+**Diagnosis:**
+
+```sh
+# From the freshly-launched pod, try the destination the policy should block. The first attempt
+# often succeeds; a few seconds later the policy is in effect and the same call fails.
+kubectl exec <pod> -- curl -m 2 http://blocked-service.namespace/
+
+# On the node where the pod is running, list the per-pod firewall chains. If the chain for this
+# pod is not in the list yet, the pod's traffic is currently unenforced.
+iptables -t filter -L -n | grep KUBE-POD-FW-
+```
+
+**Root Cause:** The CNI plugin wires the pod's networking before kube-router has a chance to
+program the pod's `KUBE-POD-FW-*` firewall chain. Between the moment the pod becomes routable on
+the node and the moment kube-router's next NetworkPolicy sync writes the chain, there is a brief
+window where the pod's traffic is not evaluated against any NetworkPolicy. By default kube-router
+fails open during this window so unrelated traffic on the node is not disrupted.
+
+**Solution — enable `--netpol-default-deny`:** Pass `--netpol-default-deny=true` to kube-router
+to fail closed during the race window instead. With the flag on, kube-router installs catch-all
+REJECT rules in the `KUBE-NWPLCY-TAIL` iptables chain that drop any traffic to or from a local
+pod whose firewall chain has not yet been programmed for the current sync. The pod sees
+"connection refused" during the race window and once kube-router programs the pod's chain (a few
+seconds at most under default sync settings) the NetworkPolicy takes over normally.
+
+The trade-off is that traffic the NetworkPolicy *would* have allowed is also rejected during the
+same window. Most applications can simply retry, but workloads that cannot tolerate the initial
+failure should leave `--netpol-default-deny` off and use an `initContainer` that waits for
+network readiness before the main container starts.
+
+**Requirements:** kube-router can only install the catch-all REJECT rules when it knows the
+node's pod CIDRs. It reads them from one of two places on the Node object, in this order:
+
+- The `kube-router.io/pod-cidrs` annotation, if present. Set this when kube-controller-manager is
+  not handling pod CIDR allocation for your cluster.
+- Otherwise, `node.spec.podCIDRs` — the field `kube-controller-manager` populates when started
+  with `--allocate-node-cidrs=true` (the typical Kubernetes default). The legacy single-CIDR
+  `node.spec.podCIDR` field is also populated but kube-router uses the plural list.
+
+You can verify the source kube-router will use with `kubectl`:
+
+```sh
+# What kube-controller-manager allocated (when --allocate-node-cidrs=true is in effect):
+kubectl get node <node-name> -o jsonpath='{.spec.podCIDRs}{"\n"}'
+
+# What the annotation override is set to (empty when no annotation is present):
+kubectl get node <node-name> -o jsonpath='{.metadata.annotations.kube-router\.io/pod-cidrs}{"\n"}'
+```
+
+If neither source is populated, kube-router logs the message below at startup, silently disables
+`--netpol-default-deny`, and continues without protection. Either enable `--allocate-node-cidrs`
+on kube-controller-manager or set the `kube-router.io/pod-cidrs` annotation on the affected
+nodes, then restart kube-router on those nodes to pick up the change.
+
+```text
+we were unable to intuit the default pod IP CIDRs for this node ... Disabling this option as
+it would not be safe to other node traffic
+```
+
+**Verifying the feature is active:**
+
+```sh
+# KUBE-NWPLCY-TAIL should contain REJECTs that consult the kube-router-local-pods ipset, one
+# per pod CIDR per direction:
+iptables -t filter -L KUBE-NWPLCY-TAIL -n -v --line-numbers
+
+# The ipset should contain the IP of every local pod whose firewall chain has been programmed
+# in the current sync:
+ipset list kube-router-local-pods
+
+# IPv6 equivalent when --enable-ipv6 is set:
+ip6tables -t filter -L KUBE-NWPLCY-TAIL -n -v --line-numbers
+ipset list inet6:kube-router-local-pods
+```
+
+If the `kube-router-local-pods` ipset is destroyed out-of-band, kube-router recreates it during
+its per-sync drift check and the next full sync repopulates it. The same warning fires once at
+kube-router startup (when the set is created for the first time) and is informational there; if
+it keeps reappearing during normal operation, find and stop whichever process is destroying the
+ipset (it is not kube-router):
+
+```text
+kube-router-local-pods ipset for family IPv4 was missing; creating
+```
 
 ### ipBlock Not Matching Real Client IP
 
