@@ -38,6 +38,9 @@ const (
 	kubeDefaultNetpolChain       = "KUBE-NWPLCY-DEFAULT"
 	kubeCommonNetpolChain        = "KUBE-NWPLCY-COMMON"
 	kubeTailNetpolChain          = "KUBE-NWPLCY-TAIL"
+	// kubeLocalPodsIPSetName is the per-family ipset of local pod IPs whose KUBE-POD-FW-* chain has been
+	// programmed this sync. It gates the default-deny REJECT rules at the head of KUBE-NWPLCY-TAIL.
+	kubeLocalPodsIPSetName = "kube-router-local-pods"
 
 	kubeIngressPolicyType = "ingress"
 	kubeEgressPolicyType  = "egress"
@@ -311,7 +314,11 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 		return
 	}
 
-	activePodFwChains := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+	activePodFwChains, activePodIPs := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+
+	// Refresh the kube-router-local-pods ipset before ensureTailChainPosition installs the TAIL jump, so the
+	// rules never reference a stale set. No-op when --netpol-default-deny is disabled.
+	npc.populateProtectedPodsIPSet(activePodIPs)
 
 	// Ensure the KUBE-NWPLCY-TAIL jump sits at the end of each top-level chain, after the per-pod jumps above.
 	npc.ensureTailChainPosition()
@@ -576,6 +583,10 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 // toggling --netpol-default-deny across restarts is idempotent. Call from Run() only; fullPolicySync uses
 // ensureDefaultTailChainExists to avoid a ClearChain/Append leak window on every pod event.
 func (npc *NetworkPolicyController) ensureDefaultTailChain() {
+	// Set must exist before the rules that reference it are appended. Empty is fine — the first
+	// populateProtectedPodsIPSet during fullPolicySync fills it.
+	npc.ensureLocalPodsIPSetExists()
+
 	for family, iptablesCmdHandler := range npc.iptablesCmdHandlers {
 		exists, err := iptablesCmdHandler.ChainExists("filter", kubeTailNetpolChain)
 		if err != nil {
@@ -599,10 +610,13 @@ func (npc *NetworkPolicyController) ensureDefaultTailChain() {
 	}
 }
 
-// ensureDefaultTailChainExists is the per-sync safety net: it recreates KUBE-NWPLCY-TAIL only if the chain has gone
-// missing entirely, and otherwise just runs a cheap rule-count drift check and logs a warning on mismatch. We don't
-// auto-rebuild on drift because doing so would re-introduce the leak window ensureDefaultTailChain avoids.
+// ensureDefaultTailChainExists is the per-sync safety net: it recreates KUBE-NWPLCY-TAIL only if the chain has
+// gone missing entirely, otherwise it runs a cheap rule-count drift check. With --netpol-default-deny on it
+// also makes sure the kube-router-local-pods ipset still exists; the next populateProtectedPodsIPSet repopulates
+// it.
 func (npc *NetworkPolicyController) ensureDefaultTailChainExists() {
+	npc.ensureLocalPodsIPSetExists()
+
 	for family, iptablesCmdHandler := range npc.iptablesCmdHandlers {
 		exists, err := iptablesCmdHandler.ChainExists("filter", kubeTailNetpolChain)
 		if err != nil {
@@ -630,7 +644,9 @@ func (npc *NetworkPolicyController) ensureDefaultTailChainExists() {
 		// List returns "-N CHAIN" as rules[0] followed by one "-A CHAIN ..." per rule, so subtract one.
 		expected := 1
 		if npc.defaultDeny {
-			expected += 2 * len(npc.podCIDRs[family])
+			// 2 ipset-gated REJECTs (src/dst) + 2 CIDR REJECTs (src/dst) per CIDR, plus the single
+			// ACCEPT-on-mark rule.
+			expected += 4 * len(npc.podCIDRs[family])
 		}
 		if actual := len(rules) - 1; actual != expected {
 			klog.Warningf("%s has %d rules but expected %d; chain contents have drifted, "+
@@ -639,11 +655,63 @@ func (npc *NetworkPolicyController) ensureDefaultTailChainExists() {
 	}
 }
 
-// populateDefaultTailChain appends the ACCEPT-marked rule and (when --netpol-default-deny is enabled) the per-CIDR
-// REJECT rules into KUBE-NWPLCY-TAIL. Callers must ensure the chain exists and is empty.
+// ensureLocalPodsIPSetExists makes sure the kube-router-local-pods ipset exists for every IP family. No-op when
+// --netpol-default-deny is disabled. The Save+Sets lookup exists only so we can log a one-shot "was missing"
+// warning on drift; Create itself is idempotent via `create -exist`.
+func (npc *NetworkPolicyController) ensureLocalPodsIPSetExists() {
+	if !npc.defaultDeny {
+		return
+	}
+	if nil != npc.ipsetMutex {
+		klog.V(2).Infof("Attempting to attain ipset mutex lock for protected-pods ipset check")
+		npc.ipsetMutex.Lock()
+		klog.V(2).Infof("Attained ipset mutex lock for protected-pods ipset check, continuing...")
+		defer func() {
+			npc.ipsetMutex.Unlock()
+			klog.V(2).Infof("Returned ipset mutex lock for protected-pods ipset check")
+		}()
+	}
+	for family, ipSetHandler := range npc.ipSetHandlers {
+		if err := ipSetHandler.Save(); err != nil {
+			klog.Warningf("failed to save ipsets while checking %s on family %s: %v",
+				kubeLocalPodsIPSetName, family, err)
+		}
+		setNameForFamily := ipSetHandler.Name(kubeLocalPodsIPSetName)
+		if _, exists := ipSetHandler.Sets()[setNameForFamily]; exists {
+			continue
+		}
+		klog.Warningf("%s ipset for family %s was missing; creating",
+			setNameForFamily, family)
+		if _, err := ipSetHandler.Create(kubeLocalPodsIPSetName, utils.TypeHashIP, utils.OptionTimeout, "0"); err != nil {
+			klog.Fatalf("failed to create %s ipset for family %s: %v",
+				setNameForFamily, family, err)
+		}
+	}
+}
+
+// populateDefaultTailChain appends rules into KUBE-NWPLCY-TAIL. Callers must ensure the chain exists and is empty.
+//
+// When --netpol-default-deny is disabled, only the ACCEPT-on-mark rule is appended (1 rule total).
+//
+// When --netpol-default-deny is enabled, the chain layout is, per CIDR:
+//  1. -s <CIDR> -m set ! --match-set kube-router-local-pods src -j REJECT  (ipset-gated, NEW)
+//  2. -d <CIDR> -m set ! --match-set kube-router-local-pods dst -j REJECT  (ipset-gated, NEW)
+//  3. -m mark --mark 0x20000/0x20000                              -j ACCEPT
+//  4. -s <CIDR>                                                   -j REJECT  (existing defense-in-depth)
+//  5. -d <CIDR>                                                   -j REJECT  (existing defense-in-depth)
+//
+// The ipset-gated REJECTs are placed ahead of the ACCEPT so they fire for traffic to or from a local pod whose
+// KUBE-POD-FW-* chain has not yet been programmed; this closes the race window where another local pod's chain
+// would mark the packet 0x20000 and the ACCEPT would let it through. The existing CIDR-scoped REJECTs at the
+// tail of the chain remain as defense-in-depth for traffic between unprotected local pods and external
+// destinations (no destination chain to mark, no ipset entry on either end).
 func (npc *NetworkPolicyController) populateDefaultTailChain(
 	family v1core.IPFamily, iptablesCmdHandler utils.IPTablesHandler,
 ) {
+	if npc.defaultDeny {
+		npc.appendIPSetGatedRejects(family, iptablesCmdHandler)
+	}
+
 	acceptComment := "rule to explicitly ACCEPT traffic that comply to network policies"
 	acceptArgs := []string{"-m", "comment", "--comment", acceptComment,
 		"-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT"}
@@ -655,6 +723,38 @@ func (npc *NetworkPolicyController) populateDefaultTailChain(
 	if !npc.defaultDeny {
 		return
 	}
+	npc.appendCIDRRejects(family, iptablesCmdHandler)
+}
+
+// appendIPSetGatedRejects emits rules 1-2 of the per-CIDR layout documented on populateDefaultTailChain — the
+// REJECTs that fire when a source/destination is in the node's pod CIDR but not yet in kube-router-local-pods.
+func (npc *NetworkPolicyController) appendIPSetGatedRejects(
+	family v1core.IPFamily, iptablesCmdHandler utils.IPTablesHandler,
+) {
+	ipSetName := npc.ipSetHandlers[family].Name(kubeLocalPodsIPSetName)
+	comment := "REJECT traffic to/from local pods without a programmed firewall chain " +
+		"(--netpol-default-deny is enabled)"
+	for _, cidr := range npc.podCIDRs[family] {
+		srcArgs := []string{"-s", cidr, "-m", "comment", "--comment", comment,
+			"-m", "set", "!", "--match-set", ipSetName, "src", "-j", "REJECT"}
+		if err := iptablesCmdHandler.Append("filter", kubeTailNetpolChain, srcArgs...); err != nil {
+			klog.Fatalf("failed to add ipset-gated source REJECT rule to %s due to %s",
+				kubeTailNetpolChain, err.Error())
+		}
+		dstArgs := []string{"-d", cidr, "-m", "comment", "--comment", comment,
+			"-m", "set", "!", "--match-set", ipSetName, "dst", "-j", "REJECT"}
+		if err := iptablesCmdHandler.Append("filter", kubeTailNetpolChain, dstArgs...); err != nil {
+			klog.Fatalf("failed to add ipset-gated destination REJECT rule to %s due to %s",
+				kubeTailNetpolChain, err.Error())
+		}
+	}
+}
+
+// appendCIDRRejects emits rules 4-5 of the per-CIDR layout documented on populateDefaultTailChain — the
+// CIDR-scoped REJECTs that catch unprotected pods talking to external destinations.
+func (npc *NetworkPolicyController) appendCIDRRejects(
+	family v1core.IPFamily, iptablesCmdHandler utils.IPTablesHandler,
+) {
 	rejectComment := "REJECT traffic before NetPol is applied (--netpol-default-deny is enabled)"
 	for _, cidr := range npc.podCIDRs[family] {
 		srcArgs := []string{"-s", cidr, "-m", "comment", "--comment", rejectComment, "-j", "REJECT"}
@@ -667,6 +767,47 @@ func (npc *NetworkPolicyController) populateDefaultTailChain(
 			klog.Fatalf("failed to add destination REJECT rule to %s due to %s",
 				kubeTailNetpolChain, err.Error())
 		}
+	}
+}
+
+// populateProtectedPodsIPSet refreshes the kube-router-local-pods ipset (per family) with the IPs of local pods
+// whose KUBE-POD-FW-* chains were programmed this sync, and is a no-op when --netpol-default-deny is disabled.
+// RestoreSets is atomic per set, so readers never see a partially-updated ipset.
+func (npc *NetworkPolicyController) populateProtectedPodsIPSet(activePodIPs map[v1core.IPFamily][]string) {
+	if !npc.defaultDeny {
+		return
+	}
+	if nil != npc.ipsetMutex {
+		klog.V(2).Infof("Attempting to attain ipset mutex lock for protected-pods refresh")
+		npc.ipsetMutex.Lock()
+		klog.V(2).Infof("Attained ipset mutex lock for protected-pods refresh, continuing...")
+		defer func() {
+			npc.ipsetMutex.Unlock()
+			klog.V(2).Infof("Returned ipset mutex lock for protected-pods refresh")
+		}()
+	}
+	for family, ipSetHandler := range npc.ipSetHandlers {
+		// Snapshot the kernel state so the handler's internal Sets() map matches reality before RestoreSets.
+		if err := ipSetHandler.Save(); err != nil {
+			klog.Errorf("failed to save ipsets before refreshing %s for family %s: %v",
+				kubeLocalPodsIPSetName, family, err)
+			continue
+		}
+
+		entries := make([][]string, 0, len(activePodIPs[family]))
+		for _, ip := range activePodIPs[family] {
+			entries = append(entries, []string{ip, utils.OptionTimeout, "0"})
+		}
+		ipSetHandler.RefreshSet(kubeLocalPodsIPSetName, entries, utils.TypeHashIP)
+
+		setNameForFamily := ipSetHandler.Name(kubeLocalPodsIPSetName)
+		if err := ipSetHandler.RestoreSets([]string{setNameForFamily}); err != nil {
+			klog.Errorf("failed to restore %s ipset for family %s: %v",
+				setNameForFamily, family, err)
+			continue
+		}
+		klog.V(2).Infof("refreshed %s ipset for family %s with %d entries",
+			setNameForFamily, family, len(entries))
 	}
 }
 
@@ -950,7 +1091,29 @@ func (npc *NetworkPolicyController) Cleanup() {
 		return
 	}
 
+	// cleanupStaleIPSets only handles KUBE-SRC-/KUBE-DST- per-policy sets; the singleton needs an explicit pass.
+	npc.destroyLocalPodsIPSet()
+
 	klog.Infof("Successfully cleaned the NetworkPolicyController configurations done by kube-router")
+}
+
+// destroyLocalPodsIPSet removes the kube-router-local-pods ipset per family if it exists; otherwise a no-op.
+func (npc *NetworkPolicyController) destroyLocalPodsIPSet() {
+	for family, ipSetHandler := range npc.ipSetHandlers {
+		if err := ipSetHandler.Save(); err != nil {
+			klog.Errorf("failed to save ipsets for %s cleanup on family %s: %v",
+				kubeLocalPodsIPSetName, family, err)
+			continue
+		}
+		setNameForFamily := ipSetHandler.Name(kubeLocalPodsIPSetName)
+		if _, ok := ipSetHandler.Sets()[setNameForFamily]; !ok {
+			continue
+		}
+		if err := ipSetHandler.Destroy(kubeLocalPodsIPSetName); err != nil {
+			klog.Errorf("failed to destroy %s ipset for family %s: %v",
+				setNameForFamily, family, err)
+		}
+	}
 }
 
 func NewIPTablesHandlers(config *options.KubeRouterConfig) (
