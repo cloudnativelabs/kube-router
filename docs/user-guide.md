@@ -152,6 +152,7 @@ Usage of kube-router:
       --metrics-addr string                           Prometheus metrics address to listen on, (Default: all interfaces)
       --metrics-path string                           Prometheus metrics path (default "/metrics")
       --metrics-port uint16                           Prometheus metrics port, (Default 0, Disabled)
+      --netpol-default-deny                           Default policy to use for pods to have before NetworkPolicy is applied
       --nodeport-bindon-all-ip                        For service of NodePort type create IPVS service that listens on all IP's of the node.
       --nodes-full-mesh                               Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
       --overlay-encap string                          Valid encapsulation types are "ipip" or "fou" (if set to "fou", the udp port can be specified via "overlay-encap-port") (default "ipip")

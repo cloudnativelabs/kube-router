@@ -66,6 +66,7 @@ type KubeRouterConfig struct {
 	MetricsPath                    string
 	MetricsPort                    uint16
 	MetricsAddr                    string
+	NetPolDefaultDeny              bool
 	NodePortBindOnAllIP            bool
 	NodePortRange                  string
 	OverlayType                    string
@@ -214,6 +215,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.Uint16Var(&s.MetricsPort, "metrics-port", 0, "Prometheus metrics port, (Default 0, Disabled)")
 	fs.StringVar(&s.MetricsAddr, "metrics-addr", "", "Prometheus metrics address to listen on, (Default: all "+
 		"interfaces)")
+	fs.BoolVar(&s.NetPolDefaultDeny, "netpol-default-deny", false,
+		"Default policy to use for pods to have before NetworkPolicy is applied")
 	fs.BoolVar(&s.NodePortBindOnAllIP, "nodeport-bindon-all-ip", false,
 		"For service of NodePort type create IPVS service that listens on all IP's of the node.")
 	fs.BoolVar(&s.FullMeshMode, "nodes-full-mesh", true,
