@@ -29,6 +29,7 @@
   - [Configuration Examples](#configuration-examples)
   - [Upgrading](#upgrading)
   - [Shared Flags](#shared-flags)
+- [NetworkPolicy Default-Deny](#networkpolicy-default-deny)
 - [Controlling Service Locality or Traffic Policies](#controlling-service-locality-or-traffic-policies)
 - [Hairpin Mode](#hairpin-mode)
   - [Hairpin Mode Example](#hairpin-mode-example)
@@ -152,6 +153,7 @@ Usage of kube-router:
       --metrics-addr string                           Prometheus metrics address to listen on, (Default: all interfaces)
       --metrics-path string                           Prometheus metrics path (default "/metrics")
       --metrics-port uint16                           Prometheus metrics port, (Default 0, Disabled)
+      --netpol-default-deny                           Default policy to use for pods to have before NetworkPolicy is applied
       --nodeport-bindon-all-ip                        For service of NodePort type create IPVS service that listens on all IP's of the node.
       --nodes-full-mesh                               Each node in the cluster will setup BGP peering with rest of the nodes. (default true)
       --overlay-encap string                          Valid encapsulation types are "ipip" or "fou" (if set to "fou", the udp port can be specified via "overlay-encap-port") (default "ipip")
@@ -452,6 +454,24 @@ The `--service-external-ip-range` and `--loadbalancer-ip-range` flags serve mult
 
 If you were already using these flags for other controllers, the proxy module will automatically benefit from the same
 configuration.
+
+## NetworkPolicy Default-Deny
+
+When `--netpol-default-deny` is enabled, kube-router rejects traffic to and from local pods during the brief window
+between a pod becoming routable on this node and its per-pod `KUBE-POD-FW-*` firewall chain being installed. Without
+this flag, a freshly-launched pod can briefly reach destinations that its NetworkPolicy would otherwise block — a
+race short-lived workloads such as CronJobs occasionally lose.
+
+To detect this node's pod CIDRs, kube-router relies on either the `--allocate-node-cidrs=true` flag on
+kube-controller-manager (the typical Kubernetes default) or the `kube-router.io/pod-cidrs` node annotation. If neither
+is configured the controller logs an error during startup, disables `--netpol-default-deny`, and continues without
+default-deny protection — it is not safe to install REJECTs against pod CIDRs we cannot trust.
+
+For details on how to verify the feature is doing what you expect (and on the failure modes when the node's pod
+CIDRs cannot be detected), see [NetworkPolicy not enforced on freshly-launched pods][netpol-default-deny] in the
+troubleshooting guide.
+
+[netpol-default-deny]: troubleshoot.md#networkpolicy-not-enforced-on-freshly-launched-pods
 
 ## Controlling Service Locality or Traffic Policies
 

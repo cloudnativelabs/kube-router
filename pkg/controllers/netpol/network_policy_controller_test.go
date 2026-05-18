@@ -666,10 +666,21 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 
 type fakeIPTables struct {
 	protocol iptables.Protocol
+	// appendedRules captures the rules appended to a chain in the order Append was called. Keyed by
+	// "<table>/<chain>". Empty unless set by the test (the default is to behave like a fully working iptables
+	// shim).
+	appendedRules map[string][][]string
+	// listOverride, if non-nil, is the response returned by List() keyed by "<table>/<chain>". When the chain
+	// is not in the map List returns its default (nil, nil) so existing tests that don't care about List
+	// behavior keep working.
+	listOverride map[string][]string
+	// chainExistsOverride mirrors listOverride for ChainExists. When the chain is not in the map ChainExists
+	// returns (true, nil) as before.
+	chainExistsOverride map[string]bool
 }
 
 func newFakeIPTables(protocol iptables.Protocol) *fakeIPTables {
-	return &fakeIPTables{protocol}
+	return &fakeIPTables{protocol: protocol, appendedRules: make(map[string][][]string)}
 }
 
 func (ipt *fakeIPTables) Proto() iptables.Protocol {
@@ -685,6 +696,11 @@ func (ipt *fakeIPTables) Insert(table, chain string, pos int, rulespec ...string
 }
 
 func (ipt *fakeIPTables) Append(table, chain string, rulespec ...string) error {
+	if ipt.appendedRules == nil {
+		ipt.appendedRules = make(map[string][][]string)
+	}
+	key := table + "/" + chain
+	ipt.appendedRules[key] = append(ipt.appendedRules[key], append([]string(nil), rulespec...))
 	return nil
 }
 
@@ -701,6 +717,12 @@ func (ipt *fakeIPTables) DeleteIfExists(table, chain string, rulespec ...string)
 }
 
 func (ipt *fakeIPTables) List(table, chain string) ([]string, error) {
+	if ipt.listOverride == nil {
+		return nil, nil
+	}
+	if rules, ok := ipt.listOverride[table+"/"+chain]; ok {
+		return rules, nil
+	}
 	return nil, nil
 }
 
@@ -713,6 +735,12 @@ func (ipt *fakeIPTables) ListChains(table string) ([]string, error) {
 }
 
 func (ipt *fakeIPTables) ChainExists(table, chain string) (bool, error) {
+	if ipt.chainExistsOverride == nil {
+		return true, nil
+	}
+	if exists, ok := ipt.chainExistsOverride[table+"/"+chain]; ok {
+		return exists, nil
+	}
 	return true, nil
 }
 
@@ -768,19 +796,77 @@ func (ipt *fakeIPTables) GetIptablesVersion() (int, int, int) {
 	return 1, 8, 0
 }
 
-type fakeIPSet struct{}
+// fakeIPSet is a minimal stand-in for utils.IPSetHandler. It tracks the operations the test cases need to assert
+// on (Create, RefreshSet, RestoreSets, Destroy) and otherwise no-ops every call. The "stored" sets are keyed by
+// set name to mirror the way the real ipset handler exposes Sets().
+type fakeIPSet struct {
+	stored          map[string]*utils.Set
+	createCalls     []string
+	destroyCalls    []string
+	refreshCalls    []fakeIPSetRefresh
+	restoreCalls    [][]string
+	saveErr         error
+	createErr       error
+	restoreErr      error
+	isIpv6          bool
+	destroyErrTimes int
+}
+
+type fakeIPSetRefresh struct {
+	name    string
+	setType string
+	entries [][]string
+}
+
+func newFakeIPSet() *fakeIPSet {
+	return &fakeIPSet{stored: make(map[string]*utils.Set)}
+}
 
 func (ips *fakeIPSet) Create(setName string, createOptions ...string) (*utils.Set, error) {
-	return nil, nil
+	if ips.stored == nil {
+		ips.stored = make(map[string]*utils.Set)
+	}
+	if ips.createErr != nil {
+		return nil, ips.createErr
+	}
+	resolved := ips.Name(setName)
+	ips.createCalls = append(ips.createCalls, resolved)
+	if existing, ok := ips.stored[resolved]; ok {
+		return existing, nil
+	}
+	s := &utils.Set{Name: resolved, Options: append([]string(nil), createOptions...)}
+	ips.stored[resolved] = s
+	return s, nil
 }
 
 func (ips *fakeIPSet) Add(set *utils.Set) error {
 	return nil
 }
 
-func (ips *fakeIPSet) RefreshSet(setName string, entriesWithOptions [][]string, setType string) {}
+func (ips *fakeIPSet) RefreshSet(setName string, entriesWithOptions [][]string, setType string) {
+	if ips.stored == nil {
+		ips.stored = make(map[string]*utils.Set)
+	}
+	resolved := ips.Name(setName)
+	ips.refreshCalls = append(ips.refreshCalls, fakeIPSetRefresh{
+		name:    resolved,
+		setType: setType,
+		entries: entriesWithOptions,
+	})
+	// Mirror the real handler: RefreshSet creates the set entry if it does not exist yet.
+	if _, ok := ips.stored[resolved]; !ok {
+		ips.stored[resolved] = &utils.Set{Name: resolved}
+	}
+}
 
 func (ips *fakeIPSet) Destroy(setName string) error {
+	resolved := ips.Name(setName)
+	ips.destroyCalls = append(ips.destroyCalls, resolved)
+	if ips.destroyErrTimes > 0 {
+		ips.destroyErrTimes--
+		return fmt.Errorf("destroy failed for %s", resolved)
+	}
+	delete(ips.stored, resolved)
 	return nil
 }
 
@@ -789,15 +875,16 @@ func (ips *fakeIPSet) DestroyAllWithin() error {
 }
 
 func (ips *fakeIPSet) Save() error {
-	return nil
+	return ips.saveErr
 }
 
 func (ips *fakeIPSet) Restore() error {
 	return nil
 }
 
-func (ips *fakeIPSet) RestoreSets(_ []string) error {
-	return nil
+func (ips *fakeIPSet) RestoreSets(setNames []string) error {
+	ips.restoreCalls = append(ips.restoreCalls, append([]string(nil), setNames...))
+	return ips.restoreErr
 }
 
 func (ips *fakeIPSet) Flush() error {
@@ -805,15 +892,302 @@ func (ips *fakeIPSet) Flush() error {
 }
 
 func (ips *fakeIPSet) Get(setName string) *utils.Set {
-	return nil
+	if ips.stored == nil {
+		return nil
+	}
+	return ips.stored[ips.Name(setName)]
 }
 
 func (ips *fakeIPSet) Sets() map[string]*utils.Set {
-	return nil
+	return ips.stored
 }
 
 func (ips *fakeIPSet) Name(name string) string {
+	if ips.isIpv6 && !strings.HasPrefix(name, utils.IPv6SetPrefix+":") {
+		return utils.IPv6SetPrefix + ":" + name
+	}
 	return name
+}
+
+// newTailChainTestController returns a minimally-wired NetworkPolicyController suitable for exercising
+// populateDefaultTailChain / populateProtectedPodsIPSet / ensureDefaultTailChainExists. The handlers are fake so
+// the test can inspect the rules and ipset operations that were performed.
+func newTailChainTestController(defaultDeny bool, podCIDRs map[v1.IPFamily][]string) (*NetworkPolicyController,
+	map[v1.IPFamily]*fakeIPTables, map[v1.IPFamily]*fakeIPSet) {
+	npc := &NetworkPolicyController{defaultDeny: defaultDeny, podCIDRs: podCIDRs}
+	npc.iptablesCmdHandlers = make(map[v1.IPFamily]utils.IPTablesHandler)
+	npc.ipSetHandlers = make(map[v1.IPFamily]utils.IPSetHandler)
+
+	iptHandlers := make(map[v1.IPFamily]*fakeIPTables)
+	ipsHandlers := make(map[v1.IPFamily]*fakeIPSet)
+
+	for family := range podCIDRs {
+		fakeIPT := newFakeIPTables(iptables.ProtocolIPv4)
+		if family == v1.IPv6Protocol {
+			fakeIPT = newFakeIPTables(iptables.ProtocolIPv6)
+		}
+		npc.iptablesCmdHandlers[family] = fakeIPT
+		iptHandlers[family] = fakeIPT
+
+		fakeIPS := newFakeIPSet()
+		if family == v1.IPv6Protocol {
+			fakeIPS.isIpv6 = true
+		}
+		npc.ipSetHandlers[family] = fakeIPS
+		ipsHandlers[family] = fakeIPS
+	}
+
+	return npc, iptHandlers, ipsHandlers
+}
+
+// TestPopulateDefaultTailChainDefaultDenyEnabled verifies that when --netpol-default-deny is enabled,
+// populateDefaultTailChain emits the documented 5-rule layout per CIDR: two ipset-gated REJECTs first, then the
+// ACCEPT-on-mark, then the two CIDR-scoped REJECTs as defense-in-depth.
+func TestPopulateDefaultTailChainDefaultDenyEnabled(t *testing.T) {
+	cidr := "10.244.0.0/24"
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: {cidr}}
+	npc, iptHandlers, _ := newTailChainTestController(true, podCIDRs)
+
+	npc.populateDefaultTailChain(v1.IPv4Protocol, npc.iptablesCmdHandlers[v1.IPv4Protocol])
+
+	rules := iptHandlers[v1.IPv4Protocol].appendedRules["filter/"+kubeTailNetpolChain]
+	if got, want := len(rules), 5; got != want {
+		t.Fatalf("expected %d rules appended for 1 CIDR with defaultDeny=true, got %d: %v", want, got, rules)
+	}
+
+	// Rule 1: ipset-gated source REJECT
+	assertRuleMatches(t, "ipset-gated src REJECT", rules[0], []string{
+		"-s", cidr, "-m", "set", "!", "--match-set", kubeLocalPodsIPSetName, "src", "-j", "REJECT",
+	})
+
+	// Rule 2: ipset-gated destination REJECT
+	assertRuleMatches(t, "ipset-gated dst REJECT", rules[1], []string{
+		"-d", cidr, "-m", "set", "!", "--match-set", kubeLocalPodsIPSetName, "dst", "-j", "REJECT",
+	})
+
+	// Rule 3: ACCEPT-on-mark
+	assertRuleMatches(t, "ACCEPT-on-mark", rules[2], []string{
+		"-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT",
+	})
+
+	// Rule 4: CIDR source REJECT
+	assertRuleMatches(t, "CIDR src REJECT", rules[3], []string{
+		"-s", cidr, "-j", "REJECT",
+	})
+
+	// Rule 5: CIDR destination REJECT
+	assertRuleMatches(t, "CIDR dst REJECT", rules[4], []string{
+		"-d", cidr, "-j", "REJECT",
+	})
+}
+
+// TestPopulateDefaultTailChainMultipleCIDRs verifies that the per-CIDR rule layout is repeated for every CIDR in
+// the family so a dual-CIDR node ends up with 1 + 4*N rules.
+func TestPopulateDefaultTailChainMultipleCIDRs(t *testing.T) {
+	cidrs := []string{"10.244.0.0/24", "10.245.0.0/24"}
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: cidrs}
+	npc, iptHandlers, _ := newTailChainTestController(true, podCIDRs)
+
+	npc.populateDefaultTailChain(v1.IPv4Protocol, npc.iptablesCmdHandlers[v1.IPv4Protocol])
+
+	rules := iptHandlers[v1.IPv4Protocol].appendedRules["filter/"+kubeTailNetpolChain]
+	// 2 ipset-gated REJECTs per CIDR + 1 ACCEPT + 2 CIDR REJECTs per CIDR == 1 + 4*N.
+	if got, want := len(rules), 1+4*len(cidrs); got != want {
+		t.Fatalf("expected %d rules for %d CIDRs with defaultDeny=true, got %d", want, len(cidrs), got)
+	}
+}
+
+// TestPopulateDefaultTailChainDefaultDenyDisabled verifies that when --netpol-default-deny is disabled, the chain
+// receives only the original ACCEPT-on-mark rule, regardless of how many pod CIDRs the node has.
+func TestPopulateDefaultTailChainDefaultDenyDisabled(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.0/24", "10.245.0.0/24"}}
+	npc, iptHandlers, _ := newTailChainTestController(false, podCIDRs)
+
+	npc.populateDefaultTailChain(v1.IPv4Protocol, npc.iptablesCmdHandlers[v1.IPv4Protocol])
+
+	rules := iptHandlers[v1.IPv4Protocol].appendedRules["filter/"+kubeTailNetpolChain]
+	if got, want := len(rules), 1; got != want {
+		t.Fatalf("expected exactly 1 rule when defaultDeny=false, got %d: %v", got, rules)
+	}
+	assertRuleMatches(t, "ACCEPT-on-mark", rules[0], []string{
+		"-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT",
+	})
+}
+
+// TestPopulateProtectedPodsIPSetDefaultDenyEnabled verifies that the refresh/restore happens for every family with a
+// known pod IP. We pass two IPs for IPv4 and confirm the refresh entries and the ipset name passed to
+// RestoreSets.
+func TestPopulateProtectedPodsIPSetDefaultDenyEnabled(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.0/24"}}
+	npc, _, ipsHandlers := newTailChainTestController(true, podCIDRs)
+
+	activeIPs := map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.7", "10.244.0.8"}}
+	npc.populateProtectedPodsIPSet(activeIPs)
+
+	ips := ipsHandlers[v1.IPv4Protocol]
+	if got, want := len(ips.refreshCalls), 1; got != want {
+		t.Fatalf("expected exactly 1 RefreshSet call, got %d", got)
+	}
+	call := ips.refreshCalls[0]
+	if call.name != kubeLocalPodsIPSetName {
+		t.Errorf("expected refresh of %q, got %q", kubeLocalPodsIPSetName, call.name)
+	}
+	if call.setType != utils.TypeHashIP {
+		t.Errorf("expected setType %q, got %q", utils.TypeHashIP, call.setType)
+	}
+	if got, want := len(call.entries), 2; got != want {
+		t.Errorf("expected %d entries in refresh, got %d: %v", want, got, call.entries)
+	}
+	for i, ip := range []string{"10.244.0.7", "10.244.0.8"} {
+		if call.entries[i][0] != ip {
+			t.Errorf("entry[%d] = %v, want first element %q", i, call.entries[i], ip)
+		}
+	}
+	if got, want := len(ips.restoreCalls), 1; got != want {
+		t.Fatalf("expected exactly 1 RestoreSets call, got %d", got)
+	}
+	if ips.restoreCalls[0][0] != kubeLocalPodsIPSetName {
+		t.Errorf("expected RestoreSets called with %q, got %v",
+			kubeLocalPodsIPSetName, ips.restoreCalls[0])
+	}
+}
+
+// TestPopulateProtectedPodsIPSetDefaultDenyDisabled verifies that the function is a no-op when --netpol-default-deny
+// is disabled: no refresh, no restore, the ipset stays untouched.
+func TestPopulateProtectedPodsIPSetDefaultDenyDisabled(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.0/24"}}
+	npc, _, ipsHandlers := newTailChainTestController(false, podCIDRs)
+
+	npc.populateProtectedPodsIPSet(map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.7"}})
+
+	ips := ipsHandlers[v1.IPv4Protocol]
+	if len(ips.refreshCalls) != 0 {
+		t.Errorf("RefreshSet should not be called when defaultDeny is disabled, got %v", ips.refreshCalls)
+	}
+	if len(ips.restoreCalls) != 0 {
+		t.Errorf("RestoreSets should not be called when defaultDeny is disabled, got %v", ips.restoreCalls)
+	}
+}
+
+// TestPopulateProtectedPodsIPSetIPv6 verifies that the IPv6 handler is fed the inet6-prefixed set name when
+// RestoreSets is invoked. This guards the per-family name resolution path through IPSetHandler.Name().
+func TestPopulateProtectedPodsIPSetIPv6(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv6Protocol: {"2001:db8::/64"}}
+	npc, _, ipsHandlers := newTailChainTestController(true, podCIDRs)
+
+	npc.populateProtectedPodsIPSet(map[v1.IPFamily][]string{v1.IPv6Protocol: {"2001:db8::7"}})
+
+	ips := ipsHandlers[v1.IPv6Protocol]
+	if len(ips.restoreCalls) != 1 {
+		t.Fatalf("expected exactly 1 RestoreSets call, got %d", len(ips.restoreCalls))
+	}
+	want := utils.IPv6SetPrefix + ":" + kubeLocalPodsIPSetName
+	if ips.restoreCalls[0][0] != want {
+		t.Errorf("expected IPv6-prefixed RestoreSets target %q, got %v", want, ips.restoreCalls[0])
+	}
+}
+
+// TestEnsureLocalPodsIPSetExistsCreatesWhenMissing covers the two callers of ensureLocalPodsIPSetExists that matter at
+// runtime: the startup path (Run() -> ensureDefaultTailChain) and the per-sync drift recovery path
+// (fullPolicySync -> ensureDefaultTailChainExists). In both cases the stored map starts empty so the function
+// must call Create(); the real handler's Create uses `create -exist` internally so the call is also safe when
+// the kernel already has the set.
+func TestEnsureLocalPodsIPSetExistsCreatesWhenMissing(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.0/24"}}
+	npc, _, ipsHandlers := newTailChainTestController(true, podCIDRs)
+
+	npc.ensureLocalPodsIPSetExists()
+
+	calls := ipsHandlers[v1.IPv4Protocol].createCalls
+	if len(calls) != 1 || calls[0] != kubeLocalPodsIPSetName {
+		t.Errorf("expected single Create(%q), got %v", kubeLocalPodsIPSetName, calls)
+	}
+}
+
+// TestEnsureLocalPodsIPSetExistsLeavesExisting verifies that an already-present ipset is not recreated by
+// ensureLocalPodsIPSetExists. The fake records every Create call so we can spot unnecessary work; the real handler's
+// Create is idempotent but still issues an `ipset` invocation, which we'd rather avoid every sync.
+func TestEnsureLocalPodsIPSetExistsLeavesExisting(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.0/24"}}
+	npc, _, ipsHandlers := newTailChainTestController(true, podCIDRs)
+	ipsHandlers[v1.IPv4Protocol].stored[kubeLocalPodsIPSetName] = &utils.Set{Name: kubeLocalPodsIPSetName}
+
+	npc.ensureLocalPodsIPSetExists()
+
+	if calls := ipsHandlers[v1.IPv4Protocol].createCalls; len(calls) != 0 {
+		t.Errorf("expected no Create calls when ipset already exists, got %v", calls)
+	}
+}
+
+// TestEnsureLocalPodsIPSetExistsNoOpWhenDisabled guards the disabled path: with --netpol-default-deny off
+// ensureLocalPodsIPSetExists must never touch the ipset handler at all.
+func TestEnsureLocalPodsIPSetExistsNoOpWhenDisabled(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.0/24"}}
+	npc, _, ipsHandlers := newTailChainTestController(false, podCIDRs)
+
+	npc.ensureLocalPodsIPSetExists()
+
+	if calls := ipsHandlers[v1.IPv4Protocol].createCalls; len(calls) != 0 {
+		t.Errorf("expected no Create calls when defaultDeny=false, got %v", calls)
+	}
+	if calls := ipsHandlers[v1.IPv4Protocol].destroyCalls; len(calls) != 0 {
+		t.Errorf("expected no Destroy calls when defaultDeny=false, got %v", calls)
+	}
+}
+
+// TestDestroyLocalPodsIPSetSkipsMissing verifies that Cleanup() does not call Destroy on a set that does not
+// exist on the system. The real handler exposes Sets() from its in-memory map; the fake mirrors that, and a
+// nil/empty stored map means the lookup misses.
+func TestDestroyLocalPodsIPSetSkipsMissing(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{v1.IPv4Protocol: {"10.244.0.0/24"}}
+	npc, _, ipsHandlers := newTailChainTestController(true, podCIDRs)
+
+	npc.destroyLocalPodsIPSet()
+
+	if calls := ipsHandlers[v1.IPv4Protocol].destroyCalls; len(calls) != 0 {
+		t.Errorf("expected no Destroy calls when ipset is missing, got %v", calls)
+	}
+}
+
+// TestDestroyLocalPodsIPSetDestroysPresent verifies that Cleanup() destroys an existing set. With dual-stack
+// enabled we also check that the IPv6 set name is properly prefixed for the IPv6 family handler.
+func TestDestroyLocalPodsIPSetDestroysPresent(t *testing.T) {
+	podCIDRs := map[v1.IPFamily][]string{
+		v1.IPv4Protocol: {"10.244.0.0/24"},
+		v1.IPv6Protocol: {"2001:db8::/64"},
+	}
+	npc, _, ipsHandlers := newTailChainTestController(true, podCIDRs)
+	ipsHandlers[v1.IPv4Protocol].stored[kubeLocalPodsIPSetName] = &utils.Set{Name: kubeLocalPodsIPSetName}
+	ipv6Name := utils.IPv6SetPrefix + ":" + kubeLocalPodsIPSetName
+	ipsHandlers[v1.IPv6Protocol].stored[ipv6Name] = &utils.Set{Name: ipv6Name}
+
+	npc.destroyLocalPodsIPSet()
+
+	if calls := ipsHandlers[v1.IPv4Protocol].destroyCalls; len(calls) != 1 || calls[0] != kubeLocalPodsIPSetName {
+		t.Errorf("expected IPv4 Destroy(%q), got %v", kubeLocalPodsIPSetName, calls)
+	}
+	if calls := ipsHandlers[v1.IPv6Protocol].destroyCalls; len(calls) != 1 || calls[0] != ipv6Name {
+		t.Errorf("expected IPv6 Destroy(%q), got %v", ipv6Name, calls)
+	}
+}
+
+// assertRuleMatches ensures every fragment of `expected` appears in `actual` (an iptables rulespec); it does not
+// compare exact slices because populateDefaultTailChain interleaves -m comment / --comment args we don't want
+// every test to rebuild verbatim.
+func assertRuleMatches(t *testing.T, label string, actual, expected []string) {
+	t.Helper()
+	for _, want := range expected {
+		found := false
+		for _, got := range actual {
+			if got == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("%s: expected fragment %q in rule, got: %v", label, want, actual)
+		}
+	}
 }
 
 func TestNetworkPolicyController(t *testing.T) {
