@@ -37,6 +37,7 @@ const (
 	kubeOutputChainName          = "KUBE-ROUTER-OUTPUT"
 	kubeDefaultNetpolChain       = "KUBE-NWPLCY-DEFAULT"
 	kubeCommonNetpolChain        = "KUBE-NWPLCY-COMMON"
+	kubeTailNetpolChain          = "KUBE-NWPLCY-TAIL"
 
 	kubeIngressPolicyType = "ingress"
 	kubeEgressPolicyType  = "egress"
@@ -75,6 +76,8 @@ type NetworkPolicyController struct {
 	healthChan           chan<- *healthcheck.ControllerHeartbeat
 	fullSyncRequestChan  chan struct{}
 	ipsetMutex           *sync.Mutex
+	defaultDeny          bool
+	podCIDRs             map[v1core.IPFamily][]string
 
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler
 	iptablesSaveRestore map[v1core.IPFamily]utils.IPTablesSaveRestorer
@@ -173,6 +176,9 @@ func (npc *NetworkPolicyController) Run(healthChan chan<- *healthcheck.Controlle
 	// setup common network policy chain that is applied to all bi-directional traffic
 	npc.ensureCommonPolicyChain()
 
+	// setup KUBE-ROUTER-(INPUT/OUTPUT/FORWARD) tail chain which contains explicit ACCEPT / REJECT rules
+	npc.ensureDefaultTailChain()
+
 	// Full syncs of the network policy controller take a lot of time and can only be processed one at a time,
 	// therefore, we start it in it's own goroutine and request a sync through a single item channel
 	klog.Info("Starting network policy controller full sync goroutine")
@@ -268,6 +274,9 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 	// ensure common network policy chain that is applied to all bi-directional traffic
 	npc.ensureCommonPolicyChain()
 
+	// Per-sync safety net for KUBE-NWPLCY-TAIL; the chain itself is built by ensureDefaultTailChain() in Run().
+	npc.ensureDefaultTailChainExists()
+
 	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 	if err != nil {
 		klog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
@@ -304,9 +313,8 @@ func (npc *NetworkPolicyController) fullPolicySync() {
 
 	activePodFwChains := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
 
-	// Makes sure that the ACCEPT rules for packets marked with "0x20000" are added to the end of each of kube-router's
-	// top level chains
-	npc.ensureExplicitAccept()
+	// Ensure the KUBE-NWPLCY-TAIL jump sits at the end of each top-level chain, after the per-pod jumps above.
+	npc.ensureTailChainPosition()
 
 	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains, false)
 	if err != nil {
@@ -564,14 +572,111 @@ func (npc *NetworkPolicyController) ensureTopLevelChains() {
 	}
 }
 
-func (npc *NetworkPolicyController) ensureExplicitAccept() {
-	// for the traffic to/from the local pod's let network policy controller be
-	// authoritative entity to ACCEPT the traffic if it complies to network policies
+// ensureDefaultTailChain (re)creates KUBE-NWPLCY-TAIL and populates it from scratch, wiping any prior contents so
+// toggling --netpol-default-deny across restarts is idempotent. Call from Run() only; fullPolicySync uses
+// ensureDefaultTailChainExists to avoid a ClearChain/Append leak window on every pod event.
+func (npc *NetworkPolicyController) ensureDefaultTailChain() {
+	for family, iptablesCmdHandler := range npc.iptablesCmdHandlers {
+		exists, err := iptablesCmdHandler.ChainExists("filter", kubeTailNetpolChain)
+		if err != nil {
+			klog.Fatalf("failed to check for the existence of chain %s, error: %v",
+				kubeTailNetpolChain, err)
+		}
+		if !exists {
+			if err = iptablesCmdHandler.NewChain("filter", kubeTailNetpolChain); err != nil {
+				klog.Fatalf("failed to create %s chain due to %s",
+					kubeTailNetpolChain, err.Error())
+			}
+		} else {
+			// Wipe stale contents (e.g. REJECT rules from a previous run where --netpol-default-deny was
+			// enabled but is now disabled, or vice versa).
+			if err = iptablesCmdHandler.ClearChain("filter", kubeTailNetpolChain); err != nil {
+				klog.Fatalf("failed to clear %s chain due to %s",
+					kubeTailNetpolChain, err.Error())
+			}
+		}
+		npc.populateDefaultTailChain(family, iptablesCmdHandler)
+	}
+}
+
+// ensureDefaultTailChainExists is the per-sync safety net: it recreates KUBE-NWPLCY-TAIL only if the chain has gone
+// missing entirely, and otherwise just runs a cheap rule-count drift check and logs a warning on mismatch. We don't
+// auto-rebuild on drift because doing so would re-introduce the leak window ensureDefaultTailChain avoids.
+func (npc *NetworkPolicyController) ensureDefaultTailChainExists() {
+	for family, iptablesCmdHandler := range npc.iptablesCmdHandlers {
+		exists, err := iptablesCmdHandler.ChainExists("filter", kubeTailNetpolChain)
+		if err != nil {
+			klog.Fatalf("failed to check for the existence of chain %s, error: %v",
+				kubeTailNetpolChain, err)
+		}
+		if !exists {
+			klog.Warningf("%s chain was missing during sync; recreating", kubeTailNetpolChain)
+			if err = iptablesCmdHandler.NewChain("filter", kubeTailNetpolChain); err != nil {
+				klog.Fatalf("failed to create %s chain due to %s",
+					kubeTailNetpolChain, err.Error())
+			}
+			npc.populateDefaultTailChain(family, iptablesCmdHandler)
+			continue
+		}
+
+		// Cheap drift detection: count the rules and compare to what we expect to be there. This catches
+		// the case where someone (or something) has tampered with the chain, without rebuilding it
+		// underneath live traffic.
+		rules, err := iptablesCmdHandler.List("filter", kubeTailNetpolChain)
+		if err != nil {
+			klog.Warningf("unable to list rules in %s for drift check: %v", kubeTailNetpolChain, err)
+			continue
+		}
+		// List returns "-N CHAIN" as rules[0] followed by one "-A CHAIN ..." per rule, so subtract one.
+		expected := 1
+		if npc.defaultDeny {
+			expected += 2 * len(npc.podCIDRs[family])
+		}
+		if actual := len(rules) - 1; actual != expected {
+			klog.Warningf("%s has %d rules but expected %d; chain contents have drifted, "+
+				"restart kube-router to rebuild", kubeTailNetpolChain, actual, expected)
+		}
+	}
+}
+
+// populateDefaultTailChain appends the ACCEPT-marked rule and (when --netpol-default-deny is enabled) the per-CIDR
+// REJECT rules into KUBE-NWPLCY-TAIL. Callers must ensure the chain exists and is empty.
+func (npc *NetworkPolicyController) populateDefaultTailChain(
+	family v1core.IPFamily, iptablesCmdHandler utils.IPTablesHandler,
+) {
+	acceptComment := "rule to explicitly ACCEPT traffic that comply to network policies"
+	acceptArgs := []string{"-m", "comment", "--comment", acceptComment,
+		"-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT"}
+	if err := iptablesCmdHandler.Append("filter", kubeTailNetpolChain, acceptArgs...); err != nil {
+		klog.Fatalf("failed to add ACCEPT rule to %s due to %s",
+			kubeTailNetpolChain, err.Error())
+	}
+
+	if !npc.defaultDeny {
+		return
+	}
+	rejectComment := "REJECT traffic before NetPol is applied (--netpol-default-deny is enabled)"
+	for _, cidr := range npc.podCIDRs[family] {
+		srcArgs := []string{"-s", cidr, "-m", "comment", "--comment", rejectComment, "-j", "REJECT"}
+		if err := iptablesCmdHandler.Append("filter", kubeTailNetpolChain, srcArgs...); err != nil {
+			klog.Fatalf("failed to add source REJECT rule to %s due to %s",
+				kubeTailNetpolChain, err.Error())
+		}
+		dstArgs := []string{"-d", cidr, "-m", "comment", "--comment", rejectComment, "-j", "REJECT"}
+		if err := iptablesCmdHandler.Append("filter", kubeTailNetpolChain, dstArgs...); err != nil {
+			klog.Fatalf("failed to add destination REJECT rule to %s due to %s",
+				kubeTailNetpolChain, err.Error())
+		}
+	}
+}
+
+// ensureTailChainPosition ensures each KUBE-ROUTER-{INPUT,FORWARD,OUTPUT} chain ends with a jump into
+// KUBE-NWPLCY-TAIL, placing it after the per-pod KUBE-POD-FW-* jumps written earlier in the same sync.
+func (npc *NetworkPolicyController) ensureTailChainPosition() {
 	for _, filterTableRules := range npc.filterTableRules {
 		for _, chain := range defaultChains {
-			comment := "\"rule to explicitly ACCEPT traffic that comply to network policies\""
-			args := []string{"-m", "comment", "--comment", comment, "-m", "mark", "--mark", "0x20000/0x20000",
-				"-j", "ACCEPT"}
+			comment := "\"rule to explicitly handle traffic for network policies ACCEPT/REJECT decision\""
+			args := []string{"-m", "comment", "--comment", comment, "-j", kubeTailNetpolChain}
 			utils.AppendUnique(filterTableRules, chain, args)
 		}
 	}
@@ -686,6 +791,9 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 				if chain == kubeCommonNetpolChain {
 					continue
 				}
+				if chain == kubeTailNetpolChain {
+					continue
+				}
 				if _, ok := activePolicyChains[chain]; !ok {
 					cleanupPolicyChains = append(cleanupPolicyChains, chain)
 					continue
@@ -720,7 +828,7 @@ func (npc *NetworkPolicyController) cleanupStaleRules(activePolicyChains, active
 			}
 			if deleteDefaultChains {
 				for _, chain := range []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName,
-					kubeDefaultNetpolChain, kubeCommonNetpolChain} {
+					kubeDefaultNetpolChain, kubeCommonNetpolChain, kubeTailNetpolChain} {
 					if strings.Contains(rule, chain) {
 						skipRule = true
 						break
@@ -943,6 +1051,26 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	node, err := utils.GetNodeObject(clientset, config.HostnameOverride)
 	if err != nil {
 		return nil, err
+	}
+
+	npc.defaultDeny = config.NetPolDefaultDeny
+	// We try to get the IPv4 and IPv6 CIDRs here, knowing that it may fail if the user is not either running with
+	// annotations on their node (kube-router.io/pod-cidrs) or running kube-controller-manager with CIDR allocation on
+	// (--allocate-node-cidrs=true). These CIDRs are only used to enforce early network policy and there is only so much
+	// conformance we can guarantee with pod routing implementations other than ours.
+	if npc.defaultDeny {
+		podIPv4CIDRs, podIPv6CIDRs, err := utils.GetPodCIDRsFromNodeSpecDualStack(node)
+		if err != nil {
+			klog.Error("we were unable to intuit the default pod IP CIDRs for this node (likely not setting either" +
+				"kube-router pod CIDR node annotations or using the k8s allocate pod CIDRs option. However, we were told " +
+				"to run with default deny (--netpol-default-deny). Disabling this option as it would not be safe to " +
+				"other node traffic")
+			npc.defaultDeny = false
+		} else {
+			npc.podCIDRs = make(map[v1core.IPFamily][]string)
+			npc.podCIDRs[v1core.IPv4Protocol] = podIPv4CIDRs
+			npc.podCIDRs[v1core.IPv6Protocol] = podIPv6CIDRs
+		}
 	}
 
 	npc.krNode, err = utils.NewKRNode(node, linkQ, config.EnableIPv4, config.EnableIPv6)
