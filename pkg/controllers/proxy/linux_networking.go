@@ -16,8 +16,8 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/internal/nlretry"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/cri"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
-	"github.com/docker/docker/client"
 	"github.com/moby/ipvs"
+	"github.com/moby/moby/client"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	"golang.org/x/sys/unix"
@@ -728,18 +728,19 @@ func (ln *linuxNetworking) setupRoutesForExternalIPForDSR(serviceInfoMap service
 // getContainerPidWithDocker get the PID for a given docker container ID which allows, among other things, for us to
 // enter the network namespace of the pod
 func (ln *linuxNetworking) getContainerPidWithDocker(containerID string) (int, error) {
-	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
+	dockerClient, err := client.New(client.FromEnv)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get docker client due to %w", err)
 	}
 	defer utils.CloseCloserDisregardError(dockerClient)
 
-	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerID)
+	containerSpec, err := dockerClient.ContainerInspect(context.Background(), containerID,
+		client.ContainerInspectOptions{})
 	if err != nil {
 		return 0, fmt.Errorf("failed to get docker container spec due to %w", err)
 	}
 
-	return containerSpec.State.Pid, nil
+	return containerSpec.Container.State.Pid, nil
 }
 
 // getContainerPidWithCRI get the PID for a given compatible CRI (cri-o / containerd / etc.) container ID which allows,
