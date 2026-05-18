@@ -310,7 +310,7 @@ func newGlobalPeers(
 
 func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			node := obj.(*v1core.Node)
 			targetNode, err := utils.NewRemoteKRNode(node)
 			if err != nil {
@@ -322,10 +322,10 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 				targetNode.GetPrimaryNodeIP())
 			nrc.OnNodeUpdate(obj)
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			// we are only interested in node add/delete, so skip update
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			node, ok := obj.(*v1core.Node)
 			if !ok {
 				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -357,7 +357,7 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 // OnNodeUpdate Handle updates from Node watcher. Node watcher calls this method whenever there is
 // new node is added or old node is deleted. So peer up with new node and drop peering
 // from old node
-func (nrc *NetworkRoutingController) OnNodeUpdate(_ interface{}) {
+func (nrc *NetworkRoutingController) OnNodeUpdate(_ any) {
 	if !nrc.bgpServerStarted.Load() {
 		return
 	}

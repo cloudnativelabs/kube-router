@@ -23,24 +23,20 @@ func TestNodePortHealthCheckConcurrentAccess(t *testing.T) {
 
 	var wg sync.WaitGroup
 	// Concurrent writes
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 100; i++ {
+	wg.Go(func() {
+		for range 100 {
 			_ = nphc.UpdateServicesInfo(svcMap, epMap)
 		}
-	}()
+	})
 
 	// Concurrent reads (simulating what the HTTP handler does)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 100; i++ {
+	wg.Go(func() {
+		for range 100 {
 			nphc.mu.RLock()
 			_ = nphc.endpointsInfoMap["test-svc"]
 			nphc.mu.RUnlock()
 		}
-	}()
+	})
 
 	wg.Wait()
 }

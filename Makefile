@@ -27,15 +27,15 @@ BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 # See Versions: https://hub.docker.com/_/alpine
 RUNTIME_BASE?=alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
 # See Versions: https://hub.docker.com/r/golangci/golangci-lint/tags
-DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.11.4@sha256:67dfc9eeeb0eb13fc1a36329c2c378197dc561f1edf1a7792e3f771606bb0e15
+DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.12.2@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0@sha256:a9509a9d50a82781aa4cd0a48f182da55233071fb19454bc70cecc2782359c3c
 # See Versions: https://hub.docker.com/_/node
-DOCKER_DOCTOC_IMAGE?=node:alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4
+DOCKER_DOCTOC_IMAGE?=node:alpine@sha256:e71ac5e964b9201072425d59d2e876359efa25dc96bb1768cb73295728d6e4ea
 # See Versions: https://www.npmjs.com/package/doctoc
 DOCTOC_VERSION=2.4.1
 # See Versions: https://github.com/crate-ci/typos/releases
-TYPOS_VERSION=v1.45.2
+TYPOS_VERSION=v1.46.1
 # See Versions: https://github.com/osrg/gobgp/releases
 GOBGP_VERSION=5f191066a78e2c1e929c54b5b75fe2c683c166e4  # v4.5.0
 QEMU_IMAGE?=multiarch/qemu-user-static:7.2.0-1@sha256:fe60359c92e86a43cc87b3d906006245f77bfc0565676b80004cc666e4feb9f0
@@ -339,6 +339,6 @@ help:
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan
 .PHONY: test test-privileged test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
-.PHONY: spellcheck update-deps update-deps-dry prep-release
+.PHONY: spellcheck update-deps update-deps-dry prep-release kube-router gobgp
 
 .DEFAULT: all

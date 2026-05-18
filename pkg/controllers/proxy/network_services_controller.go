@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -966,8 +967,8 @@ func parseSchedFlags(value string) schedFlags {
 		return schedFlags{}
 	}
 
-	flags := strings.Split(value, ",")
-	for _, flag := range flags {
+	flags := strings.SplitSeq(value, ",")
+	for flag := range flags {
 		switch strings.Trim(flag, " ") {
 		case IpvsSvcFSched1:
 			flag1 = true
@@ -1342,13 +1343,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 
 		// Apply the rules we need
 		for rule, ruleArgs := range rulesNeeded {
-			ruleExists := false
-			for _, ruleFromNode := range rulesFromNode {
-				if rule == ruleFromNode {
-					ruleExists = true
-					break
-				}
-			}
+			ruleExists := slices.Contains(rulesFromNode, rule)
 			if !ruleExists {
 				err = iptablesCmdHandler.AppendUnique("nat", ipvsHairpinChainName, ruleArgs...)
 				if err != nil {
@@ -1398,15 +1393,7 @@ func (nsc *NetworkServicesController) deleteHairpinIptablesRules(family v1.IPFam
 	}
 
 	// TODO: Factor these variables out
-	hasHairpinChain := false
-
-	// TODO: Factor out this code
-	for _, chain := range chains {
-		if chain == ipvsHairpinChainName {
-			hasHairpinChain = true
-			break
-		}
-	}
+	hasHairpinChain := slices.Contains(chains, ipvsHairpinChainName)
 
 	// Nothing left to do if hairpin chain doesn't exist
 	if !hasHairpinChain {
@@ -1879,20 +1866,20 @@ func (nsc *NetworkServicesController) Cleanup() {
 
 func (nsc *NetworkServicesController) newEndpointSliceEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			nsc.handleEndpointSliceAdd(obj)
 
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			nsc.handleEndpointSliceUpdate(oldObj, newObj)
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			nsc.handleEndpointSliceDelete(obj)
 		},
 	}
 }
 
-func (nsc *NetworkServicesController) handleEndpointSliceAdd(obj interface{}) {
+func (nsc *NetworkServicesController) handleEndpointSliceAdd(obj any) {
 	endpoints, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", obj)
@@ -1901,7 +1888,7 @@ func (nsc *NetworkServicesController) handleEndpointSliceAdd(obj interface{}) {
 	nsc.OnEndpointsUpdate(endpoints)
 }
 
-func (nsc *NetworkServicesController) handleEndpointSliceUpdate(oldObj, newObj interface{}) {
+func (nsc *NetworkServicesController) handleEndpointSliceUpdate(oldObj, newObj any) {
 	_, ok := oldObj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", oldObj)
@@ -1915,7 +1902,7 @@ func (nsc *NetworkServicesController) handleEndpointSliceUpdate(oldObj, newObj i
 	nsc.OnEndpointsUpdate(newEndpoints)
 }
 
-func (nsc *NetworkServicesController) handleEndpointSliceDelete(obj interface{}) {
+func (nsc *NetworkServicesController) handleEndpointSliceDelete(obj any) {
 	endpoints, ok := obj.(*discoveryv1.EndpointSlice)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
@@ -1933,19 +1920,19 @@ func (nsc *NetworkServicesController) handleEndpointSliceDelete(obj interface{})
 
 func (nsc *NetworkServicesController) newSvcEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			nsc.handleServiceAdd(obj)
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			nsc.handleServiceUpdate(oldObj, newObj)
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			nsc.handleServiceDelete(obj)
 		},
 	}
 }
 
-func (nsc *NetworkServicesController) handleServiceAdd(obj interface{}) {
+func (nsc *NetworkServicesController) handleServiceAdd(obj any) {
 	service, ok := obj.(*v1.Service)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", obj)
@@ -1954,7 +1941,7 @@ func (nsc *NetworkServicesController) handleServiceAdd(obj interface{}) {
 	nsc.OnServiceUpdate(service)
 }
 
-func (nsc *NetworkServicesController) handleServiceUpdate(oldObj, newObj interface{}) {
+func (nsc *NetworkServicesController) handleServiceUpdate(oldObj, newObj any) {
 	_, ok := oldObj.(*v1.Service)
 	if !ok {
 		klog.Errorf("unexpected object type: %v", oldObj)
@@ -1968,7 +1955,7 @@ func (nsc *NetworkServicesController) handleServiceUpdate(oldObj, newObj interfa
 	nsc.OnServiceUpdate(newService)
 }
 
-func (nsc *NetworkServicesController) handleServiceDelete(obj interface{}) {
+func (nsc *NetworkServicesController) handleServiceDelete(obj any) {
 	service, ok := obj.(*v1.Service)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)

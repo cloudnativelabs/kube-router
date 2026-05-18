@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cloudnativelabs/kube-router/v2/internal/testutils"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
@@ -276,17 +275,17 @@ func TestNetworkServicesController_syncIpvsServices(t *testing.T) {
 				Endpoints: []discoveryv1.Endpoint{
 					{
 						Addresses:  []string{"172.20.1.1"},
-						NodeName:   testutils.ValToPtr("node-1"),
-						Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
+						NodeName:   new("node-1"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 					{
 						Addresses:  []string{"172.20.1.2"},
-						NodeName:   testutils.ValToPtr("node-2"),
-						Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
+						NodeName:   new("node-2"),
+						Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 					},
 				},
 				Ports: []discoveryv1.EndpointPort{
-					{Name: testutils.ValToPtr("port-1"), Port: testutils.ValToPtr[int32](80), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
+					{Name: new("port-1"), Port: new(int32(80)), Protocol: new(v1core.ProtocolTCP)},
 				},
 			},
 			expectedIPs: []string{"10.0.0.1", "1.1.1.1", "2.2.2.2"},
@@ -1385,12 +1384,12 @@ func TestDSR_PolicyRoutingCalledOncePerSync(t *testing.T) {
 		Endpoints: []discoveryv1.Endpoint{
 			{
 				Addresses:  []string{"172.20.1.1"},
-				NodeName:   testutils.ValToPtr("localnode-1"),
-				Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
+				NodeName:   new("localnode-1"),
+				Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 			},
 		},
 		Ports: []discoveryv1.EndpointPort{
-			{Name: testutils.ValToPtr("http"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
+			{Name: new("http"), Port: new(int32(80)), Protocol: new(v1core.ProtocolTCP)},
 		},
 	}
 	_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(
@@ -1409,12 +1408,12 @@ func TestDSR_PolicyRoutingCalledOncePerSync(t *testing.T) {
 		Endpoints: []discoveryv1.Endpoint{
 			{
 				Addresses:  []string{"172.20.1.2"},
-				NodeName:   testutils.ValToPtr("localnode-1"),
-				Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
+				NodeName:   new("localnode-1"),
+				Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 			},
 		},
 		Ports: []discoveryv1.EndpointPort{
-			{Name: testutils.ValToPtr("http"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
+			{Name: new("http"), Port: new(int32(80)), Protocol: new(v1core.ProtocolTCP)},
 		},
 	}
 	_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(
@@ -1790,12 +1789,12 @@ func TestDSR_TwoDSRServicesSameIPDifferentPorts(t *testing.T) {
 			Endpoints: []discoveryv1.Endpoint{
 				{
 					Addresses:  []string{fmt.Sprintf("172.20.1.%d", i+1)},
-					NodeName:   testutils.ValToPtr("localnode-1"),
-					Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)},
+					NodeName:   new("localnode-1"),
+					Conditions: discoveryv1.EndpointConditions{Ready: new(true)},
 				},
 			},
 			Ports: []discoveryv1.EndpointPort{
-				{Name: testutils.ValToPtr("http"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)},
+				{Name: new("http"), Port: new(int32(80)), Protocol: new(v1core.ProtocolTCP)},
 			},
 		}
 		_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), endpointSlice, metav1.CreateOptions{})
@@ -1937,8 +1936,8 @@ func TestDSR_FWMarkCollisionCase_Issue1045(t *testing.T) {
 		endpointSlice := &discoveryv1.EndpointSlice{
 			ObjectMeta:  metav1.ObjectMeta{Name: svcName + "-slice", Namespace: "default", Labels: map[string]string{discoveryv1.LabelServiceName: svcName}},
 			AddressType: discoveryv1.AddressTypeIPv4,
-			Endpoints:   []discoveryv1.Endpoint{{Addresses: []string{fmt.Sprintf("172.20.1.%d", i+1)}, NodeName: testutils.ValToPtr("localnode-1"), Conditions: discoveryv1.EndpointConditions{Ready: testutils.ValToPtr(true)}}},
-			Ports:       []discoveryv1.EndpointPort{{Name: testutils.ValToPtr("port"), Port: testutils.ValToPtr(int32(80)), Protocol: testutils.ValToPtr(v1core.ProtocolTCP)}},
+			Endpoints:   []discoveryv1.Endpoint{{Addresses: []string{fmt.Sprintf("172.20.1.%d", i+1)}, NodeName: new("localnode-1"), Conditions: discoveryv1.EndpointConditions{Ready: new(true)}}},
+			Ports:       []discoveryv1.EndpointPort{{Name: new("port"), Port: new(int32(80)), Protocol: new(v1core.ProtocolTCP)}},
 		}
 		_, err = clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), endpointSlice, metav1.CreateOptions{})
 		assert.NoError(t, err)

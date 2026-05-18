@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -610,14 +611,7 @@ func Test_buildIPSetRestore_integrationRealWorldSets(t *testing.T) {
 
 			// Verify that only the specified sets are included
 			for setName := range tt.ipset.sets {
-				shouldBeIncluded := false
-				for _, includeName := range tt.setIncludeNames {
-					// Check if this set should be included based on the filtering logic
-					if setName == includeName {
-						shouldBeIncluded = true
-						break
-					}
-				}
+				shouldBeIncluded := slices.Contains(tt.setIncludeNames, setName)
 
 				if shouldBeIncluded {
 					assert.Contains(t, result, "create "+setName,

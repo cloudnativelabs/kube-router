@@ -13,12 +13,12 @@ import (
 const maxListenTestTimeout = 5 * time.Second
 
 type Listener interface {
-	OnUpdate(instance interface{})
+	OnUpdate(instance any)
 }
 
-type ListenerFunc func(instance interface{})
+type ListenerFunc func(instance any)
 
-func (f ListenerFunc) OnUpdate(instance interface{}) {
+func (f ListenerFunc) OnUpdate(instance any) {
 	f(instance)
 }
 
@@ -36,7 +36,7 @@ func (b *Broadcaster) Add(listener Listener) {
 }
 
 // Notify notifies an update to registered listeners
-func (b *Broadcaster) Notify(instance interface{}) {
+func (b *Broadcaster) Notify(instance any) {
 	b.listenerLock.RLock()
 	listeners := b.listeners
 	b.listenerLock.RUnlock()
@@ -49,17 +49,6 @@ func (b *Broadcaster) Notify(instance interface{}) {
 // statements, this allows an action like that to pass a linter as well as describe its intention well
 func CloseCloserDisregardError(handler io.Closer) {
 	_ = handler.Close()
-}
-
-// SliceContainsString checks to see if needle is contained within haystack, returns true if found, otherwise
-// returns false
-func SliceContainsString(needle string, haystack []string) bool {
-	for _, hay := range haystack {
-		if needle == hay {
-			return true
-		}
-	}
-	return false
 }
 
 // TCPAddressBindable checks to see if an IP/port is bindable by attempting to open a listener then closing it

@@ -24,14 +24,14 @@ import (
 
 func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			npc.OnNetworkPolicyUpdate(obj)
 
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			npc.OnNetworkPolicyUpdate(newObj)
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			npc.handleNetworkPolicyDelete(obj)
 
 		},
@@ -39,14 +39,14 @@ func (npc *NetworkPolicyController) newNetworkPolicyEventHandler() cache.Resourc
 }
 
 // OnNetworkPolicyUpdate handles updates to network policy from the kubernetes api server
-func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj interface{}) {
+func (npc *NetworkPolicyController) OnNetworkPolicyUpdate(obj any) {
 	netpol := obj.(*networking.NetworkPolicy)
 	klog.V(2).Infof("Received update for network policy: %s/%s", netpol.Namespace, netpol.Name)
 
 	npc.RequestFullSync()
 }
 
-func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj interface{}) {
+func (npc *NetworkPolicyController) handleNetworkPolicyDelete(obj any) {
 	netpol, ok := obj.(*networking.NetworkPolicy)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)

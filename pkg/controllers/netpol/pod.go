@@ -27,7 +27,7 @@ func sanitizeForComment(s string) string {
 
 func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			if podObj, ok := obj.(*api.Pod); ok {
 				// If the pod isn't yet actionable there is no action to take here anyway, so skip it. When it becomes
 				// actionable, we'll get an update below.
@@ -36,7 +36,7 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 				}
 			}
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			var newPodObj, oldPodObj *api.Pod
 			var ok bool
 
@@ -56,21 +56,21 @@ func (npc *NetworkPolicyController) newPodEventHandler() cache.ResourceEventHand
 				npc.OnPodUpdate(newObj)
 			}
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			npc.handlePodDelete(obj)
 		},
 	}
 }
 
 // OnPodUpdate handles updates to pods from the Kubernetes api server
-func (npc *NetworkPolicyController) OnPodUpdate(obj interface{}) {
+func (npc *NetworkPolicyController) OnPodUpdate(obj any) {
 	pod := obj.(*api.Pod)
 	klog.V(2).Infof("Received update to pod: %s/%s", pod.Namespace, pod.Name)
 
 	npc.RequestFullSync()
 }
 
-func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
+func (npc *NetworkPolicyController) handlePodDelete(obj any) {
 	pod, ok := obj.(*api.Pod)
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)

@@ -137,8 +137,8 @@ func getPodCIDRsFromAllNodeSources(node *v1core.Node) (podCIDRs []string) {
 	if cidrsAnnotation != "" {
 		// this should contain comma separated CIDRs, any CIDRs which fail to parse we will emit a warning log for
 		// and skip it
-		cidrsAnnotArray := strings.Split(cidrsAnnotation, ",")
-		for _, cidr := range cidrsAnnotArray {
+		cidrsAnnotArray := strings.SplitSeq(cidrsAnnotation, ",")
+		for cidr := range cidrsAnnotArray {
 			_, _, err := net.ParseCIDR(cidr)
 			if err != nil {
 				klog.Warningf("couldn't parse CIDR %s from kube-router.io/pod-cidrs annotation, skipping...",
