@@ -88,10 +88,14 @@ func (npc *NetworkPolicyController) handlePodDelete(obj interface{}) {
 	npc.RequestFullSync()
 }
 
+// syncPodFirewallChains emits per-pod KUBE-POD-FW-* chains and the rules that jump into them for every local
+// pod. Returns the active pod-firewall chain names (for stale-rule cleanup) and a per-family map of pod IPs
+// whose chain was programmed this sync (consumed by populateProtectedPodsIPSet).
 func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []networkPolicyInfo,
-	version string) map[string]bool {
+	version string) (map[string]bool, map[api.IPFamily][]string) {
 
 	activePodFwChains := make(map[string]bool)
+	activePodIPs := make(map[api.IPFamily][]string)
 
 	dropUnmarkedTrafficRules := func(pod podInfo, podFwChainName string) {
 		for ipFamily, filterTableRules := range npc.filterTableRules {
@@ -139,7 +143,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		// ensure pod specific firewall chain exist for all the pods that need ingress firewall
 		podFwChainName := podFirewallChainName(pod.namespace, pod.name, version)
 		for ipFamily, filterTableRules := range npc.filterTableRules {
-			_, err := getPodIPForFamily(pod, ipFamily)
+			ip, err := getPodIPForFamily(pod, ipFamily)
 			if err != nil {
 				// If the pod doesn't have an address in this family we skip it here and all the various places below
 				// because there won't be a valid source or destination address for iptables, and it will stop iptables
@@ -150,6 +154,8 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 			}
 
 			filterTableRules.WriteString(":" + podFwChainName + "\n")
+			// Record for populateProtectedPodsIPSet: only IPs whose chain we just programmed are "protected".
+			activePodIPs[ipFamily] = append(activePodIPs[ipFamily], ip)
 		}
 
 		activePodFwChains[podFwChainName] = true
@@ -182,7 +188,7 @@ func (npc *NetworkPolicyController) syncPodFirewallChains(networkPoliciesInfo []
 		}
 	}
 
-	return activePodFwChains
+	return activePodFwChains, activePodIPs
 }
 
 // setup rules to jump to applicable network policy chains for the traffic from/to the pod
