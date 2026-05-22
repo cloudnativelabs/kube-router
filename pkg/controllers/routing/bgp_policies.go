@@ -870,27 +870,29 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 			statementNames = append(statementNames, statement.Name)
 		}
 
-		statement := gobgpapi.Statement{
-			Conditions: &gobgpapi.Conditions{
-				PrefixSet: &gobgpapi.MatchSet{
-					Type: gobgpapi.MatchSet_TYPE_ANY,
-					Name: defaultRouteSet,
+		for _, defaultset := range []string{defaultRouteSet, defaultRouteSetV6} {
+			statement := gobgpapi.Statement{
+				Conditions: &gobgpapi.Conditions{
+					PrefixSet: &gobgpapi.MatchSet{
+						Type: gobgpapi.MatchSet_TYPE_ANY,
+						Name: defaultset,
+					},
+					NeighborSet: &gobgpapi.MatchSet{
+						Type: gobgpapi.MatchSet_TYPE_ANY,
+						Name: peerSet,
+					},
 				},
-				NeighborSet: &gobgpapi.MatchSet{
-					Type: gobgpapi.MatchSet_TYPE_ANY,
-					Name: peerSet,
-				},
-			},
-			Actions: &actions,
-			Name:    defaultRouteSet + peerSet,
+				Actions: &actions,
+				Name:    defaultset + peerSet,
+			}
+			if err = nrc.ensureStatementExists(&statement); err != nil {
+				return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
+			}
+			statementNames = append(statementNames, statement.Name)
 		}
-		if err = nrc.ensureStatementExists(&statement); err != nil {
-			return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
-		}
-		statementNames = append(statementNames, statement.Name)
 
 		if len(nrc.nodeCustomImportRejectIPNets) > 0 {
-			statement = gobgpapi.Statement{
+			statement := gobgpapi.Statement{
 				Conditions: &gobgpapi.Conditions{
 					PrefixSet: &gobgpapi.MatchSet{
 						Name: customImportRejectSet,
