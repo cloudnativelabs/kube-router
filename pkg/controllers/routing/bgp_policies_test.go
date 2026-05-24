@@ -396,8 +396,27 @@ func Test_AddPolicies(t *testing.T) {
 						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
+				// V6 default-route cross-family reject statement (kube-router unconditionally
+				// generates this for any peer set since defaultRouteSetV6 is always populated).
 				{
 					Name: "kube_router_import_stmt2",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: defaultRouteSetV6,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: allPeerSet,
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
+					},
+				},
+				{
+					Name: "kube_router_import_stmt3",
 					Conditions: &gobgpapi.Conditions{
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_TYPE_ANY,
@@ -616,6 +635,25 @@ func Test_AddPolicies(t *testing.T) {
 						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
 					},
 				},
+				// V6 default-route cross-family reject statement (kube-router unconditionally
+				// generates this for any peer set since defaultRouteSetV6 is always populated).
+				{
+					Name: "kube_router_import_stmt2",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: defaultRouteSetV6,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: allPeerSet,
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
+					},
+				},
 			},
 			nil,
 		},
@@ -791,6 +829,25 @@ func Test_AddPolicies(t *testing.T) {
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: allPeerSet,
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
+					},
+				},
+				// V6 default-route cross-family reject statement (kube-router unconditionally
+				// generates this for any peer set since defaultRouteSetV6 is always populated).
+				{
+					Name: "kube_router_import_stmt2",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: defaultRouteSetV6,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_TYPE_ANY,
@@ -1000,6 +1057,25 @@ func Test_AddPolicies(t *testing.T) {
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: allPeerSet,
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
+					},
+				},
+				// V6 default-route cross-family reject statement (kube-router unconditionally
+				// generates this for any peer set since defaultRouteSetV6 is always populated).
+				{
+					Name: "kube_router_import_stmt2",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: defaultRouteSetV6,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_TYPE_ANY,
@@ -1421,6 +1497,25 @@ func Test_AddPolicies(t *testing.T) {
 						PrefixSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_TYPE_ANY,
 							Name: defaultRouteSet,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: allPeerSet,
+						},
+						RpkiResult: -1,
+					},
+					Actions: &gobgpapi.Actions{
+						RouteAction: gobgpapi.RouteAction_ROUTE_ACTION_REJECT,
+					},
+				},
+				// V6 default-route cross-family reject statement (kube-router unconditionally
+				// generates this for any peer set since defaultRouteSetV6 is always populated).
+				{
+					Name: "kube_router_import_stmt2",
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: defaultRouteSetV6,
 						},
 						NeighborSet: &gobgpapi.MatchSet{
 							Type: gobgpapi.MatchSet_TYPE_ANY,
