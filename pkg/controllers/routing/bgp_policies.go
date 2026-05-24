@@ -32,9 +32,11 @@ const (
 	iBGPPeerSet       = "iBGPpeerset"
 	iBGPPeerSetV6     = "iBGPpeersetv6"
 
-	customImportRejectSet = "customimportrejectdefinedset"
-	defaultRouteSet       = "defaultroutedefinedset"
-	defaultRouteSetV6     = "defaultroutedefinedsetv6"
+	customImportRejectSet   = "customimportrejectdefinedset"
+	customImportRejectSetV6 = "customimportrejectdefinedsetv6"
+
+	defaultRouteSet   = "defaultroutedefinedset"
+	defaultRouteSetV6 = "defaultroutedefinedsetv6"
 
 	kubeRouterExportPolicy = "kube_router_export"
 	kubeRouterImportPolicy = "kube_router_import"
@@ -310,37 +312,52 @@ func (nrc *NetworkRoutingController) addDefaultRouteDefinedSet() error {
 	return nil
 }
 
-// create a defined set to represent custom annotated routes to be rejected on import
+// create defined sets to represent custom annotated routes to be rejected on import. The annotation
+// (kube-router.io/node.bgp.customimportreject) may contain a mix of IPv4 and IPv6 CIDRs; we split
+// them by family into two defined sets (customImportRejectSet for V4, customImportRejectSetV6 for
+// V6) because a GoBGP defined set cannot mix prefix families ("multiple families" error) and
+// because each family needs the correct MaskLengthMax (32 vs 128) for longest-match behavior.
 func (nrc *NetworkRoutingController) addCustomImportRejectDefinedSet() error {
-	var currentDefinedSet *gobgpapi.DefinedSet
-	currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(customImportRejectSet, gobgpapi.DefinedType_DEFINED_TYPE_PREFIX)
-	if err != nil {
-		return err
-	}
+	for setName, maxMask := range map[string]uint32{
+		customImportRejectSet:   maxIPv4MaskSize,
+		customImportRejectSetV6: maxIPv6MaskSize,
+	} {
+		currentDefinedSet, err := nrc.getDefinedSetFromGoBGP(setName, gobgpapi.DefinedType_DEFINED_TYPE_PREFIX)
+		if err != nil {
+			return err
+		}
+		if currentDefinedSet != nil {
+			continue
+		}
 
-	if currentDefinedSet == nil {
 		prefixes := make([]*gobgpapi.Prefix, 0)
 		for _, ipNet := range nrc.nodeCustomImportRejectIPNets {
-			prefix := new(gobgpapi.Prefix)
-			prefix.IpPrefix = ipNet.String()
+			// Filter prefixes by address family so each defined set only contains entries that
+			// match its family.
+			isV4 := ipNet.IP.To4() != nil
+			if (setName == customImportRejectSet) != isV4 {
+				continue
+			}
 			mask, _ := ipNet.Mask.Size()
-
 			uIntMask, err := safecast.Convert[uint32](mask)
 			if err != nil {
 				return fmt.Errorf("failed to convert mask to uint32: %w", err)
 			}
-
-			prefix.MaskLengthMin = uIntMask
-			prefix.MaskLengthMax = uint32(ipv4MaskMinBits)
-			prefixes = append(prefixes, prefix)
+			prefixes = append(prefixes, &gobgpapi.Prefix{
+				IpPrefix:      ipNet.String(),
+				MaskLengthMin: uIntMask,
+				MaskLengthMax: maxMask,
+			})
 		}
 		customImportRejectDefinedSet := &gobgpapi.DefinedSet{
 			DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX,
-			Name:        customImportRejectSet,
+			Name:        setName,
 			Prefixes:    prefixes,
 		}
-		return nrc.bgpServer.AddDefinedSet(context.Background(),
-			&gobgpapi.AddDefinedSetRequest{DefinedSet: customImportRejectDefinedSet})
+		if err := nrc.bgpServer.AddDefinedSet(context.Background(),
+			&gobgpapi.AddDefinedSetRequest{DefinedSet: customImportRejectDefinedSet}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -892,24 +909,37 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 		}
 
 		if len(nrc.nodeCustomImportRejectIPNets) > 0 {
-			statement := gobgpapi.Statement{
-				Conditions: &gobgpapi.Conditions{
-					PrefixSet: &gobgpapi.MatchSet{
-						Name: customImportRejectSet,
-						Type: gobgpapi.MatchSet_TYPE_ANY,
+			for _, customRejectSet := range []string{customImportRejectSet, customImportRejectSetV6} {
+				// Referencing an empty defined set with MatchSet_TYPE_ANY would match all routes
+				// (see emptyCheckDefinedSets docstring), so skip families that have no entries.
+				customRejectSetEmpty, err := nrc.emptyCheckDefinedSets([]gobgpapi.ListDefinedSetRequest{
+					{DefinedType: gobgpapi.DefinedType_DEFINED_TYPE_PREFIX, Name: customRejectSet},
+				})
+				if err != nil {
+					return err
+				}
+				if customRejectSetEmpty {
+					continue
+				}
+				statement := gobgpapi.Statement{
+					Conditions: &gobgpapi.Conditions{
+						PrefixSet: &gobgpapi.MatchSet{
+							Name: customRejectSet,
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+						},
+						NeighborSet: &gobgpapi.MatchSet{
+							Type: gobgpapi.MatchSet_TYPE_ANY,
+							Name: peerSet,
+						},
 					},
-					NeighborSet: &gobgpapi.MatchSet{
-						Type: gobgpapi.MatchSet_TYPE_ANY,
-						Name: peerSet,
-					},
-				},
-				Actions: &actions,
-				Name:    customImportRejectSet + peerSet,
+					Actions: &actions,
+					Name:    customRejectSet + peerSet,
+				}
+				if err = nrc.ensureStatementExists(&statement); err != nil {
+					return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
+				}
+				statementNames = append(statementNames, statement.Name)
 			}
-			if err = nrc.ensureStatementExists(&statement); err != nil {
-				return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
-			}
-			statementNames = append(statementNames, statement.Name)
 		}
 	}
 
