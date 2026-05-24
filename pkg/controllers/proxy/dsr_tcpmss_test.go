@@ -3,7 +3,6 @@ package proxy
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 	"testing"
 
@@ -644,7 +643,7 @@ func TestDSRTCPMSSCalculation_TableDriven(t *testing.T) {
 			mssValues := findMSSInCalls(calls)
 
 			if tc.expectMSS {
-				assert.True(t, slices.Contains(mssValues, tc.expectedMSS),
+				assert.Contains(t, mssValues, tc.expectedMSS,
 					"Expected MSS %s in %v", tc.expectedMSS, mssValues)
 			} else {
 				assert.Empty(t, mssValues,

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
+	"github.com/stretchr/testify/assert"
 
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1173,18 +1174,7 @@ func TestDestroyLocalPodsIPSetDestroysPresent(t *testing.T) {
 // every test to rebuild verbatim.
 func assertRuleMatches(t *testing.T, label string, actual, expected []string) {
 	t.Helper()
-	for _, want := range expected {
-		found := false
-		for _, got := range actual {
-			if got == want {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("%s: expected fragment %q in rule, got: %v", label, want, actual)
-		}
-	}
+	assert.Subset(t, actual, expected, label)
 }
 
 func TestNetworkPolicyController(t *testing.T) {
