@@ -662,7 +662,7 @@ func (npc *NetworkPolicyController) ensureLocalPodsIPSetExists() {
 	if !npc.defaultDeny {
 		return
 	}
-	if nil != npc.ipsetMutex {
+	if npc.ipsetMutex != nil {
 		klog.V(2).Infof("Attempting to attain ipset mutex lock for protected-pods ipset check")
 		npc.ipsetMutex.Lock()
 		klog.V(2).Infof("Attained ipset mutex lock for protected-pods ipset check, continuing...")
@@ -777,7 +777,7 @@ func (npc *NetworkPolicyController) populateProtectedPodsIPSet(activePodIPs map[
 	if !npc.defaultDeny {
 		return
 	}
-	if nil != npc.ipsetMutex {
+	if npc.ipsetMutex != nil {
 		klog.V(2).Infof("Attempting to attain ipset mutex lock for protected-pods refresh")
 		npc.ipsetMutex.Lock()
 		klog.V(2).Infof("Attained ipset mutex lock for protected-pods refresh, continuing...")
@@ -1003,7 +1003,7 @@ func (npc *NetworkPolicyController) cleanupStaleIPSets(activePolicyIPSets map[st
 	// There are certain actions like Cleanup() actions that aren't working with full instantiations of the controller
 	// and in these instances the mutex may not be present and may not need to be present as they are operating out of a
 	// single goroutine where there is no need for locking
-	if nil != npc.ipsetMutex {
+	if npc.ipsetMutex != nil {
 		klog.V(1).Infof("Attempting to attain ipset mutex lock")
 		npc.ipsetMutex.Lock()
 		klog.V(1).Infof("Attained ipset mutex lock, continuing...")

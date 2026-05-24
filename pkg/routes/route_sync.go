@@ -102,7 +102,7 @@ func (rs *RouteSync) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, sto
 					klog.Errorf("route could not be replaced due to: %v", err)
 				}
 				// Some of our unit tests send a nil health channel
-				if nil != healthChan && err == nil {
+				if healthChan != nil && err == nil {
 					healthcheck.SendHeartBeat(healthChan, healthcheck.RouteSyncController)
 				}
 			case <-stopCh:
