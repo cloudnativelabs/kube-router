@@ -1224,11 +1224,10 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	if npc.defaultDeny {
 		podIPv4CIDRs, podIPv6CIDRs, err := utils.GetPodCIDRsFromNodeSpecDualStack(node)
 		if err != nil {
-			klog.Error("we were unable to intuit the default pod IP CIDRs for this node (likely not setting either" +
+			return nil, errors.New("we were unable to intuit the default pod IP CIDRs for this node (likely not setting either" +
 				"kube-router pod CIDR node annotations or using the k8s allocate pod CIDRs option. However, we were told " +
 				"to run with default deny (--netpol-default-deny). Disabling this option as it would not be safe to " +
 				"other node traffic")
-			npc.defaultDeny = false
 		} else {
 			npc.podCIDRs = make(map[v1core.IPFamily][]string)
 			npc.podCIDRs[v1core.IPv4Protocol] = podIPv4CIDRs
