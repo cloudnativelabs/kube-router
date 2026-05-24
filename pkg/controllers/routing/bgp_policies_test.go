@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	gobgpapi "github.com/osrg/gobgp/v4/api"
 	gobgp "github.com/osrg/gobgp/v4/pkg/server"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 )
 
 type PolicyTestCase struct {
@@ -1555,7 +1557,7 @@ func Test_AddPolicies(t *testing.T) {
 }
 
 func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpapi.PolicyDirection, policyStatements []*gobgpapi.Statement) {
-	policyExists := false
+	t.Helper()
 
 	var direction string
 	if gobgpDirection.String() == "POLICY_DIRECTION_EXPORT" {
@@ -1564,23 +1566,29 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 		direction = "import"
 	}
 
+	// Discover the version-suffixed name (e.g. "kube_router_import1") rather than reconstructing
+	// it, so the helper still works if AddPolicies is ever called more than once on the same server.
+	policyExists := false
+	actualPolicyName := ""
+	expectedPolicyPrefix := "kube_router_" + direction
 	err := testcase.nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{}, func(policy *gobgpapi.Policy) {
-		if policy.Name == "kube_router_"+direction+"1" {
+		if strings.HasPrefix(policy.Name, expectedPolicyPrefix) {
 			policyExists = true
+			actualPolicyName = policy.Name
 		}
 	})
 	if err != nil {
 		t.Fatalf("failed to get policy: %v", err)
 	}
 	if !policyExists {
-		t.Errorf("policy 'kube_router_%v' was not added", direction)
+		t.Errorf("policy with prefix %q was not added", expectedPolicyPrefix)
 	}
 
 	policyAssignmentExists := false
 	err = testcase.nrc.bgpServer.ListPolicyAssignment(context.Background(), &gobgpapi.ListPolicyAssignmentRequest{}, func(policyAssignment *gobgpapi.PolicyAssignment) {
 		if policyAssignment.Name == "global" && policyAssignment.Direction == gobgpDirection {
 			for _, policy := range policyAssignment.Policies {
-				if policy.Name == "kube_router_"+direction+"1" {
+				if policy.Name == actualPolicyName {
 					policyAssignmentExists = true
 				}
 			}
@@ -1593,11 +1601,21 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 	if !policyAssignmentExists {
 		t.Errorf("%s policy assignment 'kube_router_%s' was not added", direction, direction)
 	}
-	err = testcase.nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{Name: "kube_router_" + direction}, func(foundPolicy *gobgpapi.Policy) {
+
+	// Bail before the next ListPolicy call: an empty Name filter would match every policy and
+	// produce a misleading secondary failure.
+	if actualPolicyName == "" {
+		return
+	}
+
+	// GoBGP's ListPolicy does exact name matching, so we must pass the full versioned name.
+	policyFound := false
+	err = testcase.nrc.bgpServer.ListPolicy(context.Background(), &gobgpapi.ListPolicyRequest{Name: actualPolicyName}, func(foundPolicy *gobgpapi.Policy) {
+		policyFound = true
 		for _, expectedStatement := range policyStatements {
 			found := false
 			for _, statement := range foundPolicy.Statements {
-				if reflect.DeepEqual(statement, expectedStatement) {
+				if statementsEquivalent(statement, expectedStatement) {
 					found = true
 					break
 				}
@@ -1608,10 +1626,47 @@ func checkPolicies(t *testing.T, testcase PolicyTestCase, gobgpDirection gobgpap
 			}
 		}
 		if len(policyStatements) != len(foundPolicy.Statements) {
-			t.Errorf("unexpected statement found: %v", foundPolicy.Statements)
+			t.Errorf("expected %d statements, found %d: %v",
+				len(policyStatements), len(foundPolicy.Statements), foundPolicy.Statements)
 		}
 	})
 	if err != nil {
-		t.Fatalf("expected to find a policy, but none were returned")
+		t.Fatalf("ListPolicy failed: %v", err)
 	}
+	if !policyFound {
+		t.Fatalf("expected to find policy %q, but none matched", actualPolicyName)
+	}
+}
+
+// statementsEquivalent compares two BGP policy statements by their semantically meaningful fields
+// (Conditions and Actions), ignoring implementation-detail fields whose values are stable but not
+// what the test author intends to assert:
+//
+//   - Name: GoBGP preserves the kube-router-generated name (e.g. "servicevipsdefinedsetallpeerset"),
+//     not a sequential index like "kube_router_import_stmt0" that several test cases use. Comparing
+//     by Name would require either rewriting every expected entry or coupling the tests to the
+//     internal naming scheme.
+//   - Conditions.RpkiResult: production code never sets this field, so the actual value is always
+//     the proto default (0). Several test cases pre-fill it as -1, which would never match.
+//
+// What actually matters for these tests is *what* the statement matches (PrefixSet, NeighborSet)
+// and *what* it does (Actions), both of which are compared via proto.Equal (which understands
+// protobuf semantics and ignores internal MessageState — unlike reflect.DeepEqual).
+func statementsEquivalent(a, b *gobgpapi.Statement) bool {
+	if !proto.Equal(a.GetActions(), b.GetActions()) {
+		return false
+	}
+	return proto.Equal(normalizeConditions(a.GetConditions()), normalizeConditions(b.GetConditions()))
+}
+
+// normalizeConditions returns a copy of the given Conditions with RpkiResult zeroed out, so the
+// proto.Equal comparison ignores it. Uses proto.Clone to avoid copying the embedded sync.Mutex
+// in protoimpl.MessageState (which `go vet` flags via copylocks).
+func normalizeConditions(c *gobgpapi.Conditions) *gobgpapi.Conditions {
+	if c == nil {
+		return nil
+	}
+	cp, _ := proto.Clone(c).(*gobgpapi.Conditions)
+	cp.RpkiResult = 0
+	return cp
 }
