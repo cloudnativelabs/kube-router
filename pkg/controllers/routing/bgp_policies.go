@@ -870,12 +870,12 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 			statementNames = append(statementNames, statement.Name)
 		}
 
-		for _, defaultset := range []string{defaultRouteSet, defaultRouteSetV6} {
+		for _, defaultSet := range []string{defaultRouteSet, defaultRouteSetV6} {
 			statement := gobgpapi.Statement{
 				Conditions: &gobgpapi.Conditions{
 					PrefixSet: &gobgpapi.MatchSet{
 						Type: gobgpapi.MatchSet_TYPE_ANY,
-						Name: defaultset,
+						Name: defaultSet,
 					},
 					NeighborSet: &gobgpapi.MatchSet{
 						Type: gobgpapi.MatchSet_TYPE_ANY,
@@ -883,7 +883,7 @@ func (nrc *NetworkRoutingController) addImportPolicies() error {
 					},
 				},
 				Actions: &actions,
-				Name:    defaultset + peerSet,
+				Name:    defaultSet + peerSet,
 			}
 			if err = nrc.ensureStatementExists(&statement); err != nil {
 				return fmt.Errorf("could not check or create statement: %s - %w", statement.Name, err)
