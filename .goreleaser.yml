@@ -40,5 +40,10 @@ archives:
       - CHANGELOG*
       - Documentation*
 
+# Pin the checksum filename to a stable, version-independent name so that the
+# SLSA provenance step in .github/workflows/ci-release.yml can reference it
+checksum:
+  name_template: 'checksums.txt'
+
 snapshot:
   version_template: SNAPSHOT-{{ .Commit }}
