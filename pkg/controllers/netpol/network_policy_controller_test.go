@@ -2,7 +2,6 @@ package netpol
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net"
 	"os"
@@ -913,9 +912,14 @@ func (ips *fakeIPSet) Name(name string) string {
 // newTailChainTestController returns a minimally-wired NetworkPolicyController suitable for exercising
 // populateDefaultTailChain / populateProtectedPodsIPSet / ensureDefaultTailChainExists. The handlers are fake so
 // the test can inspect the rules and ipset operations that were performed.
-func newTailChainTestController(defaultDeny bool, podCIDRs map[v1.IPFamily][]string) (*NetworkPolicyController,
+func newTailChainTestController(defaultDeny bool, podCIDRs map[v1.IPFamily][]string) (*NetworkPolicyControllerIptables,
 	map[v1.IPFamily]*fakeIPTables, map[v1.IPFamily]*fakeIPSet) {
-	npc := &NetworkPolicyController{defaultDeny: defaultDeny, podCIDRs: podCIDRs}
+	npc := &NetworkPolicyControllerIptables{
+		NetworkPolicyControllerBase: &NetworkPolicyControllerBase{
+			defaultDeny: defaultDeny,
+			podCIDRs:    podCIDRs,
+		},
+	}
 	npc.iptablesCmdHandlers = make(map[v1.IPFamily]utils.IPTablesHandler)
 	npc.ipSetHandlers = make(map[v1.IPFamily]utils.IPSetHandler)
 
@@ -1445,8 +1449,7 @@ func TestNetworkPolicyController(t *testing.T) {
 func TestBuildNetworkPoliciesInfoEdgeCases(t *testing.T) {
 	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 

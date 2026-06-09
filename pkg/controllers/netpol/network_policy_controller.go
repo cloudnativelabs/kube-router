@@ -88,6 +88,8 @@ type NetworkPolicyControllerBase struct {
 	healthChan          chan<- *healthcheck.ControllerHeartbeat
 	fullSyncRequestChan chan struct{}
 	ipsetMutex          *sync.Mutex
+	defaultDeny         bool
+	podCIDRs            map[v1core.IPFamily][]string
 
 	podLister cache.Indexer
 	npLister  cache.Indexer
