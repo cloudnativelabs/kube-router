@@ -77,7 +77,7 @@ func initTable(ctx context.Context, ipFamily knftables.Family, name string) (knf
 	tx := nft.NewTransaction()
 
 	tx.Add(&knftables.Table{
-		Comment: knftables.PtrTo("rules for " + name),
+		Comment: new("rules for " + name),
 	})
 	err = nft.Run(ctx, tx)
 	if err != nil {
@@ -190,6 +190,10 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() {
 	// ensure common network policy chain that is applied to all bi-directional traffic
 	npc.ensureCommonPolicyChain()
 
+	// (re)create KUBE-NWPLCY-TAIL chain + kube-router-local-pods named set. Rebuild every sync so the
+	// per-CIDR REJECT rules track --netpol-default-deny / pod CIDR changes without a controller restart.
+	npc.ensureDefaultTailChain()
+
 	networkPoliciesInfo, err := npc.buildNetworkPoliciesInfo()
 	if err != nil {
 		klog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
@@ -202,12 +206,19 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() {
 		return
 	}
 
-	activePodFwChains, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+	activePodFwChains, activePodIPs, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
 		klog.Errorf("Aborting sync. Failed to sync pod firewall chains: %v", err.Error())
 		return
 	}
 	klog.V(3).Infof("Active pod firewall chains: %d", len(activePodFwChains))
+
+	// Refresh the kube-router-local-pods named set before ensureTailChainPosition installs the TAIL jump,
+	// so the rules never reference a stale set. No-op when --netpol-default-deny is disabled.
+	npc.populateProtectedPodsIPSet(activePodIPs)
+
+	// Ensure the KUBE-NWPLCY-TAIL jump sits at the end of each top-level chain, after the per-pod jumps above.
+	npc.ensureTailChainPosition()
 
 	// Makes sure that the ACCEPT rules for packets marked with "0x20000" are added to the end of each of kube-router's
 	// top level chains
@@ -230,9 +241,9 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 		for chain, hook := range chainToHook {
 			tx.Add(&knftables.Chain{
 				Name:     chain,
-				Comment:  knftables.PtrTo("top level " + chain + " chain for kube-router"),
+				Comment:  new("top level " + chain + " chain for kube-router"),
 				Type:     knftables.PtrTo(knftables.FilterType),
-				Hook:     knftables.PtrTo(hook),
+				Hook:     new(hook),
 				Priority: knftables.PtrTo(knftables.FilterPriority),
 			})
 			tx.Flush(&knftables.Chain{
@@ -270,7 +281,7 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 					addrKeyword, "daddr", serviceRange.String(),
 					"counter", "return",
 				),
-				Comment: knftables.PtrTo("allow traffic to primary/secondary cluster IP range"),
+				Comment: new("allow traffic to primary/secondary cluster IP range"),
 			})
 			if err := nftItf.Run(ctx, tx); err != nil {
 				klog.ErrorS(err, "nftables: couldn't setup chain for cluster IP range", "cidr", serviceRange.String())
@@ -286,7 +297,7 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 			// Use "meta l4proto" for both IPv4 and IPv6 tables: it is the canonical
 			// family-agnostic L4 protocol match in nftables. The older "ip protocol"
 			// form only works in the ip (IPv4) table and would break in ip6 tables.
-			ruleParts := []interface{}{"meta l4proto", protocol}
+			ruleParts := []any{"meta l4proto", protocol}
 			ruleParts = append(ruleParts,
 				"fib", "daddr", "type", "local", protocol,
 				"dport", npc.nftablesNodePortRange(),
@@ -294,7 +305,7 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 			tx.Add(&knftables.Rule{
 				Chain:   kubeInputChainName,
 				Rule:    knftables.Concat(ruleParts...),
-				Comment: knftables.PtrTo("allow LOCAL " + protocol + " traffic to node ports"),
+				Comment: new("allow LOCAL " + protocol + " traffic to node ports"),
 			})
 			klog.V(2).Infof("Allow %s traffic to ingress towards node port range: %s for family: %s",
 				protocol, npc.serviceNodePortRange, family)
@@ -325,7 +336,7 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 					addrKeyword, "daddr", externalIPRange.String(),
 					"counter", "return",
 				),
-				Comment: knftables.PtrTo("allow traffic to External IP range"),
+				Comment: new("allow traffic to External IP range"),
 			})
 			if err := nftItf.Run(ctx, tx); err != nil {
 				klog.ErrorS(err, "nftables: couldn't setup chain for External IP range", "cidr", externalIPRange.String())
@@ -342,7 +353,7 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 					addrKeyword, "daddr", loadBalancerIPRange.String(),
 					"counter", "return",
 				),
-				Comment: knftables.PtrTo("allow traffic to LoadBalancer IP range"),
+				Comment: new("allow traffic to LoadBalancer IP range"),
 			})
 			if err := nftItf.Run(ctx, tx); err != nil {
 				klog.ErrorS(err, "nftables: couldn't setup chain for LoadBalancer IP range",
@@ -367,7 +378,7 @@ func (npc *NetworkPolicyControllerNftables) ensureDefaultNetworkPolicyChain() {
 		tx := nft.NewTransaction()
 		tx.Add(&knftables.Chain{
 			Name:    kubeDefaultNetpolChain,
-			Comment: knftables.PtrTo(kubeDefaultNetpolChain + " chain for kube-router"),
+			Comment: new(kubeDefaultNetpolChain + " chain for kube-router"),
 		})
 		tx.Flush(&knftables.Chain{
 			Name: kubeDefaultNetpolChain,
@@ -379,7 +390,7 @@ func (npc *NetworkPolicyControllerNftables) ensureDefaultNetworkPolicyChain() {
 			Rule: knftables.Concat(
 				"counter", "meta mark", "set mark", "or", "0x10000",
 			),
-			Comment: knftables.PtrTo("mark traffic matching a network policy"),
+			Comment: new("mark traffic matching a network policy"),
 		})
 		err := nft.Run(ctx, tx)
 		if err != nil {
@@ -397,7 +408,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 		tx := nft.NewTransaction()
 		tx.Add(&knftables.Chain{
 			Name:    kubeCommonNetpolChain,
-			Comment: knftables.PtrTo(kubeCommonNetpolChain + " chain for kube-router"),
+			Comment: new(kubeCommonNetpolChain + " chain for kube-router"),
 		})
 		tx.Flush(&knftables.Chain{
 			Name: kubeCommonNetpolChain,
@@ -413,7 +424,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 			Rule: knftables.Concat(
 				"ct state invalid", "counter", "drop",
 			),
-			Comment: knftables.PtrTo("drop invalid state for pod"),
+			Comment: new("drop invalid state for pod"),
 		})
 		// ensure stateful firewall that permits RELATED,ESTABLISHED traffic from/to the pod
 		tx.Add(&knftables.Rule{
@@ -421,7 +432,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 			Rule: knftables.Concat(
 				"ct state established,related", "counter", "accept",
 			),
-			Comment: knftables.PtrTo("rule for stateful firewall for pod"),
+			Comment: new("rule for stateful firewall for pod"),
 		})
 
 		icmpRules := utils.CommonICMPRules(family)
@@ -432,7 +443,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 					icmpRule.NftablesProto,
 					"type", icmpRule.NftablesICMPType,
 					"counter", "accept"),
-				Comment: knftables.PtrTo("allow icmp " + icmpRule.NftablesICMPType + " messages"),
+				Comment: new("allow icmp " + icmpRule.NftablesICMPType + " messages"),
 			})
 		}
 		err := nft.Run(ctx, tx)
@@ -574,7 +585,7 @@ func (npc *NetworkPolicyControllerNftables) nftAddOrReplaceIPSet(
 	set := &knftables.Set{
 		Name:    setName,
 		Type:    setType,
-		Comment: knftables.PtrTo("set for network policy"),
+		Comment: new("set for network policy"),
 	}
 	tx.Add(set)
 	tx.Flush(&knftables.Set{Name: setName})
@@ -606,7 +617,7 @@ func (npc *NetworkPolicyControllerNftables) nftAddOrReplaceIPBlockSet(
 		Name:    setName,
 		Type:    setType,
 		Flags:   []knftables.SetFlag{knftables.IntervalFlag},
-		Comment: knftables.PtrTo("set for network policy ip block"),
+		Comment: new("set for network policy ip block"),
 	})
 	tx.Flush(&knftables.Set{Name: setName})
 
@@ -634,7 +645,7 @@ func (npc *NetworkPolicyControllerNftables) nftAddOrReplaceIPBlockSet(
 		Name:    exceptSetName,
 		Type:    setType,
 		Flags:   []knftables.SetFlag{knftables.IntervalFlag},
-		Comment: knftables.PtrTo("set for network policy ip block exceptions"),
+		Comment: new("set for network policy ip block exceptions"),
 	})
 	tx.Flush(&knftables.Set{Name: exceptSetName})
 	for _, cidr := range exceptCIDRs {
@@ -656,7 +667,7 @@ func (npc *NetworkPolicyControllerNftables) appendRuleToPolicyChainNft(
 	tx *knftables.Transaction, policyChainName, comment,
 	srcSetName, dstSetName, protocol, dPort, endDport string, ipFamily v1core.IPFamily) {
 
-	parts := make([]interface{}, 0)
+	parts := make([]any, 0)
 
 	addrKeyword := "ip"
 	if ipFamily == v1core.IPv6Protocol {
@@ -695,7 +706,7 @@ func (npc *NetworkPolicyControllerNftables) appendRuleToPolicyChainNft(
 
 	var commentPtr *string
 	if comment != "" {
-		commentPtr = knftables.PtrTo(comment)
+		commentPtr = new(comment)
 	}
 	tx.Add(&knftables.Rule{
 		Chain:   policyChainName,
@@ -822,7 +833,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 				tx.Add(&knftables.Rule{
 					Chain:   policyChainName,
 					Rule:    knftables.Concat(addrKeyword, "saddr", "@"+srcIPBlockExceptSetName, "counter return"),
-					Comment: knftables.PtrTo("skip excepted source CIDRs for policy " + policy.name),
+					Comment: new("skip excepted source CIDRs for policy " + policy.name),
 				})
 			}
 
@@ -922,7 +933,7 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 				tx.Add(&knftables.Rule{
 					Chain:   policyChainName,
 					Rule:    knftables.Concat(addrKeyword, "daddr", "@"+dstIPBlockExceptSetName, "counter return"),
-					Comment: knftables.PtrTo("skip excepted destination CIDRs for policy " + policy.name),
+					Comment: new("skip excepted destination CIDRs for policy " + policy.name),
 				})
 			}
 
@@ -1000,7 +1011,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 			// Declare (or reset) the policy chain.
 			tx.Add(&knftables.Chain{
 				Name:    policyChainName,
-				Comment: knftables.PtrTo("chain for network policy " + policy.namespace + "/" + policy.name),
+				Comment: new("chain for network policy " + policy.namespace + "/" + policy.name),
 			})
 			tx.Flush(&knftables.Chain{Name: policyChainName})
 
@@ -1086,12 +1097,15 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 // syncPodFirewallChains is the nftables equivalent of the iptables syncPodFirewallChains.
 // For each local pod it creates a per-pod nftables chain that enforces network policies, then
 // adds jump rules into the top-level chains so that all traffic to/from the pod flows through it.
-// It returns the set of active pod firewall chain names for the caller to use during garbage collection.
+// Returns the set of active pod firewall chain names (for garbage collection) and a per-family map
+// of pod IPs whose chain was programmed this sync (consumed by populateProtectedPodsIPSet).
 func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
-	networkPoliciesInfo []networkPolicyInfo, version string) (map[string]bool, error) {
+	networkPoliciesInfo []networkPolicyInfo, version string) (
+	map[string]bool, map[v1core.IPFamily][]string, error) {
 
 	ctx := npc.ctx
 	activePodFwChains := make(map[string]bool)
+	activePodIPs := make(map[v1core.IPFamily][]string)
 	var errs []error
 
 	// Collect all local pods across all node IPs.
@@ -1112,6 +1126,9 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 				continue
 			}
 
+			// Record for populateProtectedPodsIPSet: only IPs whose chain we just programmed are "protected".
+			activePodIPs[ipFamily] = append(activePodIPs[ipFamily], ip)
+
 			addrKeyword := "ip"
 			if ipFamily == v1core.IPv6Protocol {
 				addrKeyword = "ip6"
@@ -1122,7 +1139,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 			// Create (or reset) the per-pod firewall chain.
 			tx.Add(&knftables.Chain{
 				Name:    podFwChainName,
-				Comment: knftables.PtrTo("pod firewall chain for " + pod.namespace + "/" + pod.name),
+				Comment: new("pod firewall chain for " + pod.namespace + "/" + pod.name),
 			})
 			tx.Flush(&knftables.Chain{Name: podFwChainName})
 
@@ -1130,7 +1147,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    knftables.Concat("counter jump", kubeCommonNetpolChain),
-				Comment: knftables.PtrTo("common bi-directional traffic policy rules"),
+				Comment: new("common bi-directional traffic policy rules"),
 			})
 
 			// 2. Allow traffic whose source is the local node itself.
@@ -1140,7 +1157,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 					"fib saddr type local", addrKeyword, "daddr", ip,
 					"counter accept",
 				),
-				Comment: knftables.PtrTo("permit traffic to pods when source is the pod's local node"),
+				Comment: new("permit traffic to pods when source is the pod's local node"),
 			})
 
 			// 3. Jump to every applicable network-policy chain; track whether ingress/egress is covered.
@@ -1159,21 +1176,21 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 					tx.Add(&knftables.Rule{
 						Chain:   podFwChainName,
 						Rule:    knftables.Concat("counter jump", policyChainName),
-						Comment: knftables.PtrTo(comment),
+						Comment: new(comment),
 					})
 				case kubeIngressPolicyType:
 					hasIngressPolicy = true
 					tx.Add(&knftables.Rule{
 						Chain:   podFwChainName,
 						Rule:    knftables.Concat(addrKeyword, "daddr", ip, "counter jump", policyChainName),
-						Comment: knftables.PtrTo(comment),
+						Comment: new(comment),
 					})
 				case kubeEgressPolicyType:
 					hasEgressPolicy = true
 					tx.Add(&knftables.Rule{
 						Chain:   podFwChainName,
 						Rule:    knftables.Concat(addrKeyword, "saddr", ip, "counter jump", policyChainName),
-						Comment: knftables.PtrTo(comment),
+						Comment: new(comment),
 					})
 				}
 			}
@@ -1184,14 +1201,14 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 				tx.Add(&knftables.Rule{
 					Chain:   podFwChainName,
 					Rule:    knftables.Concat(addrKeyword, "saddr", ip, "counter jump", kubeDefaultNetpolChain),
-					Comment: knftables.PtrTo("run through default egress network policy chain"),
+					Comment: new("run through default egress network policy chain"),
 				})
 			}
 			if !hasIngressPolicy {
 				tx.Add(&knftables.Rule{
 					Chain:   podFwChainName,
 					Rule:    knftables.Concat(addrKeyword, "daddr", ip, "counter jump", kubeDefaultNetpolChain),
-					Comment: knftables.PtrTo("run through default ingress network policy chain"),
+					Comment: new("run through default ingress network policy chain"),
 				})
 			}
 
@@ -1199,26 +1216,26 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    "meta mark and 0x10000 == 0x0 limit rate 10/minute burst 10 packets log group 100",
-				Comment: knftables.PtrTo("log dropped traffic POD name:" + pod.name),
+				Comment: new("log dropped traffic POD name:" + pod.name),
 			})
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    "meta mark and 0x10000 == 0x0 counter reject",
-				Comment: knftables.PtrTo("REJECT traffic destined for POD name:" + pod.name),
+				Comment: new("REJECT traffic destined for POD name:" + pod.name),
 			})
 
 			// 6. Clear bit 0x10000 so subsequent chains start with a clean slate.
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    "meta mark set meta mark and 0xfffeffff",
-				Comment: knftables.PtrTo("reset mark to let traffic pass through rest of the chains"),
+				Comment: new("reset mark to let traffic pass through rest of the chains"),
 			})
 
 			// 7. Set bit 0x20000 to signal to the top-level ACCEPT rule that policy was satisfied.
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    "meta mark set meta mark or 0x20000",
-				Comment: knftables.PtrTo("set mark to ACCEPT traffic that comply to network policies"),
+				Comment: new("set mark to ACCEPT traffic that comply to network policies"),
 			})
 
 			// ---- intercept inbound traffic (destination == pod IP) ----
@@ -1228,13 +1245,13 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 			tx.Add(&knftables.Rule{
 				Chain:   kubeForwardChainName,
 				Rule:    knftables.Concat(addrKeyword, "daddr", ip, "counter jump", podFwChainName),
-				Comment: knftables.PtrTo(podFwComment),
+				Comment: new(podFwComment),
 			})
 			// Traffic returned via OUTPUT (e.g. service-proxy hairpin).
 			tx.Add(&knftables.Rule{
 				Chain:   kubeOutputChainName,
 				Rule:    knftables.Concat(addrKeyword, "daddr", ip, "counter jump", podFwChainName),
-				Comment: knftables.PtrTo(podFwComment),
+				Comment: new(podFwComment),
 			})
 
 			// ---- intercept outbound traffic (source == pod IP) ----
@@ -1244,7 +1261,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 				tx.Add(&knftables.Rule{
 					Chain:   chain,
 					Rule:    knftables.Concat(addrKeyword, "saddr", ip, "counter jump", podFwChainName),
-					Comment: knftables.PtrTo(outboundComment),
+					Comment: new(outboundComment),
 				})
 			}
 
@@ -1282,9 +1299,10 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 	}
 
 	if len(errs) > 0 {
-		return activePodFwChains, fmt.Errorf("encountered %d errors during pod firewall chain sync: %v", len(errs), errs)
+		return activePodFwChains, activePodIPs,
+			fmt.Errorf("encountered %d errors during pod firewall chain sync: %v", len(errs), errs)
 	}
-	return activePodFwChains, nil
+	return activePodFwChains, activePodIPs, nil
 }
 
 func (npc *NetworkPolicyControllerNftables) ensureExplicitAccept() {
@@ -1297,11 +1315,158 @@ func (npc *NetworkPolicyControllerNftables) ensureExplicitAccept() {
 			tx.Add(&knftables.Rule{
 				Chain:   chain,
 				Rule:    "meta mark and 0x20000 == 0x20000 counter accept",
-				Comment: knftables.PtrTo("explicitly ACCEPT traffic that comply to network policies"),
+				Comment: new("explicitly ACCEPT traffic that comply to network policies"),
 			})
 		}
 		if err := nft.Run(ctx, tx); err != nil {
 			klog.Errorf("nftables: couldn't add explicit accept rules: %v", err)
+		}
+	}
+}
+
+// ensureDefaultTailChain (re)creates KUBE-NWPLCY-TAIL per family and the kube-router-local-pods named set
+// that gates the default-deny REJECT rules. Both objects are flushed before re-populating so the chain and
+// set always reflect the current configuration. populateProtectedPodsIPSet during fullPolicySync fills the set.
+func (npc *NetworkPolicyControllerNftables) ensureDefaultTailChain() {
+	ctx := npc.ctx
+	for family, nft := range npc.knftInterfaces {
+		tx := nft.NewTransaction()
+
+		tx.Add(&knftables.Chain{
+			Name:    kubeTailNetpolChain,
+			Comment: new(kubeTailNetpolChain + " chain for kube-router"),
+		})
+		tx.Flush(&knftables.Chain{Name: kubeTailNetpolChain})
+
+		setType := "ipv4_addr"
+		if family == v1core.IPv6Protocol {
+			setType = "ipv6_addr"
+		}
+		tx.Add(&knftables.Set{
+			Name:    kubeLocalPodsIPSetName,
+			Type:    setType,
+			Comment: new("local pod IPs whose pod firewall chain has been programmed"),
+		})
+
+		npc.populateDefaultTailChain(family, tx)
+
+		if err := nft.Run(ctx, tx); err != nil {
+			klog.Errorf("nftables: couldn't setup %s chain for family %s: %v",
+				kubeTailNetpolChain, family, err)
+		}
+	}
+}
+
+// populateDefaultTailChain appends rules into KUBE-NWPLCY-TAIL on tx. Callers must ensure the chain exists.
+//
+// When --netpol-default-deny is disabled, only the ACCEPT-on-mark rule is appended (1 rule total).
+//
+// When --netpol-default-deny is enabled, the chain layout is, per CIDR:
+//  1. <CIDR> saddr AND saddr not in @kube-router-local-pods -> REJECT  (set-gated, NEW)
+//  2. <CIDR> daddr AND daddr not in @kube-router-local-pods -> REJECT  (set-gated, NEW)
+//  3. meta mark & 0x20000 == 0x20000 -> ACCEPT
+//  4. <CIDR> saddr -> REJECT  (defense-in-depth)
+//  5. <CIDR> daddr -> REJECT  (defense-in-depth)
+func (npc *NetworkPolicyControllerNftables) populateDefaultTailChain(
+	family v1core.IPFamily, tx *knftables.Transaction,
+) {
+	addrKeyword := "ip"
+	if family == v1core.IPv6Protocol {
+		addrKeyword = "ip6"
+	}
+
+	if npc.defaultDeny {
+		gatedComment := "REJECT traffic to/from local pods without a programmed firewall chain " +
+			"(--netpol-default-deny is enabled)"
+		for _, cidr := range npc.podCIDRs[family] {
+			tx.Add(&knftables.Rule{
+				Chain: kubeTailNetpolChain,
+				Rule: knftables.Concat(
+					addrKeyword, "saddr", cidr,
+					addrKeyword, "saddr", "!=", "@"+kubeLocalPodsIPSetName,
+					"counter", "reject",
+				),
+				Comment: new(gatedComment),
+			})
+			tx.Add(&knftables.Rule{
+				Chain: kubeTailNetpolChain,
+				Rule: knftables.Concat(
+					addrKeyword, "daddr", cidr,
+					addrKeyword, "daddr", "!=", "@"+kubeLocalPodsIPSetName,
+					"counter", "reject",
+				),
+				Comment: new(gatedComment),
+			})
+		}
+	}
+
+	tx.Add(&knftables.Rule{
+		Chain:   kubeTailNetpolChain,
+		Rule:    "meta mark and 0x20000 == 0x20000 counter accept",
+		Comment: new("explicitly ACCEPT traffic that comply to network policies"),
+	})
+
+	if !npc.defaultDeny {
+		return
+	}
+
+	rejectComment := "REJECT traffic before NetPol is applied (--netpol-default-deny is enabled)"
+	for _, cidr := range npc.podCIDRs[family] {
+		tx.Add(&knftables.Rule{
+			Chain:   kubeTailNetpolChain,
+			Rule:    knftables.Concat(addrKeyword, "saddr", cidr, "counter", "reject"),
+			Comment: new(rejectComment),
+		})
+		tx.Add(&knftables.Rule{
+			Chain:   kubeTailNetpolChain,
+			Rule:    knftables.Concat(addrKeyword, "daddr", cidr, "counter", "reject"),
+			Comment: new(rejectComment),
+		})
+	}
+}
+
+// populateProtectedPodsIPSet refreshes the kube-router-local-pods named set (per family) with the IPs of local
+// pods whose pod firewall chain was programmed this sync. No-op when --netpol-default-deny is disabled. The
+// flush+add pair runs in a single nftables transaction, so readers never observe a partially-updated set.
+func (npc *NetworkPolicyControllerNftables) populateProtectedPodsIPSet(activePodIPs map[v1core.IPFamily][]string) {
+	if !npc.defaultDeny {
+		return
+	}
+	ctx := npc.ctx
+	for family, nft := range npc.knftInterfaces {
+		tx := nft.NewTransaction()
+		tx.Flush(&knftables.Set{Name: kubeLocalPodsIPSetName})
+		for _, ip := range activePodIPs[family] {
+			tx.Add(&knftables.Element{
+				Set: kubeLocalPodsIPSetName,
+				Key: []string{ip},
+			})
+		}
+		if err := nft.Run(ctx, tx); err != nil {
+			klog.Errorf("nftables: failed to refresh %s set for family %s: %v",
+				kubeLocalPodsIPSetName, family, err)
+			continue
+		}
+		klog.V(2).Infof("nftables: refreshed %s set for family %s with %d entries",
+			kubeLocalPodsIPSetName, family, len(activePodIPs[family]))
+	}
+}
+
+// ensureTailChainPosition ensures each top-level chain ends with a jump into KUBE-NWPLCY-TAIL,
+// placing it after the per-pod KUBE-POD-FW-* jumps written earlier in the same sync.
+func (npc *NetworkPolicyControllerNftables) ensureTailChainPosition() {
+	ctx := npc.ctx
+	for _, nft := range npc.knftInterfaces {
+		tx := nft.NewTransaction()
+		for chain := range chainToHook {
+			tx.Add(&knftables.Rule{
+				Chain:   chain,
+				Rule:    knftables.Concat("counter jump", kubeTailNetpolChain),
+				Comment: new("explicitly handle traffic for network policies ACCEPT/REJECT decision"),
+			})
+		}
+		if err := nft.Run(ctx, tx); err != nil {
+			klog.Errorf("nftables: couldn't add tail chain jump rules: %v", err)
 		}
 	}
 }

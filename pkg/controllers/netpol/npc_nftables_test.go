@@ -45,7 +45,7 @@ func newUneventfulNfTablesNPC(podInformer cache.SharedIndexInformer,
 	tx := npc.knftInterfaces[v1core.IPv4Protocol].NewTransaction()
 
 	tx.Add(&knftables.Table{
-		Comment: knftables.PtrTo("rules for " + ipv4Table),
+		Comment: new("rules for " + ipv4Table),
 	})
 	err = npc.knftInterfaces[v1core.IPv4Protocol].Run(ctx, tx)
 	if err != nil {
@@ -81,8 +81,7 @@ func newUneventfulNfTablesNPC(podInformer cache.SharedIndexInformer,
 func TestBasicChains(t *testing.T) {
 	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 	krNetPol := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
@@ -273,8 +272,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 
 	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 	krNetPol := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
@@ -295,7 +293,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 				// Declare (or reset) the policy chain.
 				tx.Add(&knftables.Chain{
 					Name:    policyChainName,
-					Comment: knftables.PtrTo("chain for network policy " + np.namespace + "/" + np.name),
+					Comment: new("chain for network policy " + np.namespace + "/" + np.name),
 				})
 				tx.Flush(&knftables.Chain{Name: policyChainName})
 
@@ -367,7 +365,7 @@ func TestFullPolicySync(t *testing.T) {
 	// Don't forget to create the table before adding chains to it (idempotent).
 	tx := ipv4KNftInterface.NewTransaction()
 	tx.Add(&knftables.Table{
-		Comment: knftables.PtrTo("rules for " + ipv4Table),
+		Comment: new("rules for " + ipv4Table),
 	})
 	err := ipv4KNftInterface.Run(context.TODO(), tx)
 	if err != nil {
@@ -376,7 +374,7 @@ func TestFullPolicySync(t *testing.T) {
 	}
 	tx = ipv6KNftInterface.NewTransaction()
 	tx.Add(&knftables.Table{
-		Comment: knftables.PtrTo("rules for " + ipv6Table),
+		Comment: new("rules for " + ipv6Table),
 	})
 	err = ipv6KNftInterface.Run(context.TODO(), tx)
 	if err != nil {
@@ -533,7 +531,7 @@ func runNftPolicyRules(t *testing.T, npc *NetworkPolicyControllerNftables) {
 			tx := nft.NewTransaction()
 			tx.Add(&knftables.Chain{
 				Name:    policyChainName,
-				Comment: knftables.PtrTo("chain for " + np.namespace + "/" + np.name),
+				Comment: new("chain for " + np.namespace + "/" + np.name),
 			})
 			tx.Flush(&knftables.Chain{Name: policyChainName})
 			activeSets := make(map[string]bool)
@@ -754,8 +752,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 
 	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 	npc := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
@@ -806,8 +803,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 func TestNftablesChainsIdempotency(t *testing.T) {
 	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
 	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 	npc := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
@@ -862,7 +858,7 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 
 	ipv4KNft := knftables.NewFake(knftables.IPv4Family, ipv4Table)
 	tx := ipv4KNft.NewTransaction()
-	tx.Add(&knftables.Table{Comment: knftables.PtrTo("rules for " + ipv4Table)})
+	tx.Add(&knftables.Table{Comment: new("rules for " + ipv4Table)})
 	require.NoError(t, ipv4KNft.Run(context.TODO(), tx))
 
 	linkQ := utils.NewFakeLocalLinkQuerier(collectNodeIPs(nodes), nil)
@@ -985,7 +981,7 @@ func TestNftablesNodePortRange(t *testing.T) {
 
 			ipv4KNft := knftables.NewFake(knftables.IPv4Family, ipv4Table)
 			tx := ipv4KNft.NewTransaction()
-			tx.Add(&knftables.Table{Comment: knftables.PtrTo("rules for " + ipv4Table)})
+			tx.Add(&knftables.Table{Comment: new("rules for " + ipv4Table)})
 			require.NoError(t, ipv4KNft.Run(context.Background(), tx))
 
 			linkQ := utils.NewFakeLocalLinkQuerier(collectNodeIPs(nodes), nil)
@@ -1027,5 +1023,126 @@ func TestNftablesNodePortRange(t *testing.T) {
 			require.NotContains(t, dump, "dport 30000:32767",
 				"colon-separated port range must not appear in nftables rules")
 		})
+	}
+}
+
+// newTailChainNftablesController returns a minimally-wired NetworkPolicyControllerNftables that has only the
+// IPv4 nftables fake interface (with its table pre-created) and the fields needed by ensureDefaultTailChain,
+// populateProtectedPodsIPSet, and ensureTailChainPosition.
+func newTailChainNftablesController(t *testing.T, defaultDeny bool,
+	podCIDRs map[v1core.IPFamily][]string) (*NetworkPolicyControllerNftables, *knftables.Fake) {
+	t.Helper()
+	ctx := t.Context()
+
+	npc := &NetworkPolicyControllerNftables{
+		NetworkPolicyControllerBase: &NetworkPolicyControllerBase{
+			defaultDeny: defaultDeny,
+			podCIDRs:    podCIDRs,
+		},
+		knftInterfaces: make(map[v1core.IPFamily]knftables.Interface, 1),
+		ctx:            ctx,
+	}
+
+	fakeIPv4 := knftables.NewFake(knftables.IPv4Family, ipv4Table)
+	tx := fakeIPv4.NewTransaction()
+	tx.Add(&knftables.Table{Comment: new("rules for " + ipv4Table)})
+	for chain, hook := range chainToHook {
+		tx.Add(&knftables.Chain{
+			Name:     chain,
+			Comment:  new("top level " + chain + " chain for kube-router"),
+			Type:     knftables.PtrTo(knftables.FilterType),
+			Hook:     new(hook),
+			Priority: knftables.PtrTo(knftables.FilterPriority),
+		})
+	}
+	require.NoError(t, fakeIPv4.Run(ctx, tx))
+	npc.knftInterfaces[v1core.IPv4Protocol] = fakeIPv4
+	return npc, fakeIPv4
+}
+
+func TestNftablesEnsureDefaultTailChainDefaultDenyEnabled(t *testing.T) {
+	cidrs := []string{"10.10.0.0/16"}
+	npc, fakeIPv4 := newTailChainNftablesController(t, true,
+		map[v1core.IPFamily][]string{v1core.IPv4Protocol: cidrs})
+
+	npc.ensureDefaultTailChain()
+	dump := fakeIPv4.Dump()
+
+	require.Contains(t, dump,
+		"add chain ip kube-router-filter-ipv4 KUBE-NWPLCY-TAIL")
+	require.Contains(t, dump,
+		"add set ip kube-router-filter-ipv4 kube-router-local-pods { type ipv4_addr ;")
+	// gated REJECTs (src + dst) for the CIDR
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-TAIL ip saddr 10.10.0.0/16 ip saddr != @kube-router-local-pods counter reject")
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-TAIL ip daddr 10.10.0.0/16 ip daddr != @kube-router-local-pods counter reject")
+	// ACCEPT on policy-satisfied mark
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-TAIL meta mark and 0x20000 == 0x20000 counter accept")
+	// CIDR-scoped defense-in-depth REJECTs
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-TAIL ip saddr 10.10.0.0/16 counter reject")
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-TAIL ip daddr 10.10.0.0/16 counter reject")
+}
+
+func TestNftablesEnsureDefaultTailChainDefaultDenyDisabled(t *testing.T) {
+	npc, fakeIPv4 := newTailChainNftablesController(t, false,
+		map[v1core.IPFamily][]string{v1core.IPv4Protocol: {"10.10.0.0/16"}})
+
+	npc.ensureDefaultTailChain()
+	dump := fakeIPv4.Dump()
+
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-TAIL meta mark and 0x20000 == 0x20000 counter accept")
+	// No REJECT rules when default-deny is disabled.
+	require.NotContains(t, dump, "counter reject")
+	// Set still exists (created unconditionally so populateProtectedPodsIPSet is always safe to call).
+	require.Contains(t, dump,
+		"add set ip kube-router-filter-ipv4 kube-router-local-pods { type ipv4_addr ;")
+}
+
+func TestNftablesPopulateProtectedPodsIPSetDefaultDenyEnabled(t *testing.T) {
+	npc, fakeIPv4 := newTailChainNftablesController(t, true,
+		map[v1core.IPFamily][]string{v1core.IPv4Protocol: {"10.10.0.0/16"}})
+	npc.ensureDefaultTailChain()
+
+	npc.populateProtectedPodsIPSet(map[v1core.IPFamily][]string{
+		v1core.IPv4Protocol: {"10.10.0.5", "10.10.0.6"},
+	})
+
+	dump := fakeIPv4.Dump()
+	require.Contains(t, dump,
+		"add element ip kube-router-filter-ipv4 kube-router-local-pods { 10.10.0.5 }")
+	require.Contains(t, dump,
+		"add element ip kube-router-filter-ipv4 kube-router-local-pods { 10.10.0.6 }")
+}
+
+func TestNftablesPopulateProtectedPodsIPSetDefaultDenyDisabled(t *testing.T) {
+	npc, fakeIPv4 := newTailChainNftablesController(t, false,
+		map[v1core.IPFamily][]string{v1core.IPv4Protocol: {"10.10.0.0/16"}})
+	npc.ensureDefaultTailChain()
+
+	npc.populateProtectedPodsIPSet(map[v1core.IPFamily][]string{
+		v1core.IPv4Protocol: {"10.10.0.5"},
+	})
+
+	dump := fakeIPv4.Dump()
+	require.NotContains(t, dump, "add element ip kube-router-filter-ipv4 kube-router-local-pods")
+}
+
+func TestNftablesEnsureTailChainPosition(t *testing.T) {
+	npc, fakeIPv4 := newTailChainNftablesController(t, true,
+		map[v1core.IPFamily][]string{v1core.IPv4Protocol: {"10.10.0.0/16"}})
+	npc.ensureDefaultTailChain()
+
+	npc.ensureTailChainPosition()
+	dump := fakeIPv4.Dump()
+
+	for chain := range chainToHook {
+		expected := "add rule ip kube-router-filter-ipv4 " + chain + " counter jump KUBE-NWPLCY-TAIL"
+		require.Contains(t, dump, expected,
+			"expected TAIL jump in %s", chain)
 	}
 }
