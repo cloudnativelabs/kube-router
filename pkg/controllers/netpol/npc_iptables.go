@@ -838,6 +838,9 @@ func (npc *NetworkPolicyControllerIptables) cleanupStaleRules(activePolicyChains
 				if chain == kubeCommonNetpolChain {
 					continue
 				}
+				if chain == kubeTailNetpolChain {
+					continue
+				}
 				if _, ok := activePolicyChains[chain]; !ok {
 					cleanupPolicyChains = append(cleanupPolicyChains, chain)
 					continue

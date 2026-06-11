@@ -1054,6 +1054,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 			if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) &&
 				chain != kubeDefaultNetpolChain &&
 				chain != kubeCommonNetpolChain &&
+				chain != kubeTailNetpolChain &&
 				!activePolicyChains[chain] {
 				tx.Delete(&knftables.Chain{Name: chain})
 				anyDeletions = true
