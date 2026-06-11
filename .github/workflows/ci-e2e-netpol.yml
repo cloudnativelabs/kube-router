@@ -54,12 +54,13 @@ jobs:
           github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...
 
   e2e-netpol:
-    name: e2e-netpol (${{ matrix.backend }})
+    name: e2e-netpol (${{ matrix.backend }}, default-deny=${{ matrix.default-deny }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         backend: [iptables, nftables]
+        default-deny: [false, true]
     steps:
     - name: Check out code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -119,6 +120,10 @@ jobs:
         if [[ "${{ matrix.backend }}" == "nftables" ]]; then
           MANIFEST=$(echo "$MANIFEST" \
             | sed 's|"--bgp-graceful-restart=true"|"--bgp-graceful-restart=true"\n        - "--use-nftables-for-netpol=true"|')
+        fi
+        if [[ "${{ matrix.default-deny }}" == "true" ]]; then
+          MANIFEST=$(echo "$MANIFEST" \
+            | sed 's|"--bgp-graceful-restart=true"|"--bgp-graceful-restart=true"\n        - "--netpol-default-deny=true"|')
         fi
         # debug: output the final manifest to be applied
         echo "=== Final kube-router DaemonSet manifest ==="
