@@ -1056,6 +1056,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 				chain != kubeCommonNetpolChain &&
 				chain != kubeTailNetpolChain &&
 				!activePolicyChains[chain] {
+				tx.Flush(&knftables.Chain{Name: chain})
 				tx.Delete(&knftables.Chain{Name: chain})
 				anyDeletions = true
 			}
@@ -1287,6 +1288,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 		anyDeletions := false
 		for _, chain := range existingChains {
 			if strings.HasPrefix(chain, kubePodFirewallChainPrefix) && !activePodFwChains[chain] {
+				tx.Flush(&knftables.Chain{Name: chain})
 				tx.Delete(&knftables.Chain{Name: chain})
 				anyDeletions = true
 			}
