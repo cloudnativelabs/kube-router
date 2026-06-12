@@ -2,6 +2,7 @@ package netpol
 
 import (
 	"bytes"
+	"fmt"
 	"sync"
 	"time"
 
@@ -236,6 +237,24 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	if err != nil {
 		return nil, err
 	}
+
+	npcBase.defaultDeny = config.NetPolDefaultDeny
+
+	podIPv4CIDRs, podIPv6CIDRs, err := utils.GetPodCIDRsFromNodeSpecDualStack(node)
+	if err != nil {
+		if npcBase.defaultDeny {
+			return nil, fmt.Errorf("failed to get pod CIDRs from node spec (required for --netpol-default-deny): %w", err)
+		}
+		klog.V(1).Infof("failed to get pod CIDRs from node spec: %v", err)
+	}
+	npcBase.podCIDRs = make(map[v1core.IPFamily][]string)
+	if len(podIPv4CIDRs) > 0 {
+		npcBase.podCIDRs[v1core.IPv4Protocol] = podIPv4CIDRs
+	}
+	if len(podIPv6CIDRs) > 0 {
+		npcBase.podCIDRs[v1core.IPv6Protocol] = podIPv6CIDRs
+	}
+
 	npcBase.filterTableRules = make(map[v1core.IPFamily]*bytes.Buffer, 2)
 	npcBase.podLister = podInformer.GetIndexer()
 	npcBase.podEventHandler = npcBase.newPodEventHandler()

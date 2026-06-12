@@ -23,6 +23,7 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/version"
 	"k8s.io/klog/v2"
 
+	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -272,9 +273,14 @@ func (kr *KubeRouter) Run() error {
 	}
 
 	if kr.Config.RunFirewall {
-		iptablesCmdHandlers, ipSetHandlers, err := netpol.NewIPTablesHandlers(kr.Config)
-		if err != nil {
-			return fmt.Errorf("failed to create iptables handlers: %w", err)
+		var iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler
+		var ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler
+		if !kr.Config.UseNftablesForNetpol {
+			var err error
+			iptablesCmdHandlers, ipSetHandlers, err = netpol.NewIPTablesHandlers(kr.Config)
+			if err != nil {
+				return fmt.Errorf("failed to create iptables handlers: %w", err)
+			}
 		}
 		nftCtx, nftCancel := context.WithTimeout(context.Background(), nftablesInitTimeout)
 		knftablesInterfaces, err := netpol.NewKnftablesInterfaces(nftCtx, kr.Config)
