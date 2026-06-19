@@ -175,8 +175,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/orcaman/concurrent-map/v2 v2.0.1 h1:jOJ5Pg2w1oeB6PeDurIYf6k9PQ+aTITr/6lP/L/zp6c=
 github.com/orcaman/concurrent-map/v2 v2.0.1/go.mod h1:9Eq3TG2oBe5FirmYWQfYO5iH1q0Jv47PLaNK++uCdOM=
-github.com/osrg/gobgp/v4 v4.5.0 h1:1jS4cMxUYSo36UfDyigLOLYEg6Oh+9I2mrnjjgAGCFk=
-github.com/osrg/gobgp/v4 v4.5.0/go.mod h1:pgu8waqTvZUYl4eQuPrKNOaVwhHv7Zt9YymuzCaX7f8=
+github.com/osrg/gobgp/v4 v4.6.0 h1:9ga/Pn3NUiM0Sv0K7YI+dy/uMYKyXOsu3dalXTmnX8I=
+github.com/osrg/gobgp/v4 v4.6.0/go.mod h1:j1GLEuE20jm2YAoGmaHGb3y9lGH/KBgCBT4Ss5RY/wQ=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=
 github.com/pelletier/go-toml/v2 v2.2.4/go.mod h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
