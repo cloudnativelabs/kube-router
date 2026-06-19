@@ -3,7 +3,7 @@ module github.com/cloudnativelabs/kube-router/v2
 require (
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.20
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.25
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.29
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.307.1
 	github.com/aws/smithy-go v1.27.1
 	github.com/ccoveille/go-safecast/v2 v2.0.1
