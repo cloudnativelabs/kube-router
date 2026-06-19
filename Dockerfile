@@ -14,6 +14,7 @@ ENV BUILD_IN_DOCKER=false \
     CGO_ENABLED=0 \
     GOOS=$TARGETOS \
     GOARCH=$TARGETARCH
+# GOARM can't be an ENV (no ${VAR#v} stripping); each ARM cross-compile RUN must export it.
 
 WORKDIR /build
 # Cache `go mod download` in its own layer; source-only changes won't invalidate it.
@@ -67,6 +68,41 @@ COPY --from=builder /build/cni-download /usr/libexec/cni
 # which version is used should be based on the host system as well as where rules that may have been added before
 # kube-router are being placed. For more information see: https://github.com/kubernetes-sigs/iptables-wrappers
 COPY --from=builder /iptables-wrappers/bin/iptables-wrapper /
+
+# Defense-in-depth: verify each copied binary's ELF e_machine (offset 18, 2 bytes) matches
+# TARGETPLATFORM. Catches wrong-arch binaries that QEMU's binfmt would otherwise silently
+# emulate at runtime. EM_ values from <elf.h>; s390x is big-endian, the rest little-endian.
+ARG TARGETPLATFORM
+RUN case "${TARGETPLATFORM}" in \
+        linux/amd64)   EXPECTED_EM="3e00" ;; \
+        linux/arm64)   EXPECTED_EM="b700" ;; \
+        linux/arm | linux/arm/*) EXPECTED_EM="2800" ;; \
+        linux/ppc64le) EXPECTED_EM="1500" ;; \
+        linux/s390x)   EXPECTED_EM="0016" ;; \
+        *) echo "ERROR: arch-check: unsupported TARGETPLATFORM=${TARGETPLATFORM}" >&2; exit 1 ;; \
+    esac && \
+    elf_checked=0 && \
+    for bin in /usr/local/bin/kube-router /usr/local/bin/gobgp /iptables-wrapper /usr/libexec/cni/*; do \
+        [ -f "$bin" ] || { echo "ERROR: arch-check: missing $bin" >&2; exit 1; }; \
+        magic=$(od -An -tx1 -N4 "$bin" | tr -d ' \n'); \
+        if [ "$magic" != "7f454c46" ]; then \
+            echo "arch-check skip: ${bin} is not ELF (magic=0x${magic:-empty})"; \
+            continue; \
+        fi; \
+        actual_em=$(od -An -tx1 -j18 -N2 "$bin" | tr -d ' \n'); \
+        if [ "$actual_em" != "$EXPECTED_EM" ]; then \
+            echo "ERROR: arch-check: ${bin} has ELF e_machine=0x${actual_em}, expected 0x${EXPECTED_EM} for ${TARGETPLATFORM}" >&2; \
+            exit 1; \
+        fi; \
+        echo "arch-check OK: ${bin} matches ${TARGETPLATFORM} (e_machine=0x${actual_em})"; \
+        elf_checked=$((elf_checked + 1)); \
+    done && \
+    if [ "$elf_checked" -lt 4 ]; then \
+        echo "ERROR: arch-check: only $elf_checked ELF binaries verified; expected at least 4 (kube-router, gobgp, iptables-wrapper, and >=1 CNI plugin)" >&2; \
+        exit 1; \
+    fi && \
+    echo "arch-check: verified $elf_checked ELF binaries against ${TARGETPLATFORM}"
+
 # This is necessary because of the bug reported here: https://github.com/flannel-io/flannel/pull/1340/files
 # Basically even under QEMU emulation, it still doesn't have an ARM kernel in-play which means that calls to
 # iptables-nft will fail in the build process. The sanity check here only makes sure that iptables-nft and iptables-legacy
