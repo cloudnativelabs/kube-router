@@ -2,12 +2,27 @@ ARG BUILDTIME_BASE=golang:1-alpine@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2
 ARG RUNTIME_BASE=alpine:latest@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
 ARG TARGETPLATFORM
 ARG CNI_VERSION
-FROM ${BUILDTIME_BASE} AS builder
-ENV BUILD_IN_DOCKER=false
+
+# Builder runs on BUILDPLATFORM (the runner's native arch) and cross-compiles Go for each
+# TARGETPLATFORM, avoiding QEMU-emulated `go build`. See:
+# https://docs.docker.com/build/building/multi-platform/#cross-compilation
+FROM --platform=$BUILDPLATFORM ${BUILDTIME_BASE} AS builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ENV BUILD_IN_DOCKER=false \
+    CGO_ENABLED=0 \
+    GOOS=$TARGETOS \
+    GOARCH=$TARGETARCH
 
 WORKDIR /build
-COPY . /build
+# Cache `go mod download` in its own layer; source-only changes won't invalidate it.
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+# GOARM is "v7" -> "7" (Dockerfile ENV can't do ${VAR#prefix}); empty on non-arm targets.
 RUN apk add --no-cache make git tar curl \
+    && export GOARM="${TARGETVARIANT#v}" \
     && make kube-router \
     && make gobgp \
     && make cni-download
@@ -15,11 +30,15 @@ RUN apk add --no-cache make git tar curl \
 WORKDIR /iptables-wrappers
 # This is the latest commit on the master branch.
 ENV IPTABLES_WRAPPERS_VERSION=bfef9e5087a198b50a4124bb9ce9d2c7c99025dd
-RUN git clone https://github.com/kubernetes-sigs/iptables-wrappers.git . \
+# Pure-Go CGO_ENABLED=0 build, cross-compiles via the env vars set above.
+RUN export GOARM="${TARGETVARIANT#v}" \
+    && git clone https://github.com/kubernetes-sigs/iptables-wrappers.git . \
     && git checkout "${IPTABLES_WRAPPERS_VERSION}" \
     && make build \
-    && test -x bin/iptables-wrapper 
+    && test -x bin/iptables-wrapper
 
+# Runtime stage runs on TARGETPLATFORM (QEMU for non-native), so apk pulls per-arch packages
+# and `iptables-wrapper install` runs target-arch scripts — both fast.
 FROM ${RUNTIME_BASE}
 
 RUN apk add --no-cache \
