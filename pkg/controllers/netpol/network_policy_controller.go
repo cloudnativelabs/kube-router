@@ -195,7 +195,6 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler,
 	ipRanges svcip.RangeQuerier,
 	knftInterfaces map[v1core.IPFamily]knftables.Interface,
-	useNftables bool,
 ) (NetworkPolicyController, error) {
 	npcBase := NetworkPolicyControllerBase{ipsetMutex: ipsetMutex}
 	// Creating a single-item buffered channel to ensure that we only keep a single full sync request at a time,
@@ -265,7 +264,7 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	npcBase.npLister = npInformer.GetIndexer()
 	npcBase.networkPolicyEventHandler = npcBase.newNetworkPolicyEventHandler()
 
-	if useNftables {
+	if config.UseNftablesForNetpol {
 		// Cleanup any existing iptables rules before starting nftables controller to avoid conflicts
 		// in case of a restart with a different configuration
 		npc := NetworkPolicyControllerIptables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}

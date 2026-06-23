@@ -87,7 +87,6 @@ func TestNetworkPolicyFixtureIPSets(t *testing.T) {
 		},
 		validator,
 		nil, // knftInterfaces
-		false,
 	)
 	require.NoError(t, err)
 

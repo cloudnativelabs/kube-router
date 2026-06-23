@@ -347,11 +347,12 @@ func TestFullPolicySync(t *testing.T) {
 	}
 
 	config := &options.KubeRouterConfig{
-		EnableIPv4:       true,
-		EnableIPv6:       true,
-		ClusterIPCIDRs:   []string{"10.96.0.0/16", "2001:db8:42:1::/112"},
-		HostnameOverride: nodes.Items[0].Name,
-		NodePortRange:    "30000-32767",
+		EnableIPv4:           true,
+		EnableIPv6:           true,
+		ClusterIPCIDRs:       []string{"10.96.0.0/16", "2001:db8:42:1::/112"},
+		HostnameOverride:     nodes.Items[0].Name,
+		NodePortRange:        "30000-32767",
+		UseNftablesForNetpol: true,
 	}
 
 	informerFactory := informers.NewSharedInformerFactory(client, 0)
@@ -404,7 +405,6 @@ func TestFullPolicySync(t *testing.T) {
 			v1core.IPv4Protocol: ipv4KNftInterface,
 			v1core.IPv6Protocol: ipv6KNftInterface,
 		},
-		true,
 	)
 	require.NoError(t, err)
 
@@ -844,11 +844,12 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	}
 
 	config := &options.KubeRouterConfig{
-		EnableIPv4:       true,
-		EnableIPv6:       false,
-		ClusterIPCIDRs:   []string{"10.96.0.0/16"},
-		HostnameOverride: nodes.Items[0].Name,
-		NodePortRange:    "30000-32767",
+		EnableIPv4:           true,
+		EnableIPv6:           false,
+		ClusterIPCIDRs:       []string{"10.96.0.0/16"},
+		HostnameOverride:     nodes.Items[0].Name,
+		NodePortRange:        "30000-32767",
+		UseNftablesForNetpol: true,
 	}
 
 	informerFactory := informers.NewSharedInformerFactory(client, 0)
@@ -874,7 +875,6 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 		&sync.Mutex{}, linkQ, nil, nil,
 		ipRanges,
 		map[v1core.IPFamily]knftables.Interface{v1core.IPv4Protocol: ipv4KNft},
-		true,
 	)
 	require.NoError(t, err)
 
@@ -967,11 +967,12 @@ func TestNftablesNodePortRange(t *testing.T) {
 			}
 
 			config := &options.KubeRouterConfig{
-				EnableIPv4:       true,
-				EnableIPv6:       false,
-				ClusterIPCIDRs:   []string{"10.96.0.0/16"},
-				HostnameOverride: nodes.Items[0].Name,
-				NodePortRange:    tc.nodePortRange,
+				EnableIPv4:           true,
+				EnableIPv6:           false,
+				ClusterIPCIDRs:       []string{"10.96.0.0/16"},
+				HostnameOverride:     nodes.Items[0].Name,
+				NodePortRange:        tc.nodePortRange,
+				UseNftablesForNetpol: true,
 			}
 
 			informerFactory := informers.NewSharedInformerFactory(client, 0)
@@ -997,7 +998,6 @@ func TestNftablesNodePortRange(t *testing.T) {
 				&sync.Mutex{}, linkQ, nil, nil,
 				ipRanges,
 				map[v1core.IPFamily]knftables.Interface{v1core.IPv4Protocol: ipv4KNft},
-				true,
 			)
 			require.NoError(t, err)
 

@@ -290,7 +290,7 @@ func (kr *KubeRouter) Run() error {
 		}
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
 			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil,
-			iptablesCmdHandlers, ipSetHandlers, ipValidator, knftablesInterfaces, kr.Config.UseNftablesForNetpol)
+			iptablesCmdHandlers, ipSetHandlers, ipValidator, knftablesInterfaces)
 		if err != nil {
 			return fmt.Errorf("failed to create network policy controller: %w", err)
 		}

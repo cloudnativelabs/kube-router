@@ -1419,8 +1419,9 @@ func TestNetworkPolicyController(t *testing.T) {
 					}
 					return
 				}
+				test.config.UseNftablesForNetpol = useNfTables
 				_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer,
-					&sync.Mutex{}, fakeLinkQuerier, iptablesHandlers, ipSetHandlers, validator, knftInterfaces, useNfTables)
+					&sync.Mutex{}, fakeLinkQuerier, iptablesHandlers, ipSetHandlers, validator, knftInterfaces)
 				if err == nil && test.expectError {
 					t.Error("This config should have failed, but it was successful instead")
 				} else if err != nil {
