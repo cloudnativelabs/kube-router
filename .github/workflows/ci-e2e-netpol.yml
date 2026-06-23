@@ -50,12 +50,19 @@ jobs:
     - name: Run integration tests for kube-router netpol
       run: |
         sudo --preserve-env=PATH,HOME,GOPATH,GOROOT \
-          go test -tags integration -v -timeout 60s -run TestIntegration \
-          github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...
+          make test-integration BUILD_IN_DOCKER=false
 
   e2e-netpol:
     name: e2e-netpol (${{ matrix.backend }}, default-deny=${{ matrix.default-deny }})
     runs-on: ubuntu-latest
+    env:
+      BACKEND: ${{ matrix.backend }}
+      DEFAULT_DENY: ${{ matrix.default-deny }}
+      KIND_CLUSTER_NAME: e2e
+      KIND_NODE_IMAGE: ${{ env.KIND_NODE_IMAGE }}
+      KUBE_ROUTER_IMAGE: ${{ env.KUBE_ROUTER_IMAGE }}
+      BUILDTIME_BASE: ${{ env.BUILDTIME_BASE }}
+      RUNTIME_BASE: ${{ env.RUNTIME_BASE }}
     strategy:
       fail-fast: false
       matrix:
@@ -96,95 +103,27 @@ jobs:
         sudo mv ./kind /usr/local/bin/kind
 
     - name: Create Kind cluster (dual-stack)
-      run: |
-        cat <<'EOF' | kind create cluster --image "${{ env.KIND_NODE_IMAGE }}" --name e2e --config=-
-        kind: Cluster
-        apiVersion: kind.x-k8s.io/v1alpha4
-        networking:
-          disableDefaultCNI: true
-          ipFamily: dual
-        nodes:
-          - role: control-plane
-          - role: worker
-        EOF
-
+      run: hack/e2e-netpol.sh create-cluster
 
     - name: Load kube-router image into kind
-      run: kind load docker-image "${{ env.KUBE_ROUTER_IMAGE }}" --name e2e
+      run: hack/e2e-netpol.sh load-image
 
     - name: Deploy kube-router (${{ matrix.backend }} NetworkPolicy backend)
-      run: |
-        MANIFEST=$(cat daemonset/generic-kuberouter.yaml \
-          | sed 's|[^ ]*cloudnativelabs/kube-router[^ ]*|kube-router:e2e-test|g' \
-          | sed 's|imagePullPolicy: Always|imagePullPolicy: Never|g')
-        if [[ "${{ matrix.backend }}" == "nftables" ]]; then
-          MANIFEST=$(echo "$MANIFEST" \
-            | sed 's|"--bgp-graceful-restart=true"|"--bgp-graceful-restart=true"\n        - "--use-nftables-for-netpol=true"|')
-        fi
-        if [[ "${{ matrix.default-deny }}" == "true" ]]; then
-          MANIFEST=$(echo "$MANIFEST" \
-            | sed 's|"--bgp-graceful-restart=true"|"--bgp-graceful-restart=true"\n        - "--netpol-default-deny=true"|')
-        fi
-        # debug: output the final manifest to be applied
-        echo "=== Final kube-router DaemonSet manifest ==="
-        echo "$MANIFEST"
-        echo "$MANIFEST" | kubectl apply -f -
+      run: hack/e2e-netpol.sh deploy
 
     - name: Wait for kube-router to be ready
-      run: kubectl rollout status daemonset/kube-router -n kube-system --timeout=120s
+      run: hack/e2e-netpol.sh wait
 
     - name: Dump initial cluster state
-      run: |
-        echo "=== Nodes ==="
-        kubectl get nodes -o wide
-        echo ""
-        echo "=== Pods (all namespaces) ==="
-        kubectl get pods -A -o wide
-        echo ""
-        echo "=== kube-router DaemonSet ==="
-        kubectl -n kube-system describe daemonset/kube-router
-        echo ""
-        echo "=== kube-router initial logs ==="
-        kubectl -n kube-system logs -l k8s-app=kube-router --tail=100
-
+      run: hack/e2e-netpol.sh dump-initial
 
     - name: Run NetworkPolicy e2e tests
-      run: go test -v ./test/e2e/netpol/... -timeout 600s
-      env:
-        E2E: "1"
-
+      run: hack/e2e-netpol.sh run-tests
 
     - name: Collect debug info on failure
       if: failure()
-      run: |
-        echo "=== Nodes ==="
-        kubectl get nodes -o wide || true
-        echo ""
-        echo "=== Node descriptions ==="
-        kubectl describe nodes || true
-        echo ""
-        echo "=== All pods ==="
-        kubectl get pods -A -o wide || true
-        echo ""
-        echo "=== Events (all namespaces, sorted by time) ==="
-        kubectl get events -A --sort-by='.lastTimestamp' || true
-        echo ""
-        echo "=== kube-router DaemonSet description ==="
-        kubectl -n kube-system describe daemonset/kube-router || true
-        echo ""
-        echo "=== kube-router pod descriptions ==="
-        kubectl -n kube-system describe pods -l k8s-app=kube-router || true
-        echo ""
-        echo "=== kube-router full logs ==="
-        kubectl -n kube-system logs -l k8s-app=kube-router --tail=500 || true
-        echo ""
-        echo "=== nftables ruleset (per kube-router pod) ==="
-        for pod in $(kubectl -n kube-system get pods -l k8s-app=kube-router -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
-          echo "--- $pod ---"
-          kubectl -n kube-system exec "$pod" -- nft list ruleset 2>&1 || true
-          echo ""
-        done
+      run: hack/e2e-netpol.sh dump-debug
 
     - name: Delete Kind cluster
       if: always()
-      run: kind delete cluster --name e2e
+      run: hack/e2e-netpol.sh delete-cluster
