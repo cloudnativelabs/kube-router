@@ -33,6 +33,7 @@ set -euo pipefail
 BACKEND="${BACKEND:-iptables}"
 DEFAULT_DENY="${DEFAULT_DENY:-false}"
 KUBE_ROUTER_IMAGE="${KUBE_ROUTER_IMAGE:-kube-router:e2e-test}"
+KIND_VERSION="${KIND_VERSION:-v0.27.0}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-e2e}"
 KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.32.2}"
 BUILDTIME_BASE="${BUILDTIME_BASE:-golang:alpine}"
@@ -55,6 +56,13 @@ cmd_build_image() {
         --build-arg "RUNTIME_BASE=${RUNTIME_BASE}" \
         -t "${KUBE_ROUTER_IMAGE}" \
         .
+}
+
+cmd_install_kind() {
+    log "Installing Kind"
+    curl -sSLo ./kind https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64
+    chmod +x ./kind
+    sudo mv ./kind /usr/local/bin/kind
 }
 
 cmd_create_cluster() {
@@ -183,6 +191,7 @@ cmd_all() {
     trap _on_exit EXIT
 
     cmd_build_image
+    cmd_install_kind
     cmd_create_cluster
     cmd_load_image
     cmd_deploy
@@ -198,6 +207,7 @@ SUBCOMMAND="${1:-all}"
 
 case "${SUBCOMMAND}" in
     build-image)    cmd_build_image ;;
+    install-kind)   cmd_install_kind ;;
     create-cluster) cmd_create_cluster ;;
     load-image)     cmd_load_image ;;
     deploy)         cmd_deploy ;;

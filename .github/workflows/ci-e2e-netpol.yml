@@ -96,11 +96,7 @@ jobs:
         tags: ${{ env.KUBE_ROUTER_IMAGE }}
 
     - name: Install kind
-      run: |
-        curl -sSLo ./kind \
-          "https://kind.sigs.k8s.io/dl/${{ env.KIND_VERSION }}/kind-linux-amd64"
-        chmod +x ./kind
-        sudo mv ./kind /usr/local/bin/kind
+      run: hack/e2e-netpol.sh install-kind
 
     - name: Create Kind cluster (dual-stack)
       run: hack/e2e-netpol.sh create-cluster
