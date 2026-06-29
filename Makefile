@@ -46,6 +46,10 @@ GRYPE_IMAGE?=anchore/grype:v0.112.0@sha256:391bfda62888fb4e98ff5c4c81598f7431a3c
 # See Versions: https://github.com/containernetworking/plugins/releases
 CNI_VERSION=v1.9.1
 UID?=$(shell id -u)
+# e2e-netpol target parameters (passed through to hack/e2e-netpol.sh)
+BACKEND?=iptables
+DEFAULT_DENY?=false
+SKIP_CLEANUP?=0
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
@@ -115,6 +119,10 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 else
 	go test -v -timeout 30s -tags privileged -run '^TestPrivileged' $$(find . -name '*_privileged_test.go' -exec dirname {} + | sort -u)
 endif
+
+test-integration: ## Runs integration tests that require the nft binary and kernel nftables support. Must be run as root (or via sudo).
+	go test -v -timeout 60s -tags integration -run '^TestIntegration' \
+		github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...
 
 test-pretty: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
@@ -336,9 +344,13 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
+e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires docker + kind). Pass BACKEND=nftables, DEFAULT_DENY=true, SKIP_CLEANUP=1 as needed.
+	BACKEND=$(BACKEND) DEFAULT_DENY=$(DEFAULT_DENY) SKIP_CLEANUP=$(SKIP_CLEANUP) \
+		hack/e2e-netpol.sh all
+
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan
-.PHONY: test test-privileged test-pretty lint docker-login push-manifest push-manifest-release
+.PHONY: test test-privileged test-integration test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
-.PHONY: spellcheck update-deps update-deps-dry prep-release kube-router gobgp
+.PHONY: spellcheck update-deps update-deps-dry prep-release kube-router gobgp e2e-netpol
 
 .DEFAULT: all
