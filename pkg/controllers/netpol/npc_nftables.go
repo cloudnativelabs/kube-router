@@ -1277,11 +1277,12 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 	}
 
 	// Garbage-collect stale pod firewall chains across both IP family tables.
+	// GC failures are non-fatal: stale chains linger until the next sync but do not affect the
+	// correctness of chains programmed above, so we warn and continue rather than aborting.
 	for _, nft := range npc.knftInterfaces {
 		existingChains, err := nft.List(ctx, "chains")
 		if err != nil {
-			klog.Errorf("nftables: could not list chains for pod fw cleanup: %v", err)
-			errs = append(errs, fmt.Errorf("failed to list chains for cleanup: %w", err))
+			klog.Warningf("nftables: could not list chains for pod fw cleanup (will retry next sync): %v", err)
 			continue
 		}
 		tx := nft.NewTransaction()
@@ -1295,8 +1296,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 		}
 		if anyDeletions {
 			if err := nft.Run(ctx, tx); err != nil {
-				klog.Errorf("nftables: failed to cleanup stale pod fw chains: %v", err)
-				errs = append(errs, fmt.Errorf("failed to cleanup stale pod firewall chains: %w", err))
+				klog.Warningf("nftables: failed to cleanup stale pod fw chains (will retry next sync): %v", err)
 			}
 		}
 	}
