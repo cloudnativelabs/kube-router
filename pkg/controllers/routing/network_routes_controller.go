@@ -1150,14 +1150,6 @@ func (nrc *NetworkRoutingController) startBgpServer(grpcServer bool) error {
 			nrc.bgpHoldtime,
 			nrc.krNode.GetPrimaryNodeIP().String(),
 		)
-		if err != nil {
-			err2 := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
-			if err2 != nil {
-				klog.Errorf("Failed to stop bgpServer: %s", err2)
-			}
-
-			return fmt.Errorf("failed to process Global Peer Router configs: %w", err)
-		}
 
 		nrc.nodePeerRouters = peerCfgs.RemoteIPStrings()
 	}
@@ -1456,9 +1448,6 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		nrc.bgpHoldtime,
 		nrc.krNode.GetPrimaryNodeIP().String(),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("error processing Global Peer Router configs: %w", err)
-	}
 
 	bgpLocalAddressListAnnotation, ok := node.Annotations[bgpLocalAddressAnnotation]
 	if !ok {
