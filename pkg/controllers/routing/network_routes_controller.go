@@ -177,13 +177,10 @@ func (nrc *NetworkRoutingController) Run(
 	stopCh <-chan struct{},
 	wg *sync.WaitGroup,
 ) {
-	var err error
-	if nrc.enableCNI {
-		nrc.updateCNIConfig()
-	}
+	mtu, cniNetConf := nrc.initCNIConfig()
 
 	klog.V(1).Info("Populating ipsets.")
-	err = nrc.syncNodeIPSets()
+	err := nrc.syncNodeIPSets()
 	if err != nil {
 		klog.Errorf("Failed initial ipset setup: %s", err)
 	}
@@ -289,48 +286,33 @@ func (nrc *NetworkRoutingController) Run(
 		}
 	}
 
-	if nrc.autoMTU {
-		mtu, err := nrc.krNode.GetNodeMTU()
+	if mtu > 0 {
+		klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
+		err = netlink.LinkSetMTU(kubeBridgeIf, mtu)
 		if err != nil {
 			klog.Errorf(
-				"Failed to find MTU for node IP: %s for intelligently setting the kube-bridge MTU "+
-					"due to %s.",
-				nrc.krNode.GetPrimaryNodeIP(),
+				"Failed to set MTU for kube-bridge interface due to: %s (kubeBridgeIf: %#v, mtu: %v)",
 				err.Error(),
+				kubeBridgeIf,
+				mtu,
 			)
-		}
-		if mtu > 0 {
-			klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
-			err = netlink.LinkSetMTU(kubeBridgeIf, mtu)
-			if err != nil {
-				klog.Errorf(
-					"Failed to set MTU for kube-bridge interface due to: %s (kubeBridgeIf: %#v, mtu: %v)",
-					err.Error(),
-					kubeBridgeIf,
-					mtu,
+			// Update the CNI config to include the effective MTU, if any.
+			if currentMTU := kubeBridgeIf.Attrs().MTU; currentMTU > 0 && cniNetConf != nil && currentMTU != mtu {
+				klog.Warningf(
+					"Updating CNI config with current MTU for kube-bridge: %d",
+					currentMTU,
 				)
-				// need to correct kuberouter.conf because autoConfigureMTU() may have set an invalid value!
-				currentMTU := kubeBridgeIf.Attrs().MTU
-				if currentMTU > 0 && currentMTU != mtu {
-					klog.Warningf(
-						"Updating config file with current MTU for kube-bridge: %d",
-						currentMTU,
-					)
-					cniNetConf, err := utils.NewCNINetworkConfig(nrc.cniConfFile)
-					if err == nil {
-						cniNetConf.SetMTU(currentMTU)
-						if err = cniNetConf.WriteCNIConfig(); err != nil {
-							klog.Errorf("Failed to update CNI config file due to: %v", err)
-						}
-					} else {
-						klog.Errorf("Failed to load CNI config file to reset MTU due to: %v", err)
-					}
-				}
+				cniNetConf.SetMTU(currentMTU)
 			}
-		} else {
-			klog.Infof("Not setting MTU of kube-bridge interface")
 		}
 	}
+
+	if cniNetConf != nil {
+		if err := cniNetConf.WriteCNIConfig(); err != nil {
+			klog.Fatalf("failed to write CNI file: %v", err)
+		}
+	}
+
 	// enable netfilter for the bridge
 	func() {
 		ctx, cancel := context.WithTimeout(context.Background(), maxModprobeTimeout)
@@ -460,11 +442,23 @@ func (nrc *NetworkRoutingController) Run(
 	}
 }
 
-func (nrc *NetworkRoutingController) updateCNIConfig() {
+func (nrc *NetworkRoutingController) initCNIConfig() (mtu int, _ *utils.CNINetworkConfig) {
+	if nrc.autoMTU {
+		if nodeMTU, err := nrc.krNode.GetNodeMTU(); err != nil {
+			klog.Errorf("Not setting MTU of kube-bridge interface: cannot determine the node's MTU: %v", err)
+		} else {
+			mtu = nodeMTU
+		}
+	}
+
+	if !nrc.enableCNI {
+		return mtu, nil
+	}
+
 	// Parse the existing IPAM CIDRs from the CNI conf file
 	cniNetConf, err := utils.NewCNINetworkConfig(nrc.cniConfFile)
 	if err != nil {
-		klog.Errorf("failed to parse CNI Config: %v", err)
+		klog.Fatalf("failed to parse CNI Config: %v", err)
 	}
 
 	// Insert any IPv4 CIDRs that are missing from the IPAM configuration in the CNI
@@ -483,20 +477,11 @@ func (nrc *NetworkRoutingController) updateCNIConfig() {
 		}
 	}
 
-	if nrc.autoMTU {
-		// Get the MTU by looking at the node's interface that is associated with the primary IP of the cluster
-		mtu, err := nrc.krNode.GetNodeMTU()
-		if err != nil {
-			klog.Fatalf("failed to generate MTU: %v", err)
-		}
-
+	if mtu > 0 {
 		cniNetConf.SetMTU(mtu)
 	}
 
-	err = cniNetConf.WriteCNIConfig()
-	if err != nil {
-		klog.Fatalf("failed to write CNI file: %v", err)
-	}
+	return mtu, cniNetConf
 }
 
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
