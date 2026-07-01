@@ -17,6 +17,7 @@ linters:
     - goconst
     - gocritic
     - gosec
+    - govet
     - lll
     - misspell
     - mnd
@@ -31,6 +32,11 @@ linters:
   settings:
     goconst:
       min-len: 20
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
   exclusions:
     generated: lax
     presets:
