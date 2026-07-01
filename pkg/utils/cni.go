@@ -9,14 +9,14 @@ import (
 	"strings"
 )
 
-type cniNetworkConfig struct {
+type CNINetworkConfig struct {
 	filePath string
 	conf     *Conf
 	confList *ConfList
 }
 
-func NewCNINetworkConfig(cniConfFilePath string) (*cniNetworkConfig, error) {
-	cniNetConf := cniNetworkConfig{
+func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
+	cniNetConf := CNINetworkConfig{
 		filePath: cniConfFilePath,
 	}
 
@@ -59,7 +59,7 @@ func NewCNINetworkConfig(cniConfFilePath string) (*cniNetworkConfig, error) {
 // consolidateSubnets Many people still define the legacy single subnet variation of the IPAM plugin instead of the
 // newer ranges variation. To account for this and make parsing simpler, we do the same thing that the official IPAM
 // config loader does and collapse them into ranges.
-func (c *cniNetworkConfig) consolidateSubnets() error {
+func (c *CNINetworkConfig) consolidateSubnets() error {
 	brPlug := c.getBridgePlugin()
 	if brPlug.IPAM.Subnet != "" {
 		err := c.InsertPodCIDRIntoIPAM(brPlug.IPAM.Subnet)
@@ -75,12 +75,12 @@ func (c *cniNetworkConfig) consolidateSubnets() error {
 
 // IsConfList checks to see if this CNI configuration is a *.conflist file or if it is a *.conf file. Returns true for
 // *.conflist, returns false for anything else.
-func (c *cniNetworkConfig) IsConfList() bool {
+func (c *CNINetworkConfig) IsConfList() bool {
 	return strings.HasSuffix(strings.ToLower(c.filePath), ".conflist")
 }
 
 // getPodCIDRsMapFromCNISpec gets pod CIDR allocated to the node as a map from CNI spec file and returns it
-func (c *cniNetworkConfig) getPodCIDRsMapFromCNISpec() (map[string]*net.IPNet, error) {
+func (c *CNINetworkConfig) getPodCIDRsMapFromCNISpec() (map[string]*net.IPNet, error) {
 	podCIDRs := make(map[string]*net.IPNet)
 
 	ipamConfig := c.getBridgePlugin().IPAM
@@ -105,7 +105,7 @@ func (c *cniNetworkConfig) getPodCIDRsMapFromCNISpec() (map[string]*net.IPNet, e
 }
 
 // GetPodCIDRsFromCNISpec gets pod CIDR allocated to the node from CNI spec file and returns it
-func (c *cniNetworkConfig) GetPodCIDRsFromCNISpec() ([]*net.IPNet, error) {
+func (c *CNINetworkConfig) GetPodCIDRsFromCNISpec() ([]*net.IPNet, error) {
 	podCIDRMap, err := c.getPodCIDRsMapFromCNISpec()
 	if err != nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (c *cniNetworkConfig) GetPodCIDRsFromCNISpec() ([]*net.IPNet, error) {
 }
 
 // getBridgePlugin get the bridge plugin configuration out of the cniNetworkConfig in a consistent manner
-func (c *cniNetworkConfig) getBridgePlugin() *Conf {
+func (c *CNINetworkConfig) getBridgePlugin() *Conf {
 	if c.confList != nil {
 		for _, conf := range c.confList.Plugins {
 			if conf.Type == "bridge" {
@@ -132,7 +132,7 @@ func (c *cniNetworkConfig) getBridgePlugin() *Conf {
 // InsertPodCIDRIntoIPAM insert a new cidr into the CNI file. If the CIDR already exists in the CNI ranges, then
 // operation is a noop. Throws an error if either the passed cidr cannot be parsed or if there is a problem with the
 // CIDRs already in the CNI config.
-func (c *cniNetworkConfig) InsertPodCIDRIntoIPAM(cidr string) error {
+func (c *CNINetworkConfig) InsertPodCIDRIntoIPAM(cidr string) error {
 	ipamConfig := c.getBridgePlugin().IPAM
 
 	// This should have already been sanitized by the GetPodCIDR* functions before it comes to us, but you can never be
@@ -158,12 +158,12 @@ func (c *cniNetworkConfig) InsertPodCIDRIntoIPAM(cidr string) error {
 	return nil
 }
 
-func (c *cniNetworkConfig) SetMTU(mtu int) {
+func (c *CNINetworkConfig) SetMTU(mtu int) {
 	brPlugin := c.getBridgePlugin()
 	brPlugin.MTU = float64(mtu)
 }
 
-func (c *cniNetworkConfig) WriteCNIConfig() error {
+func (c *CNINetworkConfig) WriteCNIConfig() error {
 	var cniBytes []byte
 	var err error
 	if c.IsConfList() {
