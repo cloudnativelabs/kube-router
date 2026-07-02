@@ -199,7 +199,8 @@ func (n *LocalKRNode) GetNodeMTU() (int, error) {
 			}
 		}
 	}
-	return 0, errors.New("failed to find interface with specified node IP")
+
+	return 0, fmt.Errorf("primary node IP %s is not assigned to any interface", n.PrimaryIP)
 }
 
 // GetNodeIPAddrs returns all of the node's IP addresses (whether internal or external) as defined by the Kubernetes
