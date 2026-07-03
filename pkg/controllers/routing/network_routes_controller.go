@@ -255,57 +255,7 @@ func (nrc *NetworkRoutingController) Run(
 	}
 
 	// create 'kube-bridge' interface to which pods will be connected
-	ctx := context.Background()
-	kubeBridgeIf, err := nlretry.LinkByName(ctx, "kube-bridge")
-	if err != nil && err.Error() == IfaceNotFound {
-		linkAttrs := netlink.NewLinkAttrs()
-		linkAttrs.Name = "kube-bridge"
-		bridge := &netlink.Bridge{LinkAttrs: linkAttrs}
-		if err = netlink.LinkAdd(bridge); err != nil {
-			klog.Errorf(
-				"Failed to create `kube-router` bridge due to %s. Will be created by CNI bridge "+
-					"plugin when pod is launched.",
-				err.Error(),
-			)
-		}
-		kubeBridgeIf, err = nlretry.LinkByName(ctx, "kube-bridge")
-		if err != nil {
-			klog.Errorf(
-				"Failed to find created `kube-router` bridge due to %s. Will be created by CNI "+
-					"bridge plugin when pod is launched.",
-				err.Error(),
-			)
-		}
-		err = netlink.LinkSetUp(kubeBridgeIf)
-		if err != nil {
-			klog.Errorf(
-				"Failed to bring `kube-router` bridge up due to %s. Will be created by CNI bridge "+
-					"plugin at later point when pod is launched.",
-				err.Error(),
-			)
-		}
-	}
-
-	if mtu > 0 {
-		klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
-		err = netlink.LinkSetMTU(kubeBridgeIf, mtu)
-		if err != nil {
-			klog.Errorf(
-				"Failed to set MTU for kube-bridge interface due to: %s (kubeBridgeIf: %#v, mtu: %v)",
-				err.Error(),
-				kubeBridgeIf,
-				mtu,
-			)
-			// Update the CNI config to include the effective MTU, if any.
-			if currentMTU := kubeBridgeIf.Attrs().MTU; currentMTU > 0 && cniNetConf != nil && currentMTU != mtu {
-				klog.Warningf(
-					"Updating CNI config with current MTU for kube-bridge: %d",
-					currentMTU,
-				)
-				cniNetConf.SetMTU(currentMTU)
-			}
-		}
-	}
+	nrc.setupKubeBridge(context.TODO(), mtu, cniNetConf)
 
 	if cniNetConf != nil {
 		if err := cniNetConf.WriteCNIConfig(); err != nil {
@@ -482,6 +432,59 @@ func (nrc *NetworkRoutingController) initCNIConfig() (mtu int, _ *utils.CNINetwo
 	}
 
 	return mtu, cniNetConf
+}
+
+func (*NetworkRoutingController) setupKubeBridge(ctx context.Context, mtu int, cniNetConf *utils.CNINetworkConfig) {
+	kubeBridgeIf, err := nlretry.LinkByName(ctx, "kube-bridge")
+	if err != nil && err.Error() == IfaceNotFound {
+		linkAttrs := netlink.NewLinkAttrs()
+		linkAttrs.Name = "kube-bridge"
+		bridge := &netlink.Bridge{LinkAttrs: linkAttrs}
+		if err = netlink.LinkAdd(bridge); err != nil {
+			klog.Errorf(
+				"Failed to create `kube-router` bridge due to %s. Will be created by CNI bridge "+
+					"plugin when pod is launched.",
+				err.Error(),
+			)
+		}
+		kubeBridgeIf, err = nlretry.LinkByName(ctx, "kube-bridge")
+		if err != nil {
+			klog.Errorf(
+				"Failed to find created `kube-router` bridge due to %s. Will be created by CNI "+
+					"bridge plugin when pod is launched.",
+				err.Error(),
+			)
+		}
+		err = netlink.LinkSetUp(kubeBridgeIf)
+		if err != nil {
+			klog.Errorf(
+				"Failed to bring `kube-router` bridge up due to %s. Will be created by CNI bridge "+
+					"plugin at later point when pod is launched.",
+				err.Error(),
+			)
+		}
+	}
+
+	if mtu > 0 {
+		klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
+		err = netlink.LinkSetMTU(kubeBridgeIf, mtu)
+		if err != nil {
+			klog.Errorf(
+				"Failed to set MTU for kube-bridge interface due to: %s (kubeBridgeIf: %#v, mtu: %v)",
+				err.Error(),
+				kubeBridgeIf,
+				mtu,
+			)
+			// Update the CNI config to include the effective MTU, if any.
+			if currentMTU := kubeBridgeIf.Attrs().MTU; currentMTU > 0 && cniNetConf != nil && currentMTU != mtu {
+				klog.Warningf(
+					"Updating CNI config with current MTU for kube-bridge: %d",
+					currentMTU,
+				)
+				cniNetConf.SetMTU(currentMTU)
+			}
+		}
+	}
 }
 
 func (nrc *NetworkRoutingController) watchBgpUpdates() {
