@@ -1,5 +1,7 @@
 module github.com/cloudnativelabs/kube-router/v2
 
+go 1.26.0
+
 require (
 	github.com/aws/aws-sdk-go-v2 v1.42.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.26
@@ -137,8 +139,6 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
 )
-
-go 1.26.0
 
 tool (
 	github.com/matryer/moq
