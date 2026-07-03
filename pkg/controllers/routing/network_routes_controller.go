@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/goccy/go-yaml"
@@ -435,35 +436,37 @@ func (nrc *NetworkRoutingController) initCNIConfig() (mtu int, _ *utils.CNINetwo
 	return mtu, cniNetConf
 }
 
-func (*NetworkRoutingController) setupKubeBridge(ctx context.Context, mtu int, cniNetConf *utils.CNINetworkConfig) {
+func (nrc *NetworkRoutingController) setupKubeBridge(ctx context.Context, mtu int, cniNetConf *utils.CNINetworkConfig) {
+	skippedAction := "bring it up"
+	if nrc.autoMTU {
+		skippedAction = "bring it up and set the MTU"
+	}
+
 	kubeBridgeIf, err := nlretry.LinkByName(ctx, "kube-bridge")
 	if _, notFound := errors.AsType[netlink.LinkNotFoundError](err); notFound {
 		linkAttrs := netlink.NewLinkAttrs()
 		linkAttrs.Name = "kube-bridge"
 		bridge := &netlink.Bridge{LinkAttrs: linkAttrs}
-		if err = netlink.LinkAdd(bridge); err != nil {
+		if err := netlink.LinkAdd(bridge); err != nil && !errors.Is(err, syscall.EEXIST) {
 			klog.Errorf(
-				"Failed to create `kube-router` bridge due to %s. Will be created by CNI bridge "+
-					"plugin when pod is launched.",
-				err.Error(),
+				"Failed to create kube-bridge interface due to %v. Cannot %s. "+
+					"The CNI bridge plugin may create it when a pod starts.",
+				err, skippedAction,
 			)
+			return
 		}
 		kubeBridgeIf, err = nlretry.LinkByName(ctx, "kube-bridge")
-		if err != nil {
-			klog.Errorf(
-				"Failed to find created `kube-router` bridge due to %s. Will be created by CNI "+
-					"bridge plugin when pod is launched.",
-				err.Error(),
-			)
-		}
-		err = netlink.LinkSetUp(kubeBridgeIf)
-		if err != nil {
-			klog.Errorf(
-				"Failed to bring `kube-router` bridge up due to %s. Will be created by CNI bridge "+
-					"plugin at later point when pod is launched.",
-				err.Error(),
-			)
-		}
+	}
+	if err != nil {
+		klog.Errorf(
+			"Failed to get kube-bridge interface configuration due to %v. Cannot %s.",
+			err, skippedAction,
+		)
+		return
+	}
+
+	if err := netlink.LinkSetUp(kubeBridgeIf); err != nil {
+		klog.Errorf("Failed to bring kube-bridge interface up due to %v.", err)
 	}
 
 	if mtu > 0 {
