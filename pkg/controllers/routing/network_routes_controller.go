@@ -38,6 +38,7 @@ import (
 )
 
 const (
+	// Deprecated: Use [netlink.LinkNotFoundError] instead.
 	IfaceNotFound = "Link not found"
 
 	podSubnetsIPSetName = "kube-router-pod-subnets"
@@ -436,7 +437,7 @@ func (nrc *NetworkRoutingController) initCNIConfig() (mtu int, _ *utils.CNINetwo
 
 func (*NetworkRoutingController) setupKubeBridge(ctx context.Context, mtu int, cniNetConf *utils.CNINetworkConfig) {
 	kubeBridgeIf, err := nlretry.LinkByName(ctx, "kube-bridge")
-	if err != nil && err.Error() == IfaceNotFound {
+	if _, notFound := errors.AsType[netlink.LinkNotFoundError](err); notFound {
 		linkAttrs := netlink.NewLinkAttrs()
 		linkAttrs.Name = "kube-bridge"
 		bridge := &netlink.Bridge{LinkAttrs: linkAttrs}
