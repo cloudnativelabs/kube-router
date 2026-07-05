@@ -24,6 +24,9 @@ pod IPs, service IPs, etc.).
   - [Restoring pre-2.9.0 behavior](#restoring-pre-290-behavior)
 - [Overriding the next hop](#overriding-the-next-hop)
 - [Overriding the next hop and enable IPIP/tunnel](#overriding-the-next-hop-and-enable-ipiptunnel)
+- [BFD (Bidirectional Forwarding Detection)](#bfd-bidirectional-forwarding-detection)
+  - [Configuring BFD](#configuring-bfd)
+  - [BFD & Graceful Restart](#bfd--graceful-restart)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -358,3 +361,57 @@ Specifically, people need to take care when combining `--override-nexthop` and `
 they understand their network, the flows they desire, how the kube-router logic works, and the possible side effects
 that are created from their configuration. Please refer to [this PR](https://github.com/cloudnativelabs/kube-router/pull/1025)
 for the risk and impact discussion.
+
+## BFD (Bidirectional Forwarding Detection)
+
+kube-router integrates GoBGP's support for BFD for external peers. Please review GoBGP's
+[docs on BFD](https://github.com/osrg/gobgp/blob/master/docs/sources/bfd.md)
+for details on features and limitations, as GoBGP's implementation for BFD is new,
+and does not support all features.
+
+### Configuring BFD
+
+You can configure BFD settings either through CLI flags for global external BGP peers
+or configure them on a per-node basis. Ensure that detection multiplier,
+required min RX interval, and desired min TX interval to either match or
+are slower than the settings configured on the peer, as GoBGP does not currently
+handle timer negotiation. Note that required min RX interval and desired min TX
+interval are both in _microseconds_, as some implementations of BFD (such as FRR)
+handle timer values in milliseconds.
+
+**Global External BGP Peers:**
+
+You can enable BFD for global external BGP peers by specifying: `--enable-bfd=true`.
+BFD timer settings can be configured via `--bfd-detection-multiplier`,
+`--bfd-required-min-rx-interval`, and `--bfd-desired-min-tx-interval`. Each of these
+flags only accept one value to configure BFD settings for all peers. If different
+BFD configurations are required for external peers, please use the per-node BGP
+annotations.
+
+**Per-Node BFD Configuration:**
+
+Per-node BFD settings can be configured via the `kube-router.io/peers` annotation:
+
+```yaml
+- remoteip: 192.168.1.99
+  remoteasn: 65000
+  password: "<b64 encoded password here>"
+  bfd:
+    enabled: true
+    port: 3785
+    detection_multiplier: 2
+    required_min_rx_interval: 1000000
+    desired_min_tx_interval: 1000000
+```
+
+Per-node BFD settings are _not_ supported via the individual BGP node annotations,
+which have been deprecated since v2.7.0.
+
+### BFD & Graceful Restart
+
+kube-router will log warnings when BFD and graceful restart are both configured.
+Configuring both BFD and graceful restart is not recommended as they have contradictory
+effects and can cause inconsistent routing behavior depending on vendor implementation.
+In GoBGP, if BFD and graceful restart are both configured and a peer is
+detected as down, graceful restart seems to be bypassed and peer routes are
+immediately flushed.

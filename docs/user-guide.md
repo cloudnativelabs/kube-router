@@ -114,6 +114,10 @@ Usage of kube-router:
       --advertise-loadbalancer-ip                     Add LoadBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr                            Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
       --auto-mtu                                      Auto detect and set the largest possible MTU for kube-bridge and pod interfaces (also accounts for IPIP overlay network when enabled). (default true)
+      --bfd-desired-min-tx-interval uint32            The desired min interval in microseconds for GoBGP to transmit BFD control packets. (default 1000000)
+      --bfd-detection-multiplier uint32               BFD failure detection multiplier. Must be between 1-255. (default 3)
+      --bfd-port uint32                               UDP port for BFD control packets (default 3784)
+      --bfd-required-min-rx-interval uint32           Min interval in microseconds for GoBGP to receive BFD control packets. (default 1000000)
       --bgp-graceful-restart                          Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
       --bgp-graceful-restart-deferral-time duration   BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h. (default 6m0s)
       --bgp-graceful-restart-time duration            BGP Graceful restart time according to RFC4724 3, maximum 4095s. (default 1m30s)
@@ -123,6 +127,7 @@ Usage of kube-router:
       --cleanup-config                                Cleanup iptables rules, ipvs, ipset configuration and exit.
       --cluster-asn uint                              ASN number under which cluster nodes will run iBGP.
       --disable-source-dest-check                     Disable the source-dest-check attribute for AWS EC2 instances. When this option is false, it must be set some other way. (default true)
+      --enable-bfd                                    Enable BFD for GoBGP
       --enable-cni                                    Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin. (default true)
       --enable-ibgp                                   Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers (default true)
       --enable-ipv4                                   Enables IPv4 support (default true)

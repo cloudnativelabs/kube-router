@@ -124,6 +124,11 @@ type NetworkRoutingController struct {
 	globalPeerRouters              []*gobgpapi.Peer
 	nodePeerRouters                []string
 	enableCNI                      bool
+	enableBFD                      bool
+	bfdDetectionMultiplier         uint32
+	bfdMinRxInt                    uint32
+	bfdMinTxInt                    uint32
+	bfdPort                        uint32
 	bgpFullMeshMode                bool
 	bgpEnableInternal              bool
 	bgpGracefulRestart             bool
@@ -1384,6 +1389,18 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		klog.Warning("--gobgp-admin-port is 0 but --gobgp-admin-address is non-empty, not binding GoBGP socket to an address")
 	}
 
+	nrc.enableBFD = kubeRouterConfig.EnableBFD
+	nrc.bfdPort = kubeRouterConfig.BFDPort
+	nrc.bfdDetectionMultiplier = kubeRouterConfig.BFDDetectionMultiplier
+	nrc.bfdMinRxInt = kubeRouterConfig.BFDRequiredMinRxInterval
+	nrc.bfdMinTxInt = kubeRouterConfig.BFDDesiredMinTxInterval
+
+	if nrc.enableBFD {
+		if nrc.bfdDetectionMultiplier == 0 || nrc.bfdDetectionMultiplier > options.BFDDetectionMultiplierMax {
+			return nil, fmt.Errorf("--bfd-detection-multiplier must be between 1-%d", options.BFDDetectionMultiplierMax)
+		}
+	}
+
 	// Convert ints to uint32s
 	peerASNs := make([]uint32, 0)
 	for _, i := range kubeRouterConfig.PeerASNs {
@@ -1438,6 +1455,13 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		peerPasswords,
 		nil,
 		nrc.krNode.GetPrimaryNodeIP().String(),
+		bgp.BFDConfig{
+			Enabled:               nrc.enableBFD,
+			Port:                  &nrc.bfdPort,
+			DetectionMultiplier:   &nrc.bfdDetectionMultiplier,
+			DesiredMinTxInterval:  &nrc.bfdMinTxInt,
+			RequiredMinRxInterval: &nrc.bfdMinRxInt,
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -1590,7 +1614,9 @@ func bgpPeerConfigsFromIndividualAnnotations(
 		}
 	}
 
-	return bgp.NewPeerConfigs(ipStrings, peerASNs, ports, passwords, localIPs, localAddress)
+	// We intentionally pass in empty BFD configs here. Individual node annotations are deprecated.
+	// We do not plan on supporting new features like BFD using individual node annotations.
+	return bgp.NewPeerConfigs(ipStrings, peerASNs, ports, passwords, localIPs, localAddress, bgp.BFDConfig{})
 }
 
 func goBGPListenAddrs(adminAddress string, adminPort uint16) []string {
