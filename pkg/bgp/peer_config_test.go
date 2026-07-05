@@ -10,6 +10,7 @@ import (
 )
 
 func TestPeerConfig_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		config   PeerConfig
@@ -189,6 +190,30 @@ func TestPeerConfigs_String(t *testing.T) {
 			},
 			expected: "PeerConfigs[PeerConfig{LocalIP: 192.168.1.1, RemoteASN: 65000, RemoteIP: 10.0.0.1},PeerConfig{Port: 179, RemoteASN: 65001, RemoteIP: 10.0.0.2},PeerConfig{RemoteIP: 10.0.0.3}]",
 		},
+		{
+			name: "PeerConfigs - with BFD config",
+			configs: PeerConfigs{
+				{
+					localIP:   "192.168.1.1",
+					password:  utils.Base64String("secret"),
+					remoteASN: uint32(65000),
+					remoteIP:  net.ParseIP("10.0.0.1"),
+					bfd: BFDConfig{
+						Enabled: true,
+						Port:    new(uint32(13784)),
+					},
+				},
+				{
+					port:      new(uint32(179)),
+					remoteASN: uint32(65001),
+					remoteIP:  net.ParseIP("10.0.0.2"),
+				},
+				{
+					remoteIP: net.ParseIP("10.0.0.3"),
+				},
+			},
+			expected: "PeerConfigs[PeerConfig{LocalIP: 192.168.1.1, RemoteASN: 65000, RemoteIP: 10.0.0.1, BFD: BFDConfig{Enabled: true, Port: 13784}},PeerConfig{Port: 179, RemoteASN: 65001, RemoteIP: 10.0.0.2},PeerConfig{RemoteIP: 10.0.0.3}]",
+		},
 	}
 
 	for _, tt := range tests {
@@ -199,6 +224,7 @@ func TestPeerConfigs_String(t *testing.T) {
 }
 
 func Test_NewPeerConfigs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                string
 		remoteIPs           []string
@@ -207,6 +233,7 @@ func Test_NewPeerConfigs(t *testing.T) {
 		b64EncodedPasswords []string
 		localIPs            []string
 		localAddress        string
+		bfdConfig           BFDConfig
 		errorContains       string
 	}{
 		{
@@ -245,15 +272,41 @@ func Test_NewPeerConfigs(t *testing.T) {
 			remoteASNs:    []uint32{0, 2345},
 			errorContains: "reserved ASN",
 		},
+		{
+			name:       "BFD config is propagated to all peers",
+			remoteIPs:  []string{"10.0.0.1", "10.0.0.2"},
+			remoteASNs: []uint32{1234, 2345},
+			bfdConfig: BFDConfig{
+				Enabled:               true,
+				Port:                  new(uint32(37850)),
+				DetectionMultiplier:   new(uint32(3)),
+				DesiredMinTxInterval:  new(uint32(100)),
+				RequiredMinRxInterval: new(uint32(100)),
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewPeerConfigs(tt.remoteIPs, tt.remoteASNs, tt.ports, tt.b64EncodedPasswords, tt.localIPs, tt.localAddress)
+			t.Parallel()
+			peerCfgs, err := NewPeerConfigs(tt.remoteIPs, tt.remoteASNs, tt.ports, tt.b64EncodedPasswords, tt.localIPs, tt.localAddress, tt.bfdConfig)
 			if tt.errorContains != "" {
 				assert.ErrorContains(t, err, tt.errorContains)
 			} else {
 				assert.NoError(t, err)
+				if len(peerCfgs) > 0 && tt.bfdConfig.Enabled {
+					for i, pc := range peerCfgs {
+						if !pc.BFD().Enabled {
+							t.Errorf("peer %d should have BFD enabled", i)
+						}
+						if pc.BFD().Port == nil || *pc.BFD().Port != *tt.bfdConfig.Port {
+							t.Errorf("peer %d BFD port mismatch: expected %d, got %v", i, *tt.bfdConfig.Port, pc.BFD().Port)
+						}
+						if pc.BFD().DetectionMultiplier == nil || *pc.BFD().DetectionMultiplier != *tt.bfdConfig.DetectionMultiplier {
+							t.Errorf("peer %d BFD detection multiplier mismatch", i)
+						}
+					}
+				}
 			}
 		})
 	}

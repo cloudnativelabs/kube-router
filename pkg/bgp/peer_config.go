@@ -18,10 +18,11 @@ type PeerConfig struct {
 	localIP   string             `yaml:"localip"`
 	password  utils.Base64String `yaml:"password"`
 	port      *uint32            `yaml:"port"`
+	bfd       BFDConfig          `yaml:"bfd"`
 }
 
 func NewPeerConfig(remoteIPStr string, remoteASN uint32, port *uint32, b64EncodedPassword utils.Base64String,
-	localIP string,
+	localIP string, bfd BFDConfig,
 ) (PeerConfig, error) {
 	remoteIP := net.ParseIP(remoteIPStr)
 	if remoteIP == nil {
@@ -37,6 +38,7 @@ func NewPeerConfig(remoteIPStr string, remoteASN uint32, port *uint32, b64Encode
 		localIP:   localIP,
 		password:  b64EncodedPassword,
 		port:      port,
+		bfd:       bfd,
 	}, nil
 }
 
@@ -60,6 +62,10 @@ func (p PeerConfig) Port() *uint32 {
 	return p.port
 }
 
+func (p PeerConfig) BFD() BFDConfig {
+	return p.bfd
+}
+
 // Custom Stringer to prevent leaking passwords when printed
 func (p PeerConfig) String() string {
 	var fields []string
@@ -75,6 +81,9 @@ func (p PeerConfig) String() string {
 	if p.remoteIP != nil {
 		fields = append(fields, fmt.Sprintf("RemoteIP: %v", p.remoteIP))
 	}
+	if p.bfd.Enabled {
+		fields = append(fields, fmt.Sprintf("BFD: %v", p.bfd))
+	}
 	return fmt.Sprintf("PeerConfig{%s}", strings.Join(fields, ", "))
 }
 
@@ -85,6 +94,7 @@ func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
 		Port      *uint32             `yaml:"port"`
 		RemoteASN *uint32             `yaml:"remoteasn"`
 		RemoteIP  *string             `yaml:"remoteip"`
+		Bfd       BFDConfig           `yaml:"bfd"`
 	}{}
 
 	if err := yaml.Unmarshal(raw, &tmp); err != nil {
@@ -108,6 +118,7 @@ func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
 	}
 	p.port = tmp.Port
 	p.remoteASN = *tmp.RemoteASN
+	p.bfd = tmp.Bfd
 	ip := net.ParseIP(*tmp.RemoteIP)
 	if ip == nil {
 		return fmt.Errorf("%s is not a valid IP address", *tmp.RemoteIP)
@@ -142,6 +153,7 @@ func NewPeerConfigs(
 	b64EncodedPasswords []string,
 	localIPs []string,
 	localAddress string,
+	globalBFDConfig BFDConfig,
 ) (PeerConfigs, error) {
 	if len(remoteIPs) != len(remoteASNs) {
 		return nil, errors.New("invalid peer router config, the number of IPs and ASN numbers must be equal")
@@ -175,7 +187,7 @@ func NewPeerConfigs(
 		if len(localIPs) != 0 {
 			localIP = localIPs[i]
 		}
-		peerCfg, err := NewPeerConfig(remoteIP, remoteASNs[i], port, pw, localIP)
+		peerCfg, err := NewPeerConfig(remoteIP, remoteASNs[i], port, pw, localIP, globalBFDConfig)
 		if err != nil {
 			return nil, err
 		}
