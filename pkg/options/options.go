@@ -90,6 +90,7 @@ type KubeRouterConfig struct {
 	ServiceTCPFinTimeout           time.Duration
 	ServiceUDPTimeout              time.Duration
 	StrictExternalIPValidation     bool
+	UseNftablesForNetpol           bool
 	Version                        bool
 	VLevel                         string
 	// FullMeshPassword    string
@@ -286,6 +287,9 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Specify UDP timeout for IPVS services in standard duration syntax (e.g. '5s', '1m'), default 0s preserves "+
 			"default system value (default: 0s)")
 	fs.StringVarP(&s.VLevel, "v", "v", "0", "log level for V logs")
+	fs.BoolVar(&s.UseNftablesForNetpol, "use-nftables-for-netpol", false,
+		"[Experimental] Use nftables instead of iptables for the network policy controller. "+
+			"Requires nft >= 1.0.1 and kernel nftables support. (default false)")
 	fs.BoolVarP(&s.Version, "version", "V", false,
 		"Print version information.")
 }

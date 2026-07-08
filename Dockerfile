@@ -43,6 +43,7 @@ RUN export GOARM="${TARGETVARIANT#v}" \
 FROM ${RUNTIME_BASE}
 
 RUN apk add --no-cache \
+      nftables \
       iptables \
       iptables-legacy \
       ipset \
