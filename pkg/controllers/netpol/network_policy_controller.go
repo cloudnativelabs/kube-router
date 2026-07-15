@@ -273,12 +273,11 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 			podInformer, npInformer, nsInformer, linkQ, knftInterfaces)
 	} else {
 		// Cleanup any existing nftables rules before starting iptables controller to avoid conflicts
-		// in case of a restart with a different configuration. Only attempt cleanup when nftables
-		// interfaces are available so iptables-only deployments do not initialize nftables support.
-		if len(knftInterfaces) > 0 {
-			npc := NetworkPolicyControllerNftables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
-			npc.Cleanup()
-		}
+		// in case of a restart with a different configuration. Cleanup() self-initializes nftables
+		// interfaces when none are passed, so this runs even when UseNftablesForNetpol is false.
+		// On hosts that lack nftables entirely, Cleanup() logs the error and returns without panic.
+		npc := NetworkPolicyControllerNftables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
+		npc.Cleanup()
 		return NewNetworkPolicyControllerIptables(&npcBase, clientset, config,
 			podInformer, npInformer, nsInformer, linkQ, iptablesCmdHandlers, ipSetHandlers)
 	}
