@@ -200,7 +200,7 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() {
 		return
 	}
 
-	_, _, err = npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
+	activePolicyChains, activePolicyIPSets, err := npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
 		klog.Errorf("Aborting sync. Failed to sync network policy chains: %v", err.Error())
 		return
@@ -211,6 +211,11 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() {
 		klog.Errorf("Aborting sync. Failed to sync pod firewall chains: %v", err.Error())
 		return
 	}
+
+	// GC stale policy chains and sets after pod-fw chains have been rewritten to reference
+	// the current policy chain names. At this point old policy chains have no inbound
+	// references and can be deleted without hitting "Resource busy".
+	npc.gcPolicyObjectsNft(activePolicyChains, activePolicyIPSets)
 	klog.V(3).Infof("Active pod firewall chains: %d", len(activePodFwChains))
 
 	// Refresh the kube-router-local-pods named set before ensureTailChainPosition installs the TAIL jump,
@@ -1088,59 +1093,60 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 		}
 	}
 
-	// Garbage-collect stale policy chains.
+	klog.V(2).Infof("nftables chains are synchronized with the network policies.")
+	return activePolicyChains, activePolicyIPSets, nil
+}
+
+// gcPolicyObjectsNft deletes stale policy chains and sets that are no longer referenced by any
+// active policy. It must be called AFTER syncPodFirewallChains so that pod-fw chains have already
+// been rewritten to reference the current policy chain names; only then are the old chains
+// unreferenced and safe to delete. Each object is deleted in its own transaction so that a
+// single "Resource busy" failure does not block removal of unrelated stale objects.
+func (npc *NetworkPolicyControllerNftables) gcPolicyObjectsNft(
+	activePolicyChains, activePolicyIPSets map[string]bool) {
+
+	ctx := npc.ctx
+
 	for _, nft := range npc.knftInterfaces {
 		existingChains, err := nft.List(ctx, "chains")
 		if err != nil {
 			klog.Warningf("nftables: could not list chains for cleanup: %v", err)
 			continue
 		}
-		tx := nft.NewTransaction()
-		anyDeletions := false
 		for _, chain := range existingChains {
 			if strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) &&
 				chain != kubeDefaultNetpolChain &&
 				chain != kubeCommonNetpolChain &&
 				chain != kubeTailNetpolChain &&
 				!activePolicyChains[chain] {
+				tx := nft.NewTransaction()
 				tx.Flush(&knftables.Chain{Name: chain})
 				tx.Delete(&knftables.Chain{Name: chain})
-				anyDeletions = true
-			}
-		}
-		if anyDeletions {
-			if err := nft.Run(ctx, tx); err != nil {
-				klog.Warningf("nftables: failed to cleanup stale chains: %v", err)
+				if err := nft.Run(ctx, tx); err != nil {
+					klog.Warningf("nftables: failed to cleanup stale chain %s (will retry next sync): %v", chain, err)
+				}
 			}
 		}
 	}
 
-	// Garbage-collect stale named sets.
 	for _, nft := range npc.knftInterfaces {
 		existingSets, err := nft.List(ctx, "sets")
 		if err != nil {
 			klog.Warningf("nftables: could not list sets for cleanup: %v", err)
 			continue
 		}
-		tx := nft.NewTransaction()
-		anyDeletions := false
 		for _, set := range existingSets {
 			if (strings.HasPrefix(set, kubeSourceIPSetPrefix) ||
 				strings.HasPrefix(set, kubeDestinationIPSetPrefix)) &&
 				!activePolicyIPSets[set] {
+				tx := nft.NewTransaction()
 				tx.Delete(&knftables.Set{Name: set})
-				anyDeletions = true
-			}
-		}
-		if anyDeletions {
-			if err := nft.Run(ctx, tx); err != nil {
-				klog.Warningf("nftables: failed to cleanup stale sets: %v", err)
+				if err := nft.Run(ctx, tx); err != nil {
+					klog.Warningf("nftables: failed to cleanup stale set %s (will retry next sync): %v", set, err)
+				}
 			}
 		}
 	}
-
-	klog.V(2).Infof("nftables chains are synchronized with the network policies.")
-	return activePolicyChains, activePolicyIPSets, nil
 }
 
 // syncPodFirewallChains is the nftables equivalent of the iptables syncPodFirewallChains.
