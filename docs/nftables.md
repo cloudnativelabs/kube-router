@@ -40,7 +40,7 @@ controllers (service proxy, routing) continue to use their existing implementati
 Pass the flag when starting kube-router:
 
 ```bash
-kube-router --run-network-policy-controller --use-nftables-for-netpol
+kube-router --run-network-policy-controller --run-firewall --use-nftables-for-netpol
 ```
 
 Or in a DaemonSet manifest:
