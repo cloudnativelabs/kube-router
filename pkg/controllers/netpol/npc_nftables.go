@@ -553,6 +553,25 @@ func nftIndexedDestinationIPBlockExceptSetName(
 	return kubeDestinationIPSetPrefix + encoded[:16]
 }
 
+// nftIndexedSourceIPBlockChainName returns the name of a per-rule sub-chain used when an ingress
+// ipBlock rule has except CIDRs. Isolating the except-return inside a sub-chain ensures that the
+// return only exits back to the policy chain, not past all remaining policy rules.
+func nftIndexedSourceIPBlockChainName(namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
+		string(ipFamily) + "ipblockchain"))
+	encoded := base32.StdEncoding.EncodeToString(hash[:])
+	return kubeNetworkPolicyChainPrefix + encoded[:16]
+}
+
+// nftIndexedDestinationIPBlockChainName returns the name of a per-rule sub-chain used when an egress
+// ipBlock rule has except CIDRs. See nftIndexedSourceIPBlockChainName for rationale.
+func nftIndexedDestinationIPBlockChainName(namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
+	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
+		string(ipFamily) + "ipblockchain"))
+	encoded := base32.StdEncoding.EncodeToString(hash[:])
+	return kubeNetworkPolicyChainPrefix + encoded[:16]
+}
+
 func nftIndexedIngressNamedPortSetName(
 	namespace, policyName string, ingressRuleNo, namedPortNo int, ipFamily v1core.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
@@ -767,6 +786,7 @@ func (npc *NetworkPolicyControllerNftables) nftAddPodMatchRules(
 func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 	tx *knftables.Transaction, policy networkPolicyInfo,
 	targetDestPodSetName string, activePolicyIPSets map[string]bool,
+	activePolicyChains map[string]bool,
 	version string, ipFamily v1core.IPFamily) {
 
 	if policy.ingressRules == nil {
@@ -822,26 +842,39 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 			activePolicyIPSets[srcIPBlockSetName] = true
 			hasExcepts := npc.nftAddOrReplaceIPBlockSet(tx, srcIPBlockSetName, srcIPBlockExceptSetName,
 				ingressRule.srcIPBlocks[ipFamily], ipFamily)
+
+			// ipBlockChain is where the ipBlock accept rules land. When there are except CIDRs,
+			// a per-rule sub-chain is used so that "return" for excepted IPs only exits that
+			// sub-chain; the policy chain continues to evaluate later rules (Kubernetes ORs all rules).
+			ipBlockChain := policyChainName
 			if hasExcepts {
 				activePolicyIPSets[srcIPBlockExceptSetName] = true
-				// Return (without marking) for any source matching an Except CIDR so
-				// it falls through to the reject rule at the end of the pod-fw chain.
 				addrKeyword := "ip"
 				if ipFamily == v1core.IPv6Protocol {
 					addrKeyword = "ip6"
 				}
+				subChainName := nftIndexedSourceIPBlockChainName(policy.namespace, policy.name, ruleIdx, ipFamily)
+				activePolicyChains[subChainName] = true
+				tx.Add(&knftables.Chain{Name: subChainName})
+				tx.Flush(&knftables.Chain{Name: subChainName})
 				tx.Add(&knftables.Rule{
-					Chain:   policyChainName,
+					Chain:   subChainName,
 					Rule:    knftables.Concat(addrKeyword, "saddr", "@"+srcIPBlockExceptSetName, "counter return"),
 					Comment: new("skip excepted source CIDRs for policy " + policy.name),
 				})
+				tx.Add(&knftables.Rule{
+					Chain:   policyChainName,
+					Rule:    knftables.Concat("counter jump", subChainName),
+					Comment: new("process ipBlock rule for policy " + policy.name),
+				})
+				ipBlockChain = subChainName
 			}
 
 			if !ingressRule.matchAllPorts {
 				for _, portProtocol := range ingressRule.ports {
 					comment := "ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
-					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
+					npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 						srcIPBlockSetName, targetDestPodSetName,
 						portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
 				}
@@ -853,7 +886,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 						endPoints.ips[ipFamily], ipFamily)
 					comment := "ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
-					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
+					npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 						srcIPBlockSetName, namedPortSetName,
 						endPoints.protocol, endPoints.port, endPoints.endport, ipFamily)
 				}
@@ -861,7 +894,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 			if ingressRule.matchAllPorts {
 				comment := "ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
-				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
+				npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 					srcIPBlockSetName, targetDestPodSetName, "", "", "", ipFamily)
 			}
 		}
@@ -871,6 +904,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 	tx *knftables.Transaction, policy networkPolicyInfo,
 	targetSourcePodSetName string, activePolicyIPSets map[string]bool,
+	activePolicyChains map[string]bool,
 	version string, ipFamily v1core.IPFamily) {
 
 	if policy.egressRules == nil {
@@ -922,26 +956,39 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 			activePolicyIPSets[dstIPBlockSetName] = true
 			hasExcepts := npc.nftAddOrReplaceIPBlockSet(tx, dstIPBlockSetName, dstIPBlockExceptSetName,
 				egressRule.dstIPBlocks[ipFamily], ipFamily)
+
+			// ipBlockChain is where the ipBlock accept rules land. When there are except CIDRs,
+			// a per-rule sub-chain is used so that "return" for excepted IPs only exits that
+			// sub-chain; the policy chain continues to evaluate later rules (Kubernetes ORs all rules).
+			ipBlockChain := policyChainName
 			if hasExcepts {
 				activePolicyIPSets[dstIPBlockExceptSetName] = true
-				// Return (without marking) for any destination matching an Except CIDR so
-				// it falls through to the reject rule at the end of the pod-fw chain.
 				addrKeyword := "ip"
 				if ipFamily == v1core.IPv6Protocol {
 					addrKeyword = "ip6"
 				}
+				subChainName := nftIndexedDestinationIPBlockChainName(policy.namespace, policy.name, ruleIdx, ipFamily)
+				activePolicyChains[subChainName] = true
+				tx.Add(&knftables.Chain{Name: subChainName})
+				tx.Flush(&knftables.Chain{Name: subChainName})
 				tx.Add(&knftables.Rule{
-					Chain:   policyChainName,
+					Chain:   subChainName,
 					Rule:    knftables.Concat(addrKeyword, "daddr", "@"+dstIPBlockExceptSetName, "counter return"),
 					Comment: new("skip excepted destination CIDRs for policy " + policy.name),
 				})
+				tx.Add(&knftables.Rule{
+					Chain:   policyChainName,
+					Rule:    knftables.Concat("counter jump", subChainName),
+					Comment: new("process ipBlock rule for policy " + policy.name),
+				})
+				ipBlockChain = subChainName
 			}
 
 			if !egressRule.matchAllPorts {
 				for _, portProtocol := range egressRule.ports {
 					comment := "ACCEPT traffic from source pods to specified ipBlocks selected by policy name: " +
 						policy.name + " namespace " + policy.namespace
-					npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
+					npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 						targetSourcePodSetName, dstIPBlockSetName,
 						portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
 				}
@@ -949,7 +996,7 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 			if egressRule.matchAllPorts {
 				comment := "ACCEPT traffic from source pods to specified ipBlocks selected by policy name: " +
 					policy.name + " namespace " + policy.namespace
-				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
+				npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 					targetSourcePodSetName, dstIPBlockSetName, "", "", "", ipFamily)
 			}
 		}
@@ -1022,7 +1069,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 				npc.nftAddOrReplaceIPSet(tx, targetDestPodSetName, currentPodIPs[ipFamily], ipFamily)
 
 				npc.processIngressRulesNft(tx, policy, targetDestPodSetName,
-					activePolicyIPSets, version, ipFamily)
+					activePolicyIPSets, activePolicyChains, version, ipFamily)
 			}
 
 			if policy.policyType == kubeBothPolicyType || policy.policyType == kubeEgressPolicyType {
@@ -1032,7 +1079,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 				npc.nftAddOrReplaceIPSet(tx, targetSourcePodSetName, currentPodIPs[ipFamily], ipFamily)
 
 				npc.processEgressRulesNft(tx, policy, targetSourcePodSetName,
-					activePolicyIPSets, version, ipFamily)
+					activePolicyIPSets, activePolicyChains, version, ipFamily)
 			}
 
 			if err := nft.Run(ctx, tx); err != nil {
