@@ -298,10 +298,10 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 				tx.Flush(&knftables.Chain{Name: policyChainName})
 
 				if np.policyType == kubeEgressPolicyType || np.policyType == kubeBothPolicyType {
-					krNetPol.processEgressRulesNft(tx, np, "", nil, "1", ipFamily)
+					krNetPol.processEgressRulesNft(tx, np, "", nil, make(map[string]bool), "1", ipFamily)
 				}
 				if np.policyType == kubeIngressPolicyType || np.policyType == kubeBothPolicyType {
-					krNetPol.processIngressRulesNft(tx, np, "", nil, "1", ipFamily)
+					krNetPol.processIngressRulesNft(tx, np, "", nil, make(map[string]bool), "1", ipFamily)
 				}
 				if err = nft.Run(ctx, tx); err != nil {
 					t.Errorf("Error running nftables transaction: %s", err)
@@ -537,10 +537,10 @@ func runNftPolicyRules(t *testing.T, npc *NetworkPolicyControllerNftables) {
 			activeSets := make(map[string]bool)
 
 			if np.policyType == kubeEgressPolicyType || np.policyType == kubeBothPolicyType {
-				npc.processEgressRulesNft(tx, np, "", activeSets, "1", ipFamily)
+				npc.processEgressRulesNft(tx, np, "", activeSets, make(map[string]bool), "1", ipFamily)
 			}
 			if np.policyType == kubeIngressPolicyType || np.policyType == kubeBothPolicyType {
-				npc.processIngressRulesNft(tx, np, "", activeSets, "1", ipFamily)
+				npc.processIngressRulesNft(tx, np, "", activeSets, make(map[string]bool), "1", ipFamily)
 			}
 			if err := nft.Run(ctx, tx); err != nil {
 				t.Fatalf("nft.Run failed: %v", err)
@@ -924,8 +924,10 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 
 	info2, err := npc.buildNetworkPoliciesInfo()
 	require.NoError(t, err)
-	_, _, err = npc.syncNetworkPolicyChains(info2, "v1")
+	activeChains2, activeSets2, err := npc.syncNetworkPolicyChains(info2, "v1")
 	require.NoError(t, err)
+	// GC is now a separate step (called after syncPodFirewallChains in production).
+	npc.(*NetworkPolicyControllerNftables).gcPolicyObjectsNft(activeChains2, activeSets2)
 
 	dumpAfterSecond := ipv4KNft.Dump()
 	t.Logf("dump after second sync:\n%s", dumpAfterSecond)
