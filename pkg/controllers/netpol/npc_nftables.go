@@ -246,13 +246,23 @@ func (npc *NetworkPolicyControllerNftables) nftablesNodePortRange() string {
 	return strings.ReplaceAll(npc.serviceNodePortRange, ":", "-")
 }
 
+// ensureTopLevelChains creates the top-level hook chains if they are missing, WITHOUT flushing
+// them or installing any rules. We deliberately preserve whatever ruleset the previous controller
+// instance left in the kernel so that policies stay enforced across a restart; the first
+// fullPolicySync atomically replaces the chain contents via syncTopLevelChainsAtomic. Flushing
+// here would open an allow-all window between startup and the end of the first sync.
 func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 	ctx := npc.ctx
-	klog.V(2).Infof("Creating top level input chains")
+	klog.V(2).Infof("Ensuring top level chains exist")
+
+	// Validate early that a cluster IP range is configured, because syncTopLevelChainsAtomic
+	// depends on it for the service CIDR exemption rules.
+	if len(npc.ipRanges.ClusterIPRanges()) == 0 {
+		return errors.New("primary service cluster IP range is not configured")
+	}
 
 	for _, nft := range npc.knftInterfaces {
 		tx := nft.NewTransaction()
-
 		for chain, hook := range chainToHook {
 			tx.Add(&knftables.Chain{
 				Name:     chain,
@@ -261,120 +271,10 @@ func (npc *NetworkPolicyControllerNftables) ensureTopLevelChains() error {
 				Hook:     new(hook),
 				Priority: knftables.PtrTo(knftables.FilterPriority),
 			})
-			tx.Flush(&knftables.Chain{
-				Name: chain,
-			})
 		}
-		err := nft.Run(ctx, tx)
-		if err != nil {
-			klog.ErrorS(err, "nftables: couldn't setup top level input chains")
-			return fmt.Errorf("failed to setup top level chains: %w", err)
-		}
-	}
-
-	// traffic towards service CIDRs should be allowed to ingress regardless of any network policy,
-	// so add rules for that in the top level chains
-	if len(npc.ipRanges.ClusterIPRanges()) == 0 {
-		return errors.New("primary service cluster IP range is not configured")
-	}
-	for _, family := range []v1core.IPFamily{v1core.IPv4Protocol, v1core.IPv6Protocol} {
-		nftItf, ok := npc.knftInterfaces[family]
-		if !ok || nftItf == nil {
-			continue
-		}
-		for _, serviceRange := range npc.ipRanges.ClusterIPRanges(family) {
-			klog.V(2).Infof("Allow traffic to ingress towards Cluster IP Range: %s for family: %s",
-				serviceRange.String(), family)
-			tx := nftItf.NewTransaction()
-			addrKeyword := "ip"
-			if family == v1core.IPv6Protocol {
-				addrKeyword = "ip6"
-			}
-			tx.Add(&knftables.Rule{
-				Chain: kubeInputChainName,
-				Rule: knftables.Concat(
-					addrKeyword, "daddr", serviceRange.String(),
-					"counter", "return",
-				),
-				Comment: new("allow traffic to primary/secondary cluster IP range"),
-			})
-			if err := nftItf.Run(ctx, tx); err != nil {
-				klog.ErrorS(err, "nftables: couldn't setup chain for cluster IP range", "cidr", serviceRange.String())
-				return fmt.Errorf("failed to setup cluster IP range %s: %w", serviceRange.String(), err)
-			}
-		}
-	}
-
-	for family, nft := range npc.knftInterfaces {
-		tx := nft.NewTransaction()
-
-		for _, protocol := range []string{"tcp", "udp", "sctp"} {
-			// Use "meta l4proto" for both IPv4 and IPv6 tables: it is the canonical
-			// family-agnostic L4 protocol match in nftables. The older "ip protocol"
-			// form only works in the ip (IPv4) table and would break in ip6 tables.
-			ruleParts := []any{"meta l4proto", protocol}
-			ruleParts = append(ruleParts,
-				"fib", "daddr", "type", "local", protocol,
-				"dport", npc.nftablesNodePortRange(),
-				"counter", "return")
-			tx.Add(&knftables.Rule{
-				Chain:   kubeInputChainName,
-				Rule:    knftables.Concat(ruleParts...),
-				Comment: new("allow LOCAL " + protocol + " traffic to node ports"),
-			})
-			klog.V(2).Infof("Allow %s traffic to ingress towards node port range: %s for family: %s",
-				protocol, npc.serviceNodePortRange, family)
-		}
-		err := nft.Run(ctx, tx)
-		if err != nil {
-			klog.ErrorS(err, "nftables: failed to add rules for node port range")
-			return fmt.Errorf("failed to add rules for node port range (family %s): %w", family, err)
-		}
-	}
-
-	for _, family := range []v1core.IPFamily{v1core.IPv4Protocol, v1core.IPv6Protocol} {
-		nftItf, ok := npc.knftInterfaces[family]
-		if !ok || nftItf == nil {
-			continue
-		}
-		addrKeyword := "ip"
-		if family == v1core.IPv6Protocol {
-			addrKeyword = "ip6"
-		}
-		for _, externalIPRange := range npc.ipRanges.ExternalIPRanges(family) {
-			klog.V(2).Infof("Allow traffic to ingress towards External IP Range: %s for family: %s",
-				externalIPRange.String(), family)
-			tx := nftItf.NewTransaction()
-			tx.Add(&knftables.Rule{
-				Chain: kubeInputChainName,
-				Rule: knftables.Concat(
-					addrKeyword, "daddr", externalIPRange.String(),
-					"counter", "return",
-				),
-				Comment: new("allow traffic to External IP range"),
-			})
-			if err := nftItf.Run(ctx, tx); err != nil {
-				klog.ErrorS(err, "nftables: couldn't setup chain for External IP range", "cidr", externalIPRange.String())
-				return fmt.Errorf("failed to setup External IP range %s: %w", externalIPRange.String(), err)
-			}
-		}
-		for _, loadBalancerIPRange := range npc.ipRanges.LoadBalancerIPRanges(family) {
-			klog.V(2).Infof("Allow traffic to ingress towards LoadBalancer IP Range: %s for family: %s",
-				loadBalancerIPRange.String(), family)
-			tx := nftItf.NewTransaction()
-			tx.Add(&knftables.Rule{
-				Chain: kubeInputChainName,
-				Rule: knftables.Concat(
-					addrKeyword, "daddr", loadBalancerIPRange.String(),
-					"counter", "return",
-				),
-				Comment: new("allow traffic to LoadBalancer IP range"),
-			})
-			if err := nftItf.Run(ctx, tx); err != nil {
-				klog.ErrorS(err, "nftables: couldn't setup chain for LoadBalancer IP range",
-					"cidr", loadBalancerIPRange.String())
-				return fmt.Errorf("failed to setup LoadBalancer IP range %s: %w", loadBalancerIPRange.String(), err)
-			}
+		if err := nft.Run(ctx, tx); err != nil {
+			klog.ErrorS(err, "nftables: couldn't ensure top level chains")
+			return fmt.Errorf("failed to ensure top level chains: %w", err)
 		}
 	}
 	return nil
