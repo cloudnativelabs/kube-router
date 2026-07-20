@@ -27,6 +27,10 @@ import (
 const (
 	ipv4Table = "kube-router-filter-ipv4"
 	ipv6Table = "kube-router-filter-ipv6"
+
+	// nftMarkAcceptRule accepts traffic that a pod firewall chain marked as compliant with
+	// network policies (bit 0x20000)
+	nftMarkAcceptRule = "meta mark and 0x20000 == 0x20000 counter accept"
 )
 
 var chainToHook = map[string]knftables.BaseChainHook{
@@ -567,7 +571,8 @@ func nftIndexedDestinationIPBlockExceptSetName(
 // nftIndexedSourceIPBlockChainName returns the name of a per-rule sub-chain used when an ingress
 // ipBlock rule has except CIDRs. Isolating the except-return inside a sub-chain ensures that the
 // return only exits back to the policy chain, not past all remaining policy rules.
-func nftIndexedSourceIPBlockChainName(namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
+func nftIndexedSourceIPBlockChainName(
+	namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
 		string(ipFamily) + "ipblockchain"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
@@ -576,7 +581,8 @@ func nftIndexedSourceIPBlockChainName(namespace, policyName string, ingressRuleN
 
 // nftIndexedDestinationIPBlockChainName returns the name of a per-rule sub-chain used when an egress
 // ipBlock rule has except CIDRs. See nftIndexedSourceIPBlockChainName for rationale.
-func nftIndexedDestinationIPBlockChainName(namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
+func nftIndexedDestinationIPBlockChainName(
+	namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
 	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
 		string(ipFamily) + "ipblockchain"))
 	encoded := base32.StdEncoding.EncodeToString(hash[:])
@@ -1350,25 +1356,6 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 	return activePodFwChains, activePodIPs, podJumps, nil
 }
 
-func (npc *NetworkPolicyControllerNftables) ensureExplicitAccept() {
-	ctx := npc.ctx
-	// for the traffic to/from the local pod's let network policy controller be
-	// authoritative entity to ACCEPT the traffic if it complies to network policies
-	for _, nft := range npc.knftInterfaces {
-		tx := nft.NewTransaction()
-		for chain := range chainToHook {
-			tx.Add(&knftables.Rule{
-				Chain:   chain,
-				Rule:    "meta mark and 0x20000 == 0x20000 counter accept",
-				Comment: new("explicitly ACCEPT traffic that comply to network policies"),
-			})
-		}
-		if err := nft.Run(ctx, tx); err != nil {
-			klog.Errorf("nftables: couldn't add explicit accept rules: %v", err)
-		}
-	}
-}
-
 // syncTopLevelChainsAtomic atomically rebuilds every top-level netfilter chain (INPUT, FORWARD, OUTPUT)
 // in a single nftables transaction per IP family. By folding the flush, static exemption rules,
 // per-pod jump rules, the TAIL jump, and the explicit ACCEPT into one transaction we eliminate the
@@ -1476,7 +1463,7 @@ func (npc *NetworkPolicyControllerNftables) syncTopLevelChainsAtomic(
 		for chain := range chainToHook {
 			tx.Add(&knftables.Rule{
 				Chain:   chain,
-				Rule:    "meta mark and 0x20000 == 0x20000 counter accept",
+				Rule:    nftMarkAcceptRule,
 				Comment: new("explicitly ACCEPT traffic that comply to network policies"),
 			})
 		}
@@ -1567,7 +1554,7 @@ func (npc *NetworkPolicyControllerNftables) populateDefaultTailChain(
 
 	tx.Add(&knftables.Rule{
 		Chain:   kubeTailNetpolChain,
-		Rule:    "meta mark and 0x20000 == 0x20000 counter accept",
+		Rule:    nftMarkAcceptRule,
 		Comment: new("explicitly ACCEPT traffic that comply to network policies"),
 	})
 
@@ -1614,25 +1601,6 @@ func (npc *NetworkPolicyControllerNftables) populateProtectedPodsIPSet(activePod
 		}
 		klog.V(2).Infof("nftables: refreshed %s set for family %s with %d entries",
 			kubeLocalPodsIPSetName, family, len(activePodIPs[family]))
-	}
-}
-
-// ensureTailChainPosition ensures each top-level chain ends with a jump into KUBE-NWPLCY-TAIL,
-// placing it after the per-pod KUBE-POD-FW-* jumps written earlier in the same sync.
-func (npc *NetworkPolicyControllerNftables) ensureTailChainPosition() {
-	ctx := npc.ctx
-	for _, nft := range npc.knftInterfaces {
-		tx := nft.NewTransaction()
-		for chain := range chainToHook {
-			tx.Add(&knftables.Rule{
-				Chain:   chain,
-				Rule:    knftables.Concat("counter jump", kubeTailNetpolChain),
-				Comment: new("explicitly handle traffic for network policies ACCEPT/REJECT decision"),
-			})
-		}
-		if err := nft.Run(ctx, tx); err != nil {
-			klog.Errorf("nftables: couldn't add tail chain jump rules: %v", err)
-		}
 	}
 }
 
