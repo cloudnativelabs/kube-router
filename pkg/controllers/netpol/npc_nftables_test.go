@@ -1030,16 +1030,24 @@ func TestNftablesNodePortRange(t *testing.T) {
 
 // newTailChainNftablesController returns a minimally-wired NetworkPolicyControllerNftables that has only the
 // IPv4 nftables fake interface (with its table pre-created) and the fields needed by ensureDefaultTailChain,
-// populateProtectedPodsIPSet, and ensureTailChainPosition.
+// populateProtectedPodsIPSet, and syncTopLevelChainsAtomic.
 func newTailChainNftablesController(t *testing.T, defaultDeny bool,
 	podCIDRs map[v1core.IPFamily][]string) (*NetworkPolicyControllerNftables, *knftables.Fake) {
 	t.Helper()
 	ctx := t.Context()
 
+	ipRanges, err := svcip.NewValidator(svcip.Config{
+		ClusterIPCIDRs: []string{"10.96.0.0/16"},
+		EnableIPv4:     true,
+	})
+	require.NoError(t, err)
+
 	npc := &NetworkPolicyControllerNftables{
 		NetworkPolicyControllerBase: &NetworkPolicyControllerBase{
-			defaultDeny: defaultDeny,
-			podCIDRs:    podCIDRs,
+			defaultDeny:          defaultDeny,
+			podCIDRs:             podCIDRs,
+			ipRanges:             ipRanges,
+			serviceNodePortRange: "30000-32767",
 		},
 		knftInterfaces: make(map[v1core.IPFamily]knftables.Interface, 1),
 		ctx:            ctx,
@@ -1134,17 +1142,47 @@ func TestNftablesPopulateProtectedPodsIPSetDefaultDenyDisabled(t *testing.T) {
 	require.NotContains(t, dump, "add element ip kube-router-filter-ipv4 kube-router-local-pods")
 }
 
-func TestNftablesEnsureTailChainPosition(t *testing.T) {
+// TestNftablesSyncTopLevelChainsAtomic verifies the single-transaction rebuild of the top-level
+// chains: static exemptions, per-pod jumps, the TAIL jump, and the mark-accept rule must all be
+// present after one call.
+func TestNftablesSyncTopLevelChainsAtomic(t *testing.T) {
 	npc, fakeIPv4 := newTailChainNftablesController(t, true,
 		map[v1core.IPFamily][]string{v1core.IPv4Protocol: {"10.10.0.0/16"}})
 	npc.ensureDefaultTailChain()
 
-	npc.ensureTailChainPosition()
+	// The pod-fw jump target must exist before the top-level chains can reference it.
+	podFwChain := kubePodFirewallChainPrefix + "TESTCHAIN"
+	tx := fakeIPv4.NewTransaction()
+	tx.Add(&knftables.Chain{Name: podFwChain})
+	require.NoError(t, fakeIPv4.Run(t.Context(), tx))
+
+	podJumps := map[v1core.IPFamily][]podFwJump{
+		v1core.IPv4Protocol: {{
+			podIP:      "10.10.0.5",
+			podFwChain: podFwChain,
+			podName:    "pod1",
+			podNS:      "ns1",
+		}},
+	}
+	require.NoError(t, npc.syncTopLevelChainsAtomic(podJumps))
 	dump := fakeIPv4.Dump()
 
 	for chain := range chainToHook {
-		expected := "add rule ip kube-router-filter-ipv4 " + chain + " counter jump KUBE-NWPLCY-TAIL"
-		require.Contains(t, dump, expected,
+		require.Contains(t, dump,
+			"add rule ip kube-router-filter-ipv4 "+chain+" counter jump KUBE-NWPLCY-TAIL",
 			"expected TAIL jump in %s", chain)
+		require.Contains(t, dump,
+			"add rule ip kube-router-filter-ipv4 "+chain+" "+nftMarkAcceptRule,
+			"expected mark-accept in %s", chain)
+		require.Contains(t, dump,
+			"add rule ip kube-router-filter-ipv4 "+chain+" ip saddr 10.10.0.5 counter jump "+podFwChain,
+			"expected outbound pod jump in %s", chain)
 	}
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-ROUTER-FORWARD ip daddr 10.10.0.5 counter jump "+podFwChain)
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-ROUTER-OUTPUT ip daddr 10.10.0.5 counter jump "+podFwChain)
+	// Static INPUT exemption from the helper's validator config.
+	require.Contains(t, dump,
+		"add rule ip kube-router-filter-ipv4 KUBE-ROUTER-INPUT ip daddr 10.96.0.0/16 counter return")
 }
