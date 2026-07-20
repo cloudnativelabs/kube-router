@@ -90,6 +90,11 @@ func TestBasicChains(t *testing.T) {
 	require.NoError(t, krNetPol.ensureTopLevelChains())
 	krNetPol.ensureDefaultNetworkPolicyChain()
 	krNetPol.ensureCommonPolicyChain()
+	krNetPol.ensureDefaultTailChain()
+	// The static exemption rules (cluster IP, nodeport, external IP ranges) are installed by the
+	// atomic top-level rebuild, not by ensureTopLevelChains (which is create-only so restarts
+	// don't flush the previous instance's enforcement).
+	require.NoError(t, krNetPol.syncTopLevelChainsAtomic(nil))
 	fakeIPv4Itf, ok := krNetPol.knftInterfaces[v1core.IPv4Protocol].(*knftables.Fake)
 	if !ok {
 		t.Fatalf("Expected knftInterfaces[v1.IPv4Protocol] to be of type *knftables.Fake")
@@ -415,6 +420,11 @@ func TestFullPolicySync(t *testing.T) {
 	require.NoError(t, npc.ensureTopLevelChains())
 	npc.ensureDefaultNetworkPolicyChain()
 	npc.ensureCommonPolicyChain()
+	// The static exemption rules now land during the atomic top-level rebuild, which needs the
+	// TAIL chain to exist first (same order fullPolicySync uses).
+	nftNpc := npc.(*NetworkPolicyControllerNftables)
+	nftNpc.ensureDefaultTailChain()
+	require.NoError(t, nftNpc.syncTopLevelChainsAtomic(nil))
 
 	ipv4Dump := ipv4KNftInterface.Dump()
 	t.Logf("nftables dump: \n%s", ipv4Dump)
@@ -812,6 +822,8 @@ func TestNftablesChainsIdempotency(t *testing.T) {
 	require.NoError(t, npc.ensureTopLevelChains())
 	npc.ensureDefaultNetworkPolicyChain()
 	npc.ensureCommonPolicyChain()
+	npc.ensureDefaultTailChain()
+	require.NoError(t, npc.syncTopLevelChainsAtomic(nil))
 
 	fakeItf, ok := npc.knftInterfaces[v1core.IPv4Protocol].(*knftables.Fake)
 	require.True(t, ok, "expected *knftables.Fake for IPv4")
@@ -821,6 +833,8 @@ func TestNftablesChainsIdempotency(t *testing.T) {
 	require.NoError(t, npc.ensureTopLevelChains())
 	npc.ensureDefaultNetworkPolicyChain()
 	npc.ensureCommonPolicyChain()
+	npc.ensureDefaultTailChain()
+	require.NoError(t, npc.syncTopLevelChainsAtomic(nil))
 	dumpAfterSecond := fakeItf.Dump()
 
 	if dumpAfterFirst != dumpAfterSecond {
@@ -1004,6 +1018,11 @@ func TestNftablesNodePortRange(t *testing.T) {
 			require.NoError(t, err)
 
 			require.NoError(t, npc.ensureTopLevelChains())
+			// Nodeport exemption rules are installed by the atomic top-level rebuild,
+			// which needs the TAIL chain to exist first.
+			nftNpc := npc.(*NetworkPolicyControllerNftables)
+			nftNpc.ensureDefaultTailChain()
+			require.NoError(t, nftNpc.syncTopLevelChainsAtomic(nil))
 
 			dump := ipv4KNft.Dump()
 			t.Logf("nftables dump:\n%s", dump)
