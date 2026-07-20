@@ -940,7 +940,7 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	require.NoError(t, err)
 	activeChains2, activeSets2, err := npc.syncNetworkPolicyChains(info2, "v1")
 	require.NoError(t, err)
-	// GC is now a separate step (called after syncPodFirewallChains in production).
+	// GC is a separate step in production, called after the atomic top-level rebuild.
 	npc.(*NetworkPolicyControllerNftables).gcPolicyObjectsNft(activeChains2, activeSets2)
 
 	dumpAfterSecond := ipv4KNft.Dump()
@@ -950,6 +950,28 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	if strings.Contains(dumpAfterSecond, deleteChain) {
 		t.Errorf("policy-delete chain %s must be removed after second sync, but found in dump", deleteChain)
 	}
+}
+
+// TestNftablesStalePodFwChainCleanup verifies that gcPodFwChainsNft removes pod firewall chains
+// that are no longer active while leaving active ones alone.
+func TestNftablesStalePodFwChainCleanup(t *testing.T) {
+	npc, fakeIPv4 := newTailChainNftablesController(t, false,
+		map[v1core.IPFamily][]string{v1core.IPv4Protocol: {"10.10.0.0/16"}})
+
+	activeChain := kubePodFirewallChainPrefix + "ACTIVE"
+	staleChain := kubePodFirewallChainPrefix + "STALE"
+	tx := fakeIPv4.NewTransaction()
+	tx.Add(&knftables.Chain{Name: activeChain})
+	tx.Add(&knftables.Chain{Name: staleChain})
+	// Give the stale chain a rule so the flush-first pass is exercised.
+	tx.Add(&knftables.Rule{Chain: staleChain, Rule: "meta mark set meta mark or 0x20000"})
+	require.NoError(t, fakeIPv4.Run(t.Context(), tx))
+
+	npc.gcPodFwChainsNft(map[string]bool{activeChain: true})
+
+	dump := fakeIPv4.Dump()
+	require.Contains(t, dump, activeChain, "active pod-fw chain must survive GC")
+	require.NotContains(t, dump, staleChain, "stale pod-fw chain must be removed by GC")
 }
 
 // TestNftablesNodePortRange verifies that node-port ranges supplied in either
