@@ -182,7 +182,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-C23KD7UE4TAT3Y5M tcp dport 30000 counter meta mark set meta mark or 0x10000 return comment \"ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\"\n",
+			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-C23KD7UE4TAT3Y5M tcp dport 30000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress egress any\"\n",
 		},
 		{
 			name: "Simple Ingress/Egress Destination Port",
@@ -215,8 +215,8 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-IDIX352DRLNY3D23 tcp dport 30000 counter meta mark set meta mark or 0x10000 return comment \"ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\"\n" +
-				"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-IDIX352DRLNY3D23 tcp dport 37000 counter meta mark set meta mark or 0x10000 return comment \"ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\"\n",
+			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-IDIX352DRLNY3D23 tcp dport 30000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-ingress-egress egress any\"\n" +
+				"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-IDIX352DRLNY3D23 tcp dport 37000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-ingress-egress ingress any\"\n",
 		},
 		{
 			name: "Simple Egress Destination Port Range",
@@ -245,8 +245,8 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-2UTXQIFBI5TAPUCL tcp dport 30000-31000 counter meta mark set meta mark or 0x10000 return comment \"ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\"\n" +
-				"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-2UTXQIFBI5TAPUCL tcp dport 34000-35000 counter meta mark set meta mark or 0x10000 return comment \"ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\"\n",
+			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-2UTXQIFBI5TAPUCL tcp dport 30000-31000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress-pr egress any\"\n" +
+				"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-2UTXQIFBI5TAPUCL tcp dport 34000-35000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress-pr egress any\"\n",
 		},
 		{
 			name: "Port > EndPort (invalid condition, should drop endport)",
@@ -271,7 +271,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-N5DQE4SCQ56JEMH7 tcp dport 34000 counter meta mark set meta mark or 0x10000 return comment \"ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\"\n",
+			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-N5DQE4SCQ56JEMH7 tcp dport 34000 counter meta mark set meta mark or 0x10000 return comment \"nsA/invalid-endport egress any\"\n",
 		},
 	}
 
@@ -298,7 +298,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 				// Declare (or reset) the policy chain.
 				tx.Add(&knftables.Chain{
 					Name:    policyChainName,
-					Comment: new("chain for network policy " + np.namespace + "/" + np.name),
+					Comment: new(clampComment("netpol " + np.namespace + "/" + np.name)),
 				})
 				tx.Flush(&knftables.Chain{Name: policyChainName})
 
@@ -453,21 +453,21 @@ func TestFullPolicySync(t *testing.T) {
 		"ipv4: KUBE-ROUTER-INPUT chain missing")
 
 	// Common chain stateful-firewall and ICMP rules.
-	require.Contains(t, ipv4Dump, `ct state invalid counter drop comment "drop invalid state for pod"`,
+	require.Contains(t, ipv4Dump, `ct state invalid counter drop comment "drop invalid state"`,
 		"ipv4: drop-invalid rule missing")
-	require.Contains(t, ipv4Dump, `ct state established,related counter accept comment "rule for stateful firewall for pod"`,
+	require.Contains(t, ipv4Dump, `ct state established,related counter accept comment "accept established/related"`,
 		"ipv4: stateful-accept rule missing")
 	require.Contains(t, ipv4Dump, `icmp type echo-request counter accept`,
 		"ipv4: ICMP echo-request rule missing")
 
 	// Per-policy chains for the two fixture policies must exist.
-	require.Contains(t, ipv4Dump, `comment "chain for network policy default/whoami"`,
+	require.Contains(t, ipv4Dump, `comment "netpol default/whoami"`,
 		"ipv4: whoami policy chain missing")
-	require.Contains(t, ipv4Dump, `comment "chain for network policy default/debug"`,
+	require.Contains(t, ipv4Dump, `comment "netpol default/debug"`,
 		"ipv4: debug policy chain missing")
 
 	// "whoami" ingress policy: allow TCP 5000 from ipBlock 10.95.0.239/32 to whoami pod IPs.
-	require.Contains(t, ipv4Dump, `tcp dport 5000 counter meta mark set meta mark or 0x10000 return comment "ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: whoami namespace default"`,
+	require.Contains(t, ipv4Dump, `tcp dport 5000 counter meta mark set meta mark or 0x10000 return comment "default/whoami ingress cidr"`,
 		"ipv4: whoami ipBlock ingress rule missing")
 
 	// ipBlock set must contain the fixture CIDR.
@@ -481,15 +481,15 @@ func TestFullPolicySync(t *testing.T) {
 		"ipv4: whoami pod IP 10.242.1.4 missing from destination set")
 
 	// "debug" egress policy: allow traffic from debug-toolbox pods to whoami pods (no port restriction).
-	require.Contains(t, ipv4Dump, `counter meta mark set meta mark or 0x10000 return comment "ACCEPT traffic from source pods to dest pods selected by policy name debug namespace default"`,
+	require.Contains(t, ipv4Dump, `counter meta mark set meta mark or 0x10000 return comment "default/debug egress pods"`,
 		"ipv4: debug egress rule missing")
 
 	// Cluster-IP and node-port pass-through rules in KUBE-ROUTER-INPUT.
-	require.Contains(t, ipv4Dump, `ip daddr 10.96.0.0/16 counter return comment "allow traffic to primary/secondary cluster IP range"`,
+	require.Contains(t, ipv4Dump, `ip daddr 10.96.0.0/16 counter return comment "allow cluster IP range"`,
 		"ipv4: cluster-IP pass-through rule missing")
-	require.Contains(t, ipv4Dump, `tcp dport 30000-32767 counter return comment "allow LOCAL tcp traffic to node ports"`,
+	require.Contains(t, ipv4Dump, `tcp dport 30000-32767 counter return comment "allow tcp nodeport"`,
 		"ipv4: TCP node-port pass-through rule missing")
-	require.Contains(t, ipv4Dump, `udp dport 30000-32767 counter return comment "allow LOCAL udp traffic to node ports"`,
+	require.Contains(t, ipv4Dump, `udp dport 30000-32767 counter return comment "allow udp nodeport"`,
 		"ipv4: UDP node-port pass-through rule missing")
 
 	// --- IPv6 assertions ---
@@ -505,13 +505,13 @@ func TestFullPolicySync(t *testing.T) {
 		"ipv6: NDP neighbor-advert rule missing")
 
 	// Per-policy chains for IPv6.
-	require.Contains(t, ipv6Dump, `comment "chain for network policy default/whoami"`,
+	require.Contains(t, ipv6Dump, `comment "netpol default/whoami"`,
 		"ipv6: whoami policy chain missing")
-	require.Contains(t, ipv6Dump, `comment "chain for network policy default/debug"`,
+	require.Contains(t, ipv6Dump, `comment "netpol default/debug"`,
 		"ipv6: debug policy chain missing")
 
 	// "debug" egress rule for IPv6.
-	require.Contains(t, ipv6Dump, `counter meta mark set meta mark or 0x10000 return comment "ACCEPT traffic from source pods to dest pods selected by policy name debug namespace default"`,
+	require.Contains(t, ipv6Dump, `counter meta mark set meta mark or 0x10000 return comment "default/debug egress pods"`,
 		"ipv6: debug egress rule missing")
 
 	// IPv6 destination sets for whoami pods.
@@ -521,7 +521,7 @@ func TestFullPolicySync(t *testing.T) {
 		"ipv6: whoami pod IP 2001:db8:42:1001::4 missing from destination set")
 
 	// Cluster-IP pass-through rule for IPv6.
-	require.Contains(t, ipv6Dump, `ip6 daddr 2001:db8:42:1::/112 counter return comment "allow traffic to primary/secondary cluster IP range"`,
+	require.Contains(t, ipv6Dump, `ip6 daddr 2001:db8:42:1::/112 counter return comment "allow cluster IP range"`,
 		"ipv6: cluster-IP pass-through rule missing")
 }
 
@@ -585,7 +585,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 				if !strings.Contains(dump, expected) {
 					t.Errorf("allow-all ingress: expected %q in dump, got:\n%s", expected, dump)
 				}
-				comment := "ACCEPT traffic from all sources to dest pods selected by policy name: " + polName + " namespace nsA"
+				comment := "nsA/" + polName + " ingress any"
 				if !strings.Contains(dump, comment) {
 					t.Errorf("allow-all ingress: comment %q not found in dump", comment)
 				}
@@ -605,7 +605,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 				if !strings.Contains(dump, expected) {
 					t.Errorf("allow-all egress: expected %q in dump, got:\n%s", expected, dump)
 				}
-				comment := "ACCEPT traffic from source pods to all destinations selected by policy name: " + polName + " namespace nsA"
+				comment := "nsA/" + polName + " egress any"
 				if !strings.Contains(dump, comment) {
 					t.Errorf("allow-all egress: comment %q not found in dump", comment)
 				}
