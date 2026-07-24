@@ -48,11 +48,11 @@ func isDefaultDenyEnabled() bool {
 }
 
 // defaultDenyRejectRulesPresent returns true when at least one kube-router
-// node has the REJECT rules that are tagged with the
-// "--netpol-default-deny is enabled" comment in its iptables filter table or
-// nftables ruleset.
+// node has the default-deny REJECT rules in its iptables filter table or
+// nftables ruleset. Both backends tag those rules with a "(default-deny)"
+// comment (see npc_iptables.go and npc_nftables.go), which is what we match on.
 func defaultDenyRejectRulesPresent() bool {
-	const marker = "netpol-default-deny is enabled"
+	const marker = "(default-deny)"
 	pods, err := k8sClient.CoreV1().Pods("kube-system").List(
 		context.Background(),
 		metav1.ListOptions{LabelSelector: "k8s-app=kube-router"},
@@ -154,12 +154,12 @@ var _ = Describe("netpol-default-deny", func() {
 	// -----------------------------------------------------------------------
 
 	Describe("infrastructure", func() {
-		// Test DD-1: kube-router must have installed REJECT rules that carry the
-		// "--netpol-default-deny is enabled" comment in the filter table on
-		// every node.  Without these rules the feature provides no protection.
+		// Test DD-1: kube-router must have installed default-deny REJECT rules
+		// (tagged with a "(default-deny)" comment) in the filter table on at
+		// least one node.  Without these rules the feature provides no protection.
 		It("programs REJECT rules for pod CIDRs in the filter table", func() {
 			Expect(defaultDenyRejectRulesPresent()).To(BeTrue(),
-				"expected REJECT rules tagged with 'netpol-default-deny is enabled' "+
+				"expected default-deny REJECT rules (tagged '(default-deny)') "+
 					"in iptables or nftables on at least one kube-router node")
 		})
 

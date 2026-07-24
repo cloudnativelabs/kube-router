@@ -1014,3 +1014,46 @@ var _ = Describe("NetworkPolicy", func() {
 		})
 	})
 })
+
+var _ = Describe("boundary-length identity", func() {
+
+	// Regression coverage for the nftables 128-byte comment cap: kube-router
+	// derives rule comments from namespace and policy names, and an over-length
+	// comment silently aborted the whole policy sync, leaving the namespace
+	// unenforced. Driving a maximum-length namespace (63) and policy name (253)
+	// proves the transaction still applies - we assert both the allow side and
+	// the block side actually enforce.
+	It("enforces an ingress allow policy under maximum-length namespace and policy names", func() {
+		ns := createNamespaceNamed(paddedName("netpol-e2e-max-", 63), nil)
+		Expect(ns.Name).To(HaveLen(63))
+
+		server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
+		client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+		other := launchClient(ns.Name, "other", map[string]string{"app": "other"})
+
+		policyName := paddedName("max-len-ingress-allow-", 253)
+		Expect(policyName).To(HaveLen(253))
+
+		applyPolicy(&netv1.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: ns.Name},
+			Spec: netv1.NetworkPolicySpec{
+				PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
+				PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+				Ingress: []netv1.NetworkPolicyIngressRule{{
+					From: []netv1.NetworkPolicyPeer{{
+						PodSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"app": "client"},
+						},
+					}},
+				}},
+			},
+		})
+
+		// Allow side: the selected client reaches the server, proving the
+		// policy's accept rule programmed despite maximum-length comments.
+		assertConnected(client, podIPv4(server), serverPort)
+		// Block side: a non-matching pod is rejected, proving the policy's
+		// implicit default-deny programmed rather than the sync silently aborting.
+		assertBlocked(other, podIPv4(server), serverPort)
+	})
+})

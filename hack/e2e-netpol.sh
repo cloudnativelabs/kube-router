@@ -18,6 +18,10 @@
 # Environment variables (all optional):
 #   BACKEND            iptables | nftables   (default: iptables)
 #   DEFAULT_DENY       true | false          (default: false)
+#   E2E_LONG           1                     Run the slow lifecycle specs
+#                                            (controller restart, chain GC).
+#                                            Left unset on PRs; CI sets it on
+#                                            push/tag/dispatch. (default: unset)
 #   KUBE_ROUTER_IMAGE  image:tag             (default: kube-router:e2e-test)
 #   KIND_CLUSTER_NAME  name                  (default: e2e)
 #   KIND_NODE_IMAGE    kindest/node:vX.Y.Z   (default: kindest/node:v1.32.2)
@@ -32,6 +36,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 BACKEND="${BACKEND:-iptables}"
 DEFAULT_DENY="${DEFAULT_DENY:-false}"
+E2E_LONG="${E2E_LONG:-}"
 KUBE_ROUTER_IMAGE="${KUBE_ROUTER_IMAGE:-kube-router:e2e-test}"
 KIND_VERSION="${KIND_VERSION:-v0.27.0}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-e2e}"
@@ -94,6 +99,15 @@ cmd_deploy() {
             daemonset/generic-kuberouter.yaml \
         | sed 's|imagePullPolicy: Always|imagePullPolicy: Never|g'
     )
+    # The Kind cluster is always created dual-stack (see cmd_create_cluster), so we enable IPv6 in
+    # kube-router to match. Without this the netpol controller runs IPv4-only and silently ignores
+    # IPv6 ipBlock peers, which breaks the dual-stack / IPv6 specs.
+    MANIFEST=$(echo "${MANIFEST}" \
+        | sed 's|"--run-router=true"|"--run-router=true"\n        - "--enable-ipv6=true"|')
+    # The manifest inherits the 1s default probe timeout, which got kube-router liveness-killed
+    # mid-suite on a loaded machine at least once, so we relax it for e2e only
+    MANIFEST=$(echo "${MANIFEST}" \
+        | sed 's|periodSeconds: 3|periodSeconds: 3\n          timeoutSeconds: 5|')
     if [[ "${BACKEND}" == "nftables" ]]; then
         MANIFEST=$(echo "${MANIFEST}" \
             | sed 's|"--bgp-graceful-restart=true"|"--bgp-graceful-restart=true"\n        - "--use-nftables-for-netpol=true"|')
@@ -128,8 +142,15 @@ cmd_dump_initial() {
 }
 
 cmd_run_tests() {
-    log "Running NetworkPolicy e2e tests"
-    E2E=1 go test -v ./test/e2e/netpol/... -timeout 600s
+    log "Running NetworkPolicy e2e tests (E2E_LONG='${E2E_LONG}', BACKEND='${BACKEND}')"
+    # The slow lifecycle specs (restart, GC) can each take minutes, so give the
+    # suite a longer timeout when E2E_LONG is set.
+    local timeout="600s"
+    if [[ -n "${E2E_LONG}" ]]; then
+        timeout="1800s"
+    fi
+    E2E=1 E2E_LONG="${E2E_LONG}" BACKEND="${BACKEND}" \
+        go test -v ./test/e2e/netpol/... -timeout "${timeout}"
 }
 
 cmd_dump_debug() {
