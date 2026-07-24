@@ -307,7 +307,7 @@ func (npc *NetworkPolicyControllerNftables) ensureDefaultNetworkPolicyChain() {
 			Rule: knftables.Concat(
 				"counter", "meta mark", "set mark", "or", "0x10000",
 			),
-			Comment: new("mark traffic matching a network policy"),
+			Comment: new("mark netpol match"),
 		})
 		err := nft.Run(ctx, tx)
 		if err != nil {
@@ -341,7 +341,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 			Rule: knftables.Concat(
 				"ct state invalid", "counter", "drop",
 			),
-			Comment: new("drop invalid state for pod"),
+			Comment: new("drop invalid state"),
 		})
 		// ensure stateful firewall that permits RELATED,ESTABLISHED traffic from/to the pod
 		tx.Add(&knftables.Rule{
@@ -349,7 +349,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 			Rule: knftables.Concat(
 				"ct state established,related", "counter", "accept",
 			),
-			Comment: new("rule for stateful firewall for pod"),
+			Comment: new("accept established/related"),
 		})
 
 		icmpRules := utils.CommonICMPRules(family)
@@ -523,7 +523,7 @@ func (npc *NetworkPolicyControllerNftables) nftAddOrReplaceIPSet(
 	set := &knftables.Set{
 		Name:    setName,
 		Type:    setType,
-		Comment: new("set for network policy"),
+		Comment: new("netpol set"),
 	}
 	tx.Add(set)
 	tx.Flush(&knftables.Set{Name: setName})
@@ -555,7 +555,7 @@ func (npc *NetworkPolicyControllerNftables) nftAddOrReplaceIPBlockSet(
 		Name:    setName,
 		Type:    setType,
 		Flags:   []knftables.SetFlag{knftables.IntervalFlag},
-		Comment: new("set for network policy ip block"),
+		Comment: new("netpol ipblock set"),
 	})
 	tx.Flush(&knftables.Set{Name: setName})
 
@@ -583,7 +583,7 @@ func (npc *NetworkPolicyControllerNftables) nftAddOrReplaceIPBlockSet(
 		Name:    exceptSetName,
 		Type:    setType,
 		Flags:   []knftables.SetFlag{knftables.IntervalFlag},
-		Comment: new("set for network policy ip block exceptions"),
+		Comment: new("netpol ipblock except set"),
 	})
 	tx.Flush(&knftables.Set{Name: exceptSetName})
 	for _, cidr := range exceptCIDRs {
@@ -657,11 +657,9 @@ func (npc *NetworkPolicyControllerNftables) appendRuleToPolicyChainNft(
 // ingress / egress rule processors
 // ---------------------------------------------------------------------------
 
-// nftAddPodMatchRules appends nftables rules for a pod-selector match block (the
-// `srcPods`/`dstPods` sub-section that is structurally identical in both ingress and egress
-// processing). podSetName is the set of matched pods; counterSetName is the always-present
-// opposite set (targetDest for ingress, targetSource for egress). When podIsSource is true
-// the pod set acts as traffic source (ingress); when false it acts as destination (egress).
+// nftAddPodMatchRules appends the pod-selector match rules shared by ingress and egress processing.
+// podSetName is the matched pods, counterSetName the opposite set; podIsSource picks which is the
+// source (true for ingress, false for egress) and drives the rule comment's direction.
 func (npc *NetworkPolicyControllerNftables) nftAddPodMatchRules(
 	tx *knftables.Transaction, policyChainName string, policy networkPolicyInfo,
 	activePolicyIPSets map[string]bool, ruleIdx int, ipFamily v1core.IPFamily,
@@ -675,9 +673,13 @@ func (npc *NetworkPolicyControllerNftables) nftAddPodMatchRules(
 		srcSet, dstSet = counterSetName, podSetName
 	}
 
+	kind := cmtIngressPods
+	if !podIsSource {
+		kind = cmtEgressPods
+	}
+
 	for _, portProtocol := range ports {
-		comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-			policy.name + " namespace " + policy.namespace
+		comment := polRuleComment(policy, kind)
 		npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 			srcSet, dstSet,
 			portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
@@ -687,16 +689,14 @@ func (npc *NetworkPolicyControllerNftables) nftAddPodMatchRules(
 		namedPortSetName := namedPortSetNameFn(policy.namespace, policy.name, ruleIdx, epIdx, ipFamily)
 		activePolicyIPSets[namedPortSetName] = true
 		npc.nftAddOrReplaceIPSet(tx, namedPortSetName, ep.ips[ipFamily], ipFamily)
-		comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-			policy.name + " namespace " + policy.namespace
+		comment := polRuleComment(policy, kind+cmtNamedPort)
 		npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 			srcSet, namedPortSetName,
 			ep.protocol, ep.port, ep.endport, ipFamily)
 	}
 
 	if len(ports) == 0 && len(namedPorts) == 0 {
-		comment := "ACCEPT traffic from source pods to dest pods selected by policy name " +
-			policy.name + " namespace " + policy.namespace
+		comment := polRuleComment(policy, kind)
 		npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 			srcSet, dstSet, "", "", "", ipFamily)
 	}
@@ -728,8 +728,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 
 		if ingressRule.matchAllSource && !ingressRule.matchAllPorts {
 			for _, portProtocol := range ingressRule.ports {
-				comment := "ACCEPT traffic from all sources to dest pods selected by policy name: " +
-					policy.name + " namespace " + policy.namespace
+				comment := polRuleComment(policy, cmtIngressAny)
 				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 					"", targetDestPodSetName,
 					portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
@@ -740,8 +739,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 				activePolicyIPSets[namedPortSetName] = true
 				npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
 					endPoints.ips[ipFamily], ipFamily)
-				comment := "ACCEPT traffic from all sources to dest pods selected by policy name: " +
-					policy.name + " namespace " + policy.namespace
+				comment := polRuleComment(policy, cmtIngressAny+cmtNamedPort)
 				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 					"", namedPortSetName,
 					endPoints.protocol, endPoints.port, endPoints.endport, ipFamily)
@@ -749,8 +747,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 		}
 
 		if ingressRule.matchAllSource && ingressRule.matchAllPorts {
-			comment := "ACCEPT traffic from all sources to dest pods selected by policy name: " +
-				policy.name + " namespace " + policy.namespace
+			comment := polRuleComment(policy, cmtIngressAny)
 			npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 				"", targetDestPodSetName, "", "", "", ipFamily)
 		}
@@ -779,20 +776,19 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 				tx.Add(&knftables.Rule{
 					Chain:   subChainName,
 					Rule:    knftables.Concat(addrKeyword, "saddr", "@"+srcIPBlockExceptSetName, "counter return"),
-					Comment: new("skip excepted source CIDRs for policy " + policy.name),
+					Comment: new(idComment(policy.namespace, policy.name, cmtExceptSrc)),
 				})
 				tx.Add(&knftables.Rule{
 					Chain:   policyChainName,
 					Rule:    knftables.Concat("counter jump", subChainName),
-					Comment: new("process ipBlock rule for policy " + policy.name),
+					Comment: new(idComment(policy.namespace, policy.name, cmtIPBlock)),
 				})
 				ipBlockChain = subChainName
 			}
 
 			if !ingressRule.matchAllPorts {
 				for _, portProtocol := range ingressRule.ports {
-					comment := "ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
-						policy.name + " namespace " + policy.namespace
+					comment := polRuleComment(policy, cmtIngressCIDR)
 					npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 						srcIPBlockSetName, targetDestPodSetName,
 						portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
@@ -803,16 +799,14 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 					activePolicyIPSets[namedPortSetName] = true
 					npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
 						endPoints.ips[ipFamily], ipFamily)
-					comment := "ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
-						policy.name + " namespace " + policy.namespace
+					comment := polRuleComment(policy, cmtIngressCIDR+cmtNamedPort)
 					npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 						srcIPBlockSetName, namedPortSetName,
 						endPoints.protocol, endPoints.port, endPoints.endport, ipFamily)
 				}
 			}
 			if ingressRule.matchAllPorts {
-				comment := "ACCEPT traffic from specified ipBlocks to dest pods selected by policy name: " +
-					policy.name + " namespace " + policy.namespace
+				comment := polRuleComment(policy, cmtIngressCIDR)
 				npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 					srcIPBlockSetName, targetDestPodSetName, "", "", "", ipFamily)
 			}
@@ -846,15 +840,13 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 
 		if egressRule.matchAllDestinations && !egressRule.matchAllPorts {
 			for _, portProtocol := range egressRule.ports {
-				comment := "ACCEPT traffic from source pods to all destinations selected by policy name: " +
-					policy.name + " namespace " + policy.namespace
+				comment := polRuleComment(policy, cmtEgressAny)
 				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 					targetSourcePodSetName, "",
 					portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
 			}
 			for _, portProtocol := range egressRule.namedPorts {
-				comment := "ACCEPT traffic from source pods to all destinations selected by policy name: " +
-					policy.name + " namespace " + policy.namespace
+				comment := polRuleComment(policy, cmtEgressAny+cmtNamedPort)
 				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 					targetSourcePodSetName, "",
 					portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
@@ -862,8 +854,7 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 		}
 
 		if egressRule.matchAllDestinations && egressRule.matchAllPorts {
-			comment := "ACCEPT traffic from source pods to all destinations selected by policy name: " +
-				policy.name + " namespace " + policy.namespace
+			comment := polRuleComment(policy, cmtEgressAny)
 			npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
 				targetSourcePodSetName, "", "", "", "", ipFamily)
 		}
@@ -893,28 +884,26 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 				tx.Add(&knftables.Rule{
 					Chain:   subChainName,
 					Rule:    knftables.Concat(addrKeyword, "daddr", "@"+dstIPBlockExceptSetName, "counter return"),
-					Comment: new("skip excepted destination CIDRs for policy " + policy.name),
+					Comment: new(idComment(policy.namespace, policy.name, cmtExceptDst)),
 				})
 				tx.Add(&knftables.Rule{
 					Chain:   policyChainName,
 					Rule:    knftables.Concat("counter jump", subChainName),
-					Comment: new("process ipBlock rule for policy " + policy.name),
+					Comment: new(idComment(policy.namespace, policy.name, cmtIPBlock)),
 				})
 				ipBlockChain = subChainName
 			}
 
 			if !egressRule.matchAllPorts {
 				for _, portProtocol := range egressRule.ports {
-					comment := "ACCEPT traffic from source pods to specified ipBlocks selected by policy name: " +
-						policy.name + " namespace " + policy.namespace
+					comment := polRuleComment(policy, cmtEgressCIDR)
 					npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 						targetSourcePodSetName, dstIPBlockSetName,
 						portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
 				}
 			}
 			if egressRule.matchAllPorts {
-				comment := "ACCEPT traffic from source pods to specified ipBlocks selected by policy name: " +
-					policy.name + " namespace " + policy.namespace
+				comment := polRuleComment(policy, cmtEgressCIDR)
 				npc.appendRuleToPolicyChainNft(tx, ipBlockChain, comment,
 					targetSourcePodSetName, dstIPBlockSetName, "", "", "", ipFamily)
 			}
@@ -977,7 +966,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 			// Declare (or reset) the policy chain.
 			tx.Add(&knftables.Chain{
 				Name:    policyChainName,
-				Comment: new("chain for network policy " + policy.namespace + "/" + policy.name),
+				Comment: new(clampComment("netpol " + policy.namespace + "/" + policy.name)),
 			})
 			tx.Flush(&knftables.Chain{Name: policyChainName})
 
@@ -1155,7 +1144,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 			// Create (or reset) the per-pod firewall chain.
 			tx.Add(&knftables.Chain{
 				Name:    podFwChainName,
-				Comment: new("pod firewall chain for " + pod.namespace + "/" + pod.name),
+				Comment: new(clampComment("podfw " + pod.namespace + "/" + pod.name)),
 			})
 			tx.Flush(&knftables.Chain{Name: podFwChainName})
 
@@ -1163,7 +1152,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    knftables.Concat("counter jump", kubeCommonNetpolChain),
-				Comment: new("common bi-directional traffic policy rules"),
+				Comment: new("common netpol rules"),
 			})
 
 			// 2. Allow traffic whose source is the local node itself.
@@ -1173,7 +1162,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 					"fib saddr type local", addrKeyword, "daddr", ip,
 					"counter accept",
 				),
-				Comment: new("permit traffic to pods when source is the pod's local node"),
+				Comment: new("from local node"),
 			})
 
 			// 3. Jump to every applicable network-policy chain; track whether ingress/egress is covered.
@@ -1184,7 +1173,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 					continue
 				}
 				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
-				comment := "run through nw policy " + policy.name
+				comment := idComment(policy.namespace, policy.name, cmtJumpPolicy)
 				switch policy.policyType {
 				case kubeBothPolicyType:
 					hasIngressPolicy = true
@@ -1217,14 +1206,14 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 				tx.Add(&knftables.Rule{
 					Chain:   podFwChainName,
 					Rule:    knftables.Concat(addrKeyword, "saddr", ip, "counter jump", kubeDefaultNetpolChain),
-					Comment: new("run through default egress network policy chain"),
+					Comment: new("default egress"),
 				})
 			}
 			if !hasIngressPolicy {
 				tx.Add(&knftables.Rule{
 					Chain:   podFwChainName,
 					Rule:    knftables.Concat(addrKeyword, "daddr", ip, "counter jump", kubeDefaultNetpolChain),
-					Comment: new("run through default ingress network policy chain"),
+					Comment: new("default ingress"),
 				})
 			}
 
@@ -1232,26 +1221,26 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    "meta mark and 0x10000 == 0x0 limit rate 10/minute burst 10 packets log group 100",
-				Comment: new("log dropped traffic POD name:" + pod.name),
+				Comment: new(idComment(pod.namespace, pod.name, cmtLogDrop)),
 			})
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    "meta mark and 0x10000 == 0x0 counter reject",
-				Comment: new("REJECT traffic destined for POD name:" + pod.name),
+				Comment: new(idComment(pod.namespace, pod.name, cmtReject)),
 			})
 
 			// 6. Clear bit 0x10000 so subsequent chains start with a clean slate.
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    "meta mark set meta mark and 0xfffeffff",
-				Comment: new("reset mark to let traffic pass through rest of the chains"),
+				Comment: new("clear netpol mark"),
 			})
 
 			// 7. Set bit 0x20000 to signal to the top-level ACCEPT rule that policy was satisfied.
 			tx.Add(&knftables.Rule{
 				Chain:   podFwChainName,
 				Rule:    "meta mark set meta mark or 0x20000",
-				Comment: new("set mark to ACCEPT traffic that comply to network policies"),
+				Comment: new("set netpol-ok mark"),
 			})
 
 			// Record the jump entries; syncTopLevelChainsAtomic writes them into the top-level
@@ -1317,7 +1306,7 @@ func (npc *NetworkPolicyControllerNftables) syncTopLevelChainsAtomic(
 			tx.Add(&knftables.Rule{
 				Chain:   kubeInputChainName,
 				Rule:    knftables.Concat(addrKeyword, "daddr", serviceRange.String(), "counter", "return"),
-				Comment: new("allow traffic to primary/secondary cluster IP range"),
+				Comment: new("allow cluster IP range"),
 			})
 		}
 		for _, protocol := range []string{"tcp", "udp", "sctp"} {
@@ -1330,7 +1319,7 @@ func (npc *NetworkPolicyControllerNftables) syncTopLevelChainsAtomic(
 			tx.Add(&knftables.Rule{
 				Chain:   kubeInputChainName,
 				Rule:    knftables.Concat(ruleParts...),
-				Comment: new("allow LOCAL " + protocol + " traffic to node ports"),
+				Comment: new("allow " + protocol + " nodeport"),
 			})
 		}
 		for _, externalIPRange := range npc.ipRanges.ExternalIPRanges(family) {
@@ -1344,16 +1333,14 @@ func (npc *NetworkPolicyControllerNftables) syncTopLevelChainsAtomic(
 			tx.Add(&knftables.Rule{
 				Chain:   kubeInputChainName,
 				Rule:    knftables.Concat(addrKeyword, "daddr", lbIPRange.String(), "counter", "return"),
-				Comment: new("allow traffic to LoadBalancer IP range"),
+				Comment: new("allow LB IP range"),
 			})
 		}
 
 		// 3. Per-pod jump rules: route pod traffic through the pod-fw chains.
 		for _, j := range podJumps[family] {
-			podFwComment := "jump traffic to POD name:" + j.podName +
-				" ns: " + j.podNS + " to chain " + j.podFwChain
-			outboundComment := "jump traffic from POD name:" + j.podName +
-				" ns: " + j.podNS + " to chain " + j.podFwChain
+			podFwComment := idComment(j.podNS, j.podName, cmtJumpIn)
+			outboundComment := idComment(j.podNS, j.podName, cmtJumpOut)
 			tx.Add(&knftables.Rule{
 				Chain:   kubeForwardChainName,
 				Rule:    knftables.Concat(addrKeyword, "daddr", j.podIP, "counter jump", j.podFwChain),
@@ -1378,7 +1365,7 @@ func (npc *NetworkPolicyControllerNftables) syncTopLevelChainsAtomic(
 			tx.Add(&knftables.Rule{
 				Chain:   chain,
 				Rule:    knftables.Concat("counter jump", kubeTailNetpolChain),
-				Comment: new("explicitly handle traffic for network policies ACCEPT/REJECT decision"),
+				Comment: new("netpol accept/reject"),
 			})
 		}
 
@@ -1387,7 +1374,7 @@ func (npc *NetworkPolicyControllerNftables) syncTopLevelChainsAtomic(
 			tx.Add(&knftables.Rule{
 				Chain:   chain,
 				Rule:    nftMarkAcceptRule,
-				Comment: new("explicitly ACCEPT traffic that comply to network policies"),
+				Comment: new("accept netpol-ok"),
 			})
 		}
 
@@ -1420,7 +1407,7 @@ func (npc *NetworkPolicyControllerNftables) ensureDefaultTailChain() {
 		tx.Add(&knftables.Set{
 			Name:    kubeLocalPodsIPSetName,
 			Type:    setType,
-			Comment: new("local pod IPs whose pod firewall chain has been programmed"),
+			Comment: new("programmed local pod IPs"),
 		})
 
 		npc.populateDefaultTailChain(family, tx)
@@ -1451,8 +1438,7 @@ func (npc *NetworkPolicyControllerNftables) populateDefaultTailChain(
 	}
 
 	if npc.defaultDeny {
-		gatedComment := "REJECT traffic to/from local pods without a programmed firewall chain " +
-			"(--netpol-default-deny is enabled)"
+		gatedComment := "reject unprogrammed local pod (default-deny)"
 		for _, cidr := range npc.podCIDRs[family] {
 			tx.Add(&knftables.Rule{
 				Chain: kubeTailNetpolChain,
@@ -1478,14 +1464,14 @@ func (npc *NetworkPolicyControllerNftables) populateDefaultTailChain(
 	tx.Add(&knftables.Rule{
 		Chain:   kubeTailNetpolChain,
 		Rule:    nftMarkAcceptRule,
-		Comment: new("explicitly ACCEPT traffic that comply to network policies"),
+		Comment: new("accept netpol-ok"),
 	})
 
 	if !npc.defaultDeny {
 		return
 	}
 
-	rejectComment := "REJECT traffic before NetPol is applied (--netpol-default-deny is enabled)"
+	rejectComment := "reject pre-netpol (default-deny)"
 	for _, cidr := range npc.podCIDRs[family] {
 		tx.Add(&knftables.Rule{
 			Chain:   kubeTailNetpolChain,
