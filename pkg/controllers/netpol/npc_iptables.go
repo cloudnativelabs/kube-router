@@ -270,6 +270,9 @@ func (npc *NetworkPolicyControllerIptables) allowTrafficToClusterIPRange(
 // -A INPUT   -m comment --comment "kube-router netpol" -j KUBE-ROUTER-INPUT
 // -A FORWARD -m comment --comment "kube-router netpol" -j KUBE-ROUTER-FORWARD
 // -A OUTPUT  -m comment --comment "kube-router netpol" -j KUBE-ROUTER-OUTPUT
+//
+// The comments here are frozen: they are hashed into the rule UUID and matched against live state,
+// so rewording them churns every positioned rule on upgrade (see the note on ensureExplicitAccept).
 func (npc *NetworkPolicyControllerIptables) ensureTopLevelChains() error {
 	const serviceVIPPosition = 1
 	rulePosition := map[v1core.IPFamily]int{v1core.IPv4Protocol: 1, v1core.IPv6Protocol: 1}
@@ -453,6 +456,10 @@ func (npc *NetworkPolicyControllerIptables) ensureTopLevelChains() error {
 	return nil
 }
 
+// IMPORTANT: this comment (and the ones flagged "frozen" in ensureTailChainPosition,
+// ensureCommonPolicyChain, ensureDefaultNetworkPolicyChain, ensureTopLevelChains) feeds an
+// AppendUnique/Exists check against live iptables, so it is part of the rule's identity: rewording
+// it orphans the old rule on upgrade and appends a duplicate that nothing cleans up.
 func (npc *NetworkPolicyControllerIptables) ensureExplicitAccept() {
 	// for the traffic to/from the local pod's let network policy controller be
 	// authoritative entity to ACCEPT the traffic if it complies to network policies
@@ -618,7 +625,7 @@ func (npc *NetworkPolicyControllerIptables) populateDefaultTailChain(
 		npc.appendIPSetGatedRejects(family, iptablesCmdHandler)
 	}
 
-	acceptComment := "rule to explicitly ACCEPT traffic that comply to network policies"
+	acceptComment := "accept netpol-ok"
 	acceptArgs := []string{"-m", "comment", "--comment", acceptComment,
 		"-m", "mark", "--mark", "0x20000/0x20000", "-j", "ACCEPT"}
 	if err := iptablesCmdHandler.Append("filter", kubeTailNetpolChain, acceptArgs...); err != nil {
@@ -638,8 +645,7 @@ func (npc *NetworkPolicyControllerIptables) appendIPSetGatedRejects(
 	family v1core.IPFamily, iptablesCmdHandler utils.IPTablesHandler,
 ) {
 	ipSetName := npc.ipSetHandlers[family].Name(kubeLocalPodsIPSetName)
-	comment := "REJECT traffic to/from local pods without a programmed firewall chain " +
-		"(--netpol-default-deny is enabled)"
+	comment := "reject unprogrammed local pod (default-deny)"
 	for _, cidr := range npc.podCIDRs[family] {
 		srcArgs := []string{"-s", cidr, "-m", "comment", "--comment", comment,
 			"-m", "set", "!", "--match-set", ipSetName, "src", "-j", "REJECT"}
@@ -661,7 +667,7 @@ func (npc *NetworkPolicyControllerIptables) appendIPSetGatedRejects(
 func (npc *NetworkPolicyControllerIptables) appendCIDRRejects(
 	family v1core.IPFamily, iptablesCmdHandler utils.IPTablesHandler,
 ) {
-	rejectComment := "REJECT traffic before NetPol is applied (--netpol-default-deny is enabled)"
+	rejectComment := "reject pre-netpol (default-deny)"
 	for _, cidr := range npc.podCIDRs[family] {
 		srcArgs := []string{"-s", cidr, "-m", "comment", "--comment", rejectComment, "-j", "REJECT"}
 		if err := iptablesCmdHandler.Append("filter", kubeTailNetpolChain, srcArgs...); err != nil {
@@ -722,6 +728,7 @@ func (npc *NetworkPolicyControllerIptables) populateProtectedPodsIPSet(activePod
 func (npc *NetworkPolicyControllerIptables) ensureTailChainPosition() {
 	for _, filterTableRules := range npc.filterTableRules {
 		for _, chain := range defaultChains {
+			// Frozen comment: rule identity for AppendUnique, see the note on ensureExplicitAccept
 			comment := "\"rule to explicitly handle traffic for network policies ACCEPT/REJECT decision\""
 			args := []string{"-m", "comment", "--comment", comment, "-j", kubeTailNetpolChain}
 			utils.AppendUnique(filterTableRules, chain, args)
@@ -758,6 +765,7 @@ func (npc *NetworkPolicyControllerIptables) ensureCommonPolicyChain() {
 		// NAT should be performed. So the proper way to prevent the leakage is to drop INVALID packets.
 		// In the future, if we ever allow services or nodes to disable conntrack checking, we may need to make this
 		// conditional so that non-tracked traffic doesn't get dropped as invalid.
+		// Frozen comment: rule identity for AppendUnique, see the note on ensureExplicitAccept
 		comment := "\"rule to drop invalid state for pod\""
 		args := []string{"-m", "comment", "--comment", comment, "-m", "conntrack", "--ctstate", "INVALID", "-j", "DROP"}
 		err = iptablesCmdHandler.AppendUnique("filter", kubeCommonNetpolChain, args...)
@@ -808,6 +816,7 @@ func (npc *NetworkPolicyControllerIptables) ensureDefaultNetworkPolicyChain() {
 		// Start off by marking traffic with an invalid mark so that we can allow list only traffic accepted by a
 		// matching policy. Anything that still has 0x10000
 		markArgs := make([]string, 0)
+		// Frozen comment: rule identity for AppendUnique, see the note on ensureExplicitAccept
 		markComment := "rule to mark traffic matching a network policy"
 		markArgs = append(markArgs, "-j", "MARK", "-m", "comment", "--comment", markComment,
 			"--set-xmark", "0x10000/0x10000")

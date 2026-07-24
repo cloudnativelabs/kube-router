@@ -463,8 +463,8 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-C23KD7UE4TAT3Y5M -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-C23KD7UE4TAT3Y5M -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress namespace nsA\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-C23KD7UE4TAT3Y5M -m comment --comment \"nsA/simple-egress egress any\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-C23KD7UE4TAT3Y5M -m comment --comment \"nsA/simple-egress egress any\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Simple Ingress/Egress Destination Port",
@@ -497,10 +497,10 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-ingress-egress namespace nsA\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
-				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\" --dport 37000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: simple-ingress-egress namespace nsA\" --dport 37000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"nsA/simple-ingress-egress egress any\" --dport 30000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"nsA/simple-ingress-egress egress any\" --dport 30000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
+				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"nsA/simple-ingress-egress ingress any\" --dport 37000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-IDIX352DRLNY3D23 -m comment --comment \"nsA/simple-ingress-egress ingress any\" --dport 37000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Simple Egress Destination Port Range",
@@ -529,10 +529,10 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 30000:31000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
-				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: simple-egress-pr namespace nsA\" --dport 34000:35000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"nsA/simple-egress-pr egress any\" --dport 30000:31000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"nsA/simple-egress-pr egress any\" --dport 30000:31000 -m mark --mark 0x10000/0x10000 -j RETURN \n" +
+				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"nsA/simple-egress-pr egress any\" --dport 34000:35000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-2UTXQIFBI5TAPUCL -m comment --comment \"nsA/simple-egress-pr egress any\" --dport 34000:35000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Simple SCTP Egress Destination Port",
@@ -557,8 +557,8 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-HHGHJNRMJN6UUDNA -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: sctp-egress namespace nsA\" -p SCTP --dport 36000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-HHGHJNRMJN6UUDNA -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: sctp-egress namespace nsA\" -p SCTP --dport 36000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-HHGHJNRMJN6UUDNA -m comment --comment \"nsA/sctp-egress egress any\" -p SCTP --dport 36000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-HHGHJNRMJN6UUDNA -m comment --comment \"nsA/sctp-egress egress any\" -p SCTP --dport 36000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Simple SCTP Ingress Destination Port",
@@ -583,8 +583,8 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-BHQGYKZ6X5RBPUOB -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: sctp-ingress namespace nsA\" -p SCTP --dport 36000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-BHQGYKZ6X5RBPUOB -m comment --comment \"rule to ACCEPT traffic from all sources to dest pods selected by policy name: sctp-ingress namespace nsA\" -p SCTP --dport 36000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-BHQGYKZ6X5RBPUOB -m comment --comment \"nsA/sctp-ingress ingress any\" -p SCTP --dport 36000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-BHQGYKZ6X5RBPUOB -m comment --comment \"nsA/sctp-ingress ingress any\" -p SCTP --dport 36000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 		{
 			name: "Port > EndPort (invalid condition, should drop endport)",
@@ -609,8 +609,8 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "-A KUBE-NWPLCY-N5DQE4SCQ56JEMH7 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\" --dport 34000 -j MARK --set-xmark 0x10000/0x10000 \n" +
-				"-A KUBE-NWPLCY-N5DQE4SCQ56JEMH7 -m comment --comment \"rule to ACCEPT traffic from source pods to all destinations selected by policy name: invalid-endport namespace nsA\" --dport 34000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
+			expectedRule: "-A KUBE-NWPLCY-N5DQE4SCQ56JEMH7 -m comment --comment \"nsA/invalid-endport egress any\" --dport 34000 -j MARK --set-xmark 0x10000/0x10000 \n" +
+				"-A KUBE-NWPLCY-N5DQE4SCQ56JEMH7 -m comment --comment \"nsA/invalid-endport egress any\" --dport 34000 -m mark --mark 0x10000/0x10000 -j RETURN \n",
 		},
 	}
 

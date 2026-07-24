@@ -112,12 +112,13 @@ func (npc *NetworkPolicyControllerIptables) createPolicyIndexedIPSet(
 }
 
 // createPodWithPortPolicyRule handles the case where port details are provided by the ingress/egress rule and creates
-// an iptables rule that matches on both the source/dest IPs and the port
+// an iptables rule that matches on both the source/dest IPs and the port. kind is the comment tag for the rule's
+// direction (cmtIngressPods or cmtEgressPods).
 func (npc *NetworkPolicyControllerIptables) createPodWithPortPolicyRule(ports []protocolAndPort,
-	policy networkPolicyInfo, policyName string, srcSetName string, dstSetName string, ipFamily api.IPFamily) error {
+	policy networkPolicyInfo, policyName string, srcSetName string, dstSetName string, ipFamily api.IPFamily,
+	kind string) error {
 	for _, portProtocol := range ports {
-		comment := "rule to ACCEPT traffic from source pods to dest pods selected by policy name " +
-			policy.name + " namespace " + policy.namespace
+		comment := polRuleComment(policy, kind)
 		if err := npc.appendRuleToPolicyChain(policyName, comment, srcSetName, dstSetName, portProtocol.protocol,
 			portProtocol.port, portProtocol.endport, ipFamily); err != nil {
 			return err
