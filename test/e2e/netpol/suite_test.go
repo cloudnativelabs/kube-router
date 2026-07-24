@@ -19,6 +19,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,6 +33,9 @@ import (
 var (
 	k8sClient  *kubernetes.Clientset
 	restConfig *rest.Config
+	// suiteStartTime scopes the log health check so pre-existing noise on a
+	// reused cluster does not false-positive assertNoSyncErrors.
+	suiteStartTime time.Time
 )
 
 func TestNetpol(t *testing.T) {
@@ -43,6 +47,8 @@ func TestNetpol(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	suiteStartTime = time.Now()
+
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig == "" {
 		home, err := os.UserHomeDir()
@@ -72,4 +78,12 @@ var _ = ReportAfterEach(func(report SpecReport) {
 	ctx := context.Background()
 	dumpKubeRouterLogs(ctx)
 	dumpNFTablesState(ctx)
+})
+
+// AfterSuite scans every kube-router pod's logs for NetworkPolicy sync failures
+// that occurred during the run. This is ungated, so it adds regression value to
+// every run (including PRs) by catching sync aborts and nftables transaction
+// failures that steady-state connectivity specs cannot observe directly.
+var _ = AfterSuite(func() {
+	assertNoSyncErrors(context.Background(), suiteStartTime)
 })

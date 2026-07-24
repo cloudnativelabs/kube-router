@@ -6,11 +6,14 @@ on:
     - master
     - v[1-9].*
     - prep-v[1-9].*
+    tags:
+    - v*
   pull_request:
     branches:
     - master
     - v[1-9].*
     - prep-v[1-9].*
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -113,8 +116,13 @@ jobs:
     - name: Dump initial cluster state
       run: hack/e2e-netpol.sh dump-initial
 
+    # Run the slow lifecycle specs (controller restart, chain GC) only on push,
+    # tag, and manual dispatch - never on pull_request - so PRs stay fast while
+    # merges to master, v-branches, and tags get the full regression coverage.
     - name: Run NetworkPolicy e2e tests
       run: hack/e2e-netpol.sh run-tests
+      env:
+        E2E_LONG: ${{ github.event_name != 'pull_request' && '1' || '' }}
 
     - name: Collect debug info on failure
       if: failure()

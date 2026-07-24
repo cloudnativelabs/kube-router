@@ -50,6 +50,7 @@ UID?=$(shell id -u)
 BACKEND?=iptables
 DEFAULT_DENY?=false
 SKIP_CLEANUP?=0
+E2E_LONG?=
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
@@ -344,8 +345,8 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires docker + kind). Pass BACKEND=nftables, DEFAULT_DENY=true, SKIP_CLEANUP=1 as needed.
-	BACKEND=$(BACKEND) DEFAULT_DENY=$(DEFAULT_DENY) SKIP_CLEANUP=$(SKIP_CLEANUP) \
+e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires docker + kind). Pass BACKEND=nftables, DEFAULT_DENY=true, SKIP_CLEANUP=1, E2E_LONG=1 as needed.
+	BACKEND=$(BACKEND) DEFAULT_DENY=$(DEFAULT_DENY) SKIP_CLEANUP=$(SKIP_CLEANUP) E2E_LONG=$(E2E_LONG) \
 		hack/e2e-netpol.sh all
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan

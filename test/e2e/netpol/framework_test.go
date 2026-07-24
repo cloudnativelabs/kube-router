@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,12 +17,18 @@ import (
 	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
 const (
 	testImage = "registry.k8s.io/e2e-test-images/agnhost:2.43"
+
+	// kubeSystemNS is where the kube-router DaemonSet runs.
+	kubeSystemNS = "kube-system"
+	// kubeRouterLabelSelector selects the kube-router pods.
+	kubeRouterLabelSelector = "k8s-app=kube-router"
 
 	serverPort = 8080
 	altPort    = 8081
@@ -55,6 +62,35 @@ func createNamespace(labels map[string]string) *corev1.Namespace {
 		_ = k8sClient.CoreV1().Namespaces().Delete(context.Background(), created.Name, metav1.DeleteOptions{})
 	})
 	return created
+}
+
+// createNamespaceNamed creates a namespace with an explicit name (rather than
+// GenerateName) so specs can exercise maximum-length identities. Cleanup is
+// registered via DeferCleanup.
+func createNamespaceNamed(name string, labels map[string]string) *corev1.Namespace {
+	GinkgoHelper()
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels},
+	}
+	created, err := k8sClient.CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred(), "create namespace %s", name)
+	DeferCleanup(func() {
+		_ = k8sClient.CoreV1().Namespaces().Delete(context.Background(), created.Name, metav1.DeleteOptions{})
+	})
+	return created
+}
+
+// paddedName builds a DNS-1123 name of exactly length characters: prefix plus a
+// random token, padded with 'a' (or truncated) as needed. We use it to drive
+// maximum-length namespace (63) and policy (253) identities into the nftables
+// comments that derive from them.
+func paddedName(prefix string, length int) string {
+	GinkgoHelper()
+	name := prefix + rand.String(8)
+	if len(name) > length {
+		return name[:length]
+	}
+	return name + strings.Repeat("a", length-len(name))
 }
 
 // patchNamespaceLabels replaces all labels on ns with newLabels and returns
@@ -379,4 +415,95 @@ func dumpNFTablesState(ctx context.Context) {
 		}
 		GinkgoWriter.Print(stdout)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle-test gating & environment helpers
+// ---------------------------------------------------------------------------
+
+// e2eLong reports whether the slow lifecycle specs (controller restart, GC
+// churn) are enabled via the E2E_LONG environment variable. CI sets it only on
+// push events and manual dispatch so PRs skip them.
+func e2eLong() bool {
+	v := strings.ToLower(os.Getenv("E2E_LONG"))
+	return v != "" && v != "0" && v != "false"
+}
+
+// skipUnlessLong skips the current spec unless E2E_LONG opts in.
+func skipUnlessLong() {
+	GinkgoHelper()
+	if !e2eLong() {
+		Skip("slow lifecycle spec; set E2E_LONG=1 to enable")
+	}
+}
+
+// backend returns the configured NetworkPolicy backend, defaulting to iptables
+// when BACKEND is unset. Used to gate backend-specific specs such as the
+// nftables chain-GC test.
+func backend() string {
+	if b := os.Getenv("BACKEND"); b != "" {
+		return b
+	}
+	return "iptables"
+}
+
+// kubeRouterPods returns the current list of kube-router pods in kube-system.
+func kubeRouterPods() []corev1.Pod {
+	GinkgoHelper()
+	pods, err := k8sClient.CoreV1().Pods(kubeSystemNS).List(context.Background(),
+		metav1.ListOptions{LabelSelector: kubeRouterLabelSelector})
+	Expect(err).NotTo(HaveOccurred(), "list kube-router pods")
+	return pods.Items
+}
+
+// ---------------------------------------------------------------------------
+// Suite-level log health check
+// ---------------------------------------------------------------------------
+
+// syncErrorMarkers are substrings kube-router logs when a NetworkPolicy sync
+// fails to apply cleanly - a sync abort, a top-level chain rebuild failure, or
+// an nftables transaction failure. Any of them appearing after the suite
+// started means enforcement may have silently diverged from desired state.
+var syncErrorMarkers = []string{
+	"Aborting sync",
+	"failed to ensure top level chains",
+	"failed to atomically rebuild top-level chains",
+}
+
+// assertNoSyncErrors fails the suite if any kube-router pod logged one of the
+// syncErrorMarkers since the given time. Scoping to the suite start keeps
+// pre-existing noise on a reused cluster from false-positiving.
+func assertNoSyncErrors(ctx context.Context, since time.Time) {
+	GinkgoHelper()
+	pods, err := k8sClient.CoreV1().Pods(kubeSystemNS).List(ctx,
+		metav1.ListOptions{LabelSelector: kubeRouterLabelSelector})
+	Expect(err).NotTo(HaveOccurred(), "list kube-router pods for log health check")
+
+	sinceTime := metav1.NewTime(since)
+	var offenders []string
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		req := k8sClient.CoreV1().Pods(kubeSystemNS).GetLogs(pod.Name, &corev1.PodLogOptions{
+			SinceTime: &sinceTime,
+		})
+		rc, streamErr := req.Stream(ctx)
+		if streamErr != nil {
+			GinkgoWriter.Printf("[health] GetLogs(%s): %v\n", pod.Name, streamErr)
+			continue
+		}
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, rc)
+		rc.Close()
+		for line := range strings.SplitSeq(buf.String(), "\n") {
+			for _, marker := range syncErrorMarkers {
+				if strings.Contains(line, marker) {
+					offenders = append(offenders,
+						fmt.Sprintf("%s: %s", pod.Name, strings.TrimSpace(line)))
+				}
+			}
+		}
+	}
+	Expect(offenders).To(BeEmpty(),
+		"kube-router logged NetworkPolicy sync failures during the suite:\n%s",
+		strings.Join(offenders, "\n"))
 }
