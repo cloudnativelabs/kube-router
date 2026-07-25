@@ -894,7 +894,10 @@ var _ = Describe("NetworkPolicy", func() {
 		})
 
 		// Test 87
-		It("removes a completed pod's IP from nftables sets so stale IPs do not grant access", func() {
+		// Serial: the spec relies on the CNI re-assigning a just-freed IP to the
+		// next pod created; concurrent specs creating pods would steal it and
+		// force the skip path.
+		It("removes a completed pod's IP from nftables sets so stale IPs do not grant access", Serial, func() {
 			ns := createNamespace(nil)
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
 			allowedClient := launchClient(ns.Name, "allowed-client", map[string]string{"group": "allowed"})

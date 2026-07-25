@@ -51,6 +51,9 @@ BACKEND?=iptables
 DEFAULT_DENY?=false
 SKIP_CLEANUP?=0
 E2E_LONG?=
+E2E_PROCS?=4
+E2E_FOCUS?=
+E2E_SKIP?=
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
@@ -354,8 +357,9 @@ help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires docker + kind). Pass BACKEND=nftables, DEFAULT_DENY=true, SKIP_CLEANUP=1, E2E_LONG=1 as needed.
+e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires docker + kind). Pass BACKEND=nftables, DEFAULT_DENY=true, SKIP_CLEANUP=1, E2E_LONG=1, E2E_PROCS=N, E2E_FOCUS/E2E_SKIP=regex as needed.
 	BACKEND=$(BACKEND) DEFAULT_DENY=$(DEFAULT_DENY) SKIP_CLEANUP=$(SKIP_CLEANUP) E2E_LONG=$(E2E_LONG) \
+		E2E_PROCS=$(E2E_PROCS) E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) \
 		hack/e2e-netpol.sh all
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan

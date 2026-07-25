@@ -95,7 +95,9 @@ func restartKubeRouter(ctx context.Context) (map[types.UID]bool, int) {
 	return oldUIDs, desired
 }
 
-var _ = Describe("controller restart", Ordered, func() {
+// Serial: this spec restarts the kube-router DaemonSet, which would disrupt any
+// spec running concurrently under --procs.
+var _ = Describe("controller restart", Ordered, Serial, func() {
 	BeforeEach(func() {
 		skipUnlessLong()
 	})
