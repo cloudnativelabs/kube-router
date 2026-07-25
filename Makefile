@@ -121,9 +121,18 @@ else
 	go test -v -timeout 30s -tags privileged -run '^TestPrivileged' $$(find . -name '*_privileged_test.go' -exec dirname {} + | sort -u)
 endif
 
-test-integration: ## Runs integration tests that require the nft binary and kernel nftables support. Must be run as root (or via sudo).
+test-integration: ## Runs nftables integration tests in a privileged container. Set BUILD_IN_DOCKER=false to run bare (requires root and nft).
+ifeq "$(BUILD_IN_DOCKER)" "true"
+	$(DOCKER) run --privileged -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
+		-v $(GO_CACHE):/root/.cache/go-build \
+		-v $(GO_MOD_CACHE):/go/pkg/mod \
+		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
+		sh -c \
+		'apk add --no-cache nftables >/dev/null && CGO_ENABLED=0 go test -v -timeout 60s -tags integration -run "^TestIntegration" github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...'
+else
 	go test -v -timeout 60s -tags integration -run '^TestIntegration' \
 		github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...
+endif
 
 test-pretty: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
