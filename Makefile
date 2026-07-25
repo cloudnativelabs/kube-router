@@ -137,6 +137,8 @@ else
 		github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...
 endif
 
+test-all: test test-privileged test-integration ## Runs every host-local test level (unit, privileged, nftables integration). The e2e suite is separate; compose with: make test-all e2e-netpol
+
 test-pretty: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
 	$(DOCKER) run -v $(PWD):/go/src/github.com/cloudnativelabs/kube-router \
@@ -363,7 +365,7 @@ e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires doc
 		hack/e2e-netpol.sh all
 
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan
-.PHONY: test test-privileged test-integration test-pretty lint docker-login push-manifest push-manifest-release
+.PHONY: test test-privileged test-integration test-all test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
 .PHONY: spellcheck update-deps update-deps-dry prep-release kube-router gobgp cni-download e2e-netpol
 
