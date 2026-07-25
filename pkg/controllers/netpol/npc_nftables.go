@@ -57,6 +57,10 @@ type NetworkPolicyControllerNftables struct {
 
 	knftInterfaces map[v1core.IPFamily]knftables.Interface
 	ctx            context.Context
+
+	// Policy chains whose transaction failed last sync; syncPodFirewallChains fails their target
+	// pods closed rather than leaving them default-allow. Guarded by npc.mu.
+	failedPolicyChains map[string]bool
 }
 
 func NewKnftablesInterfaces(
@@ -628,7 +632,14 @@ func (npc *NetworkPolicyControllerNftables) appendRuleToPolicyChainNft(
 		effectiveProtocol = "tcp"
 	}
 	if effectiveProtocol != "" {
-		parts = append(parts, effectiveProtocol)
+		if dPort != "" {
+			// "<proto> dport <n>" is valid nft: the protocol keyword introduces the port match.
+			parts = append(parts, effectiveProtocol)
+		} else {
+			// A protocol-only match must be "meta l4proto <proto>"; a bare protocol token is invalid
+			// nft grammar and nft rejects the whole transaction with "unexpected counter".
+			parts = append(parts, "meta l4proto", effectiveProtocol)
+		}
 	}
 	if dPort != "" {
 		if endDport != "" {
@@ -935,6 +946,11 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 	activePolicyChains := make(map[string]bool)
 	activePolicyIPSets := make(map[string]bool)
 
+	// Collect chains nft rejected this sync so one malformed policy degrades only its own target
+	// pods (which fail closed via syncPodFirewallChains) instead of freezing netpol cluster-wide.
+	failedPolicyChains := make(map[string]bool)
+	npc.failedPolicyChains = failedPolicyChains
+
 	defer func() {
 		if npc.MetricsEnabled {
 			metrics.ControllerPolicyChains.Set(float64(len(activePolicyChains)))
@@ -991,9 +1007,19 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 			}
 
 			if err := nft.Run(ctx, tx); err != nil {
-				return nil, nil, fmt.Errorf("nftables: failed to sync policy chain %s: %w", policyChainName, err)
+				// Record the failure and keep programming the rest; the target pods fail closed
+				klog.Errorf("nftables: failed to sync policy chain %s for %s/%s (family %s), "+
+					"skipping this policy and failing its pods closed: %v",
+					policyChainName, policy.namespace, policy.name, ipFamily, err)
+				failedPolicyChains[policyChainName] = true
+				continue
 			}
 		}
+	}
+
+	if len(failedPolicyChains) > 0 {
+		klog.Warningf("nftables: %d policy chain(s) failed to sync this cycle; their target pods fail "+
+			"closed while the remaining policies continue to enforce", len(failedPolicyChains))
 	}
 
 	klog.V(2).Infof("nftables chains are synchronized with the network policies.")
@@ -1111,6 +1137,8 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 	activePodFwChains := make(map[string]bool)
 	activePodIPs := make(map[v1core.IPFamily][]string)
 	podJumps := make(map[v1core.IPFamily][]podFwJump)
+	// So a broken policy warns once per sync instead of once per target pod
+	warnedFailedChains := make(map[string]bool)
 	var errs []error
 
 	// Collect all local pods across all node IPs.
@@ -1174,10 +1202,24 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 				}
 				policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
 				comment := idComment(policy.namespace, policy.name, cmtJumpPolicy)
+
+				// Fail closed: mark the covered direction(s) so default-allow is skipped, but omit
+				// the jump so unmatched traffic falls through to the log+reject tail
+				failed := npc.failedPolicyChains[policyChainName]
+				if failed && !warnedFailedChains[policyChainName] {
+					warnedFailedChains[policyChainName] = true
+					klog.Warningf("nftables: policy %s/%s (family %s) failed to program; failing its "+
+						"target pods closed for the covered direction(s)",
+						policy.namespace, policy.name, ipFamily)
+				}
+
 				switch policy.policyType {
 				case kubeBothPolicyType:
 					hasIngressPolicy = true
 					hasEgressPolicy = true
+					if failed {
+						continue
+					}
 					tx.Add(&knftables.Rule{
 						Chain:   podFwChainName,
 						Rule:    knftables.Concat("counter jump", policyChainName),
@@ -1185,6 +1227,9 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 					})
 				case kubeIngressPolicyType:
 					hasIngressPolicy = true
+					if failed {
+						continue
+					}
 					tx.Add(&knftables.Rule{
 						Chain:   podFwChainName,
 						Rule:    knftables.Concat(addrKeyword, "daddr", ip, "counter jump", policyChainName),
@@ -1192,6 +1237,9 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 					})
 				case kubeEgressPolicyType:
 					hasEgressPolicy = true
+					if failed {
+						continue
+					}
 					tx.Add(&knftables.Rule{
 						Chain:   podFwChainName,
 						Rule:    knftables.Concat(addrKeyword, "saddr", ip, "counter jump", policyChainName),

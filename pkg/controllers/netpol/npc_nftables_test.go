@@ -1227,3 +1227,176 @@ func TestNftablesSyncTopLevelChainsAtomic(t *testing.T) {
 	require.Contains(t, dump,
 		"add rule ip kube-router-filter-ipv4 KUBE-ROUTER-INPUT ip daddr 10.96.0.0/16 counter return")
 }
+
+// TestAppendRuleToPolicyChainNftProtocolRendering verifies a protocol-only NetworkPolicyPort renders
+// as "meta l4proto <proto>" (valid nft) while the proto-dport and no-proto-no-port forms stay put.
+func TestAppendRuleToPolicyChainNftProtocolRendering(t *testing.T) {
+	const chainName = "KUBE-NWPLCY-TESTREND"
+
+	families := []struct {
+		ipFamily v1core.IPFamily
+		family   knftables.Family
+		table    string
+	}{
+		{v1core.IPv4Protocol, knftables.IPv4Family, ipv4Table},
+		{v1core.IPv6Protocol, knftables.IPv6Family, ipv6Table},
+	}
+
+	testCases := []struct {
+		name       string
+		protocol   string
+		dPort      string
+		endDport   string
+		wantAppear []string
+		wantAbsent []string
+	}{
+		{
+			name:       "protocol-only udp",
+			protocol:   "UDP",
+			wantAppear: []string{chainName + " meta l4proto udp counter"},
+			wantAbsent: []string{chainName + " udp counter"},
+		},
+		{
+			name:       "protocol-only tcp",
+			protocol:   "TCP",
+			wantAppear: []string{chainName + " meta l4proto tcp counter"},
+			wantAbsent: []string{chainName + " tcp counter"},
+		},
+		{
+			name:       "protocol-only sctp",
+			protocol:   "SCTP",
+			wantAppear: []string{chainName + " meta l4proto sctp counter"},
+			wantAbsent: []string{chainName + " sctp counter"},
+		},
+		{
+			name:       "protocol and port stays proto dport",
+			protocol:   "UDP",
+			dPort:      "53",
+			wantAppear: []string{chainName + " udp dport 53 counter"},
+			wantAbsent: []string{"meta l4proto"},
+		},
+		{
+			name:       "protocol and port range stays proto dport range",
+			protocol:   "TCP",
+			dPort:      "8000",
+			endDport:   "9000",
+			wantAppear: []string{chainName + " tcp dport 8000-9000 counter"},
+			wantAbsent: []string{"meta l4proto"},
+		},
+		{
+			name:       "no protocol no port stays bare counter",
+			wantAppear: []string{chainName + " counter meta mark set meta mark or 0x10000 return"},
+			wantAbsent: []string{"meta l4proto", "dport"},
+		},
+	}
+
+	npc := &NetworkPolicyControllerNftables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
+
+	for _, fam := range families {
+		for _, tc := range testCases {
+			t.Run(string(fam.ipFamily)+"/"+tc.name, func(t *testing.T) {
+				ctx := t.Context()
+				nft := knftables.NewFake(fam.family, fam.table)
+				setupTx := nft.NewTransaction()
+				setupTx.Add(&knftables.Table{Comment: new("rules for " + fam.table)})
+				setupTx.Add(&knftables.Chain{Name: chainName})
+				require.NoError(t, nft.Run(ctx, setupTx))
+
+				tx := nft.NewTransaction()
+				npc.appendRuleToPolicyChainNft(tx, chainName, "render test",
+					"", "", tc.protocol, tc.dPort, tc.endDport, fam.ipFamily)
+				require.NoError(t, nft.Run(ctx, tx),
+					"nft rejected the rendered rule - this is exactly the protocol-only bug")
+
+				dump := nft.Dump()
+				for _, want := range tc.wantAppear {
+					require.Contains(t, dump, want, "case %q: expected rule text missing", tc.name)
+				}
+				for _, absent := range tc.wantAbsent {
+					require.NotContains(t, dump, absent, "case %q: forbidden rule text present", tc.name)
+				}
+			})
+		}
+	}
+}
+
+// TestNftablesSyncPodFirewallChainsFailClosed verifies that for a chain in failedPolicyChains,
+// syncPodFirewallChains fails its target pods closed (no jump, no KUBE-NWPLCY-DEFAULT fallback) while
+// a healthy policy on another pod still programs its jump.
+func TestNftablesSyncPodFirewallChainsFailClosed(t *testing.T) {
+	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
+	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
+	ctx := t.Context()
+	informerFactory.Start(ctx.Done())
+	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
+	npc := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
+	// The per-pod firewall chain jumps into COMMON and (for uncovered directions) DEFAULT, so both
+	// must exist before syncPodFirewallChains runs.
+	npc.ensureDefaultNetworkPolicyChain()
+	npc.ensureCommonPolicyChain()
+
+	const (
+		badPodIP  = "1.1.1.1"
+		goodPodIP = "2.2.2.2"
+		version   = "1"
+	)
+	// Two local pods on this node (HostIP matches the node's internal IP).
+	for _, p := range []struct {
+		name, ns, ip string
+	}{
+		{"bad-pod", "nsA", badPodIP},
+		{"good-pod", "nsA", goodPodIP},
+	} {
+		tAddToInformerStore(t, podInformer, &v1core.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: p.name, Namespace: p.ns},
+			Status: v1core.PodStatus{
+				Phase:  v1core.PodRunning,
+				HostIP: "10.10.10.10",
+				PodIP:  p.ip,
+				PodIPs: []v1core.PodIP{{IP: p.ip}},
+			},
+		})
+	}
+
+	badPol := networkPolicyInfo{
+		name: "bad", namespace: "nsA", policyType: kubeIngressPolicyType,
+		targetPods: map[string]podInfo{badPodIP: {ip: badPodIP, name: "bad-pod", namespace: "nsA"}},
+	}
+	goodPol := networkPolicyInfo{
+		name: "good", namespace: "nsA", policyType: kubeIngressPolicyType,
+		targetPods: map[string]podInfo{goodPodIP: {ip: goodPodIP, name: "good-pod", namespace: "nsA"}},
+	}
+
+	badChain := networkPolicyChainName("nsA", "bad", version, v1core.IPv4Protocol)
+	goodChain := networkPolicyChainName("nsA", "good", version, v1core.IPv4Protocol)
+
+	// Simulate the outcome of syncNetworkPolicyChains: the healthy chain programmed (so its jump
+	// target exists) while the "bad" chain failed and is recorded in failedPolicyChains.
+	goodNft := npc.knftInterfaces[v1core.IPv4Protocol]
+	goodTx := goodNft.NewTransaction()
+	goodTx.Add(&knftables.Chain{Name: goodChain})
+	require.NoError(t, goodNft.Run(ctx, goodTx))
+	npc.failedPolicyChains = map[string]bool{badChain: true}
+
+	activePodFwChains, _, _, err := npc.syncPodFirewallChains([]networkPolicyInfo{badPol, goodPol}, version)
+	require.NoError(t, err)
+	require.Len(t, activePodFwChains, 2, "expected a pod-fw chain for each local pod")
+
+	fakeItf, ok := npc.knftInterfaces[v1core.IPv4Protocol].(*knftables.Fake)
+	require.True(t, ok, "expected *knftables.Fake for IPv4")
+	dump := fakeItf.Dump()
+
+	// Healthy policy still enforces: its target pod gets the jump to the good chain.
+	require.Contains(t, dump, "ip daddr "+goodPodIP+" counter jump "+goodChain,
+		"healthy policy jump missing - one bad policy must not block the others")
+
+	// Broken policy fails closed: no jump into the missing chain...
+	require.NotContains(t, dump, "counter jump "+badChain,
+		"pod targeted by a failed policy must not jump into the broken chain")
+	// ...and no default-allow fallback for the covered (ingress) direction of the bad pod.
+	require.NotContains(t, dump, "ip daddr "+badPodIP+" counter jump "+kubeDefaultNetpolChain,
+		"failed ingress policy must not fall back to KUBE-NWPLCY-DEFAULT (that would fail open)")
+
+	// The reject tail is present so the bad pod's unmatched traffic is dropped, not allowed.
+	require.Contains(t, dump, "meta mark and 0x10000 == 0x0 counter reject")
+}
