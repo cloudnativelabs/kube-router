@@ -37,6 +37,9 @@ set -euo pipefail
 BACKEND="${BACKEND:-iptables}"
 DEFAULT_DENY="${DEFAULT_DENY:-false}"
 E2E_LONG="${E2E_LONG:-}"
+E2E_PROCS="${E2E_PROCS:-4}"
+E2E_FOCUS="${E2E_FOCUS:-}"
+E2E_SKIP="${E2E_SKIP:-}"
 KUBE_ROUTER_IMAGE="${KUBE_ROUTER_IMAGE:-kube-router:e2e-test}"
 KIND_VERSION="${KIND_VERSION:-v0.27.0}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-e2e}"
@@ -142,15 +145,26 @@ cmd_dump_initial() {
 }
 
 cmd_run_tests() {
-    log "Running NetworkPolicy e2e tests (E2E_LONG='${E2E_LONG}', BACKEND='${BACKEND}')"
+    log "Running NetworkPolicy e2e tests (E2E_LONG='${E2E_LONG}', BACKEND='${BACKEND}'," \
+        "procs=${E2E_PROCS}, focus='${E2E_FOCUS}', skip='${E2E_SKIP}')"
     # The slow lifecycle specs (restart, GC) can each take minutes, so give the
     # suite a longer timeout when E2E_LONG is set.
     local timeout="600s"
     if [[ -n "${E2E_LONG}" ]]; then
         timeout="1800s"
     fi
+
+    # We run through the ginkgo CLI rather than `go test` because parallelism
+    # (--procs) and focus/skip filtering are only available there
+    local ginkgo_args=(-r --procs="${E2E_PROCS}" --timeout="${timeout}" -v)
+    if [[ -n "${E2E_FOCUS}" ]]; then
+        ginkgo_args+=(--focus="${E2E_FOCUS}")
+    fi
+    if [[ -n "${E2E_SKIP}" ]]; then
+        ginkgo_args+=(--skip="${E2E_SKIP}")
+    fi
     E2E=1 E2E_LONG="${E2E_LONG}" BACKEND="${BACKEND}" \
-        go test -v ./test/e2e/netpol/... -timeout "${timeout}"
+        go run github.com/onsi/ginkgo/v2/ginkgo "${ginkgo_args[@]}" ./test/e2e/netpol
 }
 
 cmd_dump_debug() {
