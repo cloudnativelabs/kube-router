@@ -9,6 +9,8 @@
 #   wait             Wait for the kube-router DaemonSet to roll out.
 #   dump-initial     Print initial cluster state (nodes / pods / daemonset / logs).
 #   run-tests        Execute the NetworkPolicy e2e test suite.
+#   refresh          Rebuild the image, reload it into the cluster, and restart
+#                    the kube-router DaemonSet. For iterating on code changes.
 #   dump-debug       Collect debug info (logs, events, nft ruleset). Intended for
 #                    use on failure.
 #   delete-cluster   Delete the Kind cluster.
@@ -22,12 +24,30 @@
 #                                            (controller restart, chain GC).
 #                                            Left unset on PRs; CI sets it on
 #                                            push/tag/dispatch. (default: unset)
+#   E2E_PROCS          N                     Ginkgo parallel processes (default: 4,
+#                                            matching free GitHub runners' 4 vCPU;
+#                                            set 1 to run fully serial)
+#   E2E_FOCUS          regex                 Only run specs matching the regex
+#                                            (ginkgo --focus)
+#   E2E_SKIP           regex                 Skip specs matching the regex
+#                                            (ginkgo --skip)
 #   KUBE_ROUTER_IMAGE  image:tag             (default: kube-router:e2e-test)
 #   KIND_CLUSTER_NAME  name                  (default: e2e)
 #   KIND_NODE_IMAGE    kindest/node:vX.Y.Z   (default: kindest/node:v1.32.2)
 #   BUILDTIME_BASE     docker image ref      (default: golang:alpine)
 #   RUNTIME_BASE       docker image ref      (default: alpine:3)
 #   SKIP_CLEANUP       1                     Skip cluster deletion on exit ("all" mode only)
+#
+# Iterating on a failing spec (human or AI agent) without rerunning "all":
+#
+#   SKIP_CLEANUP=1 BACKEND=nftables DEFAULT_DENY=true make e2e-netpol   # once, keeps cluster
+#   # ...edit code or tests, then:
+#   hack/e2e-netpol.sh refresh                                          # only if kube-router code changed
+#   E2E_LONG=1 BACKEND=nftables E2E_FOCUS='chain GC' hack/e2e-netpol.sh run-tests
+#   hack/e2e-netpol.sh delete-cluster                                   # when done
+#
+# Nothing in the loop needs sudo as long as kind is already installed and your
+# user can talk to the docker daemon.
 
 set -euo pipefail
 
