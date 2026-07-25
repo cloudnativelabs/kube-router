@@ -468,6 +468,8 @@ var syncErrorMarkers = []string{
 	"Aborting sync",
 	"failed to ensure top level chains",
 	"failed to atomically rebuild top-level chains",
+	// Isolated per-policy failures no longer abort the sync, so match their log line directly
+	"failed to sync policy chain",
 }
 
 // assertNoSyncErrors fails the suite if any kube-router pod logged one of the

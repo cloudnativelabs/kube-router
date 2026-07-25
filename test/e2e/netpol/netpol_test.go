@@ -322,6 +322,36 @@ var _ = Describe("NetworkPolicy", func() {
 			})
 			assertConnected(client, podIPv4(server), serverPort)
 		})
+
+		// Regression coverage for protocol-only NetworkPolicyPort rendering. Deny-all is applied
+		// first so the connectivity assertions can't pass vacuously.
+		It("allows all ports of the protocol when a NetworkPolicyPort specifies only a protocol", func() {
+			ns := createNamespace(nil)
+			serverA := launchServer(ns.Name, "server-a", map[string]string{"app": "server"})
+			serverB := launchServerOnPort(ns.Name, "server-b", map[string]string{"app": "server"}, altPort)
+			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+
+			// First establish deny-all so enforcement is provably active.
+			applyPolicy(denyAllIngress(ns.Name, "deny-all", metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "server"},
+			}))
+			assertBlocked(client, podIPv4(serverA), serverPort)
+
+			// Then allow all TCP via a protocol-only port entry.
+			proto := corev1.ProtocolTCP
+			applyPolicy(&netv1.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "ingress-protocol-only", Namespace: ns.Name},
+				Spec: netv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
+					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+					Ingress: []netv1.NetworkPolicyIngressRule{{
+						Ports: []netv1.NetworkPolicyPort{{Protocol: &proto}},
+					}},
+				},
+			})
+			assertConnected(client, podIPv4(serverA), serverPort)
+			assertConnected(client, podIPv4(serverB), altPort)
+		})
 	})
 
 	// -----------------------------------------------------------------------

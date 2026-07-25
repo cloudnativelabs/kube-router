@@ -147,16 +147,18 @@ func setupIntegrationEnv(t *testing.T, tableName string) (
 
 // syncPolicies is a thin wrapper: it builds policy info from the informer and
 // calls syncNetworkPolicyChains.
-func syncPolicies(t *testing.T, npc *NetworkPolicyControllerNftables, version string) {
+func syncPolicies(t *testing.T, npc *NetworkPolicyControllerNftables, version string) (
+	activePolicyChains, activePolicyIPSets map[string]bool) {
 	t.Helper()
 	netpols, err := npc.buildNetworkPoliciesInfo()
 	if err != nil {
 		t.Fatalf("buildNetworkPoliciesInfo: %v", err)
 	}
-	_, _, err = npc.syncNetworkPolicyChains(netpols, version)
+	activePolicyChains, activePolicyIPSets, err = npc.syncNetworkPolicyChains(netpols, version)
 	if err != nil {
 		t.Fatalf("syncNetworkPolicyChains: %v", err)
 	}
+	return activePolicyChains, activePolicyIPSets
 }
 
 // ---------------------------------------------------------------------------
@@ -303,11 +305,12 @@ func TestIntegrationStalePolicyChainRemoved(t *testing.T) {
 		t.Fatalf("policy chain not created on first sync; chains: %v", chains)
 	}
 
-	// Remove the policy from the informer store, then sync again.
+	// Remove the policy, sync again, then run the GC step like fullPolicySync does
 	if err := npStore.Delete(pol); err != nil {
 		t.Fatalf("delete policy from store: %v", err)
 	}
-	syncPolicies(t, npc, "2")
+	activeChains, activeSets := syncPolicies(t, npc, "2")
+	npc.gcPolicyObjectsNft(activeChains, activeSets)
 
 	// The stale chain must now be absent.
 	chainsAfter, err := nftItf.List(ctx, "chains")
@@ -572,51 +575,120 @@ func TestIntegrationIPBlockExceptAbsentFromSet(t *testing.T) {
 		t.Errorf("except CIDR 10.1.0.0/16 not found in except set %q; elements: %+v", exceptSetName, exceptElements)
 	}
 
-	// The policy chain must contain a return rule referencing the except set
-	// before the accept rule referencing the main set.
-	netpols, err := npc.buildNetworkPoliciesInfo()
-	if err != nil {
-		t.Fatalf("buildNetworkPoliciesInfo: %v", err)
-	}
-	var policyChainName string
-	for _, np := range netpols {
-		if np.name == "ipblock-except" {
-			policyChainName = networkPolicyChainName(np.namespace, np.name, "1", v1core.IPv4Protocol)
-			break
-		}
-	}
-	if policyChainName == "" {
-		t.Fatal("could not find policy chain name for ipblock-except")
-	}
-	rules, err := nftItf.ListRules(ctx, policyChainName)
+	// With except CIDRs, the policy chain jumps to a per-rule sub-chain that holds the
+	// except-return followed by the accept
+	policyChainName := networkPolicyChainName("nsA", "ipblock-except", "1", v1core.IPv4Protocol)
+	subChainName := nftIndexedSourceIPBlockChainName("nsA", "ipblock-except", 0, v1core.IPv4Protocol)
+
+	// ListRules against real nft populates r.Comment but not r.Rule, so we match on comments
+	policyRules, err := nftItf.ListRules(ctx, policyChainName)
 	if err != nil {
 		t.Fatalf("ListRules(%s): %v", policyChainName, err)
 	}
-	// ListRules on a real nftables interface does not populate r.Rule (the
-	// expression text is not parsed back from JSON). It does populate r.Comment,
-	// which we set on every rule, so match on that instead.
+	jumpFound := false
+	for _, r := range policyRules {
+		if r.Comment != nil && strings.Contains(*r.Comment, cmtIPBlock) {
+			jumpFound = true
+			break
+		}
+	}
+	if !jumpFound {
+		t.Errorf("expected a jump rule (comment containing %q) in chain %q; comments: %v",
+			cmtIPBlock, policyChainName, ruleComments(policyRules))
+	}
+
+	subRules, err := nftItf.ListRules(ctx, subChainName)
+	if err != nil {
+		t.Fatalf("ListRules(%s): %v", subChainName, err)
+	}
 	var returnRuleIdx, acceptRuleIdx int = -1, -1
-	for i, r := range rules {
+	for i, r := range subRules {
 		if r.Comment == nil {
 			continue
 		}
-		if strings.Contains(*r.Comment, "skip excepted source CIDRs") {
+		if strings.Contains(*r.Comment, cmtExceptSrc) {
 			returnRuleIdx = i
 		}
-		if strings.Contains(*r.Comment, "ACCEPT traffic from specified ipBlocks") {
+		if strings.Contains(*r.Comment, cmtIngressCIDR) {
 			acceptRuleIdx = i
 		}
 	}
 	if returnRuleIdx == -1 {
-		t.Errorf("expected a return rule (comment containing \"skip excepted source CIDRs\") in chain %q; rules: %+v",
-			policyChainName, rules)
+		t.Errorf("expected a return rule (comment containing %q) in sub-chain %q; comments: %v",
+			cmtExceptSrc, subChainName, ruleComments(subRules))
 	}
 	if acceptRuleIdx == -1 {
-		t.Errorf("expected an accept rule (comment containing \"ACCEPT traffic from specified ipBlocks\") in chain %q; rules: %+v",
-			policyChainName, rules)
+		t.Errorf("expected an accept rule (comment containing %q) in sub-chain %q; comments: %v",
+			cmtIngressCIDR, subChainName, ruleComments(subRules))
 	}
 	if returnRuleIdx != -1 && acceptRuleIdx != -1 && returnRuleIdx > acceptRuleIdx {
-		t.Errorf("return rule (idx %d) must appear before accept rule (idx %d) in chain %q",
-			returnRuleIdx, acceptRuleIdx, policyChainName)
+		t.Errorf("return rule (idx %d) must appear before accept rule (idx %d) in sub-chain %q",
+			returnRuleIdx, acceptRuleIdx, subChainName)
+	}
+}
+
+// ruleComments extracts rule comments so failures print something readable
+func ruleComments(rules []*knftables.Rule) []string {
+	comments := make([]string, 0, len(rules))
+	for _, r := range rules {
+		if r.Comment != nil {
+			comments = append(comments, *r.Comment)
+		}
+	}
+	return comments
+}
+
+// TestIntegrationProtocolOnlyPolicySyncs is the regression test for a protocol-only
+// NetworkPolicyPort: the rule must program in real nft and not be swallowed by failure isolation.
+func TestIntegrationProtocolOnlyPolicySyncs(t *testing.T) {
+	ctx := context.Background()
+	npc, nftItf, npStore := setupIntegrationEnv(t, "kube-router-intg-55")
+
+	udp := v1.ProtocolUDP
+	pol := &netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "proto-only", Namespace: "nsA"},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "a"}},
+			Ingress: []netv1.NetworkPolicyIngressRule{{
+				Ports: []netv1.NetworkPolicyPort{{Protocol: &udp}},
+			}},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+		},
+	}
+	if err := npStore.Add(pol); err != nil {
+		t.Fatalf("add policy: %v", err)
+	}
+
+	netpols, err := npc.buildNetworkPoliciesInfo()
+	if err != nil {
+		t.Fatalf("buildNetworkPoliciesInfo: %v", err)
+	}
+	// Call syncNetworkPolicyChains directly (not the syncPolicies helper) so a
+	// per-policy failure surfaces as an empty failedPolicyChains assertion rather
+	// than being masked. Pre-fix, real nft rejects the transaction here.
+	if _, _, err = npc.syncNetworkPolicyChains(netpols, "1"); err != nil {
+		t.Fatalf("syncNetworkPolicyChains returned a systemic error: %v", err)
+	}
+
+	policyChainName := networkPolicyChainName("nsA", "proto-only", "1", v1core.IPv4Protocol)
+	if npc.failedPolicyChains[policyChainName] {
+		t.Fatalf("proto-only policy chain %s failed to program - the bare-protocol rule was rejected by nft",
+			policyChainName)
+	}
+
+	rules, err := nftItf.ListRules(ctx, policyChainName)
+	if err != nil {
+		t.Fatalf("ListRules(%s): %v", policyChainName, err)
+	}
+	var found bool
+	for _, r := range rules {
+		if r.Comment != nil && strings.Contains(*r.Comment, "proto-only") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("no rule with comment containing 'proto-only' in chain %s; the protocol-only rule did not "+
+			"program. rules: %+v", policyChainName, rules)
 	}
 }
