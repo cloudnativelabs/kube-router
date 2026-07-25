@@ -67,6 +67,12 @@ cmd_build_image() {
 }
 
 cmd_install_kind() {
+    # Skipping the reinstall when kind is already present keeps sudo out of the
+    # loop entirely, which is what lets an AI agent drive this script unattended
+    if command -v kind > /dev/null 2>&1; then
+        log "Kind already installed ($(kind version 2>/dev/null || true)); skipping install"
+        return 0
+    fi
     log "Installing Kind"
     curl -sSLo ./kind https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64
     chmod +x ./kind
