@@ -205,6 +205,16 @@ cmd_dump_debug() {
     done
 }
 
+# refresh rebuilds the image, reloads it into the running cluster, and rolls the
+# DaemonSet so code changes take effect without recreating the cluster
+cmd_refresh() {
+    cmd_build_image
+    cmd_load_image
+    log "Restarting kube-router DaemonSet to pick up the new image"
+    kubectl -n kube-system rollout restart daemonset/kube-router
+    cmd_wait
+}
+
 cmd_delete_cluster() {
     log "Deleting Kind cluster '${KIND_CLUSTER_NAME}'"
     kind delete cluster --name "${KIND_CLUSTER_NAME}"
@@ -255,12 +265,13 @@ case "${SUBCOMMAND}" in
     wait)           cmd_wait ;;
     dump-initial)   cmd_dump_initial ;;
     run-tests)      cmd_run_tests ;;
+    refresh)        cmd_refresh ;;
     dump-debug)     cmd_dump_debug ;;
     delete-cluster) cmd_delete_cluster ;;
     all)            cmd_all ;;
     *)
         echo "Unknown subcommand: ${SUBCOMMAND}" >&2
-        echo "Usage: $0 {build-image|create-cluster|load-image|deploy|wait|dump-initial|run-tests|dump-debug|delete-cluster|all}" >&2
+        echo "Usage: $0 {build-image|create-cluster|load-image|deploy|wait|dump-initial|run-tests|refresh|dump-debug|delete-cluster|all}" >&2
         exit 1
         ;;
 esac
