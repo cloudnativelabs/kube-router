@@ -176,6 +176,16 @@ func (nrc *NetworkRoutingController) Run(
 	stopCh <-chan struct{},
 	wg *sync.WaitGroup,
 ) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-stopCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	mtu, cniNetConf := nrc.initCNIConfig()
 
 	klog.V(1).Info("Populating ipsets.")
@@ -254,7 +264,7 @@ func (nrc *NetworkRoutingController) Run(
 	}
 
 	// create 'kube-bridge' interface to which pods will be connected
-	nrc.setupKubeBridge(context.TODO(), mtu, cniNetConf)
+	nrc.setupKubeBridge(ctx, mtu, cniNetConf)
 
 	if cniNetConf != nil {
 		if err := cniNetConf.WriteCNIConfig(); err != nil {
