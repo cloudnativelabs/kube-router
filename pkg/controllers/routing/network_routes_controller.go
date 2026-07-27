@@ -421,7 +421,7 @@ func (nrc *NetworkRoutingController) initCNIConfig() (mtu int, _ *utils.CNINetwo
 		}
 	}
 
-	// Insert any IPv4 CIDRs that are missing from the IPAM configuration in the CNI
+	// Insert any IPv6 CIDRs that are missing from the IPAM configuration in the CNI
 	for _, ipv6CIDR := range nrc.podIPv6CIDRs {
 		err = cniNetConf.InsertPodCIDRIntoIPAM(ipv6CIDR)
 		if err != nil {
@@ -465,28 +465,32 @@ func (nrc *NetworkRoutingController) setupKubeBridge(ctx context.Context, mtu in
 		return
 	}
 
+	// We call LinkSetUp unconditionally so that bridges that already existed (and were returned
+	// by the first LinkByName above) are also brought up - idempotent and safe to repeat.
 	if err := netlink.LinkSetUp(kubeBridgeIf); err != nil {
 		klog.Errorf("Failed to bring kube-bridge interface up due to %v.", err)
 	}
 
 	if mtu > 0 {
-		klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
-		err = netlink.LinkSetMTU(kubeBridgeIf, mtu)
-		if err != nil {
-			klog.Errorf(
-				"Failed to set MTU for kube-bridge interface due to: %s (kubeBridgeIf: %#v, mtu: %v)",
-				err.Error(),
-				kubeBridgeIf,
-				mtu,
-			)
-			// Update the CNI config to include the effective MTU, if any.
-			if currentMTU := kubeBridgeIf.Attrs().MTU; currentMTU > 0 && cniNetConf != nil && currentMTU != mtu {
-				klog.Warningf(
-					"Updating CNI config with current MTU for kube-bridge: %d",
-					currentMTU,
-				)
-				cniNetConf.SetMTU(currentMTU)
-			}
+		nrc.setKubeBridgeMTU(kubeBridgeIf, mtu, cniNetConf)
+	}
+}
+
+func (nrc *NetworkRoutingController) setKubeBridgeMTU(
+	kubeBridgeIf netlink.Link, mtu int, cniNetConf *utils.CNINetworkConfig,
+) {
+	klog.Infof("Setting MTU of kube-bridge interface to: %d", mtu)
+	if err := netlink.LinkSetMTU(kubeBridgeIf, mtu); err != nil {
+		klog.Errorf(
+			"Failed to set MTU for kube-bridge interface due to: %v (kubeBridgeIf: %#v, mtu: %v)",
+			err,
+			kubeBridgeIf,
+			mtu,
+		)
+		// Fall back to the bridge's current MTU so the CNI config stays consistent.
+		if currentMTU := kubeBridgeIf.Attrs().MTU; currentMTU > 0 && cniNetConf != nil && currentMTU != mtu {
+			klog.Warningf("Updating CNI config with current MTU for kube-bridge: %d", currentMTU)
+			cniNetConf.SetMTU(currentMTU)
 		}
 	}
 }
