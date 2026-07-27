@@ -62,10 +62,6 @@ jobs:
       BACKEND: ${{ matrix.backend }}
       DEFAULT_DENY: ${{ matrix.default-deny }}
       KIND_CLUSTER_NAME: e2e
-      KIND_NODE_IMAGE: ${{ env.KIND_NODE_IMAGE }}
-      KUBE_ROUTER_IMAGE: ${{ env.KUBE_ROUTER_IMAGE }}
-      BUILDTIME_BASE: ${{ env.BUILDTIME_BASE }}
-      RUNTIME_BASE: ${{ env.RUNTIME_BASE }}
     strategy:
       fail-fast: false
       matrix:
