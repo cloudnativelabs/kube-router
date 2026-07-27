@@ -39,9 +39,6 @@ import (
 )
 
 const (
-	// Deprecated: Use [netlink.LinkNotFoundError] instead.
-	IfaceNotFound = "Link not found"
-
 	podSubnetsIPSetName = "kube-router-pod-subnets"
 	nodeAddrsIPSetName  = "kube-router-node-ips"
 

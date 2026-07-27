@@ -863,7 +863,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 	ctx := context.Background()
 	tunIf, err := nlretry.LinkByName(ctx, ipTunLink.Attrs().Name)
 	if err != nil {
-		if err.Error() != IfaceNotFound {
+		if _, notFound := errors.AsType[netlink.LinkNotFoundError](err); !notFound {
 			attemptNamespaceResetAfterError(hostNetworkNamespaceHandle)
 			return fmt.Errorf("failed to verify if ipip tunnel interface exists in endpoint %s namespace due "+
 				"to %v", endpointIP, err)
@@ -884,7 +884,7 @@ func (ln *linuxNetworking) configureContainerForDSR(
 			if err == nil {
 				break
 			}
-			if err.Error() == IfaceNotFound {
+			if _, notFound := errors.AsType[netlink.LinkNotFoundError](err); notFound {
 				klog.V(3).Infof("Waiting for tunnel interface %s to come up in the pod, retrying",
 					ipTunLink.Attrs().Name)
 				continue
@@ -957,7 +957,7 @@ func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 	ctx := context.Background()
 	var dummyVipInterface netlink.Link
 	dummyVipInterface, err := nlretry.LinkByName(ctx, KubeDummyIf)
-	if err != nil && err.Error() == IfaceNotFound {
+	if _, notFound := errors.AsType[netlink.LinkNotFoundError](err); err != nil && notFound {
 		klog.V(1).Infof("Could not find dummy interface: %s to assign cluster ip's, creating one",
 			KubeDummyIf)
 		err = netlink.LinkAdd(&netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: KubeDummyIf}})
@@ -972,6 +972,9 @@ func (ln *linuxNetworking) getKubeDummyInterface() (netlink.Link, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to bring dummy interface up: %w", err)
 		}
+	} else if err != nil {
+		// Without this we'd return (nil, nil) and callers would deref a nil link
+		return nil, fmt.Errorf("failed to look up dummy interface %s: %w", KubeDummyIf, err)
 	}
 	return dummyVipInterface, nil
 }
