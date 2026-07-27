@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/controllers/testhelpers"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/moby/ipvs"
@@ -2183,6 +2184,214 @@ func TestShuffleDoesNotPanicOnEmptySlice(t *testing.T) {
 			result := shuffle(tt.input)
 			assert.Equal(t, len(tt.input), len(result), "shuffle should preserve slice length")
 		})
+	}
+}
+
+// setupDualStackNodeController creates a controller backed by a dual-stack node (v4 primary + v6 internal).
+// It returns the ipvsState (for inspecting services), the mock, and the controller.
+//
+//nolint:unparam // mockIPVSState returned for API consistency with setupTestController
+func setupDualStackNodeController(t *testing.T, service *v1core.Service) (
+	*mockIPVSState, *LinuxNetworkingMock, *NetworkServicesController) {
+	t.Helper()
+
+	ipvsState := newMockIPVSState()
+	netlinkState := newMockNetlinkState()
+
+	mock := &LinuxNetworkingMock{
+		getKubeDummyInterfaceFunc:          createMockGetKubeDummyInterface(netlinkState),
+		ipAddrAddFunc:                      createMockIPAddrAdd(netlinkState),
+		ipAddrDelFunc:                      createMockIPAddrDel(netlinkState),
+		setupPolicyRoutingForDSRFunc:       createMockSetupPolicyRoutingForDSR(netlinkState),
+		setupRoutesForExternalIPForDSRFunc: createMockSetupRoutesForExternalIPForDSR(netlinkState),
+		configureContainerForDSRFunc:       createMockConfigureContainerForDSR(netlinkState),
+		getContainerPidWithDockerFunc:      createMockGetContainerPidWithDocker(netlinkState),
+		getContainerPidWithCRIFunc:         createMockGetContainerPidWithCRI(netlinkState),
+		findIfaceLinkForPidFunc:            createMockFindIfaceLinkForPid(netlinkState),
+		ipvsAddServerFunc: func(ipvsSvc *ipvs.Service, ipvsDst *ipvs.Destination) error {
+			return nil
+		},
+		ipvsAddServiceFunc: func(svcs []*ipvs.Service, vip net.IP, protocol uint16, port uint16,
+			persistent bool, persistentTimeout int32, scheduler string,
+			flags schedFlags) ([]*ipvs.Service, *ipvs.Service, error) {
+			svc := &ipvs.Service{Address: vip, Protocol: protocol, Port: port}
+			ipvsState.services = append(ipvsState.services, svc)
+			return svcs, svc, nil
+		},
+		ipvsDelServiceFunc: func(ipvsSvc *ipvs.Service) error { return nil },
+		ipvsGetDestinationsFunc: func(ipvsSvc *ipvs.Service) ([]*ipvs.Destination, error) {
+			return []*ipvs.Destination{}, nil
+		},
+		ipvsGetServicesFunc: func() ([]*ipvs.Service, error) {
+			svcsCopy := make([]*ipvs.Service, len(ipvsState.services))
+			copy(svcsCopy, ipvsState.services)
+			return svcsCopy, nil
+		},
+	}
+
+	routeVIPTrafficToDirector = createMockRouteVIPTrafficToDirector(netlinkState)
+
+	clientset := fake.NewSimpleClientset()
+	_, err := clientset.CoreV1().Services("default").Create(
+		context.Background(), service, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	// Dual-stack node: IPv4 primary + IPv6 internal address.
+	krNode := &utils.LocalKRNode{
+		KRNode: utils.KRNode{
+			NodeName:  "node-1",
+			PrimaryIP: net.ParseIP("10.0.0.1"),
+			NodeIPv6Addrs: map[v1core.NodeAddressType][]net.IP{
+				v1core.NodeInternalIP: {net.ParseIP("2001:db8::1")},
+			},
+		},
+	}
+
+	ipt4 := &utils.IPTablesHandlerMock{
+		AppendUniqueFunc: func(table string, chain string, rulespec ...string) error { return nil },
+		ExistsFunc:       func(table string, chain string, rulespec ...string) (bool, error) { return false, nil },
+		DeleteFunc:       func(table string, chain string, rulespec ...string) error { return nil },
+	}
+	ipt6 := &utils.IPTablesHandlerMock{
+		AppendUniqueFunc: func(table string, chain string, rulespec ...string) error { return nil },
+		ExistsFunc:       func(table string, chain string, rulespec ...string) (bool, error) { return false, nil },
+		DeleteFunc:       func(table string, chain string, rulespec ...string) error { return nil },
+	}
+
+	nsc := &NetworkServicesController{
+		krNode:     krNode,
+		ln:         mock,
+		nphc:       NewNodePortHealthCheck(),
+		ipsetMutex: &sync.Mutex{},
+		client:     clientset,
+		fwMarkMap:  make(map[uint32]string),
+		iptablesCmdHandlers: map[v1core.IPFamily]utils.IPTablesHandler{
+			v1core.IPv4Protocol: ipt4,
+			v1core.IPv6Protocol: ipt6,
+		},
+		ipSetHandlers: map[v1core.IPFamily]utils.IPSetHandler{
+			v1core.IPv4Protocol: testhelpers.NewFakeIPSetHandler(false),
+			v1core.IPv6Protocol: testhelpers.NewFakeIPSetHandler(true),
+		},
+	}
+
+	startInformersForServiceProxy(t, nsc, clientset)
+	waitForListerWithTimeout(t, nsc.svcLister, time.Second*10)
+
+	nsc.setServiceMap(nsc.buildServicesInfo())
+	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
+
+	return ipvsState, mock, nsc
+}
+
+// TestDualStackNodePort_BothFamiliesGetIPVSService verifies that on a dual-stack node,
+// a dual-stack NodePort service produces IPVS NodePort services on both the v4 and v6 node IPs.
+// This is the regression test for the bug where only the primary (v4) family got a NodePort service
+// and traffic to [nodeV6IP]:nodePort was black-holed.
+func TestDualStackNodePort_BothFamiliesGetIPVSService(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-ds-np", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "10.100.5.1",
+			ClusterIPs:            []string{"10.100.5.1", "2001:db8:42::1"},
+			IPFamilies:            []v1core.IPFamily{v1core.IPv4Protocol, v1core.IPv6Protocol},
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30500, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupDualStackNodeController(t, service)
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualServices := getServicesFromAddServiceCalls(mock)
+
+	assert.Contains(t, actualServices, "10.0.0.1:6:30500:false:rr",
+		"v4 NodePort IPVS service should be created on the IPv4 node IP")
+	assert.Contains(t, actualServices, "2001:db8::1:6:30500:false:rr",
+		"v6 NodePort IPVS service should be created on the IPv6 node IP")
+}
+
+// TestSingleStackNodePort_OnlyOwnFamilyGetsIPVSService verifies that a single-stack (IPv4-only)
+// NodePort service on a dual-stack node only creates a NodePort IPVS service for IPv4, not IPv6.
+func TestSingleStackNodePort_OnlyOwnFamilyGetsIPVSService(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-v4-np", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "10.100.6.1",
+			ClusterIPs:            []string{"10.100.6.1"},
+			IPFamilies:            []v1core.IPFamily{v1core.IPv4Protocol},
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30501, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupDualStackNodeController(t, service)
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualServices := getServicesFromAddServiceCalls(mock)
+
+	assert.Contains(t, actualServices, "10.0.0.1:6:30501:false:rr",
+		"v4 NodePort IPVS service should be created on the IPv4 node IP")
+	for _, svc := range actualServices {
+		assert.NotContains(t, svc, "2001:db8::1",
+			"no v6 NodePort IPVS service should be created for an IPv4-only service")
+	}
+}
+
+// TestSingleStackV6NodePort_OnlyOwnFamilyGetsIPVSService verifies that a single-stack (IPv6-only)
+// NodePort service on a dual-stack node creates its NodePort IPVS service on the v6 node IP rather
+// than the primary (v4) node IP, which is the corner that black-holed v6-only NodePort traffic.
+func TestSingleStackV6NodePort_OnlyOwnFamilyGetsIPVSService(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "svc-v6-np", Namespace: "default"},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeNodePort,
+			ClusterIP:             "2001:db8:42::2",
+			ClusterIPs:            []string{"2001:db8:42::2"},
+			IPFamilies:            []v1core.IPFamily{v1core.IPv6Protocol},
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports: []v1core.ServicePort{
+				{Name: "http", Port: 8080, NodePort: 30502, Protocol: v1core.ProtocolTCP},
+			},
+		},
+	}
+
+	_, mock, nsc := setupDualStackNodeController(t, service)
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	actualServices := getServicesFromAddServiceCalls(mock)
+
+	assert.Contains(t, actualServices, "2001:db8::1:6:30502:false:rr",
+		"v6 NodePort IPVS service should be created on the IPv6 node IP")
+	for _, svc := range actualServices {
+		assert.NotContains(t, svc, "10.0.0.1",
+			"no v4 IPVS service should be created for an IPv6-only service")
 	}
 }
 

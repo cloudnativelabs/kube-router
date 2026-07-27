@@ -336,14 +336,36 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 				}
 			}
 		} else {
-			ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc,
-				nsc.krNode.GetPrimaryNodeIP(), protocol, nPort)
-			// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
-			if svcID == "" {
-				continue
+			// A NodePort is one port shared across every family the Service exposes, but each family has to
+			// be programmed on that family's node IP, otherwise the secondary family NodePort never gets an
+			// IPVS service and traffic to [nodeV6IP]:nodePort is black-holed.
+			for family, famClusIPs := range getAllClusterIPs(svc) {
+				// Skip families the Service doesn't actually expose (getAllClusterIPs always returns both
+				// family keys, but the slice will be empty for families the Service doesn't use).
+				if len(famClusIPs) == 0 {
+					continue
+				}
+				var nodeIP net.IP
+				//nolint:exhaustive // only two IP families exist
+				switch family {
+				case v1.IPv4Protocol:
+					nodeIP = nsc.krNode.FindBestIPv4NodeAddress()
+				case v1.IPv6Protocol:
+					nodeIP = nsc.krNode.FindBestIPv6NodeAddress()
+				}
+				if nodeIP == nil {
+					// node doesn't have an address in this family (single-stack node with a dual-stack service)
+					continue
+				}
+				ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc,
+					nodeIP, protocol, nPort)
+				// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
+				if svcID == "" {
+					continue
+				}
+				nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc,
+					nodeIP, false)
 			}
-			nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc,
-				nsc.krNode.GetPrimaryNodeIP(), false)
 		}
 	}
 
