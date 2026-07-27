@@ -398,9 +398,7 @@ func TestFullPolicySync(t *testing.T) {
 	npc, err := NewNetworkPolicyController(
 		client,
 		config,
-		podInformer,
-		npInformer,
-		nsInformer,
+		testInformers{pods: podInformer, namespaces: nsInformer, networkPolicies: npInformer},
 		&sync.Mutex{},
 		linkQ,
 		nil,
@@ -885,7 +883,7 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	require.NoError(t, err)
 	npc, err := NewNetworkPolicyController(
 		client, config,
-		podInformer, npInformer, nsInformer,
+		testInformers{pods: podInformer, namespaces: nsInformer, networkPolicies: npInformer},
 		&sync.Mutex{}, linkQ, nil, nil,
 		ipRanges,
 		map[v1core.IPFamily]knftables.Interface{v1core.IPv4Protocol: ipv4KNft},
@@ -1032,7 +1030,7 @@ func TestNftablesNodePortRange(t *testing.T) {
 			require.NoError(t, err)
 			npc, err := NewNetworkPolicyController(
 				client, config,
-				podInformer, npInformer, nsInformer,
+				testInformers{pods: podInformer, namespaces: nsInformer, networkPolicies: npInformer},
 				&sync.Mutex{}, linkQ, nil, nil,
 				ipRanges,
 				map[v1core.IPFamily]knftables.Interface{v1core.IPv4Protocol: ipv4KNft},

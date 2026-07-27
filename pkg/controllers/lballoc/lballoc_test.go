@@ -653,6 +653,13 @@ func TestAllocateServiceAlreadyAllocated(t *testing.T) {
 	}
 }
 
+// testInformers satisfies the package's Informers interface for tests that drive the constructor directly.
+type testInformers struct {
+	services cache.SharedIndexInformer
+}
+
+func (t testInformers) Services() cache.SharedIndexInformer { return t.services }
+
 type mockInformer struct {
 }
 
@@ -762,7 +769,7 @@ func TestNewLoadBalancerController(t *testing.T) {
 		t.Fatalf("expected validator to succeed, got %s", validatorErr)
 	}
 
-	_, err := NewLoadBalancerController(fs, config, mf, validator)
+	_, err := NewLoadBalancerController(fs, config, testInformers{services: mf}, validator)
 	if err != nil {
 		t.Fatalf("expected %v, got %s", nil, err)
 	}

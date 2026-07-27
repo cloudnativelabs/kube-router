@@ -31,6 +31,17 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 )
 
+// testInformers satisfies the package's Informers interface for tests that drive the constructor directly.
+type testInformers struct {
+	pods            cache.SharedIndexInformer
+	namespaces      cache.SharedIndexInformer
+	networkPolicies cache.SharedIndexInformer
+}
+
+func (t testInformers) Pods() cache.SharedIndexInformer            { return t.pods }
+func (t testInformers) Namespaces() cache.SharedIndexInformer      { return t.namespaces }
+func (t testInformers) NetworkPolicies() cache.SharedIndexInformer { return t.networkPolicies }
+
 // newFakeInformersFromClient creates the different informers used in the uneventful network policy controller
 func newFakeInformersFromClient(kubeClient clientset.Interface) (informers.SharedInformerFactory, cache.SharedIndexInformer, cache.SharedIndexInformer, cache.SharedIndexInformer) {
 	informerFactory := informers.NewSharedInformerFactory(kubeClient, 0)
@@ -1420,7 +1431,8 @@ func TestNetworkPolicyController(t *testing.T) {
 					return
 				}
 				test.config.UseNftablesForNetpol = useNfTables
-				_, err := NewNetworkPolicyController(client, test.config, podInformer, netpolInformer, nsInformer,
+				_, err := NewNetworkPolicyController(client, test.config,
+					testInformers{pods: podInformer, namespaces: nsInformer, networkPolicies: netpolInformer},
 					&sync.Mutex{}, fakeLinkQuerier, iptablesHandlers, ipSetHandlers, validator, knftInterfaces)
 				if err == nil && test.expectError {
 					t.Error("This config should have failed, but it was successful instead")

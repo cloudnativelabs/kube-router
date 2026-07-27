@@ -76,6 +76,14 @@ type NetworkPolicyController interface {
 	NetworkPolicyEventHandler() cache.ResourceEventHandler
 }
 
+// Informers is the set of shared informers the NPC reads from. We declare it here rather than accepting a
+// full informer factory so that the controller can only reach the resources it actually watches.
+type Informers interface {
+	Pods() cache.SharedIndexInformer
+	Namespaces() cache.SharedIndexInformer
+	NetworkPolicies() cache.SharedIndexInformer
+}
+
 // NetworkPolicyController struct to hold information required by NetworkPolicyController
 type NetworkPolicyControllerBase struct {
 	krNode               utils.NodeIPAndFamilyAware
@@ -188,8 +196,7 @@ func (npc *NetworkPolicyControllerBase) RequestFullSync() {
 
 // NewNetworkPolicyController returns new NetworkPolicyController object
 func NewNetworkPolicyController(clientset kubernetes.Interface,
-	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
-	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer,
+	config *options.KubeRouterConfig, informers Informers,
 	ipsetMutex *sync.Mutex, linkQ utils.LocalLinkQuerier,
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler,
 	ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler,
@@ -255,22 +262,38 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 	}
 
 	npcBase.filterTableRules = make(map[v1core.IPFamily]*bytes.Buffer, 2)
+
+	podInformer := informers.Pods()
 	npcBase.podLister = podInformer.GetIndexer()
 	npcBase.podEventHandler = npcBase.newPodEventHandler()
 
+	nsInformer := informers.Namespaces()
 	npcBase.nsLister = nsInformer.GetIndexer()
 	npcBase.namespaceEventHandler = npcBase.newNamespaceEventHandler()
 
+	npInformer := informers.NetworkPolicies()
 	npcBase.npLister = npInformer.GetIndexer()
 	npcBase.networkPolicyEventHandler = npcBase.newNetworkPolicyEventHandler()
+
+	// We register our own handlers here so that the wiring lives next to the handlers themselves. The informer
+	// factory has already been started by this point, which is fine, a SharedIndexInformer replays existing
+	// objects as synthetic adds to handlers that join late.
+	if _, err := podInformer.AddEventHandler(npcBase.podEventHandler); err != nil {
+		return nil, fmt.Errorf("failed to add PodEventHandler: %w", err)
+	}
+	if _, err := nsInformer.AddEventHandler(npcBase.namespaceEventHandler); err != nil {
+		return nil, fmt.Errorf("failed to add NamespaceEventHandler: %w", err)
+	}
+	if _, err := npInformer.AddEventHandler(npcBase.networkPolicyEventHandler); err != nil {
+		return nil, fmt.Errorf("failed to add NetworkPolicyEventHandler: %w", err)
+	}
 
 	if config.UseNftablesForNetpol {
 		// Cleanup any existing iptables rules before starting nftables controller to avoid conflicts
 		// in case of a restart with a different configuration
 		npc := NetworkPolicyControllerIptables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
 		npc.Cleanup()
-		return NewNetworkPolicyControllerNftables(&npcBase, clientset, config,
-			podInformer, npInformer, nsInformer, linkQ, knftInterfaces)
+		return NewNetworkPolicyControllerNftables(&npcBase, config, knftInterfaces)
 	} else {
 		// Cleanup any existing nftables rules before starting iptables controller to avoid conflicts
 		// in case of a restart with a different configuration. Cleanup() self-initializes nftables
@@ -278,7 +301,6 @@ func NewNetworkPolicyController(clientset kubernetes.Interface,
 		// On hosts that lack nftables entirely, Cleanup() logs the error and returns without panic.
 		npc := NetworkPolicyControllerNftables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
 		npc.Cleanup()
-		return NewNetworkPolicyControllerIptables(&npcBase, clientset, config,
-			podInformer, npInformer, nsInformer, linkQ, iptablesCmdHandlers, ipSetHandlers)
+		return NewNetworkPolicyControllerIptables(&npcBase, config, iptablesCmdHandlers, ipSetHandlers)
 	}
 }

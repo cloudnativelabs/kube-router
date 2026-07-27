@@ -18,8 +18,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	"github.com/coreos/go-iptables/iptables"
 	v1core "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"
 )
@@ -1048,10 +1046,7 @@ func NewIPTablesHandlers(config *options.KubeRouterConfig) (
 
 // NewNetworkPolicyControllerIptables returns new NetworkPolicyControllerIptables object
 func NewNetworkPolicyControllerIptables(
-	npcBase *NetworkPolicyControllerBase, clientset kubernetes.Interface,
-	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
-	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer,
-	linkQ utils.LocalLinkQuerier,
+	npcBase *NetworkPolicyControllerBase, config *options.KubeRouterConfig,
 	iptablesCmdHandlers map[v1core.IPFamily]utils.IPTablesHandler,
 	ipSetHandlers map[v1core.IPFamily]utils.IPSetHandler) (*NetworkPolicyControllerIptables, error) {
 

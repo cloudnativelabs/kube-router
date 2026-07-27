@@ -165,6 +165,14 @@ type NetworkServicesController struct {
 	nphc *nodePortHealthCheckController
 }
 
+// Informers is the set of shared informers the NSC reads from. We declare it here rather than accepting a
+// full informer factory so that the controller can only reach the resources it actually watches.
+type Informers interface {
+	Services() cache.SharedIndexInformer
+	EndpointSlices() cache.SharedIndexInformer
+	Pods() cache.SharedIndexInformer
+}
+
 type ipvsCalls interface {
 	ipvsNewService(ipvsSvc *ipvs.Service) error
 	ipvsAddService(svcs []*ipvs.Service, vip net.IP, protocol, port uint16, persistent bool,
@@ -2017,8 +2025,7 @@ func (nsc *NetworkServicesController) setupHandlers(node *v1.Node) error {
 
 // NewNetworkServicesController returns NetworkServicesController object
 func NewNetworkServicesController(clientset kubernetes.Interface,
-	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
-	epSliceInformer cache.SharedIndexInformer, podInformer cache.SharedIndexInformer,
+	config *options.KubeRouterConfig, informers Informers,
 	ipsetMutex *sync.Mutex, ipFilter svcip.Filter) (*NetworkServicesController, error) {
 
 	var err error
@@ -2115,15 +2122,27 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	// Store MTU only. Code setting MSS will handle address family, and calculate correct MSS.
 	nsc.mtu = automtu
 
-	nsc.podLister = podInformer.GetIndexer()
+	nsc.podLister = informers.Pods().GetIndexer()
 
+	svcInformer := informers.Services()
 	nsc.svcLister = svcInformer.GetIndexer()
 	nsc.ServiceEventHandler = nsc.newSvcEventHandler()
 
 	nsc.ipvsPermitAll = config.IpvsPermitAll
 
+	epSliceInformer := informers.EndpointSlices()
 	nsc.epSliceLister = epSliceInformer.GetIndexer()
 	nsc.EndpointSliceEventHandler = nsc.newEndpointSliceEventHandler()
+
+	// We register our own handlers here so that the wiring lives next to the handlers themselves. The informer
+	// factory has already been started by this point, which is fine, a SharedIndexInformer replays existing
+	// objects as synthetic adds to handlers that join late.
+	if _, err := svcInformer.AddEventHandler(nsc.ServiceEventHandler); err != nil {
+		return nil, fmt.Errorf("failed to add ServiceEventHandler: %w", err)
+	}
+	if _, err := epSliceInformer.AddEventHandler(nsc.EndpointSliceEventHandler); err != nil {
+		return nil, fmt.Errorf("failed to add EndpointSliceEventHandler: %w", err)
+	}
 
 	// Not creating the hairpin controller for now because this should be handled at the CNI level. The CNI bridge
 	// plugin ensures that hairpin mode is set much more reliably than we do. However, as a lot of work was put into
