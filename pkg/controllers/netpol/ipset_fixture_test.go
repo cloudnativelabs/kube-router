@@ -72,9 +72,7 @@ func TestNetworkPolicyFixtureIPSets(t *testing.T) {
 	controller, err := NewNetworkPolicyController(
 		client,
 		config,
-		podInformer,
-		npInformer,
-		nsInformer,
+		testInformers{pods: podInformer, namespaces: nsInformer, networkPolicies: npInformer},
 		&sync.Mutex{},
 		linkQ,
 		map[v1.IPFamily]utils.IPTablesHandler{

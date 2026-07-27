@@ -17,8 +17,6 @@ import (
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	v1core "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"
 	"sigs.k8s.io/knftables"
@@ -376,10 +374,7 @@ func (npc *NetworkPolicyControllerNftables) ensureCommonPolicyChain() {
 }
 
 func NewNetworkPolicyControllerNftables(
-	npcBase *NetworkPolicyControllerBase, clientset kubernetes.Interface,
-	config *options.KubeRouterConfig, podInformer cache.SharedIndexInformer,
-	npInformer cache.SharedIndexInformer, nsInformer cache.SharedIndexInformer,
-	linkQ utils.LocalLinkQuerier,
+	npcBase *NetworkPolicyControllerBase, config *options.KubeRouterConfig,
 	knftInterfaces map[v1core.IPFamily]knftables.Interface) (*NetworkPolicyControllerNftables, error) {
 
 	npc := NetworkPolicyControllerNftables{NetworkPolicyControllerBase: npcBase, knftInterfaces: knftInterfaces}

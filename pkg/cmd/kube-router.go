@@ -42,6 +42,25 @@ type KubeRouter struct {
 	Config *options.KubeRouterConfig
 }
 
+// sharedInformers bundles every informer we start so that we can hand a single value to each controller.
+// Each controller declares its own narrow interface over this (routing.Informers, proxy.Informers, and so on)
+// and therefore only ever sees the informers it actually watches.
+type sharedInformers struct {
+	services        cache.SharedIndexInformer
+	endpointSlices  cache.SharedIndexInformer
+	pods            cache.SharedIndexInformer
+	nodes           cache.SharedIndexInformer
+	namespaces      cache.SharedIndexInformer
+	networkPolicies cache.SharedIndexInformer
+}
+
+func (s *sharedInformers) Services() cache.SharedIndexInformer        { return s.services }
+func (s *sharedInformers) EndpointSlices() cache.SharedIndexInformer  { return s.endpointSlices }
+func (s *sharedInformers) Pods() cache.SharedIndexInformer            { return s.pods }
+func (s *sharedInformers) Nodes() cache.SharedIndexInformer           { return s.nodes }
+func (s *sharedInformers) Namespaces() cache.SharedIndexInformer      { return s.namespaces }
+func (s *sharedInformers) NetworkPolicies() cache.SharedIndexInformer { return s.networkPolicies }
+
 // NewKubeRouterDefault returns a KubeRouter object
 func NewKubeRouterDefault(config *options.KubeRouterConfig) (*KubeRouter, error) {
 
@@ -134,15 +153,17 @@ func (kr *KubeRouter) Run() error {
 
 	// Setup factory and informers
 	informerFactory := informers.NewSharedInformerFactory(kr.Client, 0)
-	svcInformer := informerFactory.Core().V1().Services().Informer()
-	epSliceInformer := informerFactory.Discovery().V1().EndpointSlices().Informer()
-	podInformer := informerFactory.Core().V1().Pods().Informer()
-	nodeInformer := informerFactory.Core().V1().Nodes().Informer()
-	nsInformer := informerFactory.Core().V1().Namespaces().Informer()
-	npInformer := informerFactory.Networking().V1().NetworkPolicies().Informer()
+	krInformers := &sharedInformers{
+		services:        informerFactory.Core().V1().Services().Informer(),
+		endpointSlices:  informerFactory.Discovery().V1().EndpointSlices().Informer(),
+		pods:            informerFactory.Core().V1().Pods().Informer(),
+		nodes:           informerFactory.Core().V1().Nodes().Informer(),
+		namespaces:      informerFactory.Core().V1().Namespaces().Informer(),
+		networkPolicies: informerFactory.Networking().V1().NetworkPolicies().Informer(),
+	}
 
 	// Add custom indexers
-	err = epSliceInformer.AddIndexers(map[string]cache.IndexFunc{
+	err = krInformers.EndpointSlices().AddIndexers(map[string]cache.IndexFunc{
 		indexers.ServiceNameIndex: indexers.ServiceNameIndexFunc,
 	})
 	if err != nil {
@@ -216,22 +237,9 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunRouter {
 		nrc, err := routing.NewNetworkRoutingController(kr.Client, kr.Config,
-			nodeInformer, svcInformer, epSliceInformer, &ipsetMutex, ipValidator)
+			krInformers, &ipsetMutex, ipValidator)
 		if err != nil {
 			return fmt.Errorf("failed to create network routing controller: %w", err)
-		}
-
-		_, err = nodeInformer.AddEventHandler(nrc.NodeEventHandler)
-		if err != nil {
-			return fmt.Errorf("failed to add NodeEventHandler: %w", err)
-		}
-		_, err = svcInformer.AddEventHandler(nrc.ServiceEventHandler)
-		if err != nil {
-			return fmt.Errorf("failed to add ServiceEventHandler: %w", err)
-		}
-		_, err = epSliceInformer.AddEventHandler(nrc.EndpointSliceEventHandler)
-		if err != nil {
-			return fmt.Errorf("failed to add EndpointsEventHandler: %w", err)
 		}
 
 		wg.Add(1)
@@ -247,18 +255,9 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunServiceProxy {
 		nsc, err := proxy.NewNetworkServicesController(kr.Client, kr.Config,
-			svcInformer, epSliceInformer, podInformer, &ipsetMutex, ipValidator)
+			krInformers, &ipsetMutex, ipValidator)
 		if err != nil {
 			return fmt.Errorf("failed to create network services controller: %w", err)
-		}
-
-		_, err = svcInformer.AddEventHandler(nsc.ServiceEventHandler)
-		if err != nil {
-			return fmt.Errorf("failed to add ServiceEventHandler: %w", err)
-		}
-		_, err = epSliceInformer.AddEventHandler(nsc.EndpointSliceEventHandler)
-		if err != nil {
-			return fmt.Errorf("failed to add EndpointsEventHandler: %w", err)
 		}
 
 		wg.Add(1)
@@ -289,23 +288,10 @@ func (kr *KubeRouter) Run() error {
 			return fmt.Errorf("failed to create nftables interfaces: %v", err)
 		}
 		npc, err := netpol.NewNetworkPolicyController(kr.Client,
-			kr.Config, podInformer, npInformer, nsInformer, &ipsetMutex, nil,
+			kr.Config, krInformers, &ipsetMutex, nil,
 			iptablesCmdHandlers, ipSetHandlers, ipValidator, knftablesInterfaces)
 		if err != nil {
 			return fmt.Errorf("failed to create network policy controller: %w", err)
-		}
-
-		_, err = podInformer.AddEventHandler(npc.PodEventHandler())
-		if err != nil {
-			return fmt.Errorf("failed to add PodEventHandler: %w", err)
-		}
-		_, err = nsInformer.AddEventHandler(npc.NamespaceEventHandler())
-		if err != nil {
-			return fmt.Errorf("failed to add NamespaceEventHandler: %w", err)
-		}
-		_, err = npInformer.AddEventHandler(npc.NetworkPolicyEventHandler())
-		if err != nil {
-			return fmt.Errorf("failed to add NetworkPolicyEventHandler: %w", err)
 		}
 
 		wg.Add(1)
@@ -314,14 +300,9 @@ func (kr *KubeRouter) Run() error {
 
 	if kr.Config.RunLoadBalancer {
 		klog.V(0).Info("running load balancer allocator controller")
-		lbc, err := lballoc.NewLoadBalancerController(kr.Client, kr.Config, svcInformer, ipValidator)
+		lbc, err := lballoc.NewLoadBalancerController(kr.Client, kr.Config, krInformers, ipValidator)
 		if err != nil {
 			return fmt.Errorf("failed to create load balancer allocator: %w", err)
-		}
-
-		_, err = svcInformer.AddEventHandler(lbc)
-		if err != nil {
-			return fmt.Errorf("failed to add ServiceEventHandler: %w", err)
 		}
 
 		wg.Add(1)

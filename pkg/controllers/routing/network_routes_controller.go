@@ -99,6 +99,14 @@ type PolicyBasedRouter interface {
 	Disable() error
 }
 
+// Informers is the set of shared informers the NRC reads from. We declare it here rather than accepting a
+// full informer factory so that the controller can only reach the resources it actually watches.
+type Informers interface {
+	Nodes() cache.SharedIndexInformer
+	Services() cache.SharedIndexInformer
+	EndpointSlices() cache.SharedIndexInformer
+}
+
 // NetworkRoutingController is struct to hold necessary information required by controller
 type NetworkRoutingController struct {
 	krNode                         utils.NodeAware
@@ -1238,8 +1246,7 @@ func (nrc *NetworkRoutingController) setupHandlers(node *v1core.Node) error {
 // NewNetworkRoutingController returns new NetworkRoutingController object
 func NewNetworkRoutingController(clientset kubernetes.Interface,
 	kubeRouterConfig *options.KubeRouterConfig,
-	nodeInformer cache.SharedIndexInformer, svcInformer cache.SharedIndexInformer,
-	epSliceInformer cache.SharedIndexInformer, ipsetMutex *sync.Mutex,
+	informers Informers, ipsetMutex *sync.Mutex,
 	ipFilter svcip.Filter,
 ) (*NetworkRoutingController, error) {
 	var err error
@@ -1483,14 +1490,30 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		}
 		nrc.localAddressList = append(nrc.localAddressList, localAddresses...)
 	}
+	svcInformer := informers.Services()
 	nrc.svcLister = svcInformer.GetIndexer()
 	nrc.ServiceEventHandler = nrc.newServiceEventHandler()
 
+	epSliceInformer := informers.EndpointSlices()
 	nrc.epSliceLister = epSliceInformer.GetIndexer()
 	nrc.EndpointSliceEventHandler = nrc.newEndpointSliceEventHandler()
 
+	nodeInformer := informers.Nodes()
 	nrc.nodeLister = nodeInformer.GetIndexer()
 	nrc.NodeEventHandler = nrc.newNodeEventHandler()
+
+	// We register our own handlers here so that the wiring lives next to the handlers themselves. The informer
+	// factory has already been started by this point, which is fine, a SharedIndexInformer replays existing
+	// objects as synthetic adds to handlers that join late.
+	if _, err := nodeInformer.AddEventHandler(nrc.NodeEventHandler); err != nil {
+		return nil, fmt.Errorf("failed to add NodeEventHandler: %w", err)
+	}
+	if _, err := svcInformer.AddEventHandler(nrc.ServiceEventHandler); err != nil {
+		return nil, fmt.Errorf("failed to add ServiceEventHandler: %w", err)
+	}
+	if _, err := epSliceInformer.AddEventHandler(nrc.EndpointSliceEventHandler); err != nil {
+		return nil, fmt.Errorf("failed to add EndpointSliceEventHandler: %w", err)
+	}
 
 	return &nrc, nil
 }

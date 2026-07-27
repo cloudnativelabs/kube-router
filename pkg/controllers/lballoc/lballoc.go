@@ -32,6 +32,12 @@ type ipRanges struct {
 	currentIP  net.IP
 }
 
+// Informers is the set of shared informers the LBC reads from. We declare it here rather than accepting a
+// full informer factory so that the controller can only reach the resources it actually watches.
+type Informers interface {
+	Services() cache.SharedIndexInformer
+}
+
 type LoadBalancerController struct {
 	ipv4Ranges   *ipRanges
 	ipv6Ranges   *ipRanges
@@ -478,7 +484,7 @@ func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.Controller
 }
 
 func NewLoadBalancerController(clientset kubernetes.Interface,
-	config *options.KubeRouterConfig, svcInformer cache.SharedIndexInformer,
+	config *options.KubeRouterConfig, informers Informers,
 	ipRanges svcip.RangeQuerier,
 ) (*LoadBalancerController, error) {
 	lbc := &LoadBalancerController{
@@ -491,7 +497,14 @@ func NewLoadBalancerController(clientset kubernetes.Interface,
 		syncPeriod:   config.LoadBalancerSyncPeriod,
 	}
 
+	svcInformer := informers.Services()
 	lbc.svcLister = svcInformer.GetIndexer()
+
+	// The controller is its own ResourceEventHandler, see OnAdd/OnUpdate/OnDelete below. We register here so
+	// that the wiring lives next to the handler methods themselves.
+	if _, err := svcInformer.AddEventHandler(lbc); err != nil {
+		return nil, fmt.Errorf("failed to add ServiceEventHandler: %w", err)
+	}
 
 	namespace, err := getNamespace()
 	if err != nil {
