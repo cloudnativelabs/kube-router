@@ -48,6 +48,10 @@ func Main() error {
 		return fmt.Errorf("failed to set flag: %w", err)
 	}
 
+	if args := pflag.Args(); len(args) > 0 {
+		return fmt.Errorf("unrecognized positional argument(s): %v", args)
+	}
+
 	if config.HelpRequested {
 		pflag.Usage()
 		return nil
