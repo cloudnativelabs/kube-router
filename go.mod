@@ -1,6 +1,6 @@
 module github.com/cloudnativelabs/kube-router/v2
 
-go 1.26.0
+go 1.26.2
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.42.1
@@ -16,7 +16,7 @@ require (
 	github.com/hashicorp/go-version v1.9.0
 	github.com/moby/ipvs v1.1.0
 	github.com/moby/moby/client v0.5.0
-	github.com/osrg/gobgp/v4 v4.5.0
+	github.com/osrg/gobgp/v4 v4.7.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1

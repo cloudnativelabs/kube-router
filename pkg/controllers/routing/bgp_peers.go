@@ -240,6 +240,10 @@ func (nrc *NetworkRoutingController) connectToExternalBGPPeers(server *gobgp.Bgp
 		}
 
 		if bgpGracefulRestart {
+			if n.Bfd != nil && n.Bfd.Enabled {
+				klog.Warning("Both BFD and BGP Graceful Restart should not be enabled at the same time. " +
+					"See docs/bgp.md for details.")
+			}
 			n.GracefulRestart = &gobgpapi.GracefulRestart{
 				Enabled:         true,
 				RestartTime:     uint32(bgpGracefulRestartTime.Seconds()),
@@ -301,6 +305,8 @@ func newGlobalPeers(
 		if peerConfig.LocalIP() != "" {
 			peer.Transport.LocalAddress = peerConfig.LocalIP()
 		}
+
+		peer.Bfd = peerConfig.BFD().ToGoBGP()
 
 		peers[i] = peer
 	}
