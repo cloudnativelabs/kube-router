@@ -41,7 +41,6 @@ const (
 	KubeTunnelIfv4    = "kube-tunnel-if"
 	KubeTunnelIfv6    = "kube-tunnel-v6"
 	KubeBridgeIf      = "kube-bridge"
-	IfaceNotFound     = "Link not found"
 	IfaceHasNoAddr    = "cannot assign requested address"
 	IpvsMaglevHashing = "mh"
 	IpvsSvcFSched1    = "flag-1"
@@ -1850,13 +1849,13 @@ func (nsc *NetworkServicesController) Cleanup() {
 	// delete dummy interface used to assign cluster IP's
 	dummyVipInterface, err := nlretry.LinkByName(context.Background(), KubeDummyIf)
 	if err != nil {
-		if err.Error() != IfaceNotFound {
-			klog.Infof("Dummy interface: " + KubeDummyIf + " does not exist")
+		if _, notFound := errors.AsType[netlink.LinkNotFoundError](err); notFound {
+			klog.Infof("Dummy interface: %s does not exist", KubeDummyIf)
 		}
 	} else {
 		err = netlink.LinkDel(dummyVipInterface)
 		if err != nil {
-			klog.Errorf("could not delete dummy interface %s due to: %v", KubeDummyIf, err.Error())
+			klog.Errorf("could not delete dummy interface %s due to: %v", KubeDummyIf, err)
 			return
 		}
 	}
