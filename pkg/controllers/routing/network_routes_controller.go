@@ -146,6 +146,7 @@ type NetworkRoutingController struct {
 	bgpRRServer                    bool
 	bgpClusterID                   string
 	cniConfFile                    string
+	cniConfTemplateFile            string
 	disableSrcDstCheck             bool
 	initSrcDstCheckDone            atomic.Bool
 	ec2IamAuthorized               atomic.Bool
@@ -407,10 +408,10 @@ func (nrc *NetworkRoutingController) initCNIConfig() (mtu int, _ *utils.CNINetwo
 		return mtu, nil
 	}
 
-	// Parse the existing IPAM CIDRs from the CNI conf file
-	cniNetConf, err := utils.NewCNINetworkConfig(nrc.cniConfFile)
+	// Parse the existing IPAM CIDRs from the CNI conf (template) file
+	cniNetConf, err := utils.NewCNINetworkConfigFromTemplate(nrc.cniConfFile, nrc.cniConfTemplateFile)
 	if err != nil {
-		klog.Fatalf("failed to parse CNI Config: %v", err)
+		klog.Fatalf("failed to load CNI configuration: %v", err)
 	}
 
 	// Insert any IPv4 CIDRs that are missing from the IPAM configuration in the CNI
@@ -1301,9 +1302,18 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		if nrc.cniConfFile == "" {
 			nrc.cniConfFile = "/etc/cni/net.d/10-kuberouter.conf"
 		}
-		// #nosec G703: cniConfFile is not untrusted user input
-		if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
-			return nil, errors.New("CNI conf file " + nrc.cniConfFile + " does not exist.")
+		nrc.cniConfTemplateFile = os.Getenv("KUBE_ROUTER_CNI_CONF_TEMPLATE_FILE")
+		if nrc.cniConfTemplateFile != "" {
+			// The CNI conf file will be written from the template, so only the template needs to exist.
+			// #nosec G703: cniConfTemplateFile is not untrusted user input
+			if _, err := os.Stat(nrc.cniConfTemplateFile); os.IsNotExist(err) {
+				return nil, errors.New("CNI conf template file " + nrc.cniConfTemplateFile + " does not exist.")
+			}
+		} else {
+			// #nosec G703: cniConfFile is not untrusted user input
+			if _, err := os.Stat(nrc.cniConfFile); os.IsNotExist(err) {
+				return nil, errors.New("CNI conf file " + nrc.cniConfFile + " does not exist.")
+			}
 		}
 	}
 

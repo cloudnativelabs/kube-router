@@ -328,12 +328,12 @@ func TestNewCNINetworkConfig(t *testing.T) {
 		{
 			name:    "Ensure error upon reading from conf with no type",
 			content: getConfWithNoType(),
-			err:     "error load CNI config, file appears to have no type: ",
+			err:     "10-kuberouter.conf has no type",
 		},
 		{
 			name:    "Ensure error upon reading from conflist with no plugins",
 			content: getConfListWithNoPlugins(),
-			err:     "CNI config list ",
+			err:     "10-kuberouter.conflist has no bridge plugin",
 		},
 		{
 			name:    "Ensure conf subnet get consolidated into ranges when only subnet exists",
@@ -626,4 +626,61 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 			assert.ElementsMatch(t, testcase.ranges, slices.Collect(maps.Keys(podCIDRs)))
 		})
 	}
+}
+
+func TestNewCNINetworkConfig_Template(t *testing.T) {
+	t.Run("Ensure template is parsed according to the CNI conf file name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		templateFilePath := filepath.Join(tmpDir, "cni-conf.json")
+		require.NoError(t, os.WriteFile(templateFilePath, getConfList().bytes, 0600))
+
+		cni, err := NewCNINetworkConfigFromTemplate(filepath.Join(tmpDir, cniConfListTestFileName), templateFilePath)
+		require.NoError(t, err)
+		require.NotNil(t, cni)
+
+		assert.NotNil(t, cni.confList, "The CNI conf file name, not the template file name, should determine "+
+			"if the config is a conflist")
+	})
+
+	t.Run("Ensure CNI conf file is written from the template", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		templateFilePath := filepath.Join(tmpDir, "cni-conf.json")
+		require.NoError(t, os.WriteFile(templateFilePath, getConfListWithNoSubnet().bytes, 0600))
+		templateFileInfo, err := os.Stat(templateFilePath)
+		require.NoError(t, err)
+
+		cniConfFilePath := filepath.Join(tmpDir, cniConfListTestFileName)
+		cni, err := NewCNINetworkConfigFromTemplate(cniConfFilePath, templateFilePath)
+		require.NoError(t, err)
+		require.NotNil(t, cni)
+
+		require.NoError(t, cni.InsertPodCIDRIntoIPAM("10.242.0.0/24"))
+		require.NoError(t, cni.WriteCNIConfig())
+
+		writtenCNI, err := NewCNINetworkConfig(cniConfFilePath)
+		require.NoError(t, err)
+		require.NotNil(t, writtenCNI)
+
+		podCIDRs, err := writtenCNI.getPodCIDRsMapFromCNISpec()
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []string{"10.242.0.0/24"}, slices.Collect(maps.Keys(podCIDRs)))
+
+		if newTemplateFileInfo, err := os.Stat(templateFilePath); assert.NoError(t, err) {
+			assert.True(t, templateFileInfo.Size() == newTemplateFileInfo.Size() &&
+				templateFileInfo.ModTime().Equal(newTemplateFileInfo.ModTime()),
+				"The template file should remain untouched")
+		}
+
+		entries, err := os.ReadDir(tmpDir)
+		require.NoError(t, err)
+		assert.Lenf(t, entries, 2, "No other files besides the template and the CNI conf file should be left "+
+			"behind in the CNI conf dir")
+	})
+
+	t.Run("Ensure a missing template file is an error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		_, err := NewCNINetworkConfigFromTemplate(
+			filepath.Join(tmpDir, cniConfListTestFileName), filepath.Join(tmpDir, "cni-conf.json"))
+		assert.ErrorIs(t, err, os.ErrNotExist)
+	})
 }
