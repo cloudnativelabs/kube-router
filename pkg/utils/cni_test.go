@@ -3,8 +3,10 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -283,10 +285,12 @@ func TestNewCNINetworkConfig(t *testing.T) {
 		{
 			name:    "Attempt reading from conf",
 			content: getConf(),
+			ranges:   []string{"10.242.0.0/24"},
 		},
 		{
 			name:    "Attempt reading from conflist",
 			content: getConfList(),
+			ranges:   []string{"10.242.0.0/24"},
 		},
 		{
 			name:    "Ensure error upon reading from conf with no type",
@@ -339,26 +343,9 @@ func TestNewCNINetworkConfig(t *testing.T) {
 				assert.Nilf(t, cni.confList, "Didn't expect a conflist for %s", testcase.content.name)
 			}
 
-			if testcase.ranges != nil {
-				assert.Emptyf(t, cni.getBridgePlugin().IPAM.Subnet,
-					"subnet of cniNetworkConfig should always be empty because it should be consolidated with "+
-						"ranges upon creation")
-
-				foundSubnets := make(map[string]any, 0)
-				for _, rangeSet := range cni.getBridgePlugin().IPAM.Ranges {
-					for _, rangeSubnet := range rangeSet {
-						foundSubnets[rangeSubnet.Subnet] = struct{}{}
-					}
-				}
-
-				assert.Len(t, foundSubnets, len(testcase.ranges))
-
-				for _, subnet := range testcase.ranges {
-					_, found := foundSubnets[subnet]
-					assert.Truef(t, found, "subnet %s from testcase should have been found in the ranges inside "+
-						"cniNetworkConfig", subnet)
-				}
-			}
+			podCIDRs, err := cni.getPodCIDRsMapFromCNISpec()
+			require.NoError(t, err)
+			assert.ElementsMatch(t, testcase.ranges, slices.Collect(maps.Keys(podCIDRs)))
 		})
 	}
 }
@@ -410,28 +397,9 @@ func TestCniNetworkConfig_GetPodCIDRsFromCNISpec(t *testing.T) {
 				assert.Nilf(t, cni.confList, "Didn't expect a conflist for %s", testcase.content.name)
 			}
 
-			if testcase.ranges != nil {
-				assert.Emptyf(t, cni.getBridgePlugin().IPAM.Subnet,
-					"subnet of cniNetworkConfig should always be empty because it should be consolidated with "+
-						"ranges upon creation")
-
-				foundSubnets, err := cni.GetPodCIDRsFromCNISpec()
-
-				assert.Nil(t, err, "err should be nil at this point")
-
-				assert.Len(t, foundSubnets, len(testcase.ranges))
-
-				for _, subnet := range testcase.ranges {
-					found := false
-					for _, foundSubnet := range foundSubnets {
-						if subnet == foundSubnet.String() {
-							found = true
-						}
-					}
-					assert.Truef(t, found, "subnet %s from testcase should have been found in the ranges inside "+
-						"cniNetworkConfig", subnet)
-				}
-			}
+			podCIDRs, err := cni.getPodCIDRsMapFromCNISpec()
+			require.NoError(t, err)
+			assert.ElementsMatch(t, testcase.ranges, slices.Collect(maps.Keys(podCIDRs)))
 		})
 	}
 }
@@ -610,30 +578,9 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, cni)
 
-			if testcase.ranges != nil {
-				assert.Emptyf(t, cni.getBridgePlugin().IPAM.Subnet,
-					"subnet of cniNetworkConfig should always be empty because it should be consolidated with "+
-						"ranges upon creation")
-
-				foundSubnets := make(map[string]any, 0)
-				for _, rangeSet := range cni.getBridgePlugin().IPAM.Ranges {
-					for _, rangeSubnet := range rangeSet {
-						foundSubnets[rangeSubnet.Subnet] = struct{}{}
-					}
-				}
-
-				assert.Len(t, foundSubnets, len(testcase.ranges))
-
-				for _, subnet := range testcase.ranges {
-					_, found := foundSubnets[subnet]
-					assert.Truef(t, found, "subnet %s from testcase should have been found in the ranges inside "+
-						"cniNetworkConfig", subnet)
-				}
-			} else {
-				assert.Emptyf(t, cni.getBridgePlugin().IPAM.Ranges,
-					"testcase ranges was nil, the subnets re-read from the CNI file after writing should have "+
-						"been empty also")
-			}
+			podCIDRs, err := cni.getPodCIDRsMapFromCNISpec()
+			require.NoError(t, err)
+			assert.ElementsMatch(t, testcase.ranges, slices.Collect(maps.Keys(podCIDRs)))
 		})
 	}
 }
