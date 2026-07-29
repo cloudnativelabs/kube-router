@@ -342,7 +342,11 @@ func TestNewCNINetworkConfig(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, testcase.content.isConfList, cni.IsConfList())
+			if testcase.content.isConfList {
+				assert.NotNilf(t, cni.confList, "Expected a conflist for %s", testcase.content.name)
+			} else {
+				assert.Nilf(t, cni.confList, "Didn't expect a conflist for %s", testcase.content.name)
+			}
 
 			if testcase.ranges != nil {
 				assert.Emptyf(t, cni.getBridgePlugin().IPAM.Subnet,
@@ -417,7 +421,11 @@ func TestCniNetworkConfig_GetPodCIDRsFromCNISpec(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, testcase.content.isConfList, cni.IsConfList())
+			if testcase.content.isConfList {
+				assert.NotNilf(t, cni.confList, "Expected a conflist for %s", testcase.content.name)
+			} else {
+				assert.Nilf(t, cni.confList, "Didn't expect a conflist for %s", testcase.content.name)
+			}
 
 			if testcase.ranges != nil {
 				assert.Emptyf(t, cni.getBridgePlugin().IPAM.Subnet,
@@ -600,7 +608,7 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 				t.Fatalf("we should be able to read the CNI file we just wrote to")
 			}
 			var brPlug *Conf
-			if cni.IsConfList() {
+			if testcase.content.isConfList {
 				cl := new(ConfList)
 				err = json.Unmarshal(cniFileBytes, cl)
 				if err != nil {
