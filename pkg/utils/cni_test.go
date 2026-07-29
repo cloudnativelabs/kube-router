@@ -13,9 +13,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getConfList() []byte {
-	return []byte(`
-{
+const (
+	cniConfTestFileName     = "10-kuberouter.conf"
+	cniConfListTestFileName = "10-kuberouter.conflist"
+)
+
+type cniConfContent struct {
+	isConfList bool
+	bytes      []byte
+}
+
+func (c *cniConfContent) fileName() string {
+	if c.isConfList {
+		return cniConfListTestFileName
+	}
+	return cniConfTestFileName
+}
+
+func getConfList() cniConfContent {
+	return cniConfContent{true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -32,12 +48,11 @@ func getConfList() []byte {
     }
   ]
 }
-`)
+`)}
 }
 
-func getConfListWithRanges() []byte {
-	return []byte(`
-{
+func getConfListWithRanges() cniConfContent {
+	return cniConfContent{true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -72,12 +87,11 @@ func getConfListWithRanges() []byte {
     }
   ]
 }
-`)
+`)}
 }
 
-func getConfListWithDuplicateRanges() []byte {
-	return []byte(`
-{
+func getConfListWithDuplicateRanges() cniConfContent {
+	return cniConfContent{true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -112,12 +126,11 @@ func getConfListWithDuplicateRanges() []byte {
     }
   ]
 }
-`)
+`)}
 }
 
-func getConfListWithIPv6DuplicateRanges() []byte {
-	return []byte(`
-{
+func getConfListWithIPv6DuplicateRanges() cniConfContent {
+	return cniConfContent{true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -152,12 +165,11 @@ func getConfListWithIPv6DuplicateRanges() []byte {
     }
   ]
 }
-`)
+`)}
 }
 
-func getConfListWithNoSubnet() []byte {
-	return []byte(`
-{
+func getConfListWithNoSubnet() cniConfContent {
+	return cniConfContent{true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -172,38 +184,34 @@ func getConfListWithNoSubnet() []byte {
     }
   ]
 }
-`)
+`)}
 }
 
-func getConfListWithNoPlugins() []byte {
-	return []byte(`
-{
+func getConfListWithNoPlugins() cniConfContent {
+	return cniConfContent{true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet"
-}
-`)
+}`)}
 }
 
-func getConf() []byte {
-	return []byte(`
-{
+func getConf() cniConfContent {
+	return cniConfContent{false, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "bridge":"kube-bridge",
   "ipam":{
-    "type":"host-local",
+	"type":"host-local",
     "subnet": "10.242.0.0/24"
   },
   "isDefaultGateway":true,
   "name":"kubernetes",
   "type":"bridge"
 }
-`)
+`)}
 }
 
-func getConfWithNoSubnet() []byte {
-	return []byte(`
-{
+func getConfWithNoSubnet() cniConfContent {
+	return cniConfContent{false, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "bridge":"kube-bridge",
@@ -214,12 +222,11 @@ func getConfWithNoSubnet() []byte {
   "name":"kubernetes",
   "type":"bridge"
 }
-`)
+`)}
 }
 
-func getConfWithNoType() []byte {
-	return []byte(`
-{
+func getConfWithNoType() cniConfContent {
+	return cniConfContent{false, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "bridge":"kube-bridge",
@@ -229,7 +236,7 @@ func getConfWithNoType() []byte {
   "isDefaultGateway":true,
   "name":"kubernetes"
 }
-`)
+`)}
 }
 
 func TestMarshalUnmarshalRestoration(t *testing.T) {
@@ -237,146 +244,128 @@ func TestMarshalUnmarshalRestoration(t *testing.T) {
 		before := getConfList()
 		cl := new(ConfList)
 
-		err := json.Unmarshal(before, cl)
+		err := json.Unmarshal(before.bytes, cl)
 		if err != nil {
-			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before)
+			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before.bytes)
 		}
 
 		after, err := json.MarshalIndent(cl, "", "  ")
 		if err != nil {
-			t.Fatalf("wasn't able to marshal JSON in test: %s", before)
+			t.Fatalf("wasn't able to marshal JSON in test: %s", before.bytes)
 		}
 
-		assert.JSONEqf(t, string(before), string(after),
+		assert.JSONEqf(t, string(before.bytes), string(after),
 			"JSON is not equal!\nBefore:\n%s\nAfter:\n%s\n", before, after)
 	})
 	t.Run("Ensure ConfListWithRange is parsed and unparsed properly", func(t *testing.T) {
 		before := getConfListWithRanges()
 		cl := new(ConfList)
 
-		err := json.Unmarshal(before, cl)
+		err := json.Unmarshal(before.bytes, cl)
 		if err != nil {
-			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before)
+			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before.bytes)
 		}
 
 		after, err := json.MarshalIndent(cl, "", "  ")
 		if err != nil {
-			t.Fatalf("wasn't able to marshal JSON in test: %s", before)
+			t.Fatalf("wasn't able to marshal JSON in test: %s", before.bytes)
 		}
 
-		assert.JSONEqf(t, string(before), string(after),
+		assert.JSONEqf(t, string(before.bytes), string(after),
 			"JSON is not equal!\nBefore:\n%s\nAfter:\n%s\n", before, after)
 	})
 	t.Run("Ensure ConfListWithNoSubnet is parsed and unparsed properly", func(t *testing.T) {
 		before := getConfListWithNoSubnet()
 		cl := new(ConfList)
 
-		err := json.Unmarshal(before, cl)
+		err := json.Unmarshal(before.bytes, cl)
 		if err != nil {
-			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before)
+			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before.bytes)
 		}
 
 		after, err := json.MarshalIndent(cl, "", "  ")
 		if err != nil {
-			t.Fatalf("wasn't able to marshal JSON in test: %s", before)
+			t.Fatalf("wasn't able to marshal JSON in test: %s", before.bytes)
 		}
 
-		assert.JSONEqf(t, string(before), string(after),
+		assert.JSONEqf(t, string(before.bytes), string(after),
 			"JSON is not equal!\nBefore:\n%s\nAfter:\n%s\n", before, after)
 	})
 	t.Run("Ensure ConfWithNoSubnet is parsed and unparsed properly", func(t *testing.T) {
 		before := getConfWithNoSubnet()
 		c := new(Conf)
 
-		err := json.Unmarshal(before, c)
+		err := json.Unmarshal(before.bytes, c)
 		if err != nil {
-			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before)
+			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before.bytes)
 		}
 
 		after, err := json.MarshalIndent(c, "", "  ")
 		if err != nil {
-			t.Fatalf("wasn't able to marshal JSON in test: %s", before)
+			t.Fatalf("wasn't able to marshal JSON in test: %s", before.bytes)
 		}
 
-		assert.JSONEqf(t, string(before), string(after),
+		assert.JSONEqf(t, string(before.bytes), string(after),
 			"JSON is not equal!\nBefore:\n%s\nAfter:\n%s\n", before, after)
 	})
 }
 
 func TestNewCNINetworkConfig(t *testing.T) {
 	testcases := []struct {
-		name       string
-		filename   string
-		isConfList bool
-		content    []byte
-		err        error
-		ranges     []string
+		name    string
+		content cniConfContent
+		err     error
+		ranges  []string
 	}{
 		{
-			name:       "Attempt reading from conf",
-			filename:   "10-kuberouter.conf",
-			isConfList: false,
-			content:    getConf(),
-			err:        nil,
+			name:    "Attempt reading from conf",
+			content: getConf(),
+			err:     nil,
 		},
 		{
-			name:       "Attempt reading from conflist",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfList(),
-			err:        nil,
+			name:    "Attempt reading from conflist",
+			content: getConfList(),
+			err:     nil,
 		},
 		{
-			name:       "Ensure error upon reading from conf with no type",
-			filename:   "10-kuberouter.conf",
-			isConfList: false,
-			content:    getConfWithNoType(),
-			err:        errors.New("error load CNI config, file appears to have no type: "),
+			name:    "Ensure error upon reading from conf with no type",
+			content: getConfWithNoType(),
+			err:     errors.New("error load CNI config, file appears to have no type: "),
 		},
 		{
-			name:       "Ensure error upon reading from conflist with no plugins",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithNoPlugins(),
-			err:        errors.New("CNI config list "),
+			name:    "Ensure error upon reading from conflist with no plugins",
+			content: getConfListWithNoPlugins(),
+			err:     errors.New("CNI config list "),
 		},
 		{
-			name:       "Ensure conf subnet get consolidated into ranges when only subnet exists",
-			filename:   "10-kuberouter.conf",
-			isConfList: false,
-			content:    getConf(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24"},
+			name:    "Ensure conf subnet get consolidated into ranges when only subnet exists",
+			content: getConf(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24"},
 		},
 		{
-			name:       "Ensure conflist subnet get consolidated into ranges when only subnet exists",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfList(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24"},
+			name:    "Ensure conflist subnet get consolidated into ranges when only subnet exists",
+			content: getConfList(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24"},
 		},
 		{
-			name:       "Ensure conflist subnets get consolidated with ranges when both exist",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithRanges(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24"},
+			name:    "Ensure conflist subnets get consolidated with ranges when both exist",
+			content: getConfListWithRanges(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24"},
 		},
 		{
-			name:       "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithDuplicateRanges(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24"},
+			name:    "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
+			content: getConfListWithDuplicateRanges(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24"},
 		},
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			confFilePath := filepath.Join(t.TempDir(), testcase.filename)
-			require.NoError(t, os.WriteFile(confFilePath, testcase.content, 0600))
+			confFilePath := filepath.Join(t.TempDir(), testcase.content.fileName())
+			require.NoError(t, os.WriteFile(confFilePath, testcase.content.bytes, 0600))
 
 			cni, err := NewCNINetworkConfig(confFilePath)
 			if err != nil {
@@ -388,7 +377,7 @@ func TestNewCNINetworkConfig(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, testcase.isConfList, cni.IsConfList())
+			assert.Equal(t, testcase.content.isConfList, cni.IsConfList())
 
 			if testcase.ranges != nil {
 				assert.Emptyf(t, cni.getBridgePlugin().IPAM.Subnet,
@@ -416,58 +405,46 @@ func TestNewCNINetworkConfig(t *testing.T) {
 
 func TestCniNetworkConfig_GetPodCIDRsFromCNISpec(t *testing.T) {
 	testcases := []struct {
-		name       string
-		filename   string
-		isConfList bool
-		content    []byte
-		err        error
-		ranges     []string
+		name    string
+		content cniConfContent
+		err     error
+		ranges  []string
 	}{
 		{
-			name:       "Ensure conf subnet get consolidated into ranges when only subnet exists",
-			filename:   "10-kuberouter.conf",
-			isConfList: false,
-			content:    getConf(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24"},
+			name:    "Ensure conf subnet get consolidated into ranges when only subnet exists",
+			content: getConf(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24"},
 		},
 		{
-			name:       "Ensure conflist subnet get consolidated into ranges when only subnet exists",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfList(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24"},
+			name:    "Ensure conflist subnet get consolidated into ranges when only subnet exists",
+			content: getConfList(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24"},
 		},
 		{
-			name:       "Ensure conflist subnets get consolidated with ranges when both exist",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithRanges(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24"},
+			name:    "Ensure conflist subnets get consolidated with ranges when both exist",
+			content: getConfListWithRanges(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24"},
 		},
 		{
-			name:       "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithDuplicateRanges(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24"},
+			name:    "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
+			content: getConfListWithDuplicateRanges(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24"},
 		},
 		{
-			name:       "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithIPv6DuplicateRanges(),
-			err:        nil,
-			ranges:     []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "2001:db8:42:2::/64"},
+			name:    "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
+			content: getConfListWithIPv6DuplicateRanges(),
+			err:     nil,
+			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "2001:db8:42:2::/64"},
 		},
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			confFilePath := filepath.Join(t.TempDir(), testcase.filename)
-			require.NoError(t, os.WriteFile(confFilePath, testcase.content, 0600))
+			confFilePath := filepath.Join(t.TempDir(), testcase.content.fileName())
+			require.NoError(t, os.WriteFile(confFilePath, testcase.content.bytes, 0600))
 
 			cni, err := NewCNINetworkConfig(confFilePath)
 			assert.Equal(t, testcase.err, err)
@@ -475,7 +452,7 @@ func TestCniNetworkConfig_GetPodCIDRsFromCNISpec(t *testing.T) {
 				return
 			}
 
-			assert.Equal(t, testcase.isConfList, cni.IsConfList())
+			assert.Equal(t, testcase.content.isConfList, cni.IsConfList())
 
 			if testcase.ranges != nil {
 				assert.Emptyf(t, cni.getBridgePlugin().IPAM.Subnet,
@@ -506,17 +483,13 @@ func TestCniNetworkConfig_GetPodCIDRsFromCNISpec(t *testing.T) {
 func TestCniNetworkConfig_InsertPodCIDRIntoIPAM(t *testing.T) {
 	testcases := []struct {
 		name         string
-		filename     string
-		isConfList   bool
-		content      []byte
+		content      cniConfContent
 		err          error
 		ranges       []string
 		insertRanges []string
 	}{
 		{
 			name:         "Ensure passed CIDR is properly inserted into a CNI conf with no subnets defined",
-			filename:     "10-kuberouter.conf",
-			isConfList:   false,
 			content:      getConfWithNoSubnet(),
 			err:          nil,
 			ranges:       []string{"10.242.0.0/24"},
@@ -524,8 +497,6 @@ func TestCniNetworkConfig_InsertPodCIDRIntoIPAM(t *testing.T) {
 		},
 		{
 			name:         "Ensure multiple CIDRs are properly inserted into a CNI conf with no subnets defined",
-			filename:     "10-kuberouter.conflist",
-			isConfList:   true,
 			content:      getConfListWithNoSubnet(),
 			err:          nil,
 			ranges:       []string{"10.242.0.0/24", "10.242.1.0/24"},
@@ -534,37 +505,29 @@ func TestCniNetworkConfig_InsertPodCIDRIntoIPAM(t *testing.T) {
 		{
 			name: "Ensure multiple IPv4 & IPv6 CIDRs are properly inserted into a CNI conf with no subnets" +
 				"defined",
-			filename:     "10-kuberouter.conflist",
-			isConfList:   true,
 			content:      getConfListWithNoSubnet(),
 			err:          nil,
 			ranges:       []string{"10.242.0.0/24", "2001:db8:42:2::/64"},
 			insertRanges: []string{"10.242.0.0/24", "2001:db8:42:2::/64"},
 		},
 		{
-			name:       "Ensure that new subnets are inserted into a conflist with existing ranges",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithRanges(),
-			err:        nil,
+			name:    "Ensure that new subnets are inserted into a conflist with existing ranges",
+			content: getConfListWithRanges(),
+			err:     nil,
 			ranges: []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24",
 				"10.242.5.0/24", "10.242.6.0/24"},
 			insertRanges: []string{"10.242.5.0/24", "10.242.6.0/24"},
 		},
 		{
 			name:         "Ensure duplicates are not inserted without error",
-			filename:     "10-kuberouter.conflist",
-			isConfList:   true,
 			content:      getConfListWithDuplicateRanges(),
 			err:          nil,
 			ranges:       []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24"},
 			insertRanges: []string{"10.242.4.0/24"},
 		},
 		{
-			name:       "Ensure error is thrown for bad cidr",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithDuplicateRanges(),
+			name:    "Ensure error is thrown for bad cidr",
+			content: getConfListWithDuplicateRanges(),
 			err: fmt.Errorf("unable to parse input cidr: %s - %s", "10.242.4.0",
 				"invalid CIDR address: 10.242.4.0"),
 			ranges:       []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24"},
@@ -573,8 +536,8 @@ func TestCniNetworkConfig_InsertPodCIDRIntoIPAM(t *testing.T) {
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			confFilePath := filepath.Join(t.TempDir(), testcase.filename)
-			require.NoError(t, os.WriteFile(confFilePath, testcase.content, 0600))
+			confFilePath := filepath.Join(t.TempDir(), testcase.content.fileName())
+			require.NoError(t, os.WriteFile(confFilePath, testcase.content.bytes, 0600))
 
 			cni, err := NewCNINetworkConfig(confFilePath)
 			if err != nil {
@@ -603,24 +566,18 @@ func TestCniNetworkConfig_InsertPodCIDRIntoIPAM(t *testing.T) {
 func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 	testcases := []struct {
 		name         string
-		filename     string
-		isConfList   bool
-		content      []byte
+		content      cniConfContent
 		err          error
 		ranges       []string
 		insertRanges []string
 	}{
 		{
-			name:       "Ensure written file is the same as read file when no ranges were inserted",
-			filename:   "10-kuberouter.conf",
-			isConfList: false,
-			content:    getConfWithNoSubnet(),
-			err:        nil,
+			name:    "Ensure written file is the same as read file when no ranges were inserted",
+			content: getConfWithNoSubnet(),
+			err:     nil,
 		},
 		{
 			name:         "Ensure written conf file contains single subnet",
-			filename:     "10-kuberouter.conf",
-			isConfList:   false,
 			content:      getConf(),
 			err:          nil,
 			ranges:       []string{"10.242.0.0/24"},
@@ -628,8 +585,6 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 		},
 		{
 			name:         "Ensure written conflist file contains multiple subnets",
-			filename:     "10-kuberouter.conflist",
-			isConfList:   true,
 			content:      getConfListWithNoSubnet(),
 			err:          nil,
 			ranges:       []string{"10.242.0.0/24", "10.242.1.0/24"},
@@ -637,19 +592,15 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 		},
 		{
 			name:         "Ensure written conflist file has IPv4 & IPv6 CIDRs properly inserted",
-			filename:     "10-kuberouter.conflist",
-			isConfList:   true,
 			content:      getConfListWithNoSubnet(),
 			err:          nil,
 			ranges:       []string{"10.242.0.0/24", "2001:db8:42:2::/64"},
 			insertRanges: []string{"10.242.0.0/24", "2001:db8:42:2::/64"},
 		},
 		{
-			name:       "Ensure that conflist file has multiple subnets written when ranges already exist",
-			filename:   "10-kuberouter.conflist",
-			isConfList: true,
-			content:    getConfListWithRanges(),
-			err:        nil,
+			name:    "Ensure that conflist file has multiple subnets written when ranges already exist",
+			content: getConfListWithRanges(),
+			err:     nil,
 			ranges: []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24",
 				"10.242.5.0/24", "10.242.6.0/24"},
 			insertRanges: []string{"10.242.5.0/24", "10.242.6.0/24"},
@@ -657,8 +608,8 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			confFilePath := filepath.Join(t.TempDir(), testcase.filename)
-			require.NoError(t, os.WriteFile(confFilePath, testcase.content, 0600))
+			confFilePath := filepath.Join(t.TempDir(), testcase.content.fileName())
+			require.NoError(t, os.WriteFile(confFilePath, testcase.content.bytes, 0600))
 
 			cni, err := NewCNINetworkConfig(confFilePath)
 			if err != nil {
