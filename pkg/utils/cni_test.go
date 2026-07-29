@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func getConfList() []byte {
@@ -374,13 +375,10 @@ func TestNewCNINetworkConfig(t *testing.T) {
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			file, tmpDir, err := createFile(testcase.content, testcase.filename)
-			if err != nil {
-				t.Fatalf("Failed to create temporary CNI config file: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			confFilePath := filepath.Join(t.TempDir(), testcase.filename)
+			require.NoError(t, os.WriteFile(confFilePath, testcase.content, 0600))
 
-			cni, err := NewCNINetworkConfig(file.Name())
+			cni, err := NewCNINetworkConfig(confFilePath)
 			if err != nil {
 				if testcase.err == nil {
 					assert.Fail(t, "if error from NewCNINetworkConfig is not nil, the testcase shouldn't be "+
@@ -468,13 +466,10 @@ func TestCniNetworkConfig_GetPodCIDRsFromCNISpec(t *testing.T) {
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			file, tmpDir, err := createFile(testcase.content, testcase.filename)
-			if err != nil {
-				t.Fatalf("Failed to create temporary CNI config file: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			confFilePath := filepath.Join(t.TempDir(), testcase.filename)
+			require.NoError(t, os.WriteFile(confFilePath, testcase.content, 0600))
 
-			cni, err := NewCNINetworkConfig(file.Name())
+			cni, err := NewCNINetworkConfig(confFilePath)
 			assert.Equal(t, testcase.err, err)
 			if err != nil {
 				return
@@ -578,13 +573,10 @@ func TestCniNetworkConfig_InsertPodCIDRIntoIPAM(t *testing.T) {
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			file, tmpDir, err := createFile(testcase.content, testcase.filename)
-			if err != nil {
-				t.Fatalf("Failed to create temporary CNI config file: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			confFilePath := filepath.Join(t.TempDir(), testcase.filename)
+			require.NoError(t, os.WriteFile(confFilePath, testcase.content, 0600))
 
-			cni, err := NewCNINetworkConfig(file.Name())
+			cni, err := NewCNINetworkConfig(confFilePath)
 			if err != nil {
 				assert.Fail(t, "err should always be nil when calling NewCNINetworkConfig for this suite")
 			}
@@ -665,13 +657,10 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 	}
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			file, tmpDir, err := createFile(testcase.content, testcase.filename)
-			if err != nil {
-				t.Fatalf("Failed to create temporary CNI config file: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			confFilePath := filepath.Join(t.TempDir(), testcase.filename)
+			require.NoError(t, os.WriteFile(confFilePath, testcase.content, 0600))
 
-			cni, err := NewCNINetworkConfig(file.Name())
+			cni, err := NewCNINetworkConfig(confFilePath)
 			if err != nil {
 				assert.Fail(t, "err should always be nil when calling NewCNINetworkConfig for this suite")
 			}
@@ -690,7 +679,7 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 
 			// Read the CNI directly to ensure that subnet is really removed (which wouldn't be detected upon
 			// re-initialization of NewCNINetworkConfig below because of how it treats subnets
-			cniFileBytes, err := os.ReadFile(file.Name())
+			cniFileBytes, err := os.ReadFile(confFilePath)
 			if err != nil {
 				t.Fatalf("we should be able to read the CNI file we just wrote to")
 			}
@@ -721,7 +710,7 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 			assert.Emptyf(t, brPlug.IPAM.Subnet, "upon calling WriteCNIConfig() subnet should ALWAYS be blank "+
 				"because it should have been consolidated with ranges")
 
-			cni, err = NewCNINetworkConfig(file.Name())
+			cni, err = NewCNINetworkConfig(confFilePath)
 			if err != nil {
 				assert.Fail(t, "err should always be nil when calling NewCNINetworkConfig for this suite")
 			}
@@ -752,23 +741,4 @@ func TestCniNetworkConfig_WriteCNIConfig(t *testing.T) {
 			}
 		})
 	}
-}
-
-func createFile(content []byte, filename string) (*os.File, string, error) {
-	dir, err := os.MkdirTemp("", "kube-router-cni-test")
-	if err != nil {
-		return nil, "", fmt.Errorf("cannot create tmpdir: %v", err)
-	}
-	fullPath := path.Join(dir, filename)
-	file, err := os.Create(fullPath)
-	if err != nil {
-		return nil, "", fmt.Errorf("cannot create file: %v", err)
-	}
-
-	if _, err = file.Write(content); err != nil {
-		return nil, "", fmt.Errorf("cannot write to file: %v", err)
-	}
-
-	fmt.Println("File is ", file.Name())
-	return file, dir, nil
 }
