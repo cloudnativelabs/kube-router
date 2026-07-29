@@ -15,14 +15,19 @@ type CNINetworkConfig struct {
 	confList *ConfList
 }
 
-func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
+func NewCNINetworkConfig(cniConfFilePath, cniConfTemplateFilePath string) (*CNINetworkConfig, error) {
 	cniNetConf := CNINetworkConfig{
 		filePath: cniConfFilePath,
 	}
 
-	cniFileBytes, err := os.ReadFile(cniConfFilePath)
+	fileDesc, srcFilePath := "configuration file", cniConfFilePath
+	if cniConfTemplateFilePath != "" {
+		fileDesc, srcFilePath = "configuration template file", cniConfTemplateFilePath
+	}
+
+	cniFileBytes, err := os.ReadFile(srcFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %w", cniConfFilePath, err)
+		return nil, fmt.Errorf("failed to read %s: %w", fileDesc, err)
 	}
 
 	// If we're working with a conflist setup
@@ -30,7 +35,7 @@ func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
 		confList := new(ConfList)
 		err = json.Unmarshal(cniFileBytes, confList)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load CNI conflist file: %w", err)
+			return nil, fmt.Errorf("failed to parse %s %s as configuration list: %w", fileDesc, srcFilePath, err)
 		}
 		for _, conf := range confList.Plugins {
 			if conf != nil && conf.Type == "bridge" {
@@ -39,7 +44,7 @@ func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
 			}
 		}
 		if cniNetConf.conf == nil {
-			return nil, fmt.Errorf("CNI config list %s has no bridge plugin", cniConfFilePath)
+			return nil, fmt.Errorf("configuration list in %s %s has no bridge plugin", fileDesc, srcFilePath)
 		}
 		cniNetConf.confList = confList
 	} else {
@@ -47,10 +52,10 @@ func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
 		conf := new(Conf)
 		err = json.Unmarshal(cniFileBytes, conf)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load CNI conf file: %w", err)
+			return nil, fmt.Errorf("failed to parse %s %s: %w", fileDesc, srcFilePath, err)
 		}
 		if conf.Type == "" {
-			return nil, fmt.Errorf("error load CNI config, file appears to have no type: %s", cniConfFilePath)
+			return nil, fmt.Errorf("configuration in %s %s has no type", fileDesc, srcFilePath)
 		}
 		cniNetConf.conf = conf
 	}
