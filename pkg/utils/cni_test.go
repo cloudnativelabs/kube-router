@@ -19,6 +19,7 @@ const (
 )
 
 type cniConfContent struct {
+	name       string
 	isConfList bool
 	bytes      []byte
 }
@@ -31,7 +32,7 @@ func (c *cniConfContent) fileName() string {
 }
 
 func getConfList() cniConfContent {
-	return cniConfContent{true, []byte(`{
+	return cniConfContent{"confList", true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -52,7 +53,7 @@ func getConfList() cniConfContent {
 }
 
 func getConfListWithRanges() cniConfContent {
-	return cniConfContent{true, []byte(`{
+	return cniConfContent{"confListWithRanges", true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -91,7 +92,7 @@ func getConfListWithRanges() cniConfContent {
 }
 
 func getConfListWithDuplicateRanges() cniConfContent {
-	return cniConfContent{true, []byte(`{
+	return cniConfContent{"confListWithDuplicateRanges", true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -130,7 +131,7 @@ func getConfListWithDuplicateRanges() cniConfContent {
 }
 
 func getConfListWithIPv6DuplicateRanges() cniConfContent {
-	return cniConfContent{true, []byte(`{
+	return cniConfContent{"confListWithIPv6DuplicateRanges", true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -169,7 +170,7 @@ func getConfListWithIPv6DuplicateRanges() cniConfContent {
 }
 
 func getConfListWithNoSubnet() cniConfContent {
-	return cniConfContent{true, []byte(`{
+	return cniConfContent{"confListWithNoSubnet", true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "plugins":[
@@ -188,14 +189,14 @@ func getConfListWithNoSubnet() cniConfContent {
 }
 
 func getConfListWithNoPlugins() cniConfContent {
-	return cniConfContent{true, []byte(`{
+	return cniConfContent{"confListWithNoPlugins", true, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet"
 }`)}
 }
 
 func getConf() cniConfContent {
-	return cniConfContent{false, []byte(`{
+	return cniConfContent{"conf", false, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "bridge":"kube-bridge",
@@ -211,7 +212,7 @@ func getConf() cniConfContent {
 }
 
 func getConfWithNoSubnet() cniConfContent {
-	return cniConfContent{false, []byte(`{
+	return cniConfContent{"confWithNoSubnet", false, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "bridge":"kube-bridge",
@@ -226,7 +227,7 @@ func getConfWithNoSubnet() cniConfContent {
 }
 
 func getConfWithNoType() cniConfContent {
-	return cniConfContent{false, []byte(`{
+	return cniConfContent{"confWithNoType", false, []byte(`{
   "cniVersion":"0.3.0",
   "name":"mynet",
   "bridge":"kube-bridge",
@@ -239,75 +240,39 @@ func getConfWithNoType() cniConfContent {
 `)}
 }
 
+func allCNIConfContents() []cniConfContent {
+	return []cniConfContent{
+		getConfList(),
+		getConfListWithRanges(),
+		getConfListWithDuplicateRanges(),
+		getConfListWithIPv6DuplicateRanges(),
+		getConfListWithNoSubnet(),
+		getConfListWithNoPlugins(),
+		getConf(),
+		getConfWithNoSubnet(),
+		getConfWithNoType(),
+	}
+}
+
 func TestMarshalUnmarshalRestoration(t *testing.T) {
-	t.Run("Ensure ConfList is parsed and unparsed properly", func(t *testing.T) {
-		before := getConfList()
-		cl := new(ConfList)
+	for _, content := range allCNIConfContents() {
+		t.Run(content.name, func(t *testing.T) {
+			t.Parallel()
 
-		err := json.Unmarshal(before.bytes, cl)
-		if err != nil {
-			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before.bytes)
-		}
+			var obj any
+			if content.isConfList {
+				obj = new(ConfList)
+			} else {
+				obj = new(Conf)
+			}
 
-		after, err := json.MarshalIndent(cl, "", "  ")
-		if err != nil {
-			t.Fatalf("wasn't able to marshal JSON in test: %s", before.bytes)
-		}
+			require.NoError(t, json.Unmarshal(content.bytes, obj))
+			after, err := json.Marshal(obj)
+			require.NoError(t, err)
 
-		assert.JSONEqf(t, string(before.bytes), string(after),
-			"JSON is not equal!\nBefore:\n%s\nAfter:\n%s\n", before, after)
-	})
-	t.Run("Ensure ConfListWithRange is parsed and unparsed properly", func(t *testing.T) {
-		before := getConfListWithRanges()
-		cl := new(ConfList)
-
-		err := json.Unmarshal(before.bytes, cl)
-		if err != nil {
-			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before.bytes)
-		}
-
-		after, err := json.MarshalIndent(cl, "", "  ")
-		if err != nil {
-			t.Fatalf("wasn't able to marshal JSON in test: %s", before.bytes)
-		}
-
-		assert.JSONEqf(t, string(before.bytes), string(after),
-			"JSON is not equal!\nBefore:\n%s\nAfter:\n%s\n", before, after)
-	})
-	t.Run("Ensure ConfListWithNoSubnet is parsed and unparsed properly", func(t *testing.T) {
-		before := getConfListWithNoSubnet()
-		cl := new(ConfList)
-
-		err := json.Unmarshal(before.bytes, cl)
-		if err != nil {
-			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before.bytes)
-		}
-
-		after, err := json.MarshalIndent(cl, "", "  ")
-		if err != nil {
-			t.Fatalf("wasn't able to marshal JSON in test: %s", before.bytes)
-		}
-
-		assert.JSONEqf(t, string(before.bytes), string(after),
-			"JSON is not equal!\nBefore:\n%s\nAfter:\n%s\n", before, after)
-	})
-	t.Run("Ensure ConfWithNoSubnet is parsed and unparsed properly", func(t *testing.T) {
-		before := getConfWithNoSubnet()
-		c := new(Conf)
-
-		err := json.Unmarshal(before.bytes, c)
-		if err != nil {
-			t.Fatalf("wasn't able to unmarshal JSON in test: %s", before.bytes)
-		}
-
-		after, err := json.MarshalIndent(c, "", "  ")
-		if err != nil {
-			t.Fatalf("wasn't able to marshal JSON in test: %s", before.bytes)
-		}
-
-		assert.JSONEqf(t, string(before.bytes), string(after),
-			"JSON is not equal!\nBefore:\n%s\nAfter:\n%s\n", before, after)
-	})
+			assert.JSONEq(t, string(content.bytes), string(after))
+		})
+	}
 }
 
 func TestNewCNINetworkConfig(t *testing.T) {
