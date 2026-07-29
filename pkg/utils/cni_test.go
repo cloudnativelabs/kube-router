@@ -31,6 +31,10 @@ func (c *cniConfContent) fileName() string {
 	return cniConfTestFileName
 }
 
+func getNullConfList() cniConfContent {
+	return cniConfContent{"nullConfList", true, []byte(`null`)}
+}
+
 func getConfList() cniConfContent {
 	return cniConfContent{"confList", true, []byte(`{
   "cniVersion":"0.3.0",
@@ -195,6 +199,27 @@ func getConfListWithNoPlugins() cniConfContent {
 }`)}
 }
 
+func getConfListWithNullPlugin() cniConfContent {
+	return cniConfContent{"getConfListWithNullPlugin", true, []byte(`{
+  "cniVersion": "1.1.0",
+  "name":"mynet",
+  "plugins":[null]
+}`)}
+}
+
+func getConfListWithoutBridgePlugin() cniConfContent {
+	return cniConfContent{"confListWithoutBridgePlugin", true, []byte(`{
+  "cniVersion": "1.1.0",
+  "name":"mynet",
+  "plugins":[
+    {
+      "type": "portmap",
+      "capabilities": {"portMappings": true}
+    }
+  ]
+}`)}
+}
+
 func getConf() cniConfContent {
 	return cniConfContent{"conf", false, []byte(`{
   "cniVersion":"0.3.0",
@@ -242,12 +267,15 @@ func getConfWithNoType() cniConfContent {
 
 func allCNIConfContents() []cniConfContent {
 	return []cniConfContent{
+		getNullConfList(),
 		getConfList(),
 		getConfListWithRanges(),
 		getConfListWithDuplicateRanges(),
 		getConfListWithIPv6DuplicateRanges(),
 		getConfListWithNoSubnet(),
 		getConfListWithNoPlugins(),
+		getConfListWithNullPlugin(),
+		getConfListWithoutBridgePlugin(),
 		getConf(),
 		getConfWithNoSubnet(),
 		getConfWithNoType(),
@@ -283,6 +311,11 @@ func TestNewCNINetworkConfig(t *testing.T) {
 		ranges  []string
 	}{
 		{
+			name:    "Rejects null conflists",
+			content: getNullConfList(),
+			err:     "10-kuberouter.conflist has no bridge plugin",
+		},
+		{
 			name:    "Ensure error upon reading from conf with no type",
 			content: getConfWithNoType(),
 			err:     "error load CNI config, file appears to have no type: ",
@@ -311,6 +344,16 @@ func TestNewCNINetworkConfig(t *testing.T) {
 			name:    "Ensure conflist subnets get de-duplicated with ranges when repeats exist",
 			content: getConfListWithDuplicateRanges(),
 			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24"},
+		},
+		{
+			name:    "Doesn't panic on conflists with null plugins",
+			content: getConfListWithNullPlugin(),
+			err:     "10-kuberouter.conflist has no bridge plugin",
+		},
+		{
+			name:    "Rejects conflists without bridge plugin",
+			content: getConfListWithoutBridgePlugin(),
+			err:     "10-kuberouter.conflist has no bridge plugin",
 		},
 		{
 			name:    "Ensure conflist subnets get de-duplicated with ranges when IPv6 repeats exist",
