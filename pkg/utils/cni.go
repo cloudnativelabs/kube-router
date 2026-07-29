@@ -26,7 +26,7 @@ func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
 	}
 
 	// If we're working with a conflist setup
-	if cniNetConf.IsConfList() {
+	if strings.HasSuffix(strings.ToLower(cniConfFilePath), ".conflist") {
 		confList := new(ConfList)
 		err = json.Unmarshal(cniFileBytes, confList)
 		if err != nil {
@@ -73,10 +73,11 @@ func (c *CNINetworkConfig) consolidateSubnets() error {
 	return nil
 }
 
-// IsConfList checks to see if this CNI configuration is a *.conflist file or if it is a *.conf file. Returns true for
-// *.conflist, returns false for anything else.
+// IsConfList checks to see if this CNI configuration is a conflist or a conf.
+//
+// Deprecated: This is internal state.
 func (c *CNINetworkConfig) IsConfList() bool {
-	return strings.HasSuffix(strings.ToLower(c.filePath), ".conflist")
+	return c.confList != nil
 }
 
 // getPodCIDRsMapFromCNISpec gets pod CIDR allocated to the node as a map from CNI spec file and returns it
@@ -166,7 +167,7 @@ func (c *CNINetworkConfig) SetMTU(mtu int) {
 func (c *CNINetworkConfig) WriteCNIConfig() error {
 	var cniBytes []byte
 	var err error
-	if c.IsConfList() {
+	if c.confList != nil {
 		cniBytes, err = json.Marshal(c.confList)
 		if err != nil {
 			return fmt.Errorf("unable to marshal CNI ConfList: %w", err)
