@@ -46,22 +46,22 @@ func getConfListWithRanges() []byte {
       "ipam":{
         "ranges": [
           [
-			{
+            {
               "subnet":"10.242.0.0/24"
-			},
-			{
+            },
+            {
               "subnet":"10.242.1.0/24"
-			}
+            }
           ],
           [
-			{
+            {
               "subnet":"10.242.2.0/24"
-			},
-			{
+            },
+            {
               "subnet":"10.242.3.0/24"
-			}
+            }
           ]
-		],
+        ],
         "subnet": "10.242.4.0/24",
         "type":"host-local"
       },
@@ -86,22 +86,22 @@ func getConfListWithDuplicateRanges() []byte {
       "ipam":{
         "ranges": [
           [
-			{
+            {
               "subnet":"10.242.0.0/24"
-			},
-			{
+            },
+            {
               "subnet":"10.242.1.0/24"
-			}
+            }
           ],
           [
-			{
+            {
               "subnet":"10.242.2.0/24"
-			},
-			{
+            },
+            {
               "subnet":"10.242.3.0/24"
-			}
+            }
           ]
-		],
+        ],
         "subnet": "10.242.0.0/24",
         "type":"host-local"
       },
@@ -126,22 +126,22 @@ func getConfListWithIPv6DuplicateRanges() []byte {
       "ipam":{
         "ranges": [
           [
-			{
+            {
               "subnet":"10.242.0.0/24"
-			},
-			{
+            },
+            {
               "subnet":"10.242.1.0/24"
-			}
+            }
           ],
           [
-			{
+            {
               "subnet":"10.242.2.0/24"
-			},
-			{
+            },
+            {
               "subnet":"2001:db8:42:2::/64"
-			}
+            }
           ]
-		],
+        ],
         "subnet": "2001:db8:42:2::/64",
         "type":"host-local"
       },
@@ -191,7 +191,7 @@ func getConf() []byte {
   "name":"mynet",
   "bridge":"kube-bridge",
   "ipam":{
-	"type":"host-local",
+    "type":"host-local",
     "subnet": "10.242.0.0/24"
   },
   "isDefaultGateway":true,
@@ -208,7 +208,7 @@ func getConfWithNoSubnet() []byte {
   "name":"mynet",
   "bridge":"kube-bridge",
   "ipam":{
-	"type":"host-local"
+    "type":"host-local"
   },
   "isDefaultGateway":true,
   "name":"kubernetes",
@@ -224,7 +224,7 @@ func getConfWithNoType() []byte {
   "name":"mynet",
   "bridge":"kube-bridge",
   "ipam":{
-	"type":"host-local"
+    "type":"host-local"
   },
   "isDefaultGateway":true,
   "name":"kubernetes"
