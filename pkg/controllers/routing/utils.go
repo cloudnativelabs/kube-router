@@ -2,6 +2,7 @@ package routing
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -74,8 +75,7 @@ func stringSliceB64Decode(s []string) ([]string, error) {
 	for _, b64String := range s {
 		decoded, err := base64.StdEncoding.DecodeString(b64String)
 		if err != nil {
-			return nil, fmt.Errorf("could not parse \"%s\" as a base64 encoded string",
-				b64String)
+			return nil, errors.New("could not parse value as a base64 encoded string")
 		}
 		ss = append(ss, string(decoded))
 	}

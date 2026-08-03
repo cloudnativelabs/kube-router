@@ -50,3 +50,37 @@ func Test_stringSliceToIPNets(t *testing.T) {
 		assert.Nil(t, ips)
 	})
 }
+
+func Test_stringSliceB64Decode(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     []string
+		expected  []string
+		errorText string
+	}{
+		{
+			name:     "valid values",
+			input:    []string{"cGFzc3dvcmQ=", "c2VjcmV0"},
+			expected: []string{"password", "secret"},
+		},
+		{
+			name:      "invalid value is not returned in error",
+			input:     []string{"sensitive-value"},
+			errorText: "could not parse value as a base64 encoded string",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual, err := stringSliceB64Decode(tt.input)
+			if tt.errorText != "" {
+				assert.EqualError(t, err, tt.errorText)
+				assert.Nil(t, actual)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
