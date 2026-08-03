@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,25 +26,15 @@ func main() {
 }
 
 func Main() error {
-	klog.InitFlags(nil)
-
 	config := options.NewKubeRouterConfig()
 	config.AddFlags(pflag.CommandLine)
 	pflag.Parse()
 
-	// Workaround for this issue:
-	// https://github.com/kubernetes/kubernetes/issues/17162
-	err := flag.CommandLine.Parse([]string{})
-	if err != nil {
-		return fmt.Errorf("failed to parse flags: %w", err)
-	}
-	err = flag.Set("logtostderr", "true")
-	if err != nil {
-		return fmt.Errorf("failed to set flag: %w", err)
-	}
-	err = flag.Set("v", config.VLevel)
-	if err != nil {
-		return fmt.Errorf("failed to set flag: %w", err)
+	// Level.Set() mutates klog's package-global verbosity rather than the receiver, so we can discard
+	// vLevel afterwards. Everything else we need, logging to stderr included, is already klog's default.
+	var vLevel klog.Level
+	if err := vLevel.Set(config.VLevel); err != nil {
+		return fmt.Errorf("failed to set log level to %q: %w", config.VLevel, err)
 	}
 
 	if args := pflag.Args(); len(args) > 0 {
