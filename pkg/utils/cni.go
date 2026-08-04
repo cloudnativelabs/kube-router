@@ -16,24 +16,39 @@ type CNINetworkConfig struct {
 }
 
 func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
+	return NewCNINetworkConfigFromTemplate(cniConfFilePath, "")
+}
+
+func NewCNINetworkConfigFromTemplate(cniConfFilePath, cniConfTemplateFilePath string) (*CNINetworkConfig, error) {
 	cniNetConf := CNINetworkConfig{
 		filePath: cniConfFilePath,
 	}
 
-	cniFileBytes, err := os.ReadFile(cniConfFilePath)
+	fileDesc, srcFilePath := "configuration file", cniConfFilePath
+	if cniConfTemplateFilePath != "" {
+		fileDesc, srcFilePath = "configuration template file", cniConfTemplateFilePath
+	}
+
+	cniFileBytes, err := os.ReadFile(srcFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading %s: %w", cniConfFilePath, err)
+		return nil, fmt.Errorf("failed to read %s: %w", fileDesc, err)
 	}
 
 	// If we're working with a conflist setup
-	if cniNetConf.IsConfList() {
+	if strings.HasSuffix(strings.ToLower(cniConfFilePath), ".conflist") {
 		confList := new(ConfList)
 		err = json.Unmarshal(cniFileBytes, confList)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load CNI conflist file: %w", err)
+			return nil, fmt.Errorf("failed to parse %s %s as configuration list: %w", fileDesc, srcFilePath, err)
 		}
-		if len(confList.Plugins) == 0 {
-			return nil, fmt.Errorf("CNI config list %s has no plugins", cniConfFilePath)
+		for _, conf := range confList.Plugins {
+			if conf != nil && conf.Type == "bridge" {
+				cniNetConf.conf = conf
+				break
+			}
+		}
+		if cniNetConf.conf == nil {
+			return nil, fmt.Errorf("configuration list in %s %s has no bridge plugin", fileDesc, srcFilePath)
 		}
 		cniNetConf.confList = confList
 	} else {
@@ -41,10 +56,10 @@ func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
 		conf := new(Conf)
 		err = json.Unmarshal(cniFileBytes, conf)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load CNI conf file: %w", err)
+			return nil, fmt.Errorf("failed to parse %s %s: %w", fileDesc, srcFilePath, err)
 		}
 		if conf.Type == "" {
-			return nil, fmt.Errorf("error load CNI config, file appears to have no type: %s", cniConfFilePath)
+			return nil, fmt.Errorf("configuration in %s %s has no type", fileDesc, srcFilePath)
 		}
 		cniNetConf.conf = conf
 	}
@@ -60,30 +75,30 @@ func NewCNINetworkConfig(cniConfFilePath string) (*CNINetworkConfig, error) {
 // newer ranges variation. To account for this and make parsing simpler, we do the same thing that the official IPAM
 // config loader does and collapse them into ranges.
 func (c *CNINetworkConfig) consolidateSubnets() error {
-	brPlug := c.getBridgePlugin()
-	if brPlug.IPAM.Subnet != "" {
-		err := c.InsertPodCIDRIntoIPAM(brPlug.IPAM.Subnet)
+	if c.conf.IPAM.Subnet != "" {
+		err := c.InsertPodCIDRIntoIPAM(c.conf.IPAM.Subnet)
 		if err != nil {
 			return err
 		}
-		brPlug.IPAM.Subnet = ""
-		delete(brPlug.IPAM.raw, "subnet")
+		c.conf.IPAM.Subnet = ""
+		delete(c.conf.IPAM.raw, "subnet")
 	}
 
 	return nil
 }
 
-// IsConfList checks to see if this CNI configuration is a *.conflist file or if it is a *.conf file. Returns true for
-// *.conflist, returns false for anything else.
+// IsConfList checks to see if this CNI configuration is a conflist or a conf.
+//
+// Deprecated: This is internal state.
 func (c *CNINetworkConfig) IsConfList() bool {
-	return strings.HasSuffix(strings.ToLower(c.filePath), ".conflist")
+	return c.confList != nil
 }
 
 // getPodCIDRsMapFromCNISpec gets pod CIDR allocated to the node as a map from CNI spec file and returns it
 func (c *CNINetworkConfig) getPodCIDRsMapFromCNISpec() (map[string]*net.IPNet, error) {
 	podCIDRs := make(map[string]*net.IPNet)
 
-	ipamConfig := c.getBridgePlugin().IPAM
+	ipamConfig := c.conf.IPAM
 
 	// Parse ranges from ipamConfig
 	if ipamConfig != nil && len(ipamConfig.Ranges) > 0 {
@@ -117,23 +132,11 @@ func (c *CNINetworkConfig) GetPodCIDRsFromCNISpec() ([]*net.IPNet, error) {
 	return podCIDRs, nil
 }
 
-// getBridgePlugin get the bridge plugin configuration out of the cniNetworkConfig in a consistent manner
-func (c *CNINetworkConfig) getBridgePlugin() *Conf {
-	if c.confList != nil {
-		for _, conf := range c.confList.Plugins {
-			if conf.Type == "bridge" {
-				return conf
-			}
-		}
-	}
-	return c.conf
-}
-
 // InsertPodCIDRIntoIPAM insert a new cidr into the CNI file. If the CIDR already exists in the CNI ranges, then
 // operation is a noop. Throws an error if either the passed cidr cannot be parsed or if there is a problem with the
 // CIDRs already in the CNI config.
 func (c *CNINetworkConfig) InsertPodCIDRIntoIPAM(cidr string) error {
-	ipamConfig := c.getBridgePlugin().IPAM
+	ipamConfig := c.conf.IPAM
 
 	// This should have already been sanitized by the GetPodCIDR* functions before it comes to us, but you can never be
 	// too safe...
@@ -159,14 +162,13 @@ func (c *CNINetworkConfig) InsertPodCIDRIntoIPAM(cidr string) error {
 }
 
 func (c *CNINetworkConfig) SetMTU(mtu int) {
-	brPlugin := c.getBridgePlugin()
-	brPlugin.MTU = float64(mtu)
+	c.conf.MTU = float64(mtu)
 }
 
 func (c *CNINetworkConfig) WriteCNIConfig() error {
 	var cniBytes []byte
 	var err error
-	if c.IsConfList() {
+	if c.confList != nil {
 		cniBytes, err = json.Marshal(c.confList)
 		if err != nil {
 			return fmt.Errorf("unable to marshal CNI ConfList: %w", err)
