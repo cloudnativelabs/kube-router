@@ -31,6 +31,9 @@ func NewPeerConfig(remoteIPStr string, remoteASN uint32, port *uint32, b64Encode
 	if err := validateASN(remoteASN); err != nil {
 		return PeerConfig{}, err
 	}
+	if err := bfd.Validate(); err != nil {
+		return PeerConfig{}, err
+	}
 
 	return PeerConfig{
 		remoteIP:  remoteIP,
@@ -108,6 +111,9 @@ func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
 		return errors.New("remoteasn cannot be empty")
 	}
 	if err := validateASN(*tmp.RemoteASN); err != nil {
+		return err
+	}
+	if err := tmp.Bfd.Validate(); err != nil {
 		return err
 	}
 	if tmp.LocalIP != nil {
