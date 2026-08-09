@@ -131,11 +131,7 @@ type NetworkRoutingController struct {
 	globalPeerRouters              []*gobgpapi.Peer
 	nodePeerRouters                []string
 	enableCNI                      bool
-	enableBFD                      bool
-	bfdDetectionMultiplier         uint32
-	bfdMinRxInt                    uint32
-	bfdMinTxInt                    uint32
-	bfdPort                        uint32
+	bfdConfig                      bgp.BFDConfig
 	bgpFullMeshMode                bool
 	bgpEnableInternal              bool
 	bgpGracefulRestart             bool
@@ -1399,16 +1395,15 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		klog.Warning("--gobgp-admin-port is 0 but --gobgp-admin-address is non-empty, not binding GoBGP socket to an address")
 	}
 
-	nrc.enableBFD = kubeRouterConfig.EnableBFD
-	nrc.bfdPort = kubeRouterConfig.BFDPort
-	nrc.bfdDetectionMultiplier = kubeRouterConfig.BFDDetectionMultiplier
-	nrc.bfdMinRxInt = kubeRouterConfig.BFDRequiredMinRxInterval
-	nrc.bfdMinTxInt = kubeRouterConfig.BFDDesiredMinTxInterval
-
-	if nrc.enableBFD {
-		if nrc.bfdDetectionMultiplier == 0 || nrc.bfdDetectionMultiplier > options.BFDDetectionMultiplierMax {
-			return nil, fmt.Errorf("--bfd-detection-multiplier must be between 1-%d", options.BFDDetectionMultiplierMax)
-		}
+	nrc.bfdConfig = bgp.BFDConfig{
+		Enabled:               kubeRouterConfig.EnableBFD,
+		Port:                  new(kubeRouterConfig.BFDPort),
+		DetectionMultiplier:   new(kubeRouterConfig.BFDDetectionMultiplier),
+		DesiredMinTxInterval:  new(kubeRouterConfig.BFDDesiredMinTxInterval),
+		RequiredMinRxInterval: new(kubeRouterConfig.BFDRequiredMinRxInterval),
+	}
+	if err := nrc.bfdConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid BFD configuration: %w", err)
 	}
 
 	// Convert ints to uint32s
@@ -1465,13 +1460,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		peerPasswords,
 		nil,
 		nrc.krNode.GetPrimaryNodeIP().String(),
-		bgp.BFDConfig{
-			Enabled:               nrc.enableBFD,
-			Port:                  &nrc.bfdPort,
-			DetectionMultiplier:   &nrc.bfdDetectionMultiplier,
-			DesiredMinTxInterval:  &nrc.bfdMinTxInt,
-			RequiredMinRxInterval: &nrc.bfdMinRxInt,
-		},
+		nrc.bfdConfig,
 	)
 	if err != nil {
 		return nil, err

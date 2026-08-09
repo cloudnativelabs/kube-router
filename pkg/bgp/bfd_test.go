@@ -127,3 +127,81 @@ func TestBFDConfig_ToGoBGP(t *testing.T) {
 		})
 	}
 }
+
+func TestBFDConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name          string
+		config        BFDConfig
+		errorContains string
+	}{
+		{
+			name: "valid config",
+			config: BFDConfig{
+				Enabled:               true,
+				Port:                  new(uint32(65535)),
+				DetectionMultiplier:   new(uint32(255)),
+				DesiredMinTxInterval:  new(uint32(BFDIntervalMax)),
+				RequiredMinRxInterval: new(uint32(BFDIntervalMax)),
+			},
+		},
+		{
+			name:   "empty config is valid",
+			config: BFDConfig{},
+		},
+		{
+			name:   "enabled with defaults is valid",
+			config: BFDConfig{Enabled: true},
+		},
+		{
+			name:          "port cannot be 0",
+			config:        BFDConfig{Port: new(uint32(0))},
+			errorContains: "bfd port must be between",
+		},
+		{
+			name:          "port cannot be above 65535",
+			config:        BFDConfig{Port: new(uint32(65536))},
+			errorContains: "bfd port must be between",
+		},
+		{
+			name:          "detection multiplier cannot be zero",
+			config:        BFDConfig{DetectionMultiplier: new(uint32(0))},
+			errorContains: "detection multiplier must be between",
+		},
+		{
+			name:          "detection multiplier cannot be above 255",
+			config:        BFDConfig{DetectionMultiplier: new(uint32(256))},
+			errorContains: "detection multiplier must be between",
+		},
+		{
+			name:          "desired min tx interval cannot be zero",
+			config:        BFDConfig{DesiredMinTxInterval: new(uint32(0))},
+			errorContains: "desired min tx interval must be between",
+		},
+		{
+			name:          "desired min tx interval cannot be greater than value that would cause uint32 overflow as microseconds",
+			config:        BFDConfig{DesiredMinTxInterval: new(uint32(BFDIntervalMax + 1))},
+			errorContains: "desired min tx interval must be between",
+		},
+		{
+			name:          "required rx interval cannot be zero",
+			config:        BFDConfig{RequiredMinRxInterval: new(uint32(0))},
+			errorContains: "required min rx interval must be between",
+		},
+		{
+			name:          "required rx interval cannot be greater than value that would cause uint32 overflow as microseconds",
+			config:        BFDConfig{RequiredMinRxInterval: new(uint32(BFDIntervalMax + 1))},
+			errorContains: "required min rx interval must be between",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+			if tt.errorContains != "" {
+				assert.ErrorContains(t, err, tt.errorContains)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

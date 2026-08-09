@@ -13,7 +13,6 @@ const (
 	DefaultBFDDetectionMultiplier   uint32 = 3
 	DefaultBFDDesiredMinTxInterval  uint32 = 1000 // 1s in milliseconds
 	DefaultBFDRequiredMinRxInterval uint32 = 1000 // 1s in milliseconds
-	BFDDetectionMultiplierMax       uint32 = 255     // RFC 5880: detect_mult is an 8-bit field
 	DefaultBgpPort                         = 179
 	DefaultBgpHoldTime                     = 90 * time.Second
 	defaultHealthCheckPort                 = 20244
