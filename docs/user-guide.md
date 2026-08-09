@@ -114,10 +114,10 @@ Usage of kube-router:
       --advertise-loadbalancer-ip                     Add LoadBalancer IP of service status as set by the LB provider to the RIB so that it gets advertised to the BGP peers.
       --advertise-pod-cidr                            Add Node's POD cidr to the RIB so that it gets advertised to the BGP peers. (default true)
       --auto-mtu                                      Auto detect and set the largest possible MTU for kube-bridge and pod interfaces (also accounts for IPIP overlay network when enabled). (default true)
-      --bfd-desired-min-tx-interval uint32            The desired min interval in microseconds for GoBGP to transmit BFD control packets. (default 1000000)
+      --bfd-desired-min-tx-interval uint32            The desired min interval in milliseconds for GoBGP to transmit BFD control packets. (default 1000)
       --bfd-detection-multiplier uint32               BFD failure detection multiplier. Must be between 1-255. (default 3)
       --bfd-port uint32                               UDP port for BFD control packets (default 3784)
-      --bfd-required-min-rx-interval uint32           Min interval in microseconds for GoBGP to receive BFD control packets. (default 1000000)
+      --bfd-required-min-rx-interval uint32           Min interval in milliseconds for GoBGP to receive BFD control packets. (default 1000)
       --bgp-graceful-restart                          Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts
       --bgp-graceful-restart-deferral-time duration   BGP Graceful restart deferral time according to RFC4724 4.1, maximum 18h. (default 6m0s)
       --bgp-graceful-restart-time duration            BGP Graceful restart time according to RFC4724 3, maximum 4095s. (default 1m30s)

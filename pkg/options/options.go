@@ -11,8 +11,8 @@ import (
 const (
 	DefaultBFDPort                  uint32 = 3784
 	DefaultBFDDetectionMultiplier   uint32 = 3
-	DefaultBFDDesiredMinTxInterval  uint32 = 1000000 // 1s in microseconds
-	DefaultBFDRequiredMinRxInterval uint32 = 1000000 // 1s in microseconds
+	DefaultBFDDesiredMinTxInterval  uint32 = 1000 // 1s in milliseconds
+	DefaultBFDRequiredMinRxInterval uint32 = 1000 // 1s in milliseconds
 	BFDDetectionMultiplierMax       uint32 = 255     // RFC 5880: detect_mult is an 8-bit field
 	DefaultBgpPort                         = 179
 	DefaultBgpHoldTime                     = 90 * time.Second
@@ -143,12 +143,12 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Auto detect and set the largest possible MTU for kube-bridge and pod interfaces (also accounts for "+
 			"IPIP overlay network when enabled).")
 	fs.Uint32Var(&s.BFDDesiredMinTxInterval, "bfd-desired-min-tx-interval", DefaultBFDDesiredMinTxInterval,
-		"The desired min interval in microseconds for GoBGP to transmit BFD control packets.")
+		"The desired min interval in milliseconds for GoBGP to transmit BFD control packets.")
 	fs.Uint32Var(&s.BFDDetectionMultiplier, "bfd-detection-multiplier", DefaultBFDDetectionMultiplier,
 		"BFD failure detection multiplier. Must be between 1-255.")
 	fs.Uint32Var(&s.BFDPort, "bfd-port", DefaultBFDPort, "UDP port for BFD control packets")
 	fs.Uint32Var(&s.BFDRequiredMinRxInterval, "bfd-required-min-rx-interval", DefaultBFDRequiredMinRxInterval,
-		"Min interval in microseconds for GoBGP to receive BFD control packets.")
+		"Min interval in milliseconds for GoBGP to receive BFD control packets.")
 	fs.BoolVar(&s.BGPGracefulRestart, "bgp-graceful-restart", false,
 		"Enables the BGP Graceful Restart capability so that routes are preserved on unexpected restarts")
 	fs.DurationVar(&s.BGPGracefulRestartDeferralTime, "bgp-graceful-restart-deferral-time",

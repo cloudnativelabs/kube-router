@@ -46,7 +46,7 @@ func (b BFDConfig) ToGoBGP() *gobgpapi.BfdPeerConfig {
 		Enabled:                  true,
 		Port:                     ptr.Deref(b.Port, options.DefaultBFDPort),
 		DetectionMultiplier:      ptr.Deref(b.DetectionMultiplier, options.DefaultBFDDetectionMultiplier),
-		DesiredMinimumTxInterval: ptr.Deref(b.DesiredMinTxInterval, options.DefaultBFDDesiredMinTxInterval),
-		RequiredMinimumReceive:   ptr.Deref(b.RequiredMinRxInterval, options.DefaultBFDRequiredMinRxInterval),
+		DesiredMinimumTxInterval: ptr.Deref(b.DesiredMinTxInterval, options.DefaultBFDDesiredMinTxInterval) * 1000,
+		RequiredMinimumReceive:   ptr.Deref(b.RequiredMinRxInterval, options.DefaultBFDRequiredMinRxInterval) * 1000,
 	}
 }
