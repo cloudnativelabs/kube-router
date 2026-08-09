@@ -376,8 +376,7 @@ or configure them on a per-node basis. Ensure that detection multiplier,
 required min RX interval, and desired min TX interval to either match or
 are slower than the settings configured on the peer, as GoBGP does not currently
 handle timer negotiation. Note that required min RX interval and desired min TX
-interval are both in _microseconds_, as some implementations of BFD (such as FRR)
-handle timer values in milliseconds.
+interval are both in _milliseconds_, instead of microseconds, which GoBGP uses.
 
 **Global External BGP Peers:**
 
@@ -400,8 +399,8 @@ Per-node BFD settings can be configured via the `kube-router.io/peers` annotatio
     enabled: true
     port: 3785
     detection_multiplier: 2
-    required_min_rx_interval: 1000000
-    desired_min_tx_interval: 1000000
+    required_min_rx_interval: 1000
+    desired_min_tx_interval: 1000
 ```
 
 Per-node BFD settings are _not_ supported via the individual BGP node annotations,

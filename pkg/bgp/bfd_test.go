@@ -38,20 +38,20 @@ func TestBFDConfig_String(t *testing.T) {
 			config: BFDConfig{
 				Enabled:               true,
 				Port:                  new(uint32(3785)),
-				DesiredMinTxInterval:  new(uint32(2000000)),
+				DesiredMinTxInterval:  new(uint32(2000)),
 				DetectionMultiplier:   new(uint32(5)),
-				RequiredMinRxInterval: new(uint32(1000000)),
+				RequiredMinRxInterval: new(uint32(1000)),
 			},
-			expected: "BFDConfig{Enabled: true, Port: 3785, DesiredMinTxInterval: 2000000, DetectionMultiplier: 5, RequiredMinRxInterval: 1000000}",
+			expected: "BFDConfig{Enabled: true, Port: 3785, DesiredMinTxInterval: 2000, DetectionMultiplier: 5, RequiredMinRxInterval: 1000}",
 		},
 		{
 			name: "Some fields set",
 			config: BFDConfig{
 				Enabled:              true,
 				DetectionMultiplier:  new(uint32(3)),
-				DesiredMinTxInterval: new(uint32(1000000)),
+				DesiredMinTxInterval: new(uint32(1000)),
 			},
-			expected: "BFDConfig{Enabled: true, DesiredMinTxInterval: 1000000, DetectionMultiplier: 3}",
+			expected: "BFDConfig{Enabled: true, DesiredMinTxInterval: 1000, DetectionMultiplier: 3}",
 		},
 	}
 
@@ -82,8 +82,8 @@ func TestBFDConfig_ToGoBGP(t *testing.T) {
 				Enabled:                  true,
 				Port:                     options.DefaultBFDPort,
 				DetectionMultiplier:      options.DefaultBFDDetectionMultiplier,
-				DesiredMinimumTxInterval: options.DefaultBFDDesiredMinTxInterval,
-				RequiredMinimumReceive:   options.DefaultBFDRequiredMinRxInterval,
+				DesiredMinimumTxInterval: options.DefaultBFDDesiredMinTxInterval * 1000,
+				RequiredMinimumReceive:   options.DefaultBFDRequiredMinRxInterval * 1000,
 			},
 		},
 		{
@@ -91,14 +91,14 @@ func TestBFDConfig_ToGoBGP(t *testing.T) {
 			peer: BFDConfig{
 				Enabled:              true,
 				DetectionMultiplier:  new(uint32(5)),
-				DesiredMinTxInterval: new(uint32(2000000)),
+				DesiredMinTxInterval: new(uint32(2000)),
 			},
 			expected: &gobgpapi.BfdPeerConfig{
 				Enabled:                  true,
 				Port:                     3784,
 				DetectionMultiplier:      5,
 				DesiredMinimumTxInterval: 2000000,
-				RequiredMinimumReceive:   options.DefaultBFDRequiredMinRxInterval,
+				RequiredMinimumReceive:   options.DefaultBFDRequiredMinRxInterval * 1000,
 			},
 		},
 		{
@@ -107,8 +107,8 @@ func TestBFDConfig_ToGoBGP(t *testing.T) {
 				Enabled:               true,
 				Port:                  new(uint32(3785)),
 				DetectionMultiplier:   new(uint32(2)),
-				DesiredMinTxInterval:  new(uint32(2000000)),
-				RequiredMinRxInterval: new(uint32(2000000)),
+				DesiredMinTxInterval:  new(uint32(2000)),
+				RequiredMinRxInterval: new(uint32(2000)),
 			},
 			expected: &gobgpapi.BfdPeerConfig{
 				Enabled:                  true,
