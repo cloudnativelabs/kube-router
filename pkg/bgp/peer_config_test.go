@@ -87,6 +87,18 @@ func TestPeerConfig_UnmarshalYAML(t *testing.T) {
 		errorContains string
 	}{
 		{
+			name: "Valid peer config YAML",
+			input: []byte(`remoteip: 1.1.1.1
+remoteasn: 1234
+password: aGVsbG8=
+`),
+			expected: PeerConfig{
+				password:  utils.Base64String("hello"),
+				remoteIP:  net.ParseIP("1.1.1.1"),
+				remoteASN: uint32(1234),
+			},
+		},
+		{
 			name:     "empty YAML",
 			expected: PeerConfig{},
 		},
@@ -119,16 +131,40 @@ remoteasn: 1234`),
 			errorContains: "is not a valid IP address",
 		},
 		{
-			name: "Valid peer config YAML",
+			name: "Invalid BFD port ",
 			input: []byte(`remoteip: 1.1.1.1
 remoteasn: 1234
-password: aGVsbG8=
-`),
-			expected: PeerConfig{
-				password:  utils.Base64String("hello"),
-				remoteIP:  net.ParseIP("1.1.1.1"),
-				remoteASN: uint32(1234),
-			},
+bfd:
+  enabled: true
+  port: 0`),
+			errorContains: "bfd port must be between",
+		},
+		{
+			name: "Invalid BFD detection multiplier",
+			input: []byte(`remoteip: 1.1.1.1
+remoteasn: 1234
+bfd:
+  enabled: true
+  detection_multiplier: 0`),
+			errorContains: "bfd detection multiplier must be between",
+		},
+		{
+			name: "Invalid BFD desired min tx interval",
+			input: []byte(`remoteip: 1.1.1.1
+remoteasn: 1234
+bfd:
+  enabled: true
+  desired_min_tx_interval: 0`),
+			errorContains: "bfd desired min tx interval must be between",
+		},
+		{
+			name: "Invalid BFD required min rx interval",
+			input: []byte(`remoteip: 1.1.1.1
+remoteasn: 1234
+bfd:
+  enabled: true
+  required_min_rx_interval: 0`),
+			errorContains: "bfd required min rx interval must be between",
 		},
 	}
 

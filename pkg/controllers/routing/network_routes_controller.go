@@ -1402,9 +1402,6 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		DesiredMinTxInterval:  new(kubeRouterConfig.BFDDesiredMinTxInterval),
 		RequiredMinRxInterval: new(kubeRouterConfig.BFDRequiredMinRxInterval),
 	}
-	if err := nrc.bfdConfig.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid BFD configuration: %w", err)
-	}
 
 	// Convert ints to uint32s
 	peerASNs := make([]uint32, 0)
