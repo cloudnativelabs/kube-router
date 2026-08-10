@@ -12,6 +12,7 @@ import (
 	"github.com/moby/ipvs"
 	"github.com/stretchr/testify/assert"
 	"github.com/vishvananda/netlink"
+	v1 "k8s.io/api/core/v1"
 )
 
 func getMoqNSC() *NetworkServicesController {
@@ -251,9 +252,42 @@ func TestIsValidKubeRouterServiceArtifact(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		result, err := nsc.isValidKubeRouterServiceArtifact(test.address, test.port)
+		result, err := nsc.isValidKubeRouterServiceArtifact(test.address, test.port, nil)
 		if result != test.expected || (err != nil && err.Error() != test.err.Error()) {
 			t.Errorf("lookupServiceByAddress(%v) = %v, %v; want %v, %v", test.address, result, err, test.expected, test.err)
 		}
+	}
+}
+
+// TestIsValidKubeRouterServiceArtifactBindOnAllIP verifies that with nodeportBindOnAllIP set, a NodePort service is
+// validated against the caller-supplied local IP map (rather than re-enumerating interfaces).
+func TestIsValidKubeRouterServiceArtifactBindOnAllIP(t *testing.T) {
+	nsc := &NetworkServicesController{nodeportBindOnAllIP: true}
+	nsc.setServiceMap(map[string]*serviceInfo{
+		"service1": {clusterIPs: []string{"10.0.0.1"}, nodePort: 30000},
+	})
+
+	localIPs := map[v1.IPFamily][]net.IP{
+		v1.IPv4Protocol: {net.ParseIP("192.168.1.10")},
+	}
+
+	tests := []struct {
+		name     string
+		address  net.IP
+		port     int
+		expected bool
+	}{
+		{"nodeport on a local IP is valid", net.ParseIP("192.168.1.10"), 30000, true},
+		{"nodeport on a non-local IP is not valid", net.ParseIP("192.168.1.99"), 30000, false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, _ := nsc.isValidKubeRouterServiceArtifact(test.address, test.port, localIPs)
+			if result != test.expected {
+				t.Errorf("isValidKubeRouterServiceArtifact(%v, %d) = %v; want %v",
+					test.address, test.port, result, test.expected)
+			}
+		})
 	}
 }

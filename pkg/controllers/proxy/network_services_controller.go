@@ -680,7 +680,7 @@ func (nsc *NetworkServicesController) syncIpvsFirewall() error {
 			address = ipvsService.Address
 			port = int(ipvsService.Port)
 
-			isValid, err := nsc.isValidKubeRouterServiceArtifact(address, port)
+			isValid, err := nsc.isValidKubeRouterServiceArtifact(address, port, addrsMap)
 			if err != nil {
 				klog.Infof("failed to lookup service by address %s: %v - this does not appear to be a kube-router "+
 					"controlled service, skipping...", address, err)
