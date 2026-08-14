@@ -99,6 +99,27 @@ password: aGVsbG8=
 			},
 		},
 		{
+			name: "Valid peer config YAML with BFD enabled",
+			input: []byte(`remoteip: 1.1.1.1
+remoteasn: 1234
+password: aGVsbG8=
+bfd:
+  enabled: true
+  desired_min_tx_interval: 1000
+  required_min_rx_interval: 1000
+`),
+			expected: PeerConfig{
+				password:  utils.Base64String("hello"),
+				remoteIP:  net.ParseIP("1.1.1.1"),
+				remoteASN: uint32(1234),
+				bfd: BFDConfig{
+					Enabled:               true,
+					DesiredMinTxInterval:  new(uint32(1000)),
+					RequiredMinRxInterval: new(uint32(1000)),
+				},
+			},
+		},
+		{
 			name:     "empty YAML",
 			expected: PeerConfig{},
 		},
