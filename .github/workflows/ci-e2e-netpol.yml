@@ -25,7 +25,7 @@ env:
   GO_VERSION: "~1.26.6"
   KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
   KIND_VERSION: "v0.27.0"
-  KIND_NODE_IMAGE: "kindest/node:v1.32.2"
+  KIND_NODE_IMAGE: "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
 
 jobs:
   # Executes Integration Tests (require nft binary + kernel nftables support) 
