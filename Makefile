@@ -33,7 +33,7 @@ DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0@sha256:a9509a9d50a82781aa4
 # See Versions: https://hub.docker.com/_/node
 DOCKER_DOCTOC_IMAGE?=node:alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019
 # See Versions: https://www.npmjs.com/package/doctoc
-DOCTOC_VERSION=2.4.1
+DOCTOC_VERSION=2.5.0
 # See Versions: https://github.com/crate-ci/typos/releases
 TYPOS_VERSION=v1.46.3
 # See Versions: https://github.com/osrg/gobgp/releases
