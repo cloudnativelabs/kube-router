@@ -24,7 +24,7 @@ env:
   RUNTIME_BASE: "alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40"
   GO_VERSION: "~1.26.6"
   KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
-  KIND_VERSION: "v0.27.0"
+  KIND_VERSION: "v0.32.0"
   KIND_NODE_IMAGE: "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
 
 jobs:
