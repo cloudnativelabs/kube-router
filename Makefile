@@ -37,7 +37,7 @@ DOCTOC_VERSION=2.5.0
 # See Versions: https://github.com/crate-ci/typos/releases
 TYPOS_VERSION=v1.49.0
 # See Versions: https://github.com/osrg/gobgp/releases
-GOBGP_VERSION=8b5edc2c55cbec9e7df33123a07811a119d44542  # v4.7.0
+GOBGP_VERSION=10495227d00666041c98244088b73fa80a59f86c  # v4.8.0
 QEMU_IMAGE?=multiarch/qemu-user-static:7.2.0-1@sha256:fe60359c92e86a43cc87b3d906006245f77bfc0565676b80004cc666e4feb9f0
 # See Versions: https://github.com/goreleaser/goreleaser/releases
 GORELEASER_VERSION=v2.16.0
