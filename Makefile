@@ -42,7 +42,7 @@ QEMU_IMAGE?=multiarch/qemu-user-static:7.2.0-1@sha256:fe60359c92e86a43cc87b3d906
 # See Versions: https://github.com/goreleaser/goreleaser/releases
 GORELEASER_VERSION=v2.17.1
 # See Versions: https://hub.docker.com/r/anchore/grype/tags
-GRYPE_IMAGE?=anchore/grype:v0.117.0@sha256:9e7063a67136c869cfc2449959b731b25d462990c26a9d0ca7bd380bab3ab540
+GRYPE_IMAGE?=anchore/grype:v0.117.0@sha256:ddf9e9f204049f3a4a0955ef70873cabab6a31432125ad4f20a490b54950a253
 # See Versions: https://github.com/containernetworking/plugins/releases
 CNI_VERSION=v1.9.1
 UID?=$(shell id -u)
