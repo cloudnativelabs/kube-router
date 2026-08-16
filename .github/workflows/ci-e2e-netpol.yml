@@ -20,12 +20,12 @@ permissions:
 
 env:
   # Keep these in sync with ci.yml; update-deps will pin the SHAs.
-  BUILDTIME_BASE: "golang:1.26.3-alpine3.23@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d"
-  RUNTIME_BASE: "alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11"
-  GO_VERSION: "~1.26.3"
+  BUILDTIME_BASE: "golang:1.26.6-alpine3.24@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df"
+  RUNTIME_BASE: "alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b"
+  GO_VERSION: "~1.26.6"
   KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
-  KIND_VERSION: "v0.27.0"
-  KIND_NODE_IMAGE: "kindest/node:v1.32.2"
+  KIND_VERSION: "v0.32.0"
+  KIND_NODE_IMAGE: "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
 
 jobs:
   # Executes Integration Tests (require nft binary + kernel nftables support) 
@@ -37,7 +37,7 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
     - name: Set up Go 1.x
-      uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c  # v6.4.0
+      uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
       with:
         go-version: ${{ env.GO_VERSION }}
       id: go
@@ -85,7 +85,7 @@ jobs:
     # Build the kube-router image from source and load it into the local Docker daemon.
     # The Dockerfile handles compilation in a builder stage, so no pre-built binary is needed.
     - name: Build kube-router container image
-      uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+      uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
       with:
         context: .
         load: true
