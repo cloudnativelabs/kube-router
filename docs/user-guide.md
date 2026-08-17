@@ -35,7 +35,9 @@
   - [Hairpin Mode Example](#hairpin-mode-example)
 - [SNATing Service Traffic](#snating-service-traffic)
 - [Load balancing Scheduling Algorithms](#load-balancing-scheduling-algorithms)
-- [HostPort support](#hostport-support)
+- [CNI Configuration](#cni-configuration)
+  - [CNI Configuration Templates](#cni-configuration-templates)
+  - [HostPort support](#hostport-support)
 - [IPVS Graceful termination support](#ipvs-graceful-termination-support)
 - [MTU](#mtu)
 - [BGP configuration](#bgp-configuration)
@@ -583,45 +585,91 @@ $ kubectl annotate service my-service "kube-router.io/service.schedflags=flag-2"
 $ kubectl annotate service my-service "kube-router.io/service.schedflags=flag-1,flag-2"
 ```
 
-## HostPort support
+## CNI Configuration
 
-If you would like to use `HostPort` functionality below changes are required in the manifest.
+kube-router provides pod networking by means of the standard [`bridge`][cni-bridge] and [`host-local`][cni-host-local]
+[containernetworking plugins], optionally accompanied by others like [`portmap`][cni-portmap]. The kube-router Docker
+image ships these plugins, and the [example daemonsets](../daemonset/) install them onto the node in an init container.
+kube-router's own contribution is the routing of pod traffic between nodes and the management of the plugins'
+configuration file, filling in the parts that are node-specific and only known at runtime. The latter is what
+`--enable-cni` controls, which is enabled by default. Disable it to use kube-router's features alongside another CNI
+provider. On startup, kube-router
 
-- By default kube-router assumes CNI conf file to be `/etc/cni/net.d/10-kuberouter.conf`. Add an environment variable
-`KUBE_ROUTER_CNI_CONF_FILE` to kube-router manifest and set it to `/etc/cni/net.d/10-kuberouter.conflist`
+- inserts the node's pod CIDRs into the `host-local` IPAM ranges of the `bridge` plugin, as allocated to the node by
+  the kube-controller-manager, or as set via the `kube-router.io/pod-cidrs` annotation
+- and sets the `bridge` plugin's MTU, if `--auto-mtu` is enabled (see [MTU](#mtu)).
 
-- Modify `kube-router-cfg` ConfigMap with CNI config that supports `portmap` as additional plug-in
+The completed configuration is written back once the `kube-bridge` interface has been set up. The configuration is read
+from and written to `/etc/cni/net.d/10-kuberouter.conf` by default; the location can be changed via the
+`KUBE_ROUTER_CNI_CONF_FILE` environment variable. A file name ending in `.conflist` is treated as a [configuration
+list][cni-config-format], i.e. a chain of multiple plugins, any other name as a single plugin configuration.
 
-```json
-    {
-       "cniVersion":"0.3.0",
-       "name":"mynet",
-       "plugins":[
-          {
-             "name":"kubernetes",
-             "type":"bridge",
-             "bridge":"kube-bridge",
-             "isDefaultGateway":true,
-             "ipam":{
-                "type":"host-local"
-             }
-          },
-          {
-             "type":"portmap",
-             "capabilities":{
-                "snat":true,
-                "portMappings":true
-             }
-          }
-       ]
-    }
-```
+The configuration file must exist when kube-router starts. The [example daemonsets](../daemonset/) ship it in a
+`kube-router-cfg` ConfigMap and use an init container to copy it into the CNI configuration directory.
 
-- Update init container command to create `/etc/cni/net.d/10-kuberouter.conflist` file
+### CNI Configuration Templates
+
+A configuration file that's copied into the CNI configuration directory by an init container is already visible to the
+container runtime before kube-router has completed it, so on a freshly booted node, pod sandbox creation may transiently
+fail with errors like "no IP ranges specified" until kube-router has filled in the missing parts.
+
+To avoid this, the `KUBE_ROUTER_CNI_CONF_TEMPLATE_FILE` environment variable can point kube-router to a potentially
+incomplete CNI configuration outside of the CNI configuration directory, e.g. a ConfigMap mounted at
+`/etc/kube-router/cni-conf.json`. kube-router will then read the configuration from the template instead, and write the
+completed configuration to `KUBE_ROUTER_CNI_CONF_FILE`, which doesn't need to exist beforehand. The template is
+interpreted according to the file name given in `KUBE_ROUTER_CNI_CONF_FILE`, i.e. as a configuration list if that name
+ends in `.conflist`. The template's own file name has no significance. As a result, the container runtime won't pick up
+an incomplete configuration and try to set up pod networking too early. Since the configuration is re-derived from the
+pristine template on every start, the written configuration is wholly owned by kube-router.
+
+For an example manifest, please look at the [CNI configuration template manifest].
+
+### HostPort support
+
+If you would like to use `HostPort` functionality, the following changes are required in the manifest:
+
+- Since the `portmap` plugin needs to be chained after the `bridge` plugin, the CNI configuration has to be a config
+  list: set `KUBE_ROUTER_CNI_CONF_FILE` to `/etc/cni/net.d/10-kuberouter.conflist` (see above)
+- Modify the `kube-router-cfg` ConfigMap with a CNI configuration that supports `portmap` as an additional plug-in:
+
+  ```json
+      {
+         "cniVersion":"0.3.0",
+         "name":"mynet",
+         "plugins":[
+            {
+               "name":"kubernetes",
+               "type":"bridge",
+               "bridge":"kube-bridge",
+               "isDefaultGateway":true,
+               "ipam":{
+                  "type":"host-local"
+               }
+            },
+            {
+               "type":"portmap",
+               "capabilities":{
+                  "snat":true,
+                  "portMappings":true
+               }
+            }
+         ]
+      }
+  ```
+
+- Update the init container command to create `/etc/cni/net.d/10-kuberouter.conflist`, or point
+  `KUBE_ROUTER_CNI_CONF_TEMPLATE_FILE` at the ConfigMap mount instead
 - Restart the container runtime
 
 For an e.g manifest please look at [manifest](../daemonset/kubeadm-kuberouter-all-features-hostport.yaml) with necessary
 changes required for `HostPort` functionality.
+
+[cni-bridge]: https://www.cni.dev/plugins/v1.1/main/bridge/
+[cni-host-local]: https://www.cni.dev/plugins/v1.1/ipam/host-local/
+[containernetworking plugins]: https://github.com/containernetworking/plugins
+[cni-portmap]: https://www.cni.dev/plugins/v1.1/meta/portmap/
+[cni-config-format]: https://www.cni.dev/docs/spec/#configuration-format
+[CNI configuration template manifest]: ../daemonset/generic-kuberouter-cni-conf-template.yaml
 
 ## IPVS Graceful termination support
 
