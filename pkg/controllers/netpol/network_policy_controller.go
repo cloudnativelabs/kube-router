@@ -126,6 +126,7 @@ type networkPolicyInfo struct {
 	name        string
 	namespace   string
 	podSelector labels.Selector
+	annotations map[string]string
 
 	// set of pods matching network policy spec podselector label selector
 	targetPods map[string]podInfo
