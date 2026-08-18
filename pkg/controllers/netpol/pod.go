@@ -109,7 +109,7 @@ func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInf
 			// add rule to log the packets that will be dropped due to network policy enforcement
 			comment := "\"" + idComment(pod.namespace, pod.name, cmtLogDrop) + "\""
 			args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment,
-				"-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG",
+				"-m", "mark", "!", "--mark", "0x10000/0x50000", "-j", "NFLOG",
 				"--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10", "\n"}
 			// This used to be AppendUnique when we were using iptables directly, this checks to make sure we didn't drop
 			// unmarked for this chain already
@@ -125,7 +125,7 @@ func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInf
 			filterTableRules.WriteString(strings.Join(args, " "))
 
 			// reset mark to let traffic pass through rest of the chains
-			args = []string{"-A", podFwChainName, "-j", "MARK", "--set-mark", "0/0x10000", "\n"}
+			args = []string{"-A", podFwChainName, "-j", "MARK", "--set-mark", "0/0x50000", "\n"}
 			filterTableRules.WriteString(strings.Join(args, " "))
 		}
 	}
@@ -208,6 +208,9 @@ func (npc *NetworkPolicyControllerBase) setupPodNetpolRules(pod podInfo, podFwCh
 			if _, ok := policy.targetPods[pod.ip]; !ok {
 				continue
 			}
+			if isMonitorPolicy(policy) {
+				continue
+			}
 			comment := "\"" + idComment(policy.namespace, policy.name, cmtJumpPolicy) + "\""
 			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
 			var args []string
@@ -244,6 +247,30 @@ func (npc *NetworkPolicyControllerBase) setupPodNetpolRules(pod podInfo, podFwCh
 			comment := "\"default egress\""
 			args := []string{"-I", podFwChainName, "1", "-s", ip, "-m", "comment", "--comment", comment,
 				"-j", kubeDefaultNetpolChain, "\n"}
+			filterTableRules.WriteString(strings.Join(args, " "))
+		}
+
+		// Monitor policies must run before the default policy so they can log traffic that their own rules do not allow.
+		// They do not contribute to isolation, so an enforcing policy can still reject the packet.
+		// These rules are emitted after the default rules because every rule is inserted at position 1.
+		for _, policy := range networkPoliciesInfo {
+			if _, ok := policy.targetPods[pod.ip]; !ok || !isMonitorPolicy(policy) {
+				continue
+			}
+			comment := "\"run through monitored nw policy " + sanitizeForComment(policy.name) + "\""
+			policyChainName := networkPolicyChainName(policy.namespace, policy.name, version, ipFamily)
+			var args []string
+			switch policy.policyType {
+			case kubeBothPolicyType:
+				args = []string{"-I", podFwChainName, "1", "-m", "comment", "--comment", comment,
+					"-j", policyChainName, "\n"}
+			case kubeIngressPolicyType:
+				args = []string{"-I", podFwChainName, "1", "-d", ip, "-m", "comment", "--comment", comment,
+					"-j", policyChainName, "\n"}
+			case kubeEgressPolicyType:
+				args = []string{"-I", podFwChainName, "1", "-s", ip, "-m", "comment", "--comment", comment,
+					"-j", policyChainName, "\n"}
+			}
 			filterTableRules.WriteString(strings.Join(args, " "))
 		}
 

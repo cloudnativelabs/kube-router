@@ -149,6 +149,10 @@ func (npc *NetworkPolicyControllerIptables) syncNetworkPolicyChains(networkPolic
 				}
 				activePolicyIPSets[targetSourcePodIPSetName] = true
 			}
+			if isMonitorPolicy(policy) {
+				monitorRule := []string{"-A", policyChainName, "-m", "comment", "--comment", "\"rule to mark to monitor traffic\"", "-j", "MARK", "--set-xmark", "0x40000/0x40000", "\n"}
+				npc.filterTableRules[ipFamily].WriteString(strings.Join(monitorRule, " "))
+			}
 		}
 	}
 
@@ -509,6 +513,7 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 			namespace:   policy.Namespace,
 			podSelector: podSelector,
 			policyType:  kubeIngressPolicyType,
+			annotations: policy.Annotations,
 		}
 
 		ingressType, egressType := false, false
@@ -959,4 +964,8 @@ func policyRulePortsHasNamedPort(npPorts []networking.NetworkPolicyPort) bool {
 		}
 	}
 	return false
+}
+
+func isMonitorPolicy(policy networkPolicyInfo) bool {
+	return policy.annotations["kube-router.io/network-policy.monitor"] == "true"
 }
