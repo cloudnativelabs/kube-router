@@ -123,8 +123,9 @@ func (nsc *NetworkServicesController) lookupServiceByFWMark(fwMark uint32) (stri
 }
 
 // isValidKubeRouterServiceArtifact looks up a service by its clusterIP, externalIP, or loadBalancerIP. It returns
-// truthy
-func (nsc *NetworkServicesController) isValidKubeRouterServiceArtifact(address net.IP, nodePort int) (bool, error) {
+// truthy. localIPs is the node's local address map, supplied by the caller.
+func (nsc *NetworkServicesController) isValidKubeRouterServiceArtifact(address net.IP, nodePort int,
+	localIPs map[v1.IPFamily][]net.IP) (bool, error) {
 	for _, svc := range nsc.getServiceMap() {
 		for _, clIP := range svc.clusterIPs {
 			if net.ParseIP(clIP).Equal(address) {
@@ -143,15 +144,11 @@ func (nsc *NetworkServicesController) isValidKubeRouterServiceArtifact(address n
 		}
 		if nodePort != 0 && svc.nodePort == nodePort {
 			if nsc.nodeportBindOnAllIP {
-				addrMap, err := getAllLocalIPs()
-				if err != nil {
-					return false, fmt.Errorf("failed to get all local IPs: %w", err)
-				}
 				var addresses []net.IP
 				if address.To4() != nil {
-					addresses = addrMap[v1.IPv4Protocol]
+					addresses = localIPs[v1.IPv4Protocol]
 				} else {
-					addresses = addrMap[v1.IPv6Protocol]
+					addresses = localIPs[v1.IPv6Protocol]
 				}
 				for _, addr := range addresses {
 					if addr.Equal(address) {
@@ -582,6 +579,16 @@ func getAllLocalIPs() (map[v1.IPFamily][]net.IP, error) {
 	}
 
 	return convertIPMapsToFamilyMap(v4Map, v6Map), nil
+}
+
+// hasAnyIPs reports whether a family separated IP map holds at least one address in any family
+func hasAnyIPs(ipMap map[v1.IPFamily][]net.IP) bool {
+	for _, ips := range ipMap {
+		if len(ips) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // getIPSetName formulates an IP Family specific ipset name based upon the prefix and IPFamily passed
