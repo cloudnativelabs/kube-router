@@ -581,6 +581,16 @@ func getAllLocalIPs() (map[v1.IPFamily][]net.IP, error) {
 	return convertIPMapsToFamilyMap(v4Map, v6Map), nil
 }
 
+// hasAnyIPs reports whether a family separated IP map holds at least one address in any family
+func hasAnyIPs(ipMap map[v1.IPFamily][]net.IP) bool {
+	for _, ips := range ipMap {
+		if len(ips) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // getIPSetName formulates an IP Family specific ipset name based upon the prefix and IPFamily passed
 func getIPSetName(nameBase string, family v1.IPFamily) string {
 	var sb strings.Builder
