@@ -259,35 +259,84 @@ func TestIsValidKubeRouterServiceArtifact(t *testing.T) {
 	}
 }
 
-// TestIsValidKubeRouterServiceArtifactBindOnAllIP verifies that with nodeportBindOnAllIP set, a NodePort service is
-// validated against the caller-supplied local IP map (rather than re-enumerating interfaces).
+// TestIsValidKubeRouterServiceArtifactBindOnAllIP checks NodePorts against the caller supplied local IP map
 func TestIsValidKubeRouterServiceArtifactBindOnAllIP(t *testing.T) {
-	nsc := &NetworkServicesController{nodeportBindOnAllIP: true}
+	// krNode is unused here, but set so that a bind-on-primary-IP case added later doesn't nil panic
+	krNode := &utils.LocalKRNode{
+		KRNode: utils.KRNode{
+			NodeName:  "node-1",
+			PrimaryIP: net.ParseIP("192.168.1.10"),
+		},
+	}
+	nsc := &NetworkServicesController{
+		krNode:              krNode,
+		nodeportBindOnAllIP: true,
+	}
 	nsc.setServiceMap(map[string]*serviceInfo{
 		"service1": {clusterIPs: []string{"10.0.0.1"}, nodePort: 30000},
 	})
 
+	// same shape that syncIpvsFirewall hands us
 	localIPs := map[v1.IPFamily][]net.IP{
 		v1.IPv4Protocol: {net.ParseIP("192.168.1.10")},
+		v1.IPv6Protocol: {net.ParseIP("2001:db8::1")},
 	}
 
 	tests := []struct {
 		name     string
 		address  net.IP
 		port     int
+		localIPs map[v1.IPFamily][]net.IP
 		expected bool
 	}{
-		{"nodeport on a local IP is valid", net.ParseIP("192.168.1.10"), 30000, true},
-		{"nodeport on a non-local IP is not valid", net.ParseIP("192.168.1.99"), 30000, false},
+		{"IPv4 nodeport on a local IP is valid", net.ParseIP("192.168.1.10"), 30000, localIPs, true},
+		{"IPv4 nodeport on a non-local IP is not valid", net.ParseIP("192.168.1.99"), 30000, localIPs, false},
+		{"IPv6 nodeport on a local IP is valid", net.ParseIP("2001:db8::1"), 30000, localIPs, true},
+		{"IPv6 nodeport on a non-local IP is not valid", net.ParseIP("2001:db8::99"), 30000, localIPs, false},
+		{"a nil local IP map matches nothing", net.ParseIP("192.168.1.10"), 30000, nil, false},
+		{"an empty local IP map matches nothing", net.ParseIP("2001:db8::1"), 30000,
+			map[v1.IPFamily][]net.IP{}, false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			result, _ := nsc.isValidKubeRouterServiceArtifact(test.address, test.port, localIPs)
-			if result != test.expected {
-				t.Errorf("isValidKubeRouterServiceArtifact(%v, %d) = %v; want %v",
-					test.address, test.port, result, test.expected)
+			result, err := nsc.isValidKubeRouterServiceArtifact(test.address, test.port, test.localIPs)
+			assert.Equal(t, test.expected, result,
+				"unexpected validity for address %s on port %d", test.address, test.port)
+			if test.expected {
+				assert.NoError(t, err, "a service that was matched shouldn't also return an error")
+			} else {
+				assert.EqualError(t, err, fmt.Sprintf("service not found for address %s", test.address),
+					"an unmatched address should return a service not found error")
 			}
+		})
+	}
+}
+
+func TestHasAnyIPs(t *testing.T) {
+	tests := []struct {
+		name     string
+		ipMap    map[v1.IPFamily][]net.IP
+		expected bool
+	}{
+		{"nil map", nil, false},
+		{"empty map", map[v1.IPFamily][]net.IP{}, false},
+		{"both families present but empty",
+			map[v1.IPFamily][]net.IP{v1.IPv4Protocol: {}, v1.IPv6Protocol: {}}, false},
+		{"IPv4 only",
+			map[v1.IPFamily][]net.IP{v1.IPv4Protocol: {net.ParseIP("10.0.0.1")}, v1.IPv6Protocol: {}}, true},
+		{"IPv6 only",
+			map[v1.IPFamily][]net.IP{v1.IPv4Protocol: {}, v1.IPv6Protocol: {net.ParseIP("2001:db8::1")}}, true},
+		{"dual-stack",
+			map[v1.IPFamily][]net.IP{
+				v1.IPv4Protocol: {net.ParseIP("10.0.0.1")},
+				v1.IPv6Protocol: {net.ParseIP("2001:db8::1")},
+			}, true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expected, hasAnyIPs(test.ipMap), "unexpected result for %v", test.ipMap)
 		})
 	}
 }

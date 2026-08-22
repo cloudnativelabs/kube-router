@@ -274,6 +274,18 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 		return fmt.Errorf("failed get list of IPVS services due to: %w", err)
 	}
 
+	// Enumerate once per sync because doing it in the loop below is a netlink sweep per NodePort service
+	var addrMap map[v1.IPFamily][]net.IP
+	if nsc.nodeportBindOnAllIP {
+		addrMap, err = getAllLocalIPs()
+		if err != nil {
+			return fmt.Errorf("could not get list of system addresses for ipvs services: %w", err)
+		}
+		if !hasAnyIPs(addrMap) {
+			return errors.New("no IP addresses returned for nodeport service creation")
+		}
+	}
+
 	// For each Service in our service map
 	for k, svc := range serviceInfoMap {
 		protocol := convertSvcProtoToSysCallProto(svc.protocol)
@@ -301,31 +313,8 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 		var ipvsSvc *ipvs.Service
 		if nsc.nodeportBindOnAllIP {
 			// Bind on all interfaces instead of just the primary interface
-			addrMap, err := getAllLocalIPs()
-			if err != nil {
-				klog.Errorf("Could not get list of system addresses for ipvs services: %s", err.Error())
-				continue
-			}
-
-			// Check that any addrs were actually found
-			addrsFound := false
-			for _, addrs := range addrMap {
-				if len(addrs) > 0 {
-					addrsFound = true
-				}
-				if addrsFound {
-					break
-				}
-			}
-			if !addrsFound {
-				klog.Errorf("No IP addresses returned for nodeport service creation!")
-				continue
-			}
-
-			// Create the services
 			for _, addrs := range addrMap {
 				for _, addr := range addrs {
-
 					ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc, addr,
 						protocol, nPort)
 					// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
@@ -385,17 +374,7 @@ func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap ser
 		}
 
 		extIPs := getAllExternalIPs(svc, !svc.skipLbIps)
-		// Check that any addrs were actually found
-		addrsFound := false
-		for _, addrs := range extIPs {
-			if len(addrs) > 0 {
-				addrsFound = true
-			}
-			if addrsFound {
-				break
-			}
-		}
-		if !addrsFound {
+		if !hasAnyIPs(extIPs) {
 			klog.V(1).Infof("no external IP addresses returned for service %s:%s skipping...",
 				svc.namespace, svc.name)
 			continue
