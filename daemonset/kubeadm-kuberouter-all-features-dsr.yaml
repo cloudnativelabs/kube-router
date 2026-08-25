@@ -185,7 +185,6 @@ kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: kube-router
-  namespace: kube-system
 rules:
   - apiGroups:
     - ""
@@ -194,7 +193,6 @@ rules:
       - pods
       - services
       - nodes
-      - endpoints
     verbs:
       - list
       - get
@@ -206,14 +204,6 @@ rules:
     verbs:
       - list
       - get
-      - watch
-  - apiGroups:
-    - extensions
-    resources:
-      - networkpolicies
-    verbs:
-      - get
-      - list
       - watch
   - apiGroups:
       - "coordination.k8s.io"
