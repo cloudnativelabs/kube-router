@@ -133,6 +133,8 @@ spec:
       - name: kubeconfig
         hostPath:
           path: /var/lib/kube-router/kubeconfig
+          # Without an explicit type, kubelet creates a directory here when the kubeconfig is missing
+          type: File
       - name: xtables-lock
         hostPath:
           path: /run/xtables.lock
