@@ -9,6 +9,7 @@
 <!-- markdownlint-capture -->
 <!-- markdownlint-disable MD045 -->
 [![Build Status](https://github.com/cloudnativelabs/kube-router/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/cloudnativelabs/kube-router/actions/workflows/ci.yml?query=branch%3Amaster)
+[![E2E Network Policy](https://github.com/cloudnativelabs/kube-router/actions/workflows/ci-e2e-netpol.yml/badge.svg?branch=master)](https://github.com/cloudnativelabs/kube-router/actions/workflows/ci-e2e-netpol.yml?query=branch%3Amaster)
 [![golangci-lint](https://img.shields.io/badge/golangci--lint-enabled-brightgreen?logo=go)](https://github.com/cloudnativelabs/kube-router/blob/master/.golangci.yml)
 [![Slack](https://img.shields.io/badge/slack-join%20chat%20%E2%86%92-e01563.svg)](https://kubernetes.slack.com/messages/C8DCQGTSB/)
 [![Docker Pulls kube-router](https://img.shields.io/docker/pulls/cloudnativelabs/kube-router.svg?label=docker+pulls)](https://hub.docker.com/r/cloudnativelabs/kube-router/)
