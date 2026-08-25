@@ -77,6 +77,10 @@ spec:
             port: 20244
           periodSeconds: 3
           failureThreshold: 3
+        resources:
+          requests:
+            cpu: 250m
+            memory: 250Mi
         volumeMounts:
         - name: lib-modules
           mountPath: /lib/modules
@@ -114,6 +118,10 @@ spec:
           mountPath: /opt
       hostNetwork: true
       hostPID: true
+      # Inherit the host resolver: we resolve no hostnames, and cluster DNS would depend on our own service proxy
+      dnsPolicy: Default
+      nodeSelector:
+        kubernetes.io/os: linux
       tolerations:
       - effect: NoSchedule
         operator: Exists
