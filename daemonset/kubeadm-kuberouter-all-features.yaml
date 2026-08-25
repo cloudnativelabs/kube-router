@@ -46,7 +46,6 @@ spec:
     spec:
       priorityClassName: system-node-critical
       serviceAccountName: kube-router
-      serviceAccount: kube-router
       containers:
       - name: kube-router
         image: docker.io/cloudnativelabs/kube-router
@@ -127,6 +126,10 @@ spec:
           mountPath: /opt
       hostNetwork: true
       hostPID: true
+      # Inherit the host resolver: we resolve no hostnames, and cluster DNS would depend on our own service proxy
+      dnsPolicy: Default
+      nodeSelector:
+        kubernetes.io/os: linux
       tolerations:
       - effect: NoSchedule
         operator: Exists
