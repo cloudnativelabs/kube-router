@@ -41,6 +41,7 @@ spec:
         k8s-app: kube-router
     spec:
       priorityClassName: system-node-critical
+      serviceAccountName: kube-router
       containers:
       - name: kube-router
         image: docker.io/cloudnativelabs/kube-router
@@ -49,7 +50,6 @@ spec:
           - "--run-firewall=true"
           - "--run-service-proxy=true"
           - "--bgp-graceful-restart=true"
-          - "--kubeconfig=/var/lib/kube-router/kubeconfig"
           - "--advertise-cluster-ip=true"
           - "--cluster-asn=64512"
           - "--peer-router-ips=192.168.1.99"
@@ -62,6 +62,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: KUBE_ROUTER_CNI_CONF_FILE
           value: /etc/cni/net.d/10-kuberouter.conflist
         # Cache sync can take up to --cache-sync-timeout (default 1m), so gate liveness behind a startup probe
@@ -83,9 +87,6 @@ spec:
           readOnly: true
         - name: cni-conf-dir
           mountPath: /etc/cni/net.d
-        - name: kubeconfig
-          mountPath: /var/lib/kube-router/kubeconfig
-          readOnly: true
         - name: xtables-lock
           mountPath: /run/xtables.lock
           readOnly: false
@@ -134,11 +135,6 @@ spec:
       - name: kube-router-cfg
         configMap:
           name: kube-router-cfg
-      - name: kubeconfig
-        hostPath:
-          path: /var/lib/kube-router/kubeconfig
-          # Without an explicit type, kubelet creates a directory here when the kubeconfig is missing
-          type: File
       - name: xtables-lock
         hostPath:
           path: /run/xtables.lock
@@ -146,3 +142,72 @@ spec:
       - name: host-opt
         hostPath:
           path: /opt
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-router
+  namespace: kube-system
+
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kube-router
+rules:
+  - apiGroups:
+    - ""
+    resources:
+      - namespaces
+      - pods
+      - services
+      - nodes
+    verbs:
+      - list
+      - get
+      - watch
+  - apiGroups:
+    - "networking.k8s.io"
+    resources:
+      - networkpolicies
+    verbs:
+      - list
+      - get
+      - watch
+  - apiGroups:
+      - "coordination.k8s.io"
+    resources:
+      - leases
+    verbs:
+      - get
+      - create
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - services/status
+    verbs:
+      - update
+  - apiGroups:
+      - "discovery.k8s.io"
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: kube-router
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-router
+subjects:
+- kind: ServiceAccount
+  name: kube-router
+  namespace: kube-system
