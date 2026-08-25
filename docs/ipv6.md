@@ -141,7 +141,7 @@ A CNI configuration with multiple ranges will typically look something like the 
 
 ```json
 {
-  "cniVersion": "0.3.0",
+  "cniVersion": "1.0.0",
   "name": "mynet",
   "plugins": [
     {

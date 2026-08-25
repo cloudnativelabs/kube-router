@@ -594,7 +594,7 @@ If you would like to use `HostPort` functionality below changes are required in 
 
 ```json
     {
-       "cniVersion":"0.3.0",
+       "cniVersion":"1.0.0",
        "name":"mynet",
        "plugins":[
           {
@@ -645,7 +645,7 @@ attempt to configure MTU. However you can choose the right MTU and set in the `c
 ```json
   cni-conf.json: |
     {
-       "cniVersion":"0.3.0",
+       "cniVersion":"1.0.0",
        "name":"mynet",
        "plugins":[
           {
