@@ -91,9 +91,6 @@ spec:
           readOnly: true
         - name: cni-conf-dir
           mountPath: /etc/cni/net.d
-        - name: kubeconfig
-          mountPath: /var/lib/kube-router/kubeconfig
-          readOnly: true
         - name: xtables-lock
           mountPath: /run/xtables.lock
           readOnly: false
@@ -142,9 +139,6 @@ spec:
       - name: kube-router-cfg
         configMap:
           name: kube-router-cfg
-      - name: kubeconfig
-        hostPath:
-          path: /var/lib/kube-router/kubeconfig
       - name: xtables-lock
         hostPath:
           path: /run/xtables.lock
