@@ -9,7 +9,7 @@ metadata:
 data:
   cni-conf.json: |
     {
-       "cniVersion":"0.3.0",
+       "cniVersion":"1.0.0",
        "name":"mynet",
        "plugins":[
           {
