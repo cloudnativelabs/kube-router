@@ -245,7 +245,33 @@ var (
 		Name:      "host_routes_removed",
 		Help:      "Total count of host routes removed to the system",
 	})
+	// ControllerSyncLastSuccess Unix timestamp of each controller's last fully successful sync
+	ControllerSyncLastSuccess = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "controller_sync_last_success",
+		Help:      "Unix timestamp of the last fully successful sync, by controller",
+	}, []string{"controller"})
+	// ControllerSyncFailures Number of sync attempts that failed, by controller
+	ControllerSyncFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "controller_sync_failures_total",
+		Help:      "Total count of sync attempts that did not complete successfully, by controller",
+	}, []string{"controller"})
 )
+
+// RecordSyncResult reports a sync outcome under the component id the controller heartbeats with,
+// because a restart can't fix a bad data set and so /healthz is the wrong place for it
+func RecordSyncResult(component int, err error) {
+	controller := healthcheck.HeartBeatCompNames[component]
+	// Touch both children either way, so a controller that has never succeeded still has a series
+	failures := ControllerSyncFailures.WithLabelValues(controller)
+	lastSuccess := ControllerSyncLastSuccess.WithLabelValues(controller)
+	if err != nil {
+		failures.Inc()
+		return
+	}
+	lastSuccess.Set(float64(time.Now().Unix()))
+}
 
 // Controller Holds settings for the metrics controller
 type Controller struct {
@@ -271,6 +297,9 @@ func (mc *Controller) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, st
 	BuildInfo.WithLabelValues(runtime.Version(), version.Version).Set(1)
 	DefaultRegisterer.MustRegister(BuildInfo)
 	DefaultRegisterer.MustRegister(ControllerIpvsMetricsExportTime)
+	// Registered centrally rather than per-controller because every loop reports into these
+	DefaultRegisterer.MustRegister(ControllerSyncLastSuccess)
+	DefaultRegisterer.MustRegister(ControllerSyncFailures)
 
 	mux := http.NewServeMux()
 

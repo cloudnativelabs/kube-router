@@ -41,6 +41,17 @@ The following metrics are exposed by kube-router prefixed by `kube_router_`
 
 * build_info
   Expose version and other build information (labels: goversion, version)
+* controller_sync_last_success
+  Unix timestamp of the last fully successful sync, by controller (labels: controller)
+* controller_sync_failures_total
+  Total count of sync attempts that did not complete successfully, by controller (labels: controller)
+
+The `controller` label on the two sync metrics carries the same component names the health controller uses:
+`NetworkPolicyController`, `NetworkRoutesController`, `NetworkServicesController`, and `RouteSyncController`. These
+two are the only signal that a control loop is running but failing to apply its changes, because `/healthz` reports
+liveness only and deliberately stays healthy through a failing sync. Both series appear the first time a controller
+reports any result, so a controller that has never once succeeded shows `controller_sync_last_success` at `0` rather
+than not showing up at all. See [Health checking](/docs/health.md) for why, and for an example alert expression.
 
 ### --run-router=true
 
