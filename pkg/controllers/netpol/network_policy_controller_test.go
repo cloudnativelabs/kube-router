@@ -2,6 +2,7 @@ package netpol
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-iptables/iptables"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"sigs.k8s.io/knftables"
 
@@ -26,6 +28,8 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/options"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/svcip"
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
@@ -1881,4 +1885,67 @@ func TestBuildNetworkPoliciesInfoEdgeCases(t *testing.T) {
 			}
 		}
 	})
+}
+
+// Test_syncAndReport pins down what both netpol implementations share, which is that beats go
+// out at sync start and end whether or not the sync succeeded, and the outcome lands in metrics
+func Test_syncAndReport(t *testing.T) {
+	controllerLabel := healthcheck.HeartBeatCompNames[healthcheck.NetworkPolicyController]
+
+	tests := []struct {
+		name            string
+		syncErr         error
+		wantFailureRise float64
+		wantSuccessRise bool
+	}{
+		{
+			name:            "successful sync beats and stamps the last success",
+			syncErr:         nil,
+			wantFailureRise: 0,
+			wantSuccessRise: true,
+		},
+		{
+			name:            "failed sync still beats but moves the failure counter",
+			syncErr:         errors.New("failed to build network policies"),
+			wantFailureRise: 1,
+			wantSuccessRise: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			healthChan := make(chan *healthcheck.ControllerHeartbeat, 2)
+			npc := &NetworkPolicyControllerBase{healthChan: healthChan}
+
+			startedAt := float64(time.Now().Unix())
+			failuresBefore := testutil.ToFloat64(metrics.ControllerSyncFailures.WithLabelValues(controllerLabel))
+			successBefore := testutil.ToFloat64(metrics.ControllerSyncLastSuccess.WithLabelValues(controllerLabel))
+
+			npc.syncAndReport(func() error { return tt.syncErr })
+
+			// One beat at sync start and one at sync end, both regardless of the sync outcome
+			for _, when := range []string{"start", "end"} {
+				select {
+				case beat := <-healthChan:
+					assert.Equal(t, healthcheck.NetworkPolicyController, beat.Component,
+						"the heartbeat should be attributed to the network policy controller")
+				default:
+					t.Fatalf("syncAndReport must send a heartbeat at sync %s regardless of the outcome", when)
+				}
+			}
+
+			failuresAfter := testutil.ToFloat64(metrics.ControllerSyncFailures.WithLabelValues(controllerLabel))
+			successAfter := testutil.ToFloat64(metrics.ControllerSyncLastSuccess.WithLabelValues(controllerLabel))
+
+			assert.Equal(t, tt.wantFailureRise, failuresAfter-failuresBefore,
+				"the failure counter should only move when the sync returns an error")
+			if tt.wantSuccessRise {
+				assert.GreaterOrEqual(t, successAfter, startedAt,
+					"a successful sync should stamp the last success gauge with the current time")
+			} else {
+				assert.Equal(t, successBefore, successAfter,
+					"a failed sync should leave the last success gauge alone")
+			}
+		})
+	}
 }

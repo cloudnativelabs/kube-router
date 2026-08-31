@@ -3,6 +3,7 @@ package netpol
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
@@ -1397,4 +1398,101 @@ func TestNftablesSyncPodFirewallChainsFailClosed(t *testing.T) {
 
 	// The reject tail is present so the bad pod's unmatched traffic is dropped, not allowed.
 	require.Contains(t, dump, "meta mark and 0x10000 == 0x0 counter reject")
+}
+
+// failMatchingRunNft wraps a knftables.Interface and rejects any transaction whose rendered text
+// contains match, passing everything else through to the underlying fake
+type failMatchingRunNft struct {
+	knftables.Interface
+	match string
+}
+
+func (f *failMatchingRunNft) Run(ctx context.Context, tx *knftables.Transaction) error {
+	if strings.Contains(tx.String(), f.match) {
+		return errors.New("simulated nft transaction failure")
+	}
+	return f.Interface.Run(ctx, tx)
+}
+
+// TestNftablesSyncNetworkPolicyChainsRecordsPartialFailure verifies that a rejected per-policy
+// transaction doesn't abort syncNetworkPolicyChains (the rest of the fail-closed programming
+// depends on it completing) but is still recorded on the controller for fullPolicySync to return.
+func TestNftablesSyncNetworkPolicyChainsRecordsPartialFailure(t *testing.T) {
+	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
+	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
+	ctx := t.Context()
+	informerFactory.Start(ctx.Done())
+	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
+	npc := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
+
+	badPol := networkPolicyInfo{
+		name: "bad", namespace: "nsA", policyType: kubeIngressPolicyType,
+		targetPods: map[string]podInfo{"1.1.1.1": {ip: "1.1.1.1", name: "bad-pod", namespace: "nsA"}},
+	}
+	goodPol := networkPolicyInfo{
+		name: "good", namespace: "nsA", policyType: kubeIngressPolicyType,
+		targetPods: map[string]podInfo{"2.2.2.2": {ip: "2.2.2.2", name: "good-pod", namespace: "nsA"}},
+	}
+
+	// Fail only the bad policy's chain transaction, identified by its chain comment
+	npc.knftInterfaces[v1core.IPv4Protocol] = &failMatchingRunNft{
+		Interface: npc.knftInterfaces[v1core.IPv4Protocol],
+		match:     "netpol nsA/bad",
+	}
+
+	const version = "1"
+	activePolicyChains, _, err := npc.syncNetworkPolicyChains([]networkPolicyInfo{badPol, goodPol}, version)
+	require.NoError(t, err, "a per-policy failure must not abort the chain sync")
+
+	badChain := networkPolicyChainName("nsA", "bad", version, v1core.IPv4Protocol)
+	goodChain := networkPolicyChainName("nsA", "good", version, v1core.IPv4Protocol)
+	require.Len(t, npc.failedPolicyChains, 1)
+	require.True(t, npc.failedPolicyChains[badChain], "the rejected policy chain must be recorded as failed")
+	require.Contains(t, activePolicyChains, badChain, "failed chains stay active so GC leaves them alone")
+	require.Contains(t, activePolicyChains, goodChain)
+
+	require.Error(t, npc.failedPolicyErr, "the rejected transaction must be recorded for fullPolicySync")
+	require.ErrorContains(t, npc.failedPolicyErr, "nsA/bad")
+	require.NotContains(t, npc.failedPolicyErr.Error(), "nsA/good",
+		"the healthy policy must not appear in the recorded failure")
+}
+
+// TestNftablesFullPolicySyncReportsPartialFailure drives fullPolicySync end to end with one policy
+// whose transaction is rejected, and verifies the sync completes its remaining programming but
+// still returns an error so RecordSyncResult won't advance controller_sync_last_success.
+func TestNftablesFullPolicySyncReportsPartialFailure(t *testing.T) {
+	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
+	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
+	ctx := t.Context()
+	informerFactory.Start(ctx.Done())
+	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
+	npc := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
+	tCreateFakePods(t, podInformer, nsInformer)
+	require.NoError(t, npc.ensureTopLevelChains())
+
+	badNetpol := tNetpol{
+		name: "bad-policy", namespace: "nsA",
+		podSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "a"}},
+		ingress:     []netv1.NetworkPolicyIngressRule{{}},
+	}
+	badNetpol.createFakeNetpol(t, netpolInformer)
+
+	npc.knftInterfaces[v1core.IPv4Protocol] = &failMatchingRunNft{
+		Interface: npc.knftInterfaces[v1core.IPv4Protocol],
+		match:     "netpol nsA/bad-policy",
+	}
+
+	err := npc.fullPolicySync()
+	require.Error(t, err, "a rejected policy transaction must fail the sync as a whole")
+	require.ErrorContains(t, err, "failed policy chain")
+	require.ErrorContains(t, err, "nsA/bad-policy")
+	require.Len(t, npc.failedPolicyChains, 1)
+
+	// The rest of the sync still completed: the top-level chains were rebuilt with the reject
+	// tail in place, so the failed policy's pods fail closed instead of the sync aborting early
+	fakeItf, ok := npc.knftInterfaces[v1core.IPv4Protocol].(*failMatchingRunNft).Interface.(*knftables.Fake)
+	require.True(t, ok, "expected *knftables.Fake for IPv4")
+	dump := fakeItf.Dump()
+	require.Contains(t, dump, kubeForwardChainName)
+	require.Contains(t, dump, kubeTailNetpolChain)
 }
