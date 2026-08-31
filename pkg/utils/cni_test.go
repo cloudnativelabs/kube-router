@@ -283,16 +283,6 @@ func TestNewCNINetworkConfig(t *testing.T) {
 		ranges  []string
 	}{
 		{
-			name:    "Attempt reading from conf",
-			content: getConf(),
-			ranges:  []string{"10.242.0.0/24"},
-		},
-		{
-			name:    "Attempt reading from conflist",
-			content: getConfList(),
-			ranges:  []string{"10.242.0.0/24"},
-		},
-		{
 			name:    "Ensure error upon reading from conf with no type",
 			content: getConfWithNoType(),
 			err:     "error load CNI config, file appears to have no type: ",
@@ -318,9 +308,14 @@ func TestNewCNINetworkConfig(t *testing.T) {
 			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24"},
 		},
 		{
-			name:    "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
+			name:    "Ensure conflist subnets get de-duplicated with ranges when repeats exist",
 			content: getConfListWithDuplicateRanges(),
 			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24"},
+		},
+		{
+			name:    "Ensure conflist subnets get de-duplicated with ranges when IPv6 repeats exist",
+			content: getConfListWithIPv6DuplicateRanges(),
+			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "2001:db8:42:2::/64"},
 		},
 	}
 	for _, testcase := range testcases {
@@ -334,60 +329,6 @@ func TestNewCNINetworkConfig(t *testing.T) {
 				assert.ErrorContains(t, err, testcase.err)
 				return
 			}
-			require.NoError(t, err)
-			require.NotNil(t, cni)
-
-			if testcase.content.isConfList {
-				assert.NotNilf(t, cni.confList, "Expected a conflist for %s", testcase.content.name)
-			} else {
-				assert.Nilf(t, cni.confList, "Didn't expect a conflist for %s", testcase.content.name)
-			}
-
-			podCIDRs, err := cni.getPodCIDRsMapFromCNISpec()
-			require.NoError(t, err)
-			assert.ElementsMatch(t, testcase.ranges, slices.Collect(maps.Keys(podCIDRs)))
-		})
-	}
-}
-
-func TestCniNetworkConfig_GetPodCIDRsFromCNISpec(t *testing.T) {
-	testcases := []struct {
-		name    string
-		content cniConfContent
-		ranges  []string
-	}{
-		{
-			name:    "Ensure conf subnet get consolidated into ranges when only subnet exists",
-			content: getConf(),
-			ranges:  []string{"10.242.0.0/24"},
-		},
-		{
-			name:    "Ensure conflist subnet get consolidated into ranges when only subnet exists",
-			content: getConfList(),
-			ranges:  []string{"10.242.0.0/24"},
-		},
-		{
-			name:    "Ensure conflist subnets get consolidated with ranges when both exist",
-			content: getConfListWithRanges(),
-			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24", "10.242.4.0/24"},
-		},
-		{
-			name:    "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
-			content: getConfListWithDuplicateRanges(),
-			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "10.242.3.0/24"},
-		},
-		{
-			name:    "Ensure conflist subnets get de-deduplicated with ranges when repeats exist",
-			content: getConfListWithIPv6DuplicateRanges(),
-			ranges:  []string{"10.242.0.0/24", "10.242.1.0/24", "10.242.2.0/24", "2001:db8:42:2::/64"},
-		},
-	}
-	for _, testcase := range testcases {
-		t.Run(testcase.name, func(t *testing.T) {
-			confFilePath := filepath.Join(t.TempDir(), testcase.content.fileName())
-			require.NoError(t, os.WriteFile(confFilePath, testcase.content.bytes, 0600))
-
-			cni, err := NewCNINetworkConfig(confFilePath)
 			require.NoError(t, err)
 			require.NotNil(t, cni)
 
