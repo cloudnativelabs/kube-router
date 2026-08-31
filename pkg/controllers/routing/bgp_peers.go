@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"slices"
@@ -18,6 +19,12 @@ import (
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
+)
+
+// gobgp reports these when the peer is already in the state we asked for, so there's nothing to do
+const (
+	gobgpPeerAlreadyExists = "can't overwrite the existing peer"
+	gobgpPeerAlreadyGone   = "can't delete a peer configuration"
 )
 
 // configurePeerAfiSafis configures the AFI-SAFI (Address Family Indicator / Subsequent Address Family Indicator)
@@ -72,9 +79,12 @@ func configurePeerAfiSafis(peer *gobgpapi.Peer, node utils.NodeFamilyAware, grac
 // events should ensure peer relationship with only currently active nodes. In case
 // we miss any events from API server this method which is called periodically
 // ensures peer relationship with removed nodes is deleted.
-func (nrc *NetworkRoutingController) syncInternalPeers() {
+func (nrc *NetworkRoutingController) syncInternalPeers() error {
 	nrc.mu.Lock()
 	defer nrc.mu.Unlock()
+
+	// Joined so a peer we couldn't add or remove surfaces as a failed sync, not just a log line
+	var syncErr error
 
 	start := time.Now()
 	defer func() {
@@ -90,11 +100,17 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 
 	// establish peer and add Pod CIDRs with current set of nodes
 	currentNodes := make([]string, 0)
+	// Tracks Nodes we couldn't evaluate this pass; while any exist we skip peer deletion below,
+	// because we can't tell which activeNodes entry belongs to an unparseable Node and deleting
+	// on a transient address outage would tear down a working peer
+	nodesFailedToParse := false
 	for _, obj := range nodes {
 		node := obj.(*v1core.Node)
 		targetNode, err := utils.NewRemoteKRNode(node)
 		if err != nil {
 			klog.Errorf("failed to create KRNode from node object: %v", err)
+			syncErr = errors.Join(syncErr, fmt.Errorf("evaluate node %s: %w", node.Name, err))
+			nodesFailedToParse = true
 			continue
 		}
 
@@ -188,10 +204,18 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 		if err := nrc.bgpServer.AddPeer(context.Background(), &gobgpapi.AddPeerRequest{
 			Peer: n,
 		}); err != nil {
-			if !strings.Contains(err.Error(), "can't overwrite the existing peer") {
+			if !strings.Contains(err.Error(), gobgpPeerAlreadyExists) {
 				klog.Errorf("Failed to add node %s as peer due to %s", targetNode.GetPrimaryNodeIP(), err)
+				syncErr = errors.Join(syncErr, fmt.Errorf("add peer %s: %w", targetNode.GetPrimaryNodeIP(), err))
 			}
 		}
+	}
+
+	// A Node we couldn't evaluate contributes no entry to currentNodes, which would make its
+	// active peer look stale below. Defer deletion until every Node parses again; thanks to the
+	// retry behavior above, genuinely removed peers are cleaned up on a later pass
+	if nodesFailedToParse {
+		return syncErr
 	}
 
 	// find the list of the node removed, from the last known list of active nodes
@@ -206,10 +230,19 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 	// delete the neighbor for the nodes that are removed
 	for _, ip := range removedNodes {
 		if err := nrc.bgpServer.DeletePeer(context.Background(), &gobgpapi.DeletePeerRequest{Address: ip}); err != nil {
-			klog.Errorf("Failed to remove node %s as peer due to %s", ip, err)
+			// Mirrors the add case above, since gobgp already agrees the peer is gone
+			if !strings.Contains(err.Error(), gobgpPeerAlreadyGone) {
+				klog.Errorf("Failed to remove node %s as peer due to %s", ip, err)
+				syncErr = errors.Join(syncErr, fmt.Errorf("delete peer %s: %w", ip, err))
+				// Keep the address in activeNodes so the next periodic sync retries the deletion,
+				// otherwise a transient gobgp failure leaves the peer configured forever
+				continue
+			}
 		}
 		delete(nrc.activeNodes, ip)
 	}
+
+	return syncErr
 }
 
 // connectToExternalBGPPeers adds all the configured eBGP peers (global or node specific) as neighbours
@@ -375,7 +408,10 @@ func (nrc *NetworkRoutingController) OnNodeUpdate(_ any) {
 	}
 
 	if nrc.bgpEnableInternal {
-		nrc.syncInternalPeers()
+		// Event-driven, so the periodic sync in Run() owns reporting this
+		if err := nrc.syncInternalPeers(); err != nil {
+			klog.Errorf("Error syncing internal BGP peers: %v", err)
+		}
 	}
 
 	// skip if first round of disableSourceDestinationCheck() is not done yet, this is to prevent
