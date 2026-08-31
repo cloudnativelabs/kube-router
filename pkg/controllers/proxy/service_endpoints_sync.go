@@ -36,78 +36,70 @@ func (nsc *NetworkServicesController) syncIpvsServices(serviceInfoMap serviceInf
 		klog.V(1).Infof("sync ipvs services took %v", endTime)
 	}()
 
-	var err error
-	var syncErrors bool
+	// Every step below is independent, so we join failures rather than bailing on the first one
+	var syncErrors error
 
 	// map to track all active IPVS services and servers that are setup during sync of
 	// cluster IP, nodeport and external IP services
 	activeServiceEndpointMap := make(map[string][]string)
 
 	klog.V(1).Info("Syncing ClusterIP Services")
-	err = nsc.setupClusterIPServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap)
-	if err != nil {
-		syncErrors = true
+	if err := nsc.setupClusterIPServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap); err != nil {
 		klog.Errorf("Error setting up IPVS services for service cluster IP's: %s", err.Error())
+		syncErrors = errors.Join(syncErrors, fmt.Errorf("cluster IP services: %w", err))
 	}
 
 	klog.V(1).Info("Syncing NodePort Services")
-	err = nsc.setupNodePortServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap)
-	if err != nil {
-		syncErrors = true
+	if err := nsc.setupNodePortServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap); err != nil {
 		klog.Errorf("Error setting up IPVS services for service nodeport's: %s", err.Error())
+		syncErrors = errors.Join(syncErrors, fmt.Errorf("nodeport services: %w", err))
 	}
 
 	klog.V(1).Info("Syncing ExternalIP Services")
-	err = nsc.setupExternalIPServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap)
-	if err != nil {
-		syncErrors = true
+	if err := nsc.setupExternalIPServices(serviceInfoMap, endpointsInfoMap, activeServiceEndpointMap); err != nil {
 		klog.Errorf("Error setting up IPVS services for service external IP's and load balancer IP's: %s",
 			err.Error())
+		syncErrors = errors.Join(syncErrors, fmt.Errorf("external IP services: %w", err))
 	}
 
 	klog.V(1).Info("Setting up NodePort Health Checks for LB services")
-	err = nsc.nphc.UpdateServicesInfo(serviceInfoMap, endpointsInfoMap)
-	if err != nil {
-		syncErrors = true
+	if err := nsc.nphc.UpdateServicesInfo(serviceInfoMap, endpointsInfoMap); err != nil {
 		klog.Errorf("Error setting up NodePort Health Checks for LB Services: %v", err)
+		syncErrors = errors.Join(syncErrors, fmt.Errorf("nodeport health checks: %w", err))
 	}
 
 	klog.V(1).Info("Cleaning Up Stale VIPs from dummy interface")
-	err = nsc.cleanupStaleVIPs(activeServiceEndpointMap)
-	if err != nil {
-		syncErrors = true
+	if err := nsc.cleanupStaleVIPs(activeServiceEndpointMap); err != nil {
 		klog.Errorf("Error cleaning up stale VIP's configured on the dummy interface: %s", err.Error())
+		syncErrors = errors.Join(syncErrors, fmt.Errorf("stale dummy interface VIPs: %w", err))
 	}
 
 	klog.V(1).Info("Cleaning Up Stale VIPs from IPVS")
-	err = nsc.cleanupStaleIPVSConfig(activeServiceEndpointMap)
-	if err != nil {
-		syncErrors = true
+	if err := nsc.cleanupStaleIPVSConfig(activeServiceEndpointMap); err != nil {
 		klog.Errorf("Error cleaning up stale IPVS services and servers: %s", err.Error())
+		syncErrors = errors.Join(syncErrors, fmt.Errorf("stale IPVS config: %w", err))
 	}
 
 	klog.V(1).Info("Syncing IPVS Firewall")
-	err = nsc.syncIpvsFirewall()
-	if err != nil {
-		syncErrors = true
+	if err := nsc.syncIpvsFirewall(); err != nil {
 		klog.Errorf("Error syncing ipvs svc iptables rules to permit traffic to service VIP's: %s", err.Error())
+		syncErrors = errors.Join(syncErrors, fmt.Errorf("ipvs firewall: %w", err))
 	}
 
 	klog.V(1).Info("Setting up DSR Services")
-	err = nsc.setupForDSR(serviceInfoMap)
-	if err != nil {
-		syncErrors = true
+	if err := nsc.setupForDSR(serviceInfoMap); err != nil {
 		klog.Errorf("Error setting up necessary policy based routing configuration needed for "+
 			"direct server return: %s", err.Error())
+		syncErrors = errors.Join(syncErrors, fmt.Errorf("direct server return: %w", err))
 	}
 
-	if syncErrors {
+	if syncErrors != nil {
 		klog.V(1).Info("One or more errors encountered during sync of IPVS services and servers " +
 			"to desired state")
-	} else {
-		klog.V(1).Info("IPVS servers and services are synced to desired state")
+		return syncErrors
 	}
 
+	klog.V(1).Info("IPVS servers and services are synced to desired state")
 	return nil
 }
 
@@ -118,6 +110,9 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 		return fmt.Errorf("failed get list of IPVS services due to: %w", err)
 	}
 
+	// Per-Service failures are joined and reported after the walk, so one broken Service can't
+	// keep the rest from programming while the sync still records as failed
+	var svcErrs error
 	for k, svc := range serviceInfoMap {
 		endpoints := endpointsInfoMap[k]
 		// First we check to see if this is a local service and that it has any active endpoints, if it doesn't there
@@ -159,47 +154,55 @@ func (nsc *NetworkServicesController) setupClusterIPServices(serviceInfoMap serv
 				err = nsc.ln.ipAddrAdd(dummyVipInterface, clusterIP.String(), nodeIP, true)
 				if err != nil {
 					// Not logging an error here because it was already logged in the ipAddrAdd function
+					svcErrs = errors.Join(svcErrs, fmt.Errorf("service %s/%s: assign cluster IP %s: %w",
+						svc.namespace, svc.name, clusterIP, err))
 					continue
 				}
 
 				// create IPVS service for the service to be exposed through the cluster ip
-				ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc, clusterIP,
+				ipvsSvcs, svcID, ipvsSvc, err = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc, clusterIP,
 					protocol, sPort)
 				// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
-				if svcID == "" {
-					// not logging an error here because it was already logged in the addIPVSService function
+				if err != nil {
+					svcErrs = errors.Join(svcErrs, fmt.Errorf("service %s/%s: %w", svc.namespace, svc.name, err))
 					continue
 				}
 
 				// add IPVS remote server to the IPVS service
-				nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, clusterIP, true)
+				if err := nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc,
+					clusterIP, true); err != nil {
+					svcErrs = errors.Join(svcErrs, fmt.Errorf("service %s/%s: %w", svc.namespace, svc.name, err))
+				}
 			}
 		}
 	}
 
-	return nil
+	return svcErrs
 }
 
 func (nsc *NetworkServicesController) addIPVSService(ipvsSvcs []*ipvs.Service, svcEndpointMap map[string][]string,
-	svc *serviceInfo, vip net.IP, protocol uint16, port uint16) ([]*ipvs.Service, string, *ipvs.Service) {
+	svc *serviceInfo, vip net.IP, protocol uint16, port uint16) ([]*ipvs.Service, string, *ipvs.Service, error) {
 	// Note: downstream calls to nsc.ln.ipvsAddService may insert additional services to ipvsSvcs slice if it finds
 	// that it needs to create additional services. Don't count on this slice staying stable between calls
 	ipvsSvcs, ipvsService, err := nsc.ln.ipvsAddService(ipvsSvcs, vip, protocol, port,
 		svc.sessionAffinity, svc.sessionAffinityTimeoutSeconds, svc.scheduler, svc.flags)
 	if err != nil {
 		klog.Errorf("failed to create ipvs service for %s:%d due to: %s", vip, port, err.Error())
-		return ipvsSvcs, "", ipvsService
+		return ipvsSvcs, "", ipvsService, fmt.Errorf("create ipvs service for %s:%d: %w", vip, port, err)
 	}
 
 	svcID := generateIPPortID(vip.String(), svc.protocol, strconv.Itoa(int(port)))
 	svcEndpointMap[svcID] = make([]string, 0)
 
-	return ipvsSvcs, svcID, ipvsService
+	return ipvsSvcs, svcID, ipvsService, nil
 }
 
+// addEndpointsToIPVSService adds every eligible endpoint to the given IPVS service, joining the
+// failures rather than stopping, so one bad endpoint can't block the others from programming
 func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endpointSliceInfo,
 	svcEndpointMap map[string][]string, svc *serviceInfo, svcID string, ipvsSvc *ipvs.Service, vip net.IP,
-	isClusterIP bool) {
+	isClusterIP bool) error {
+	var endpointErrs error
 	var family v1.IPFamily
 	if vip.To4() != nil {
 		family = v1.IPv4Protocol
@@ -248,6 +251,7 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		ePort, err := safecast.Convert[uint16](endpoint.port)
 		if err != nil {
 			klog.Errorf("failed to convert endpoint port to uint16: %v", err)
+			endpointErrs = errors.Join(endpointErrs, fmt.Errorf("convert endpoint port %d: %w", endpoint.port, err))
 			continue
 		}
 
@@ -260,11 +264,15 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 		err = nsc.ln.ipvsAddServer(ipvsSvc, &dst)
 		if err != nil {
 			klog.Errorf("encountered error adding endpoint to service: %v", err)
+			endpointErrs = errors.Join(endpointErrs,
+				fmt.Errorf("add endpoint %s to service VIP %s: %w", endpoint.ip, vip, err))
 			continue
 		}
 		svcEndpointMap[svcID] = append(svcEndpointMap[svcID],
 			generateEndpointID(endpoint.ip, strconv.Itoa(endpoint.port)))
 	}
+
+	return endpointErrs
 }
 
 func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap serviceInfoMap,
@@ -286,7 +294,9 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 		}
 	}
 
-	// For each Service in our service map
+	// Per-Service failures are joined and reported after the walk, so one broken Service can't
+	// keep the rest from programming while the sync still records as failed
+	var svcErrs error
 	for k, svc := range serviceInfoMap {
 		protocol := convertSvcProtoToSysCallProto(svc.protocol)
 
@@ -315,13 +325,17 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 			// Bind on all interfaces instead of just the primary interface
 			for _, addrs := range addrMap {
 				for _, addr := range addrs {
-					ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc, addr,
+					ipvsSvcs, svcID, ipvsSvc, err = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc, addr,
 						protocol, nPort)
 					// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
-					if svcID == "" {
+					if err != nil {
+						svcErrs = errors.Join(svcErrs, fmt.Errorf("service %s/%s: %w", svc.namespace, svc.name, err))
 						continue
 					}
-					nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc, addr, false)
+					if err := nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc,
+						addr, false); err != nil {
+						svcErrs = errors.Join(svcErrs, fmt.Errorf("service %s/%s: %w", svc.namespace, svc.name, err))
+					}
 				}
 			}
 		} else {
@@ -346,19 +360,22 @@ func (nsc *NetworkServicesController) setupNodePortServices(serviceInfoMap servi
 					// node doesn't have an address in this family (single-stack node with a dual-stack service)
 					continue
 				}
-				ipvsSvcs, svcID, ipvsSvc = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc,
+				ipvsSvcs, svcID, ipvsSvc, err = nsc.addIPVSService(ipvsSvcs, activeServiceEndpointMap, svc,
 					nodeIP, protocol, nPort)
 				// We weren't able to create the IPVS service, so we won't be able to add endpoints to it
-				if svcID == "" {
+				if err != nil {
+					svcErrs = errors.Join(svcErrs, fmt.Errorf("service %s/%s: %w", svc.namespace, svc.name, err))
 					continue
 				}
-				nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc,
-					nodeIP, false)
+				if err := nsc.addEndpointsToIPVSService(endpoints, activeServiceEndpointMap, svc, svcID, ipvsSvc,
+					nodeIP, false); err != nil {
+					svcErrs = errors.Join(svcErrs, fmt.Errorf("service %s/%s: %w", svc.namespace, svc.name, err))
+				}
 			}
 		}
 	}
 
-	return nil
+	return svcErrs
 }
 
 func (nsc *NetworkServicesController) setupExternalIPServices(serviceInfoMap serviceInfoMap,
@@ -468,9 +485,9 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 	}
 
 	// create IPVS service for the service to be exposed through the external ip
-	_, svcID, ipvsExternalIPSvc = nsc.addIPVSService(ipvsSvcs, svcEndpointMap, svc, externalIP, protocol, sPort)
-	if svcID == "" {
-		return fmt.Errorf("failed to create ipvs service for external ip: %s", externalIP)
+	_, svcID, ipvsExternalIPSvc, err = nsc.addIPVSService(ipvsSvcs, svcEndpointMap, svc, externalIP, protocol, sPort)
+	if err != nil {
+		return fmt.Errorf("failed to create ipvs service for external ip %s: %w", externalIP, err)
 	}
 
 	// ensure there is NO iptables mangle table rule to FW mark the packet
@@ -487,7 +504,10 @@ func (nsc *NetworkServicesController) setupExternalIPForService(svc *serviceInfo
 	}
 
 	// add pod endpoints to the IPVS service
-	nsc.addEndpointsToIPVSService(endpoints, svcEndpointMap, svc, svcID, ipvsExternalIPSvc, externalIP, false)
+	if err := nsc.addEndpointsToIPVSService(endpoints, svcEndpointMap, svc, svcID, ipvsExternalIPSvc,
+		externalIP, false); err != nil {
+		return fmt.Errorf("failed to add endpoints for external ip %s: %w", externalIP, err)
+	}
 
 	return nil
 }

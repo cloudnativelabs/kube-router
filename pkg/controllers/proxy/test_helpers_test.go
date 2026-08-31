@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"net"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -176,6 +177,7 @@ func setupTestControllerWithEndpoints(t *testing.T, service *v1core.Service,
 
 	const localNodeName = "localnode-1"
 	const remoteNodeName = "node-2"
+	const localNodeIP = "10.0.0.1"
 
 	ipvsState := newMockIPVSState()
 	netlinkState := newMockNetlinkState()
@@ -291,10 +293,13 @@ func setupTestControllerWithEndpoints(t *testing.T, service *v1core.Service,
 		t.Fatalf("failed to create service: %v", err)
 	}
 
+	// DSR resolves the endpoint IP back to a pod, so local endpoints need a backing pod object
+	createPodsForLocalEndpoints(t, clientset, service.Namespace, localNodeIP, localEndpoints)
+
 	krNode := &utils.LocalKRNode{
 		KRNode: utils.KRNode{
 			NodeName:  localNodeName,
-			PrimaryIP: net.ParseIP("10.0.0.1"),
+			PrimaryIP: net.ParseIP(localNodeIP),
 		},
 	}
 	// Create iptables mocks for DSR support
@@ -341,11 +346,44 @@ func setupTestControllerWithEndpoints(t *testing.T, service *v1core.Service,
 	if len(localEndpoints) > 0 || len(remoteEndpoints) > 0 {
 		waitForListerWithTimeout(t, nsc.epSliceLister, time.Second*10)
 	}
+	if len(localEndpoints) > 0 {
+		waitForListerWithTimeout(t, nsc.podLister, time.Second*10)
+	}
 
 	nsc.setServiceMap(nsc.buildServicesInfo())
 	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
 
 	return ipvsState, mock, nsc
+}
+
+// createPodsForLocalEndpoints backs each local endpoint IP with a pod on the local node, so that DSR
+// can resolve an endpoint to a container the way it does on a real node
+func createPodsForLocalEndpoints(t *testing.T, clientset kubernetes.Interface, namespace, nodeIP string,
+	endpointIPs []string) {
+	t.Helper()
+	for idx, ip := range endpointIPs {
+		pod := &v1core.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "endpoint-pod-" + strconv.Itoa(idx),
+				Namespace: namespace,
+			},
+			Spec: v1core.PodSpec{
+				Containers: []v1core.Container{{Name: "container-" + strconv.Itoa(idx)}},
+			},
+			Status: v1core.PodStatus{
+				PodIP:  ip,
+				PodIPs: []v1core.PodIP{{IP: ip}},
+				HostIP: nodeIP,
+				ContainerStatuses: []v1core.ContainerStatus{
+					{ContainerID: "docker://" + strconv.Itoa(idx)},
+				},
+			},
+		}
+		if _, err := clientset.CoreV1().Pods(namespace).Create(
+			context.Background(), pod, metav1.CreateOptions{}); err != nil {
+			t.Fatalf("failed to create pod for endpoint %s: %v", ip, err)
+		}
+	}
 }
 
 // getIPsFromAddrAddCalls extracts IP addresses from ipAddrAdd mock calls
