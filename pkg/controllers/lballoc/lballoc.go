@@ -474,11 +474,19 @@ func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.Controller
 				lbc.allocateChan <- svc
 			}
 		case <-timer.C:
-			timer.Reset(time.Minute)
+			timer.Reset(lbc.syncPeriod)
+			// Beat at walk start as well as walk end, matching the dual-beat contract of the sync
+			// controllers: the first beat asserts this select loop is alive, the second that the
+			// walk finished. walkServices feeds addChan, which only this select drains, so it
+			// can't run inline without deadlocking
 			healthcheck.SendHeartBeat(healthChan, healthcheck.LoadBalancerController)
-			if isLeader {
-				go lbc.walkServices()
-			}
+			leader := isLeader
+			go func() {
+				if leader {
+					lbc.walkServices()
+				}
+				healthcheck.SendHeartBeat(healthChan, healthcheck.LoadBalancerController)
+			}()
 		}
 	}
 }

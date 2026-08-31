@@ -97,12 +97,19 @@ func (rs *RouteSync) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, sto
 		for {
 			select {
 			case <-t.C:
+				// Beat at sync start as well as sync end, so a netlink retry storm mid-iteration
+				// isn't mistaken for a wedged loop. Some of our unit tests send a nil health channel
+				if healthChan != nil {
+					healthcheck.SendHeartBeat(healthChan, healthcheck.RouteSyncController)
+				}
 				err := rs.SyncLocalRouteTable()
 				if err != nil {
 					klog.Errorf("route could not be replaced due to: %v", err)
 				}
-				// Some of our unit tests send a nil health channel
-				if healthChan != nil && err == nil {
+				metrics.RecordSyncResult(healthcheck.RouteSyncController, err)
+				// Unconditional, because a route that won't replace is a data problem a restart
+				// can't fix
+				if healthChan != nil {
 					healthcheck.SendHeartBeat(healthChan, healthcheck.RouteSyncController)
 				}
 			case <-stopCh:

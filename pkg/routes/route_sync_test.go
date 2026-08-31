@@ -1,13 +1,18 @@
 package routes
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/vishvananda/netlink"
+
+	"github.com/cloudnativelabs/kube-router/v2/pkg/healthcheck"
+	"github.com/cloudnativelabs/kube-router/v2/pkg/metrics"
 )
 
 var (
@@ -39,19 +44,40 @@ func generateTestRouteMap(inputRouteMap map[string]string) map[string]*netlink.R
 	return testRoutes
 }
 
+// mockNetlink guards its fields with a mutex because the route syncer calls mockRouteReplace from
+// its own goroutine while tests read currentRoute and swap out wg from the test goroutine
 type mockNetlink struct {
+	mu           sync.Mutex
 	currentRoute *netlink.Route
 	pause        time.Duration
 	wg           *sync.WaitGroup
+	replaceErr   error
 }
 
 func (mnl *mockNetlink) mockRouteReplace(route *netlink.Route) error {
+	mnl.mu.Lock()
 	mnl.currentRoute = route
-	if mnl.wg != nil {
-		mnl.wg.Done()
-		time.Sleep(mnl.pause)
+	wg := mnl.wg
+	pause := mnl.pause
+	err := mnl.replaceErr
+	mnl.mu.Unlock()
+	if wg != nil {
+		wg.Done()
+		time.Sleep(pause)
 	}
-	return nil
+	return err
+}
+
+func (mnl *mockNetlink) getCurrentRoute() *netlink.Route {
+	mnl.mu.Lock()
+	defer mnl.mu.Unlock()
+	return mnl.currentRoute
+}
+
+func (mnl *mockNetlink) setWaitGroup(wg *sync.WaitGroup) {
+	mnl.mu.Lock()
+	defer mnl.mu.Unlock()
+	mnl.wg = wg
 }
 
 func Test_syncLocalRouteTable(t *testing.T) {
@@ -75,17 +101,18 @@ func Test_syncLocalRouteTable(t *testing.T) {
 		// Launch syncLocalRouteTable in a separate goroutine so that we can try to inject a route into the map while it
 		// is syncing. Then wait on the wait group so that we know that syncLocalRouteTable has a hold on the lock when
 		// we try to use it in addInjectedRoute() below
-		myNetlink.wg = &sync.WaitGroup{}
-		myNetlink.wg.Add(1)
+		wg := &sync.WaitGroup{}
+		wg.Add(1)
+		myNetlink.setWaitGroup(wg)
 		go func() {
 			_ = syncer.SyncLocalRouteTable()
 		}()
 
 		// Now we know that the syncLocalRouteTable() is paused on our artificial wait we added above
-		myNetlink.wg.Wait()
+		wg.Wait()
 		// We no longer need the wait group, so we change it to a nil reference so that it won't come into play in the
 		// next iteration of the route map
-		myNetlink.wg = nil
+		myNetlink.setWaitGroup(nil)
 	}
 
 	t.Run("Ensure addInjectedRoute is goroutine safe", func(t *testing.T) {
@@ -151,13 +178,13 @@ func Test_routeSyncer_run(t *testing.T) {
 		wg := sync.WaitGroup{}
 
 		// For a sanity check that the currentRoute on the mock object is nil to start with as we'll rely on this later
-		assert.Nil(t, myNetLink.currentRoute, "currentRoute should be nil when the syncer hasn't run")
+		assert.Nil(t, myNetLink.getCurrentRoute(), "currentRoute should be nil when the syncer hasn't run")
 
 		syncer.Run(nil, stopCh, &wg)
 
 		time.Sleep(110 * time.Millisecond)
 
-		assert.NotNil(t, myNetLink.currentRoute,
+		assert.NotNil(t, myNetLink.getCurrentRoute(),
 			"the syncer should have run by now and populated currentRoute")
 
 		// Simulate a shutdown
@@ -167,4 +194,79 @@ func Test_routeSyncer_run(t *testing.T) {
 
 		assert.False(t, timedOut, "WaitGroup should have marked itself as done instead of timing out")
 	})
+}
+
+// Test_routeSyncerHeartbeat covers the reversal here, since we used to withhold the beat on a
+// failed route replace and restart kube-router over a problem a restart could never fix
+func Test_routeSyncerHeartbeat(t *testing.T) {
+	controllerLabel := healthcheck.HeartBeatCompNames[healthcheck.RouteSyncController]
+
+	tests := []struct {
+		name         string
+		replaceErr   error
+		wantFailures bool
+	}{
+		{
+			name:         "successful sync sends a heartbeat",
+			replaceErr:   nil,
+			wantFailures: false,
+		},
+		{
+			name:         "failed sync still sends a heartbeat",
+			replaceErr:   errors.New("network is unreachable"),
+			wantFailures: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			syncer := NewRouteSyncer(50*time.Millisecond, false)
+			myNetLink := mockNetlink{replaceErr: tt.replaceErr}
+			syncer.routeReplacer = myNetLink.mockRouteReplace
+			syncer.routeTableStateMap = generateTestRouteMap(testRoutes)
+
+			// Big enough that the loop's dual beats can never block the sync goroutine mid-send,
+			// which would keep it from ever seeing stopCh close
+			healthChan := make(chan *healthcheck.ControllerHeartbeat, 128)
+			stopCh := make(chan struct{})
+			wg := sync.WaitGroup{}
+
+			startedAt := float64(time.Now().Unix())
+			failuresBefore := testutil.ToFloat64(metrics.ControllerSyncFailures.WithLabelValues(controllerLabel))
+			successBefore := testutil.ToFloat64(metrics.ControllerSyncLastSuccess.WithLabelValues(controllerLabel))
+
+			syncer.Run(healthChan, stopCh, &wg)
+
+			// One beat at iteration start and one at iteration end, both regardless of the outcome
+			for _, when := range []string{"start", "end"} {
+				select {
+				case beat := <-healthChan:
+					assert.Equal(t, healthcheck.RouteSyncController, beat.Component,
+						"the heartbeat should be attributed to the route sync controller")
+				case <-time.After(time.Second):
+					t.Fatalf("the route syncer must send a heartbeat at iteration %s regardless of "+
+						"whether the sync succeeded", when)
+				}
+			}
+
+			// Shut down first so the assertions don't race the iteration recording its metrics
+			close(stopCh)
+			wg.Wait()
+
+			failuresAfter := testutil.ToFloat64(metrics.ControllerSyncFailures.WithLabelValues(controllerLabel))
+			successAfter := testutil.ToFloat64(metrics.ControllerSyncLastSuccess.WithLabelValues(controllerLabel))
+
+			if tt.wantFailures {
+				assert.Greater(t, failuresAfter, failuresBefore,
+					"a route that cannot be replaced should move the sync failure counter")
+				assert.Equal(t, successBefore, successAfter,
+					"a failed sync should leave the last success gauge alone")
+			} else {
+				assert.Equal(t, failuresBefore, failuresAfter,
+					"a clean sync should not move the sync failure counter")
+				assert.GreaterOrEqual(t, successAfter, startedAt,
+					"a clean sync should stamp the last success gauge with the current time")
+			}
+		})
+	}
 }

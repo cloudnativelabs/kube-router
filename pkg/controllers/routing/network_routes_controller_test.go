@@ -410,8 +410,8 @@ func Test_advertiseClusterIPs(t *testing.T) {
 			testcase.nrc.advertiseLoadBalancerIP = false
 
 			toAdvertise, toWithdraw, _ := testcase.nrc.getVIPs()
-			testcase.nrc.advertiseVIPs(toAdvertise)
-			testcase.nrc.withdrawVIPs(toWithdraw)
+			require.NoError(t, testcase.nrc.advertiseVIPs(toAdvertise))
+			require.NoError(t, testcase.nrc.withdrawVIPs(toWithdraw))
 
 			timeoutCh := time.After(time.Second * 10)
 			ticker := time.NewTicker(100 * time.Millisecond)
@@ -1056,8 +1056,8 @@ func Test_advertiseExternalIPs(t *testing.T) {
 			testcase.nrc.advertiseLoadBalancerIP = true
 
 			toAdvertise, toWithdraw, _ := testcase.nrc.getVIPs()
-			testcase.nrc.advertiseVIPs(toAdvertise)
-			testcase.nrc.withdrawVIPs(toWithdraw)
+			require.NoError(t, testcase.nrc.advertiseVIPs(toAdvertise))
+			require.NoError(t, testcase.nrc.withdrawVIPs(toWithdraw))
 			timeoutCh := time.After(time.Second * 10)
 			ticker := time.NewTicker(500 * time.Millisecond)
 
@@ -1345,8 +1345,8 @@ func Test_advertiseAnnotationOptOut(t *testing.T) {
 			testcase.nrc.advertiseLoadBalancerIP = true
 
 			toAdvertise, toWithdraw, _ := testcase.nrc.getVIPs()
-			testcase.nrc.advertiseVIPs(toAdvertise)
-			testcase.nrc.withdrawVIPs(toWithdraw)
+			require.NoError(t, testcase.nrc.advertiseVIPs(toAdvertise))
+			require.NoError(t, testcase.nrc.withdrawVIPs(toWithdraw))
 			timeoutCh := time.After(time.Second * 10)
 			ticker := time.NewTicker(100 * time.Millisecond)
 
@@ -1700,8 +1700,8 @@ func Test_advertiseAnnotationOptIn(t *testing.T) {
 			testcase.nrc.advertiseLoadBalancerIP = false
 
 			toAdvertise, toWithdraw, _ := testcase.nrc.getVIPs()
-			testcase.nrc.advertiseVIPs(toAdvertise)
-			testcase.nrc.withdrawVIPs(toWithdraw)
+			require.NoError(t, testcase.nrc.advertiseVIPs(toAdvertise))
+			require.NoError(t, testcase.nrc.withdrawVIPs(toWithdraw))
 
 			timeoutCh := time.After(time.Second * 10)
 			ticker := time.NewTicker(100 * time.Millisecond)
@@ -2304,7 +2304,7 @@ func Test_syncInternalPeers(t *testing.T) {
 			}
 			waitForListerWithTimeout(testcase.nrc.nodeLister, time.Second*10, t)
 
-			testcase.nrc.syncInternalPeers()
+			require.NoError(t, testcase.nrc.syncInternalPeers())
 
 			neighbors := make(map[string]bool)
 			err = testcase.nrc.bgpServer.ListPeer(context.Background(), &gobgpapi.ListPeerRequest{}, func(peer *gobgpapi.Peer) {
