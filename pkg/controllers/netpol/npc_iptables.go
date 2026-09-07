@@ -212,7 +212,7 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() error {
 		klog.V(1).Infof("Restoring %v iptables rules took %v", ipFamily, restoreEndTime)
 
 		if err != nil {
-			klog.Errorf("iptables-restore for %v failed against the following rule set:\n%s",
+			klog.Errorf("rule set that failed iptables-restore for %v:\n%s",
 				ipFamily, npc.filterTableRules[ipFamily].String())
 			return fmt.Errorf("failed to run iptables-restore for %v: %w", ipFamily, err)
 		}

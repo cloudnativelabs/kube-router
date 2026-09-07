@@ -1451,9 +1451,9 @@ func TestNftablesSyncNetworkPolicyChainsRecordsPartialFailure(t *testing.T) {
 	require.Contains(t, activePolicyChains, badChain, "failed chains stay active so GC leaves them alone")
 	require.Contains(t, activePolicyChains, goodChain)
 
-	require.Error(t, npc.failedPolicyErr, "the rejected transaction must be recorded for fullPolicySync")
-	require.ErrorContains(t, npc.failedPolicyErr, "nsA/bad")
-	require.NotContains(t, npc.failedPolicyErr.Error(), "nsA/good",
+	require.Error(t, npc.failedPolicyErrs, "the rejected transaction must be recorded for fullPolicySync")
+	require.ErrorContains(t, npc.failedPolicyErrs, "nsA/bad")
+	require.NotContains(t, npc.failedPolicyErrs.Error(), "nsA/good",
 		"the healthy policy must not appear in the recorded failure")
 }
 

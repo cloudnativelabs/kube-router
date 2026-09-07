@@ -31,6 +31,64 @@ By enabling
 your Prometheus configuration & adding the required annotations, Prometheus can automatically discover & scrape
 kube-router metrics.
 
+## Monitoring sync correctness
+
+Because kube-router's /healthz endpoint deliberately does not comment on sync correctness, kube-router emits two metrics
+to help operators better understand how syncs are progressing within their cluster:
+
+* `kube_router_controller_sync_last_success` - `NO_DEFAULT_SET` - Unix timestamp of the last fully successful sync,
+  labelled by `controller`.
+* `kube_router_controller_sync_failures_total` - `NO_DEFAULT_SET` - Running count of sync attempts that did not
+  complete, labelled by `controller`.
+
+The `controller` label carries the same component names the health controller uses: `NetworkPolicyController`,
+`NetworkRoutesController`, `NetworkServicesController`, and `RouteSyncController`. The load balancer allocator
+heartbeats on the same unconditional contract, but it allocates per service off a queue rather than in one sync pass,
+so it has no single per-iteration outcome to report and does not appear under these two metrics.
+
+Both series are created the first time a controller reports any result, successful or not. That matters, because a
+controller that has failed every sync since startup still needs to be visible: its
+`kube_router_controller_sync_last_success` sits at `0` rather than being absent, so a staleness alert matches it
+instead of silently evaluating against an empty vector.
+
+You'll want an alert on a controller that is alive but not making progress, which is the case `/healthz` no longer
+catches for you. Something like the following:
+
+```yaml
+# Alerts on staleness: a controller that is alive but has not completed a sync in 15m. The 900s threshold assumes
+# the default 5 minute sync periods (roughly three missed syncs), so adjust it if you've changed
+# --iptables-sync-period, --routes-sync-period, --ipvs-sync-period, or --injected-routes-sync-period.
+# RouteSyncController syncs every 60s by default, so you may want a tighter threshold for that label. A controller
+# that has never succeeded sits at 0 and fires as soon as the for window elapses, which is the intent.
+- alert: KubeRouterSyncFailing
+  expr: time() - kube_router_controller_sync_last_success > 900
+  for: 10m
+  labels:
+    severity: warning
+  annotations:
+    summary: "kube-router {{ $labels.controller }} on {{ $labels.instance }} has not completed a sync in 15m"
+    description: >
+      The control loop is still running (kube-router would be reporting unhealthy otherwise), but its last
+      several sync attempts have failed. Check the pod logs for more details.
+
+# Alerts on the rate of failures rather than staleness. Note that this also fires on a controller that is flapping
+# between success and failure, not just one that is stuck, so it is noisier than the alert above.
+- alert: KubeRouterSyncFailureRate
+  expr: increase(kube_router_controller_sync_failures_total[15m]) > 2
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "kube-router {{ $labels.controller }} on {{ $labels.instance }} has failed multiple syncs in 15m"
+    description: >
+      The control loop has recorded several failed sync attempts in the last 15 minutes, though it may still be
+      succeeding in between them. Check the pod logs for more details.
+```
+
+The thresholds above are tuned for the default sync periods, so be sure to revisit them if you've changed any of the
+sync period flags. Because a controller that has never succeeded reports a `0` timestamp, `KubeRouterSyncFailing`
+pages for it sooner than for one that merely went stale, which is what you want - it has never programmed anything.
+
 ## Available metrics
 
 If metrics is enabled only services that are running have their metrics exposed

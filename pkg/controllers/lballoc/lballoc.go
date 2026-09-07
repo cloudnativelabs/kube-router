@@ -467,7 +467,9 @@ func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.Controller
 		case isLeader = <-isLeaderChan:
 			if isLeader {
 				klog.Info("became the load balancer controller leader, syncing...")
-				go lbc.walkServices()
+				// Fire the timer instead of spawning our own walk so that the leader sync goes through
+				// the same heartbeat path below and can't overlap with a ticker-driven walk
+				timer.Reset(0)
 			}
 		case svc := <-lbc.addChan:
 			if isLeader && lbc.shouldAllocate(&svc) {
