@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -18,6 +19,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/klog/v2"
+
+	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 )
 
 // mockNode implements utils.NodeFamilyAware for testing purposes
@@ -78,6 +82,10 @@ func (m *mockNode) GetNodeIPAddrs() []net.IP {
 	addrs = append(addrs, m.GetNodeIPv4Addrs()...)
 	addrs = append(addrs, m.GetNodeIPv6Addrs()...)
 	return addrs
+}
+
+func (m *mockNode) AddressesMatch(_ *v1core.Node) bool {
+	return true
 }
 
 func TestConfigurePeerAfiSafis(t *testing.T) {
@@ -502,9 +510,24 @@ func externalIP(address string) v1core.NodeAddress {
 	return v1core.NodeAddress{Type: v1core.NodeExternalIP, Address: address}
 }
 
-// We leave bgpServerStarted false so that a worker-driven OnNodeUpdate() never touches the nil BGP server
+const (
+	localNodeName = "node-local"
+	localNodeIP   = "10.0.0.100"
+)
+
+// We leave bgpServerStarted false so that a worker-driven OnNodeUpdate() never touches the nil BGP server. The local
+// node is deliberately not any of the node-N fixtures the handler tests feed in, so those all count as remote.
 func newNodeSyncTestNRC() *NetworkRoutingController {
 	return &NetworkRoutingController{
+		krNode: &utils.LocalKRNode{
+			KRNode: utils.KRNode{
+				NodeName:  localNodeName,
+				PrimaryIP: net.ParseIP(localNodeIP),
+				NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{
+					v1core.NodeInternalIP: {net.ParseIP(localNodeIP)},
+				},
+			},
+		},
 		nodeSyncRequestChan: make(chan struct{}, 1),
 		nodeSyncLimiter:     rate.NewLimiter(nodeSyncQPS, nodeSyncBurst),
 	}
@@ -694,6 +717,82 @@ func TestNodeEventHandlerIgnoresIrrelevantUpdates(t *testing.T) {
 	handler.OnUpdate(oldNode, newNode)
 
 	assert.Equal(t, 0, len(nrc.nodeSyncRequestChan), "a heartbeat-only update should not request a sync")
+}
+
+// A change to our own node's addresses can't be applied by a peer sync, so it must never spend one. Whether the
+// addresses actually drifted is covered by Test_AddressesMatch in pkg/utils.
+func TestNodeEventHandlerLocalNodeUpdateDoesNotSync(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		newNode *v1core.Node
+	}{
+		{
+			name:    "local node addresses drifted from the startup snapshot",
+			newNode: nodeWithAddresses(localNodeName, internalIP("10.0.0.200")),
+		},
+		{
+			// Addresses changed relative to the previous event, but ended up back at what we started with
+			name:    "local node addresses still match the startup snapshot",
+			newNode: nodeWithAddresses(localNodeName, internalIP(localNodeIP)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			nrc := newNodeSyncTestNRC()
+			handler := nrc.newNodeEventHandler()
+			oldNode := nodeWithAddresses(localNodeName, internalIP("10.0.0.1"))
+
+			handler.OnUpdate(oldNode, tt.newNode)
+
+			assert.Empty(t, nrc.nodeSyncRequestChan)
+		})
+	}
+}
+
+func TestNodeEventHandlerLocalNodeInitialAdd(t *testing.T) {
+	// We keep this test serial because capturing klog output changes global logging settings
+	state := klog.CaptureState()
+	t.Cleanup(state.Restore)
+	klog.LogToStderr(false)
+
+	for _, tt := range []struct {
+		name string
+		ip   string
+		warn bool
+	}{
+		{name: "drifted snapshot", ip: "10.0.0.200", warn: true},
+		{name: "matching snapshot", ip: localNodeIP},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			klog.SetOutput(&logs)
+			nrc := newNodeSyncTestNRC()
+			handler := nrc.newNodeEventHandler()
+			node := nodeWithAddresses(localNodeName, internalIP(tt.ip))
+
+			handler.OnAdd(node, true)
+			klog.Flush()
+			warning := "The addresses on node " + localNodeName + " no longer match"
+			assert.Equal(t, tt.warn, bytes.Contains(logs.Bytes(), []byte(warning)))
+			require.Len(t, nrc.nodeSyncRequestChan, 1, "initial add must still request reconciliation")
+			<-nrc.nodeSyncRequestChan
+
+			logs.Reset()
+			updated := node.DeepCopy()
+			updated.ResourceVersion = "2"
+			updated.Status.Conditions = []v1core.NodeCondition{
+				{Type: v1core.NodeReady, Status: v1core.ConditionTrue},
+			}
+			handler.OnUpdate(node, updated)
+			klog.Flush()
+			assert.NotContains(t, logs.String(), warning, "heartbeats must not repeat the warning")
+			assert.Empty(t, nrc.nodeSyncRequestChan)
+		})
+	}
 }
 
 func TestNodeSyncRequestsCoalesceBursts(t *testing.T) {

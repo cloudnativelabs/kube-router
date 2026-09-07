@@ -98,8 +98,9 @@ func (nrc *NetworkRoutingController) syncInternalPeers() {
 			continue
 		}
 
-		// skip self
-		if targetNode.GetPrimaryNodeIP().Equal(nrc.krNode.GetPrimaryNodeIP()) {
+		// Skip self by name rather than IP, because nrc.krNode is a startup snapshot and the lister's copy of our own
+		// node may have moved to a new address since then. Matching by IP would make us peer with ourselves.
+		if node.Name == nrc.krNode.GetNodeName() {
 			continue
 		}
 
@@ -321,6 +322,24 @@ func nodeUpdateIsRelevant(oldNode, newNode *v1core.Node) bool {
 	return !slices.Equal(oldNode.Status.Addresses, newNode.Status.Addresses)
 }
 
+// handleLocalNodeUpdate warns when our own node's addresses no longer match the snapshot in nrc.krNode. Nearly
+// everything address-derived (router ID, GoBGP listen addresses, peer local addresses, tunnel endpoints, SNAT rules,
+// NPC local pod selection) is fixed at startup across all three controllers, so a peer sync can't act on this and we
+// don't request one. We compare against the snapshot rather than the previous event so we also catch a change that
+// landed between construction and the informer's first delivery.
+func (nrc *NetworkRoutingController) handleLocalNodeUpdate(node *v1core.Node) {
+	if nrc.krNode.AddressesMatch(node) {
+		klog.V(2).Infof("Received event for local node %s whose addresses match "+
+			"the addresses kube-router started with, so no restart is needed", node.Name)
+		return
+	}
+
+	klog.Warningf("The addresses on node %s no longer match the addresses kube-router started with (primary IP %s, "+
+		"all IPs %v). kube-router does not support changing the local node's addresses at runtime, restart "+
+		"kube-router on this node for the new addresses to take effect", node.Name, nrc.krNode.GetPrimaryNodeIP(),
+		nrc.krNode.GetNodeIPAddrs())
+}
+
 func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
@@ -328,6 +347,10 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			if !ok {
 				klog.Errorf("unexpected object type: %v", obj)
 				return
+			}
+
+			if node.Name == nrc.krNode.GetNodeName() {
+				nrc.handleLocalNodeUpdate(node)
 			}
 
 			klog.V(2).Infof("Received node %s added update from watch API, so syncing peers", node.Name)
@@ -346,6 +369,11 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 			}
 
 			if !nodeUpdateIsRelevant(oldNode, newNode) {
+				return
+			}
+
+			if newNode.Name == nrc.krNode.GetNodeName() {
+				nrc.handleLocalNodeUpdate(newNode)
 				return
 			}
 

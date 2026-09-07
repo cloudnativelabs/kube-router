@@ -2116,7 +2116,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				clientset:       fake.NewSimpleClientset(),
 				krNode: &utils.LocalKRNode{
 					KRNode: utils.KRNode{
-						NodeName:      "node-1",
+						NodeName:      "node-local",
 						PrimaryIP:     net.ParseIP(testNodeIPv4),
 						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
 					},
@@ -2150,7 +2150,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				clientset:       fake.NewSimpleClientset(),
 				krNode: &utils.LocalKRNode{
 					KRNode: utils.KRNode{
-						NodeName:      "node-1",
+						NodeName:      "node-local",
 						PrimaryIP:     net.ParseIP(testNodeIPv4),
 						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
 					},
@@ -2198,7 +2198,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				clientset:       fake.NewSimpleClientset(),
 				krNode: &utils.LocalKRNode{
 					KRNode: utils.KRNode{
-						NodeName:      "node-1",
+						NodeName:      "node-local",
 						PrimaryIP:     net.ParseIP(testNodeIPv4),
 						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
 					},
@@ -2234,7 +2234,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				clientset:       fake.NewSimpleClientset(),
 				krNode: &utils.LocalKRNode{
 					KRNode: utils.KRNode{
-						NodeName:      "node-1",
+						NodeName:      "node-local",
 						PrimaryIP:     net.ParseIP(testNodeIPv4),
 						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
 					},
@@ -2276,6 +2276,55 @@ func Test_syncInternalPeers(t *testing.T) {
 			},
 			map[string]bool{
 				"10.0.0.1": true,
+			},
+		},
+		{
+			// Self is identified by name, not IP, so if our own node's address drifts away from the krNode
+			// snapshot we still skip it rather than peering with ourselves
+			"skip self by name when its address has drifted from the snapshot",
+			&NetworkRoutingController{
+				bgpFullMeshMode: true,
+				clientset:       fake.NewSimpleClientset(),
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
+				},
+				bgpServer:   gobgp.NewBgpServer(),
+				activeNodes: make(map[string]bool),
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-2",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.2",
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.0.2": true,
 			},
 		},
 	}

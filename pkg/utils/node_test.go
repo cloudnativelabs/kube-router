@@ -754,6 +754,112 @@ func Test_NewRemoteKRNode(t *testing.T) {
 	}
 }
 
+func Test_AddressesMatch(t *testing.T) {
+	t.Parallel()
+
+	nodeWith := func(addrs ...apiv1.NodeAddress) *apiv1.Node {
+		return &apiv1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
+			Status:     apiv1.NodeStatus{Addresses: addrs},
+		}
+	}
+	internal := func(addr string) apiv1.NodeAddress {
+		return apiv1.NodeAddress{Type: apiv1.NodeInternalIP, Address: addr}
+	}
+	external := func(addr string) apiv1.NodeAddress {
+		return apiv1.NodeAddress{Type: apiv1.NodeExternalIP, Address: addr}
+	}
+
+	// A dual-stack node with one internal and one external address per family
+	snapshot, err := NewRemoteKRNode(nodeWith(
+		internal("10.0.0.1"), internal("2001:db8::1"), external("1.1.1.1"), external("2001:db8:ffff::1"),
+	))
+	if err != nil {
+		t.Fatalf("failed to build snapshot KRNode: %v", err)
+	}
+
+	testcases := []struct {
+		name     string
+		node     *apiv1.Node
+		expected bool
+	}{
+		{
+			name: "identical addresses match",
+			node: nodeWith(
+				internal("10.0.0.1"), internal("2001:db8::1"), external("1.1.1.1"), external("2001:db8:ffff::1"),
+			),
+			expected: true,
+		},
+		{
+			// Ordering across families and types is irrelevant, only ordering within a type and family counts,
+			// as long as the first internal address (the primary IP) stays put
+			name: "the same addresses listed in a different order match",
+			node: nodeWith(
+				internal("10.0.0.1"), external("2001:db8:ffff::1"), external("1.1.1.1"), internal("2001:db8::1"),
+			),
+			expected: true,
+		},
+		{
+			// getPrimaryNodeIP takes the first internal address of any family, so this is a real change
+			name: "a different first internal address does not match even if the set is the same",
+			node: nodeWith(
+				internal("2001:db8::1"), internal("10.0.0.1"), external("1.1.1.1"), external("2001:db8:ffff::1"),
+			),
+			expected: false,
+		},
+		{
+			name: "a changed primary IP does not match",
+			node: nodeWith(
+				internal("10.0.0.2"), internal("2001:db8::1"), external("1.1.1.1"), external("2001:db8:ffff::1"),
+			),
+			expected: false,
+		},
+		{
+			// The primary IP is unchanged, but FindBestIPv6NodeAddress would now return a different value
+			name: "a changed secondary family address does not match",
+			node: nodeWith(
+				internal("10.0.0.1"), internal("2001:db8::2"), external("1.1.1.1"), external("2001:db8:ffff::1"),
+			),
+			expected: false,
+		},
+		{
+			name: "an added address does not match",
+			node: nodeWith(
+				internal("10.0.0.1"), internal("10.0.0.2"), internal("2001:db8::1"), external("1.1.1.1"),
+				external("2001:db8:ffff::1"),
+			),
+			expected: false,
+		},
+		{
+			name: "a removed address does not match",
+			node: nodeWith(
+				internal("10.0.0.1"), internal("2001:db8::1"), external("1.1.1.1"),
+			),
+			expected: false,
+		},
+		{
+			// GetNodeIPAddrs would flatten this away, but the type matters to the FindBest* preference order
+			name: "an internal address moved to external does not match",
+			node: nodeWith(
+				internal("10.0.0.1"), external("2001:db8::1"), external("1.1.1.1"), external("2001:db8:ffff::1"),
+			),
+			expected: false,
+		},
+		{
+			name:     "a node with no addresses does not match",
+			node:     nodeWith(),
+			expected: false,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, testcase.expected, snapshot.AddressesMatch(testcase.node))
+		})
+	}
+}
+
 func Test_GetNodeMTU(t *testing.T) {
 	testcases := []struct {
 		name        string
