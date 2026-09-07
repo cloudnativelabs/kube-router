@@ -63,7 +63,7 @@ type NetworkPolicyControllerNftables struct {
 	// Joined errors behind failedPolicyChains, returned at the end of fullPolicySync so a partial
 	// failure still counts as a failed sync without aborting the fail-closed programming. Guarded
 	// by npc.mu.
-	failedPolicyErr error
+	failedPolicyErrs error
 }
 
 func NewKnftablesInterfaces(
@@ -248,9 +248,9 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() error {
 	// Per-policy transaction failures deliberately don't abort the sync above (their target pods
 	// fail closed and every other policy still programs), but they must not report as a fully
 	// successful sync either, since that would advance controller_sync_last_success
-	if npc.failedPolicyErr != nil {
+	if npc.failedPolicyErrs != nil {
 		return fmt.Errorf("sync completed with %d failed policy chain(s): %w",
-			len(npc.failedPolicyChains), npc.failedPolicyErr)
+			len(npc.failedPolicyChains), npc.failedPolicyErrs)
 	}
 
 	return nil
@@ -957,7 +957,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 	// pods (which fail closed via syncPodFirewallChains) instead of freezing netpol cluster-wide.
 	failedPolicyChains := make(map[string]bool)
 	npc.failedPolicyChains = failedPolicyChains
-	npc.failedPolicyErr = nil
+	npc.failedPolicyErrs = nil
 
 	defer func() {
 		if npc.MetricsEnabled {
@@ -1020,7 +1020,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 					"skipping this policy and failing its pods closed: %v",
 					policyChainName, policy.namespace, policy.name, ipFamily, err)
 				failedPolicyChains[policyChainName] = true
-				npc.failedPolicyErr = errors.Join(npc.failedPolicyErr,
+				npc.failedPolicyErrs = errors.Join(npc.failedPolicyErrs,
 					fmt.Errorf("policy chain %s (%s/%s, family %s): %w",
 						policyChainName, policy.namespace, policy.name, ipFamily, err))
 				continue
