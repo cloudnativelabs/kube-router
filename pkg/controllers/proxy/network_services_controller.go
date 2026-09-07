@@ -351,14 +351,10 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		return
 	default:
 		// We come up degraded rather than fatal, because a restart can't fix a rejected service
-		// Beat at both ends so a slow-but-progressing initial sync isn't mistaken for a wedged loop
-		healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
-		syncErr := nsc.doSync()
+		syncErr := metrics.RunObservedSync(healthChan, healthcheck.NetworkServicesController, nsc.doSync)
 		if syncErr != nil {
 			klog.Errorf("initial full sync did not complete cleanly, continuing anyway: %v", syncErr)
 		}
-		metrics.RecordSyncResult(healthcheck.NetworkServicesController, syncErr)
-		healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
 		nsc.readyForUpdates = true
 	}
 
@@ -380,49 +376,48 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			}
 
 		case perform := <-nsc.syncChan:
-			// Beat at sync start as well as sync end, so a slow-but-progressing sync isn't
-			// mistaken for a wedged loop
-			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
-			// Local so that a previous iteration's result can't leak into this one's metric
-			var syncErr error
-			switch perform {
-			case synctypeAll:
-				klog.V(1).Info("Performing requested full sync of services")
-				syncErr = nsc.doSync()
-				if syncErr != nil {
-					klog.Errorf("error during full sync in network service controller. Error: %v", syncErr)
-				}
-			case synctypeIpvs:
-				// We call the component pieces of doSync() here because for methods that send this on the channel they
-				// have already done expensive pieces of the doSync() method like building service and endpoint info
-				// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
-				klog.V(1).Info("Performing requested sync of ipvs services")
-				nsc.mu.Lock()
-				if ipvsErr := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap); ipvsErr != nil {
-					klog.Errorf("error during ipvs sync in network service controller. Error: %v", ipvsErr)
-					syncErr = errors.Join(syncErr, ipvsErr)
-				}
-				if hairpinErr := nsc.syncHairpinIptablesRules(); hairpinErr != nil {
-					klog.Errorf("error syncing hairpin iptables rules: %v", hairpinErr)
-					syncErr = errors.Join(syncErr, hairpinErr)
-				}
-				nsc.mu.Unlock()
-			}
-			// Unconditional, so the beat asserts the loop is turning rather than that IPVS agreed
-			metrics.RecordSyncResult(healthcheck.NetworkServicesController, syncErr)
-			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
+			// requestedSync logs its own failures per sync flavor, so there's nothing to log here
+			_ = metrics.RunObservedSync(healthChan, healthcheck.NetworkServicesController, func() error {
+				return nsc.requestedSync(perform)
+			})
 
 		case <-t.C:
 			klog.V(1).Info("Performing periodic sync of ipvs services")
-			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
-			err := nsc.doSync()
+			err := metrics.RunObservedSync(healthChan, healthcheck.NetworkServicesController, nsc.doSync)
 			if err != nil {
-				klog.Errorf("error during periodic ipvs sync in network service controller. Error: %v", err.Error())
+				klog.Errorf("error during periodic ipvs sync in network service controller. Error: %v", err)
 			}
-			metrics.RecordSyncResult(healthcheck.NetworkServicesController, err)
-			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
 		}
 	}
+}
+
+// requestedSync runs the sync flavor asked for on syncChan and returns the joined outcome
+func (nsc *NetworkServicesController) requestedSync(perform int) error {
+	var syncErr error
+	switch perform {
+	case synctypeAll:
+		klog.V(1).Info("Performing requested full sync of services")
+		syncErr = nsc.doSync()
+		if syncErr != nil {
+			klog.Errorf("error during full sync in network service controller. Error: %v", syncErr)
+		}
+	case synctypeIpvs:
+		// We call the component pieces of doSync() here because for methods that send this on the channel they
+		// have already done expensive pieces of the doSync() method like building service and endpoint info
+		// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
+		klog.V(1).Info("Performing requested sync of ipvs services")
+		nsc.mu.Lock()
+		defer nsc.mu.Unlock()
+		if ipvsErr := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap); ipvsErr != nil {
+			klog.Errorf("error during ipvs sync in network service controller. Error: %v", ipvsErr)
+			syncErr = errors.Join(syncErr, ipvsErr)
+		}
+		if hairpinErr := nsc.syncHairpinIptablesRules(); hairpinErr != nil {
+			klog.Errorf("error syncing hairpin iptables rules: %v", hairpinErr)
+			syncErr = errors.Join(syncErr, hairpinErr)
+		}
+	}
+	return syncErr
 }
 
 func (nsc *NetworkServicesController) sync(syncType int) {

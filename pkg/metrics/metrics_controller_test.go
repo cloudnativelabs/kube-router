@@ -110,3 +110,35 @@ kube_router_controller_sync_failures_total{controller="NetworkPolicyController"}
 			ControllerSyncLastSuccess.WithLabelValues("NetworkRoutesController")), before)
 	})
 }
+
+// TestRunObservedSync checks the wrapper ties the two halves of the contract together: both beats
+// go out, the outcome lands in metrics, and the error comes back for the caller to log
+func TestRunObservedSync(t *testing.T) {
+	tests := []struct {
+		name         string
+		syncErr      error
+		wantFailures float64
+	}{
+		{name: "successful sync stamps last success", syncErr: nil, wantFailures: 0},
+		{name: "failed sync counts a failure", syncErr: errors.New("ipset sync failed"), wantFailures: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gatherSyncMetrics(t)
+			channel := make(chan *healthcheck.ControllerHeartbeat, 2)
+			before := float64(time.Now().Unix())
+
+			err := RunObservedSync(channel, healthcheck.NetworkPolicyController, func() error { return tt.syncErr })
+
+			assert.Equal(t, tt.syncErr, err, "the sync's error should be returned unchanged")
+			assert.Len(t, channel, 2, "a beat should be sent before and after the sync regardless of outcome")
+			assert.Equal(t, tt.wantFailures, testutil.ToFloat64(
+				ControllerSyncFailures.WithLabelValues("NetworkPolicyController")))
+			if tt.syncErr == nil {
+				assert.GreaterOrEqual(t, testutil.ToFloat64(
+					ControllerSyncLastSuccess.WithLabelValues("NetworkPolicyController")), before)
+			}
+		})
+	}
+}

@@ -114,7 +114,6 @@ func (npc *NetworkPolicyControllerNftables) Run(
 	defer wg.Done()
 
 	klog.Info("Starting network policy controller")
-	npc.healthChan = healthChan
 
 	var cancel context.CancelFunc
 	npc.ctx, cancel = context.WithCancel(context.Background())
@@ -161,7 +160,11 @@ func (npc *NetworkPolicyControllerNftables) Run(
 				return
 			case <-fullSyncRequest:
 				klog.V(3).Info("Received request for a full sync, processing")
-				npc.syncAndReport(npc.fullPolicySync) // fullPolicySync() is a blocking request here
+				// fullPolicySync() is a blocking request here
+				err := metrics.RunObservedSync(healthChan, healthcheck.NetworkPolicyController, npc.fullPolicySync)
+				if err != nil {
+					klog.Errorf("full sync of network policies failed: %v", err)
+				}
 			}
 		}
 	}(npc.fullSyncRequestChan, stopCh, wg)
@@ -181,7 +184,7 @@ func (npc *NetworkPolicyControllerNftables) Run(
 }
 
 // fullPolicySync synchronizes nftables to the desired state of network policies, returning on the
-// abort paths so that syncAndReport can record them
+// abort paths so that Run can record them
 func (npc *NetworkPolicyControllerNftables) fullPolicySync() error {
 	npc.mu.Lock()
 	defer npc.mu.Unlock()

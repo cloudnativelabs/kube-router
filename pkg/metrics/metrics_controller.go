@@ -273,6 +273,16 @@ func RecordSyncResult(component int, err error) {
 	lastSuccess.Set(float64(time.Now().Unix()))
 }
 
+// RunObservedSync runs one sync iteration with both observers attached: heartbeats before and after
+// via healthcheck.RunSync, and the outcome recorded in the sync metrics. The error comes back so the
+// caller can log it with its own context. This lives here rather than in healthcheck because metrics
+// already depends on that package
+func RunObservedSync(channel chan<- *healthcheck.ControllerHeartbeat, component int, sync func() error) error {
+	err := healthcheck.RunSync(channel, component, sync)
+	RecordSyncResult(component, err)
+	return err
+}
+
 // Controller Holds settings for the metrics controller
 type Controller struct {
 	MetricsPath string
