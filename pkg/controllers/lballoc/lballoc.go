@@ -477,17 +477,16 @@ func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.Controller
 			}
 		case <-timer.C:
 			timer.Reset(lbc.syncPeriod)
-			// Beat at walk start as well as walk end, matching the dual-beat contract of the sync
-			// controllers: the first beat asserts this select loop is alive, the second that the
-			// walk finished. walkServices feeds addChan, which only this select drains, so it
-			// can't run inline without deadlocking
-			healthcheck.SendHeartBeat(healthChan, healthcheck.LoadBalancerController)
+			// walkServices feeds addChan, which only this select drains, so the walk can't run
+			// inline without deadlocking. It has no failure mode to record, hence no RecordSyncResult
 			leader := isLeader
 			go func() {
-				if leader {
-					lbc.walkServices()
-				}
-				healthcheck.SendHeartBeat(healthChan, healthcheck.LoadBalancerController)
+				_ = healthcheck.RunSync(healthChan, healthcheck.LoadBalancerController, func() error {
+					if leader {
+						lbc.walkServices()
+					}
+					return nil
+				})
 			}()
 		}
 	}

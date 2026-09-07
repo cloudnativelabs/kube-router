@@ -94,7 +94,6 @@ type NetworkPolicyControllerBase struct {
 	mu                  sync.Mutex
 	syncPeriod          time.Duration
 	MetricsEnabled      bool
-	healthChan          chan<- *healthcheck.ControllerHeartbeat
 	fullSyncRequestChan chan struct{}
 	ipsetMutex          *sync.Mutex
 	defaultDeny         bool
@@ -107,19 +106,6 @@ type NetworkPolicyControllerBase struct {
 	podEventHandler           cache.ResourceEventHandler
 	namespaceEventHandler     cache.ResourceEventHandler
 	networkPolicyEventHandler cache.ResourceEventHandler
-}
-
-// syncAndReport runs one full policy sync, beating at both the start and the end so the health
-// deadline budgets a full sync period per iteration instead of the first sync's duration, and
-// records the outcome unconditionally so the beats assert only that this goroutine isn't wedged
-func (npc *NetworkPolicyControllerBase) syncAndReport(fullPolicySync func() error) {
-	healthcheck.SendHeartBeat(npc.healthChan, healthcheck.NetworkPolicyController)
-	err := fullPolicySync()
-	if err != nil {
-		klog.Errorf("aborted full sync of network policies: %v", err)
-	}
-	metrics.RecordSyncResult(healthcheck.NetworkPolicyController, err)
-	healthcheck.SendHeartBeat(npc.healthChan, healthcheck.NetworkPolicyController)
 }
 
 func (npc *NetworkPolicyControllerBase) PodEventHandler() cache.ResourceEventHandler {

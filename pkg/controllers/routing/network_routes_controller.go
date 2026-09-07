@@ -332,8 +332,6 @@ func (nrc *NetworkRoutingController) Run(
 
 	// loop forever till notified to stop on stopCh
 	for {
-		// Accumulates every failure so the metric reflects the whole iteration, not the last step
-		var syncErr error
 		select {
 		case <-stopCh:
 			klog.Infof("Shutting down network routes controller")
@@ -341,67 +339,11 @@ func (nrc *NetworkRoutingController) Run(
 		default:
 		}
 
-		// Beat at sync start as well as sync end, so a slow-but-progressing sync isn't mistaken
-		// for a wedged loop
-		healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkRoutesController)
-
-		// Update ipset entries
-		if nrc.enablePodEgress || nrc.enableOverlays {
-			klog.V(1).Info("Syncing ipsets")
-			if err := nrc.syncNodeIPSets(); err != nil {
-				klog.Errorf("Error synchronizing ipsets: %s", err.Error())
-				syncErr = errors.Join(syncErr, err)
-			}
-		}
-
-		// enable IP forwarding for the packets coming in/out from the pods
-		if err := nrc.enableForwarding(); err != nil {
-			klog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
-			syncErr = errors.Join(syncErr, err)
-		}
-
-		// advertise or withdraw IPs for the services to be reachable via host
-		toAdvertise, toWithdraw, err := nrc.getVIPs()
-		if err != nil {
-			klog.Errorf("failed to get routes to advertise/withdraw %s", err)
-			syncErr = errors.Join(syncErr, err)
-		}
-
-		klog.V(1).Infof("Performing periodic sync of service VIP routes")
-		if err := nrc.advertiseVIPs(toAdvertise); err != nil {
-			syncErr = errors.Join(syncErr, err)
-		}
-		if err := nrc.withdrawVIPs(toWithdraw); err != nil {
-			syncErr = errors.Join(syncErr, err)
-		}
-
-		klog.V(1).Info("Performing periodic sync of pod CIDR routes")
-		if err := nrc.advertisePodRoute(); err != nil {
-			klog.Errorf("Error advertising route: %s", err.Error())
-			syncErr = errors.Join(syncErr, err)
-		}
-
-		if err := nrc.AddPolicies(); err != nil {
-			klog.Errorf("Error adding BGP policies: %s", err.Error())
-			syncErr = errors.Join(syncErr, err)
-		}
-
-		if nrc.bgpEnableInternal {
-			if err := nrc.syncInternalPeers(); err != nil {
-				syncErr = errors.Join(syncErr, err)
-			}
-		}
-
-		if nrc.MetricsEnabled {
-			nrc.updateBGPPeerMetrics()
-		}
-
+		// Unconditional, because gating the beat lets a stuck BGP peer get the container killed
+		syncErr := metrics.RunObservedSync(healthChan, healthcheck.NetworkRoutesController, nrc.periodicSync)
 		if syncErr != nil {
 			klog.Errorf("error during periodic sync in network routing controller. Error: %v", syncErr)
 		}
-		// Unconditional, because gating the beat let a stuck BGP peer get the container killed
-		metrics.RecordSyncResult(healthcheck.NetworkRoutesController, syncErr)
-		healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkRoutesController)
 
 		select {
 		case <-stopCh:
@@ -410,6 +352,65 @@ func (nrc *NetworkRoutingController) Run(
 		case <-t.C:
 		}
 	}
+}
+
+// periodicSync runs one iteration of the routing sync, accumulating every failure so the outcome
+// reflects the whole iteration rather than the last step
+func (nrc *NetworkRoutingController) periodicSync() error {
+	var syncErr error
+
+	// Update ipset entries
+	if nrc.enablePodEgress || nrc.enableOverlays {
+		klog.V(1).Info("Syncing ipsets")
+		if err := nrc.syncNodeIPSets(); err != nil {
+			klog.Errorf("Error synchronizing ipsets: %s", err.Error())
+			syncErr = errors.Join(syncErr, err)
+		}
+	}
+
+	// enable IP forwarding for the packets coming in/out from the pods
+	if err := nrc.enableForwarding(); err != nil {
+		klog.Errorf("Failed to enable IP forwarding of traffic from pods: %s", err.Error())
+		syncErr = errors.Join(syncErr, err)
+	}
+
+	// advertise or withdraw IPs for the services to be reachable via host
+	toAdvertise, toWithdraw, err := nrc.getVIPs()
+	if err != nil {
+		klog.Errorf("failed to get routes to advertise/withdraw %s", err)
+		syncErr = errors.Join(syncErr, err)
+	}
+
+	klog.V(1).Infof("Performing periodic sync of service VIP routes")
+	if err := nrc.advertiseVIPs(toAdvertise); err != nil {
+		syncErr = errors.Join(syncErr, err)
+	}
+	if err := nrc.withdrawVIPs(toWithdraw); err != nil {
+		syncErr = errors.Join(syncErr, err)
+	}
+
+	klog.V(1).Info("Performing periodic sync of pod CIDR routes")
+	if err := nrc.advertisePodRoute(); err != nil {
+		klog.Errorf("Error advertising route: %s", err.Error())
+		syncErr = errors.Join(syncErr, err)
+	}
+
+	if err := nrc.AddPolicies(); err != nil {
+		klog.Errorf("Error adding BGP policies: %s", err.Error())
+		syncErr = errors.Join(syncErr, err)
+	}
+
+	if nrc.bgpEnableInternal {
+		if err := nrc.syncInternalPeers(); err != nil {
+			syncErr = errors.Join(syncErr, err)
+		}
+	}
+
+	if nrc.MetricsEnabled {
+		nrc.updateBGPPeerMetrics()
+	}
+
+	return syncErr
 }
 
 func startBgpServerWithRetry(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{},

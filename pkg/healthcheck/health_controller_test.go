@@ -1,6 +1,7 @@
 package healthcheck
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -216,6 +217,39 @@ func Test_SendHeartBeat(t *testing.T) {
 			beat := <-channel
 			assert.Equal(t, component, beat.Component, "the heartbeat should carry the component it was sent for")
 			assert.False(t, beat.LastHeartBeat.Before(before), "the heartbeat should be stamped at send time")
+		})
+	}
+}
+
+// Test_RunSync pins down the contract every controller relies on: one beat before the sync and one
+// after, whether or not the sync failed, with the sync's error handed back untouched
+func Test_RunSync(t *testing.T) {
+	tests := []struct {
+		name    string
+		syncErr error
+	}{
+		{name: "successful sync beats twice and returns nil", syncErr: nil},
+		{name: "failed sync still beats twice and returns the error", syncErr: errors.New("ipset sync failed")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel := make(chan *ControllerHeartbeat, 2)
+			beatsBeforeSync := 0
+
+			err := RunSync(channel, NetworkPolicyController, func() error {
+				beatsBeforeSync = len(channel)
+				return tt.syncErr
+			})
+
+			assert.Equal(t, tt.syncErr, err, "the sync's error should be returned unchanged")
+			assert.Equal(t, 1, beatsBeforeSync, "exactly one beat should be sent before the sync runs")
+			assert.Len(t, channel, 2, "a second beat should be sent after the sync regardless of outcome")
+			for len(channel) > 0 {
+				beat := <-channel
+				assert.Equal(t, NetworkPolicyController, beat.Component,
+					"every beat should be attributed to the component that ran the sync")
+			}
 		})
 	}
 }

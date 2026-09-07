@@ -176,11 +176,13 @@ func Test_routeSyncer_run(t *testing.T) {
 		syncer.routeTableStateMap = generateTestRouteMap(testRoutes)
 		stopCh := make(chan struct{})
 		wg := sync.WaitGroup{}
+		// Buffered so the beats can't block the loop, since nobody drains this channel here
+		healthChan := make(chan *healthcheck.ControllerHeartbeat, 128)
 
 		// For a sanity check that the currentRoute on the mock object is nil to start with as we'll rely on this later
 		assert.Nil(t, myNetLink.getCurrentRoute(), "currentRoute should be nil when the syncer hasn't run")
 
-		syncer.Run(nil, stopCh, &wg)
+		syncer.Run(healthChan, stopCh, &wg)
 
 		time.Sleep(110 * time.Millisecond)
 
