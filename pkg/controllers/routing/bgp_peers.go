@@ -314,22 +314,44 @@ func newGlobalPeers(
 	return peers
 }
 
+// nodeUpdateIsRelevant filters out the constant heartbeat and condition churn so that only address changes cost us a
+// peer sync. Address order matters because getPrimaryNodeIP() takes the first internal IP.
+// TODO: More conditions will be added to this function later which is what justifies this stub sticking around for now
+func nodeUpdateIsRelevant(oldNode, newNode *v1core.Node) bool {
+	return !slices.Equal(oldNode.Status.Addresses, newNode.Status.Addresses)
+}
+
 func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHandler {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			node := obj.(*v1core.Node)
-			targetNode, err := utils.NewRemoteKRNode(node)
-			if err != nil {
-				klog.Errorf("failed to create KRNode from node object: %v", err)
+			node, ok := obj.(*v1core.Node)
+			if !ok {
+				klog.Errorf("unexpected object type: %v", obj)
 				return
 			}
 
-			klog.V(2).Infof("Received node %s added update from watch API so peer with new node",
-				targetNode.GetPrimaryNodeIP())
-			nrc.OnNodeUpdate(obj)
+			klog.V(2).Infof("Received node %s added update from watch API, so syncing peers", node.Name)
+			nrc.requestNodeSync()
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			// we are only interested in node add/delete, so skip update
+			oldNode, ok := oldObj.(*v1core.Node)
+			if !ok {
+				klog.Errorf("unexpected object type: %v", oldObj)
+				return
+			}
+			newNode, ok := newObj.(*v1core.Node)
+			if !ok {
+				klog.Errorf("unexpected object type: %v", newObj)
+				return
+			}
+
+			if !nodeUpdateIsRelevant(oldNode, newNode) {
+				return
+			}
+
+			klog.V(2).Infof("Received update for node %s from watch API that changed its addresses, so "+
+				"syncing peers", newNode.Name)
+			nrc.requestNodeSync()
 		},
 		DeleteFunc: func(obj any) {
 			node, ok := obj.(*v1core.Node)
@@ -355,15 +377,14 @@ func (nrc *NetworkRoutingController) newNodeEventHandler() cache.ResourceEventHa
 					"from peer")
 			}
 
-			nrc.OnNodeUpdate(obj)
+			nrc.requestNodeSync()
 		},
 	}
 }
 
-// OnNodeUpdate Handle updates from Node watcher. Node watcher calls this method whenever there is
-// new node is added or old node is deleted. So peer up with new node and drop peering
-// from old node
-func (nrc *NetworkRoutingController) OnNodeUpdate(_ any) {
+// OnNodeUpdate reconciles BGP peering against the current set of nodes. It re-lists from nrc.nodeLister rather than
+// looking at any one event, which is why a single pending sync request covers every node event.
+func (nrc *NetworkRoutingController) OnNodeUpdate() {
 	if !nrc.bgpServerStarted.Load() {
 		return
 	}
