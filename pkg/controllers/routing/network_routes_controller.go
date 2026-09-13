@@ -32,6 +32,7 @@ import (
 	bgppkt "github.com/osrg/gobgp/v4/pkg/packet/bgp"
 	gobgp "github.com/osrg/gobgp/v4/pkg/server"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/time/rate"
 	v1core "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -79,6 +80,11 @@ const (
 	ipv4MaskMinBits     = 32
 
 	maxModprobeTimeout = 5 * time.Second
+
+	// nodeSyncQPS and nodeSyncBurst cap how often node events can drive a peer sync. OnNodeUpdate() rebuilds every
+	// BGP policy over gRPC and diffs the full peer set, so it isn't cheap enough to run unbounded.
+	nodeSyncQPS   = rate.Limit(1)
+	nodeSyncBurst = 5
 )
 
 // RouteSyncer is an interface that defines the methods needed to sync routes to the kernel's routing table
@@ -174,6 +180,11 @@ type NetworkRoutingController struct {
 	nodeLister    cache.Indexer
 	svcLister     cache.Indexer
 	epSliceLister cache.Indexer
+
+	// One-slot channel, same pattern as NPC's fullSyncRequestChan, so that a burst spends one token per sync rather
+	// than one per event
+	nodeSyncRequestChan chan struct{}
+	nodeSyncLimiter     *rate.Limiter
 
 	NodeEventHandler          cache.ResourceEventHandler
 	ServiceEventHandler       cache.ResourceEventHandler
@@ -332,6 +343,12 @@ func (nrc *NetworkRoutingController) Run(
 	}
 
 	nrc.bgpServerStarted.Store(true)
+
+	// We start the worker only now, because OnNodeUpdate() early-returns while the BGP server is down. A request
+	// that arrived during startup sits in the channel and gets applied here rather than being thrown away.
+	wg.Add(1)
+	go nrc.runNodeSyncWorker(ctx, wg)
+
 	if !nrc.bgpGracefulRestart {
 		defer func() {
 			err := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{})
@@ -408,6 +425,36 @@ func (nrc *NetworkRoutingController) Run(
 			return
 		case <-t.C:
 		}
+	}
+}
+
+// requestNodeSync asks the worker for a peer sync without blocking the informer goroutine. If a request is already
+// pending we drop this one, because the pending sync re-lists every node and will see whatever change prompted it.
+func (nrc *NetworkRoutingController) requestNodeSync() {
+	select {
+	case nrc.nodeSyncRequestChan <- struct{}{}:
+	default:
+		klog.V(3).Info("Node sync already requested, coalescing")
+	}
+}
+
+// runNodeSyncWorker runs one peer sync per request until the context is cancelled
+func (nrc *NetworkRoutingController) runNodeSyncWorker(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for {
+		select {
+		case <-ctx.Done():
+			klog.Info("Shutting down node sync worker")
+			return
+		case <-nrc.nodeSyncRequestChan:
+		}
+
+		if err := nrc.nodeSyncLimiter.Wait(ctx); err != nil {
+			klog.Info("Shutting down node sync worker")
+			return
+		}
+		nrc.OnNodeUpdate()
 	}
 }
 
@@ -1282,6 +1329,9 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 	nrc.disableSrcDstCheck = kubeRouterConfig.DisableSrcDstCheck
 	nrc.initSrcDstCheckDone.Store(false)
 	nrc.routeSyncer = routes.NewRouteSyncer(kubeRouterConfig.InjectedRoutesSyncPeriod, kubeRouterConfig.MetricsEnabled)
+
+	nrc.nodeSyncRequestChan = make(chan struct{}, 1)
+	nrc.nodeSyncLimiter = rate.NewLimiter(nodeSyncQPS, nodeSyncBurst)
 
 	nrc.bgpHoldtime = kubeRouterConfig.BGPHoldTime.Seconds()
 	if nrc.bgpHoldtime > 65536 || nrc.bgpHoldtime < 3 {

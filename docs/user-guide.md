@@ -40,6 +40,7 @@
   - [HostPort support](#hostport-support)
 - [IPVS Graceful termination support](#ipvs-graceful-termination-support)
 - [MTU](#mtu)
+- [Pod CIDR Changes Are Not Supported](#pod-cidr-changes-are-not-supported)
 - [BGP configuration](#bgp-configuration)
 - [Metrics](#metrics)
 
@@ -714,6 +715,19 @@ attempt to configure MTU. However you can choose the right MTU and set in the `c
  to avoid packet fragmentation in case of existing nodes on which `kube-bridge` is already created. On node reboot or
 
 in case of new nodes joining the cluster both the pod's interface and `kube-bridge` will be setup with specified MTU value.
+
+## Pod CIDR Changes Are Not Supported
+
+kube-router doesn't support changing a node's pod CIDR (whether that's `node.Spec.PodCIDR(s)` allocated by
+`kube-controller-manager`, or the `kube-router.io/pod-cidr` / `kube-router.io/pod-cidrs` annotations) on a node that
+is already running. A node's pod CIDR is read once, at startup, to populate the `host-local` IPAM configuration in
+the CNI conf, and the `kube-bridge` interface and any already-running pods on the node keep using addresses from the
+old range regardless of what the node object says afterward. There's no live migration path for existing pods, so
+kube-router doesn't attempt to react to this kind of change; it isn't something a running cluster, much less a
+running node, can safely action on its own.
+
+Kubernetes itself treats `node.Spec.PodCIDR` as immutable once set (the API server rejects an update), which lines
+up with this.
 
 ## BGP configuration
 
