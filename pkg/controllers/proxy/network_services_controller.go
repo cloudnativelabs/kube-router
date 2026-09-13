@@ -350,9 +350,10 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 		klog.Info("Shutting down network services controller")
 		return
 	default:
-		err := nsc.doSync()
-		if err != nil {
-			klog.Fatalf("failed to perform initial full sync %s", err.Error())
+		// We come up degraded rather than fatal, because a restart can't fix a rejected service
+		syncErr := metrics.RunObservedSync(healthChan, healthcheck.NetworkServicesController, nsc.doSync)
+		if syncErr != nil {
+			klog.Errorf("initial full sync did not complete cleanly, continuing anyway: %v", syncErr)
 		}
 		nsc.readyForUpdates = true
 	}
@@ -375,52 +376,48 @@ func (nsc *NetworkServicesController) Run(healthChan chan<- *healthcheck.Control
 			}
 
 		case perform := <-nsc.syncChan:
-			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
-			switch perform {
-			case synctypeAll:
-				klog.V(1).Info("Performing requested full sync of services")
-				err = nsc.doSync()
-				if err != nil {
-					klog.Errorf("error during full sync in network service controller. Error: %v", err)
-				}
-			case synctypeIpvs:
-				// We call the component pieces of doSync() here because for methods that send this on the channel they
-				// have already done expensive pieces of the doSync() method like building service and endpoint info
-				// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
-				klog.V(1).Info("Performing requested sync of ipvs services")
-				nsc.mu.Lock()
-				var syncErrors bool
-				err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
-				if err != nil {
-					klog.Errorf("error during ipvs sync in network service controller. Error: %v", err)
-					syncErrors = true
-				}
-				err = nsc.syncHairpinIptablesRules()
-				if err != nil {
-					klog.Errorf("error syncing hairpin iptables rules: %v", err)
-					syncErrors = true
-				}
-				nsc.mu.Unlock()
-				if syncErrors {
-					err = errors.New("one or more errors during ipvs sync")
-				}
-			}
-			if err == nil {
-				healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
-			}
+			// requestedSync logs its own failures per sync flavor, so there's nothing to log here
+			_ = metrics.RunObservedSync(healthChan, healthcheck.NetworkServicesController, func() error {
+				return nsc.requestedSync(perform)
+			})
 
 		case <-t.C:
 			klog.V(1).Info("Performing periodic sync of ipvs services")
-			healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
-			err := nsc.doSync()
+			err := metrics.RunObservedSync(healthChan, healthcheck.NetworkServicesController, nsc.doSync)
 			if err != nil {
-				klog.Errorf("error during periodic ipvs sync in network service controller. Error: %v", err.Error())
-				klog.Errorf("Skipping sending heartbeat from network service controller as periodic sync failed.")
-			} else {
-				healthcheck.SendHeartBeat(healthChan, healthcheck.NetworkServicesController)
+				klog.Errorf("error during periodic ipvs sync in network service controller. Error: %v", err)
 			}
 		}
 	}
+}
+
+// requestedSync runs the sync flavor asked for on syncChan and returns the joined outcome
+func (nsc *NetworkServicesController) requestedSync(perform int) error {
+	var syncErr error
+	switch perform {
+	case synctypeAll:
+		klog.V(1).Info("Performing requested full sync of services")
+		syncErr = nsc.doSync()
+		if syncErr != nil {
+			klog.Errorf("error during full sync in network service controller. Error: %v", syncErr)
+		}
+	case synctypeIpvs:
+		// We call the component pieces of doSync() here because for methods that send this on the channel they
+		// have already done expensive pieces of the doSync() method like building service and endpoint info
+		// and we don't want to duplicate the effort, so this is a slimmer version of doSync()
+		klog.V(1).Info("Performing requested sync of ipvs services")
+		nsc.mu.Lock()
+		defer nsc.mu.Unlock()
+		if ipvsErr := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap); ipvsErr != nil {
+			klog.Errorf("error during ipvs sync in network service controller. Error: %v", ipvsErr)
+			syncErr = errors.Join(syncErr, ipvsErr)
+		}
+		if hairpinErr := nsc.syncHairpinIptablesRules(); hairpinErr != nil {
+			klog.Errorf("error syncing hairpin iptables rules: %v", hairpinErr)
+			syncErr = errors.Join(syncErr, hairpinErr)
+		}
+	}
+	return syncErr
 }
 
 func (nsc *NetworkServicesController) sync(syncType int) {
@@ -432,30 +429,30 @@ func (nsc *NetworkServicesController) sync(syncType int) {
 }
 
 func (nsc *NetworkServicesController) doSync() error {
-	var err error
+	// Joined rather than overwritten so the returned error covers the whole iteration
+	var syncErr error
 	nsc.mu.Lock()
 	defer nsc.mu.Unlock()
 
 	// enable masquerade rule
-	err = nsc.ensureMasqueradeIptablesRule()
-	if err != nil {
+	if err := nsc.ensureMasqueradeIptablesRule(); err != nil {
 		klog.Errorf("Failed to do add masquerade rule in POSTROUTING chain of nat table due to: %s", err.Error())
+		syncErr = errors.Join(syncErr, fmt.Errorf("masquerade rule: %w", err))
 	}
 
 	nsc.setServiceMap(nsc.buildServicesInfo())
 	nsc.endpointsMap = nsc.buildEndpointSliceInfo()
-	err = nsc.syncHairpinIptablesRules()
-	if err != nil {
+	if err := nsc.syncHairpinIptablesRules(); err != nil {
 		klog.Errorf("Error syncing hairpin iptables rules: %s", err.Error())
+		syncErr = errors.Join(syncErr, fmt.Errorf("hairpin iptables rules: %w", err))
 	}
 
-	err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
-	if err != nil {
+	if err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap); err != nil {
 		klog.Errorf("Error syncing IPVS services: %s", err.Error())
-		return err
+		syncErr = errors.Join(syncErr, fmt.Errorf("ipvs services: %w", err))
 	}
 
-	return nil
+	return syncErr
 }
 
 func (nsc *NetworkServicesController) setupIpvsFirewall() error {

@@ -69,22 +69,29 @@ func (nrc *NetworkRoutingController) bgpWithdrawVIP(vip string) error {
 	return nil
 }
 
-func (nrc *NetworkRoutingController) advertiseVIPs(vips []string) {
+// advertiseVIPs advertises every VIP it is given and returns the failures joined together
+func (nrc *NetworkRoutingController) advertiseVIPs(vips []string) error {
+	var advertiseErr error
 	for _, vip := range vips {
 		err := nrc.bgpAdvertiseVIP(vip)
 		if err != nil {
 			klog.Errorf("error advertising IP: %q, error: %v", vip, err)
+			advertiseErr = errors.Join(advertiseErr, fmt.Errorf("advertise %s: %w", vip, err))
 		}
 	}
+	return advertiseErr
 }
 
-func (nrc *NetworkRoutingController) withdrawVIPs(vips []string) {
+func (nrc *NetworkRoutingController) withdrawVIPs(vips []string) error {
+	var withdrawErr error
 	for _, vip := range vips {
 		err := nrc.bgpWithdrawVIP(vip)
 		if err != nil {
 			klog.Errorf("error withdrawing IP: %q, error: %v", vip, err)
+			withdrawErr = errors.Join(withdrawErr, fmt.Errorf("withdraw %s: %w", vip, err))
 		}
 	}
+	return withdrawErr
 }
 
 func (nrc *NetworkRoutingController) newServiceEventHandler() cache.ResourceEventHandler {
@@ -131,8 +138,10 @@ func (nrc *NetworkRoutingController) handleServiceUpdate(svcOld, svcNew *v1core.
 		klog.Errorf("Error adding BGP policies: %s", err.Error())
 	}
 
-	nrc.advertiseVIPs(toAdvertise)
-	nrc.withdrawVIPs(toWithdraw)
+	// Event-driven, so the periodic sync in Run() owns retrying and reporting this
+	if err := errors.Join(nrc.advertiseVIPs(toAdvertise), nrc.withdrawVIPs(toWithdraw)); err != nil {
+		klog.Errorf("error updating VIPs on service update: %v", err)
+	}
 }
 
 func (nrc *NetworkRoutingController) handleServiceDelete(oldSvc *v1core.Service) {
@@ -169,7 +178,9 @@ func (nrc *NetworkRoutingController) handleServiceDelete(oldSvc *v1core.Service)
 			withdrawVIPs = append(withdrawVIPs, serviceVIP)
 		}
 	}
-	nrc.withdrawVIPs(withdrawVIPs)
+	if err := nrc.withdrawVIPs(withdrawVIPs); err != nil {
+		klog.Errorf("error withdrawing VIPs on delete of service %s/%s: %v", oldSvc.Namespace, oldSvc.Name, err)
+	}
 }
 
 func (nrc *NetworkRoutingController) tryHandleServiceUpdate(objOld, objNew any) {

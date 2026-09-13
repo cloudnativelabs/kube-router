@@ -97,13 +97,11 @@ func (rs *RouteSync) Run(healthChan chan<- *healthcheck.ControllerHeartbeat, sto
 		for {
 			select {
 			case <-t.C:
-				err := rs.SyncLocalRouteTable()
+				// Unconditional, because a route that won't replace is a data problem a restart
+				// can't fix
+				err := metrics.RunObservedSync(healthChan, healthcheck.RouteSyncController, rs.SyncLocalRouteTable)
 				if err != nil {
 					klog.Errorf("route could not be replaced due to: %v", err)
-				}
-				// Some of our unit tests send a nil health channel
-				if healthChan != nil && err == nil {
-					healthcheck.SendHeartBeat(healthChan, healthcheck.RouteSyncController)
 				}
 			case <-stopCh:
 				klog.Infof("Shutting down local route synchronization")

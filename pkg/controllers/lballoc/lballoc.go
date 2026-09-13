@@ -467,18 +467,27 @@ func (lbc *LoadBalancerController) Run(healthChan chan<- *healthcheck.Controller
 		case isLeader = <-isLeaderChan:
 			if isLeader {
 				klog.Info("became the load balancer controller leader, syncing...")
-				go lbc.walkServices()
+				// Fire the timer instead of spawning our own walk so that the leader sync goes through
+				// the same heartbeat path below and can't overlap with a ticker-driven walk
+				timer.Reset(0)
 			}
 		case svc := <-lbc.addChan:
 			if isLeader && lbc.shouldAllocate(&svc) {
 				lbc.allocateChan <- svc
 			}
 		case <-timer.C:
-			timer.Reset(time.Minute)
-			healthcheck.SendHeartBeat(healthChan, healthcheck.LoadBalancerController)
-			if isLeader {
-				go lbc.walkServices()
-			}
+			timer.Reset(lbc.syncPeriod)
+			// walkServices feeds addChan, which only this select drains, so the walk can't run
+			// inline without deadlocking. It has no failure mode to record, hence no RecordSyncResult
+			leader := isLeader
+			go func() {
+				_ = healthcheck.RunSync(healthChan, healthcheck.LoadBalancerController, func() error {
+					if leader {
+						lbc.walkServices()
+					}
+					return nil
+				})
+			}()
 		}
 	}
 }

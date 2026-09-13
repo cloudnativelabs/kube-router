@@ -62,7 +62,7 @@ var (
 type NetworkPolicyController interface {
 	Run(healthChan chan<- *healthcheck.ControllerHeartbeat, stopCh <-chan struct{}, wg *sync.WaitGroup)
 	RequestFullSync()
-	fullPolicySync()
+	fullPolicySync() error
 	ensureTopLevelChains() error
 	ensureDefaultNetworkPolicyChain()
 	ensureCommonPolicyChain()
@@ -94,7 +94,6 @@ type NetworkPolicyControllerBase struct {
 	mu                  sync.Mutex
 	syncPeriod          time.Duration
 	MetricsEnabled      bool
-	healthChan          chan<- *healthcheck.ControllerHeartbeat
 	fullSyncRequestChan chan struct{}
 	ipsetMutex          *sync.Mutex
 	defaultDeny         bool

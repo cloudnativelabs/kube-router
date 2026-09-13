@@ -41,7 +41,6 @@ func (npc *NetworkPolicyControllerIptables) Run(
 	defer wg.Done()
 
 	klog.Info("Starting network policy controller")
-	npc.healthChan = healthChan
 
 	// setup kube-router specific top level custom chains (KUBE-ROUTER-INPUT, KUBE-ROUTER-FORWARD, KUBE-ROUTER-OUTPUT)
 	if err := npc.ensureTopLevelChains(); err != nil {
@@ -78,7 +77,11 @@ func (npc *NetworkPolicyControllerIptables) Run(
 				return
 			case <-fullSyncRequest:
 				klog.V(3).Info("Received request for a full sync, processing")
-				npc.fullPolicySync() // fullPolicySync() is a blocking request here
+				// fullPolicySync() is a blocking request here
+				err := metrics.RunObservedSync(healthChan, healthcheck.NetworkPolicyController, npc.fullPolicySync)
+				if err != nil {
+					klog.Errorf("full sync of network policies failed: %v", err)
+				}
 			}
 		}
 	}(npc.fullSyncRequestChan, stopCh, wg)
@@ -96,8 +99,9 @@ func (npc *NetworkPolicyControllerIptables) Run(
 	}
 }
 
-// Sync synchronizes iptables to desired state of network policies
-func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
+// fullPolicySync synchronizes iptables to the desired state of network policies, returning on the
+// abort paths so that Run can record them
+func (npc *NetworkPolicyControllerIptables) fullPolicySync() error {
 
 	var err error
 	var networkPoliciesInfo []networkPolicyInfo
@@ -115,12 +119,10 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
 			npc.ipSetHandlers[ipFamily], err = utils.NewIPSet(true)
 		}
 		if err != nil {
-			klog.Errorf("failed to create ipset handler: %v", err)
-			return
+			return fmt.Errorf("failed to create ipset handler: %w", err)
 		}
 	}
 
-	healthcheck.SendHeartBeat(npc.healthChan, healthcheck.NetworkPolicyController)
 	start := time.Now()
 	syncVersion := strconv.FormatInt(start.UnixNano(), syncVersionBase)
 	defer func() {
@@ -135,8 +137,7 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
 
 	// ensure kube-router specific top level chains and corresponding rules exist
 	if err := npc.ensureTopLevelChains(); err != nil {
-		klog.Errorf("Aborting sync. Failed to ensure top level chains: %v", err)
-		return
+		return fmt.Errorf("failed to ensure top level chains: %w", err)
 	}
 
 	// ensure default network policy chain that is applied to traffic from/to the pods that does not match any network
@@ -151,8 +152,7 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
 
 	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
 	if err != nil {
-		klog.Errorf("Aborting sync. Failed to build network policies: %v", err.Error())
-		return
+		return fmt.Errorf("failed to build network policies: %w", err)
 	}
 
 	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
@@ -172,15 +172,13 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
 		klog.V(1).Infof("Saving %v iptables rules took %v", ipFamily, saveEndTime)
 
 		if err != nil {
-			klog.Errorf("Aborting sync. Failed to run iptables-save: %v", err.Error())
-			return
+			return fmt.Errorf("failed to run iptables-save for %v: %w", ipFamily, err)
 		}
 	}
 
 	activePolicyChains, activePolicyIPSets, err := npc.syncNetworkPolicyChains(networkPoliciesInfo, syncVersion)
 	if err != nil {
-		klog.Errorf("Aborting sync. Failed to sync network policy chains: %v", err.Error())
-		return
+		return fmt.Errorf("failed to sync network policy chains: %w", err)
 	}
 
 	activePodFwChains, activePodIPs := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
@@ -198,8 +196,7 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
 
 	err = npc.cleanupStaleRules(activePolicyChains, activePodFwChains, false)
 	if err != nil {
-		klog.Errorf("Aborting sync. Failed to cleanup stale iptables rules: %v", err.Error())
-		return
+		return fmt.Errorf("failed to cleanup stale iptables rules: %w", err)
 	}
 
 	for ipFamily, iptablesSaveRestore := range npc.iptablesSaveRestore {
@@ -218,17 +215,18 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() {
 		klog.V(1).Infof("Restoring %v iptables rules took %v", ipFamily, restoreEndTime)
 
 		if err != nil {
-			klog.Errorf("Aborting sync. Failed to run iptables-restore: %v\n%s",
-				err.Error(), npc.filterTableRules[ipFamily].String())
-			return
+			klog.Errorf("rule set that failed iptables-restore for %v:\n%s",
+				ipFamily, npc.filterTableRules[ipFamily].String())
+			return fmt.Errorf("failed to run iptables-restore for %v: %w", ipFamily, err)
 		}
 	}
 
 	err = npc.cleanupStaleIPSets(activePolicyIPSets)
 	if err != nil {
-		klog.Errorf("Failed to cleanup stale ipsets: %v", err.Error())
-		return
+		return fmt.Errorf("failed to cleanup stale ipsets: %w", err)
 	}
+
+	return nil
 }
 
 func (npc *NetworkPolicyControllerIptables) iptablesCmdHandlerForCIDR(cidr *net.IPNet) (utils.IPTablesHandler, error) {

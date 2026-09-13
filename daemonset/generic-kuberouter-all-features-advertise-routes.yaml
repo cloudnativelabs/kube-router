@@ -98,6 +98,9 @@ spec:
             port: 20244
           periodSeconds: 5
           failureThreshold: 30
+        # /healthz only checks that the controllers are still heartbeating, i.e. that kube-router isn't stuck in a
+        # control loop. It doesn't verify that the networking it programmed is correct. With these settings, roughly
+        # nine seconds without a heartbeat and the kubelet restarts the container.
         livenessProbe:
           httpGet:
             path: /healthz

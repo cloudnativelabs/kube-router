@@ -83,6 +83,17 @@ func SendHeartBeat(channel chan<- *ControllerHeartbeat, component int) {
 	channel <- &heartbeat
 }
 
+// RunSync runs one sync iteration under the heartbeat contract shared by every controller: a beat
+// before and after, regardless of the outcome, so the beats assert the loop is turning rather than
+// that the sync succeeded. Callers report the returned error through metrics.RecordSyncResult, which
+// we can't do here because metrics already imports this package
+func RunSync(channel chan<- *ControllerHeartbeat, component int, sync func() error) error {
+	SendHeartBeat(channel, component)
+	err := sync()
+	SendHeartBeat(channel, component)
+	return err
+}
+
 // Handler writes HTTP responses to the health path
 func (hc *HealthController) Handler(w http.ResponseWriter, _ *http.Request) {
 	if hc.Status.Healthy {
