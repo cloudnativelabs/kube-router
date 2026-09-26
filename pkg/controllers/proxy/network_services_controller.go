@@ -2,10 +2,9 @@ package proxy
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
+	"math/rand/v2"
 	"net"
 	"reflect"
 	"slices"
@@ -991,15 +990,10 @@ func parseSchedFlags(value string) schedFlags {
 }
 
 func shuffle(endPoints []endpointSliceInfo) []endpointSliceInfo {
-	for index1 := range endPoints {
-		randBitInt, err := rand.Int(rand.Reader, big.NewInt(int64(index1+1)))
-		if err != nil {
-			klog.Warningf("unable to get a random int: %v", err)
-			continue
-		}
-		index2 := randBitInt.Int64()
-		endPoints[index1], endPoints[index2] = endPoints[index2], endPoints[index1]
-	}
+	// Important: Do not introduce crypto/rand here as it introduces too much CPU usage on larger clusters
+	rand.Shuffle(len(endPoints), func(i, j int) {
+		endPoints[i], endPoints[j] = endPoints[j], endPoints[i]
+	})
 	return endPoints
 }
 
