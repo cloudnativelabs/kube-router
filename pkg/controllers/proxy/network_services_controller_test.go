@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 )
 
 // getServicesFromAddServiceCalls formats ipvsAddService calls as strings for comparison
@@ -2209,6 +2210,109 @@ func TestShuffleRandomizesOrder(t *testing.T) {
 
 	for _, ep := range base {
 		assert.Len(t, seen[ep], numEndpoints, "endpoint %s never reached some positions", ep.ip)
+	}
+}
+
+func newTestEndpointSlice(name, svcName string, ready bool, portNames []string, ips ...string) *discoveryv1.EndpointSlice {
+	es := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Labels:    map[string]string{"kubernetes.io/service-name": svcName},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+	}
+	for i, portName := range portNames {
+		es.Ports = append(es.Ports, discoveryv1.EndpointPort{Name: new(portName), Port: new(int32(80 + i))})
+	}
+	for _, ip := range ips {
+		es.Endpoints = append(es.Endpoints, discoveryv1.Endpoint{
+			Addresses:  []string{ip},
+			NodeName:   new("node-1"),
+			Conditions: discoveryv1.EndpointConditions{Ready: new(ready)},
+		})
+	}
+	return es
+}
+
+func newTestNSCWithEndpointSlices(t *testing.T, epSlices ...*discoveryv1.EndpointSlice) *NetworkServicesController {
+	t.Helper()
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	for _, es := range epSlices {
+		if err := indexer.Add(es); err != nil {
+			t.Fatalf("failed to add EndpointSlice %s to indexer: %v", es.Name, err)
+		}
+	}
+	return &NetworkServicesController{
+		krNode:        &utils.LocalKRNode{KRNode: utils.KRNode{NodeName: "node-1"}},
+		epSliceLister: indexer,
+	}
+}
+
+func TestBuildEndpointSliceInfo(t *testing.T) {
+	http := []string{"http"}
+	tests := []struct {
+		name     string
+		epSlices []*discoveryv1.EndpointSlice
+		want     map[string][]string
+	}{
+		{
+			name:     "single slice",
+			epSlices: []*discoveryv1.EndpointSlice{newTestEndpointSlice("a", "svc", true, http, "10.1.0.1", "10.1.0.2")},
+			want:     map[string][]string{"default-svc-http": {"10.1.0.1", "10.1.0.2"}},
+		},
+		{
+			name: "multiple slices for one service are merged",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "svc", true, http, "10.1.0.1", "10.1.0.2"),
+				newTestEndpointSlice("b", "svc", true, http, "10.1.0.3", "10.1.0.4", "10.1.0.5"),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1", "10.1.0.2", "10.1.0.3", "10.1.0.4", "10.1.0.5"}},
+		},
+		{
+			name: "multiple ports get their own service IDs",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "svc", true, []string{"http", "https"}, "10.1.0.1", "10.1.0.2"),
+			},
+			want: map[string][]string{
+				"default-svc-http":  {"10.1.0.1", "10.1.0.2"},
+				"default-svc-https": {"10.1.0.1", "10.1.0.2"},
+			},
+		},
+		{
+			name: "multiple services stay separate",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "svc1", true, http, "10.1.0.1"),
+				newTestEndpointSlice("b", "svc2", true, http, "10.2.0.1", "10.2.0.2"),
+			},
+			want: map[string][]string{
+				"default-svc1-http": {"10.1.0.1"},
+				"default-svc2-http": {"10.2.0.1", "10.2.0.2"},
+			},
+		},
+		{
+			name: "non-ready endpoints are skipped",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "svc", true, http, "10.1.0.1"),
+				newTestEndpointSlice("b", "svc", false, http, "10.1.0.2"),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := newTestNSCWithEndpointSlices(t, tt.epSlices...).buildEndpointSliceInfo()
+
+			assert.Len(t, got, len(tt.want))
+			for svcID, wantIPs := range tt.want {
+				var gotIPs []string
+				for _, ep := range got[svcID] {
+					gotIPs = append(gotIPs, ep.ip)
+				}
+				assert.ElementsMatch(t, wantIPs, gotIPs, "endpoints for %s", svcID)
+			}
+		})
 	}
 }
 
