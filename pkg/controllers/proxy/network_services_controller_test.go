@@ -2316,6 +2316,97 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 	}
 }
 
+func TestOrderEndpointsForScheduler(t *testing.T) {
+	input := []endpointSliceInfo{
+		{ip: "10.1.0.3", port: 80},
+		{ip: "10.1.0.1", port: 443},
+		{ip: "10.1.0.4", port: 80},
+		{ip: "10.1.0.1", port: 80},
+		{ip: "10.1.0.2", port: 80},
+		{ip: "10.1.0.6", port: 80},
+		{ip: "10.1.0.5", port: 80},
+		{ip: "10.1.0.8", port: 80},
+		{ip: "10.1.0.7", port: 80},
+	}
+	sorted := []endpointSliceInfo{
+		{ip: "10.1.0.1", port: 80},
+		{ip: "10.1.0.1", port: 443},
+		{ip: "10.1.0.2", port: 80},
+		{ip: "10.1.0.3", port: 80},
+		{ip: "10.1.0.4", port: 80},
+		{ip: "10.1.0.5", port: 80},
+		{ip: "10.1.0.6", port: 80},
+		{ip: "10.1.0.7", port: 80},
+		{ip: "10.1.0.8", port: 80},
+	}
+
+	tests := []struct {
+		scheduler  string
+		wantSorted bool
+	}{
+		{scheduler: ipvs.RoundRobin},
+		{scheduler: ipvs.LeastConnection},
+		{scheduler: ipvs.SourceHashing, wantSorted: true},
+		{scheduler: ipvs.DestinationHashing, wantSorted: true},
+		{scheduler: IpvsMaglevHashing, wantSorted: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.scheduler, func(t *testing.T) {
+			orig := slices.Clone(input)
+			orders := make(map[string]bool)
+			for range 100 {
+				got := orderEndpointsForScheduler(input, tt.scheduler)
+				assert.ElementsMatch(t, input, got)
+				orders[fmt.Sprint(got)] = true
+				if tt.wantSorted {
+					assert.Equal(t, sorted, got)
+				}
+			}
+
+			assert.Equal(t, orig, input, "input slice should not be modified")
+			if !tt.wantSorted {
+				assert.Greater(t, len(orders), 1, "non-hashing schedulers should get a shuffled order")
+			}
+		})
+	}
+}
+
+func TestSyncIpvsServices_HashingSchedulerAddsSortedDestinations(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "svc-mh",
+			Namespace:   "default",
+			Annotations: map[string]string{svcSchedulerAnnotation: IpvsMaglevHashing},
+		},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.1.1",
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports:                 []v1core.ServicePort{{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP}},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.3", "172.20.1.1"},
+		[]string{"172.20.2.2", "172.20.1.2", "172.20.2.1"})
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"10.100.1.1:8080->172.20.1.1:80",
+		"10.100.1.1:8080->172.20.1.2:80",
+		"10.100.1.1:8080->172.20.1.3:80",
+		"10.100.1.1:8080->172.20.2.1:80",
+		"10.100.1.1:8080->172.20.2.2:80",
+	}, getEndpointsFromAddServerCalls(mock))
+}
+
 // setupDualStackNodeController creates a controller backed by a dual-stack node (v4 primary + v6 internal).
 // It returns the ipvsState (for inspecting services), the mock, and the controller.
 //
