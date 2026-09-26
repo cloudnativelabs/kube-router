@@ -28,6 +28,7 @@ solutions.
   - [NodePort Not Accessible from Outside the Node](#nodeport-not-accessible-from-outside-the-node)
   - [High CPU Usage with Many Services](#high-cpu-usage-with-many-services)
   - [Hairpin NAT Not Working](#hairpin-nat-not-working)
+  - [Inconsistent Backend Selection with Hashing Schedulers](#inconsistent-backend-selection-with-hashing-schedulers)
 - [BGP and Routing Issues](#bgp-and-routing-issues)
   - [Routes Not Being Advertised](#routes-not-being-advertised)
   - [Routes Lost After Network Interface Bounce](#routes-lost-after-network-interface-bounce)
@@ -420,6 +421,67 @@ kube-router:
 iptables -t nat -F KUBE-ROUTER-HAIRPIN
 # Then restart the kube-router pod
 ```
+
+### Inconsistent Backend Selection with Hashing Schedulers
+
+**Symptoms:** A service uses the `sh` (source hashing) or `dh` (destination hashing) scheduler, but the same client
+reaches different backend pods depending on which node its traffic lands on. This usually shows up as lost session
+or cache locality behind a load balancer that spreads traffic across multiple nodes.
+
+**Diagnosis:**
+
+```sh
+# Run this on two or more nodes and compare the order of the destinations (not just the set of destinations)
+# TCP services
+ipvsadm -ln -t <service-ip>:<port>
+# UDP services
+ipvsadm -ln -u <service-ip>:<port>
+# SCTP services
+ipvsadm -ln --sctp-service <service-ip>:<port>
+
+# For DSR services, look up the FWMark service instead (kube-router uses a separate FWMark per protocol and port)
+ipvsadm -ln -f <fwmark>
+```
+
+Be sure to use the flag that matches your service's protocol, since `ipvsadm` won't find a UDP service when you ask
+for a TCP one. If every node lists the same destinations in a different order, you're hitting this issue.
+
+**Root Cause:** The `sh` and `dh` schedulers assign clients to backends based on the order of the destinations in the
+kernel's IPVS destination list, so every node needs the same order in order to pick the same backend. kube-router
+sorts endpoints before adding them to IPVS for hashing schedulers (`sh`, `dh`, and `mh`), but the kernel always
+inserts new destinations at the head of the list and updates existing destinations in place. There's no way to
+reorder destinations without deleting and re-adding them.
+
+As such, kube-router only guarantees a consistent order when a node adds all of a service's destinations at the same
+time, such as when the IPVS service is first created. If nodes receive endpoint updates at different times (for
+example, one node sees two pods come up in a single sync while another node sees them one at a time), each node can
+end up with a different destination order for the same set of endpoints. The same thing happens to services that
+existed before kube-router started sorting endpoints, and to services that are switched from another scheduler to a
+hashing scheduler. `mh` (Maglev hashing) is affected as well, but a lot less, since Maglev mostly relies on hashing
+the destinations themselves rather than their order.
+
+Currently, kube-router doesn't reorder existing destinations, because deleting and re-adding a destination can drop
+established connections through that node (kube-router enables `net.ipv4.vs.expire_nodest_conn`).
+
+**Solution:** To bring a node back to the sorted order, delete the IPVS service on that node and let kube-router
+recreate it with all of its destinations at once:
+
+```sh
+# Regular TCP services
+ipvsadm -D -t <service-ip>:<port>
+# Regular UDP services
+ipvsadm -D -u <service-ip>:<port>
+# Regular SCTP services
+ipvsadm -D --sctp-service <service-ip>:<port>
+
+# DSR services
+ipvsadm -D -f <fwmark>
+```
+
+kube-router recreates the service on its next sync, which happens when the service's endpoints change or at the
+latest after `--ipvs-sync-period` (default `5m`). Be aware that this drops any connections to that service going
+through that node, and that the service is unreachable through that node until kube-router recreates it. Because
+later endpoint changes can cause the order to drift again, this is a point-in-time fix rather than a permanent one.
 
 ## BGP and Routing Issues
 
