@@ -2187,6 +2187,30 @@ func TestShuffleDoesNotPanicOnEmptySlice(t *testing.T) {
 	}
 }
 
+func TestShuffleRandomizesOrder(t *testing.T) {
+	const numEndpoints, iterations = 10, 1000
+
+	base := make([]endpointSliceInfo, numEndpoints)
+	for i := range base {
+		base[i] = endpointSliceInfo{ip: fmt.Sprintf("10.0.0.%d", i), port: 80}
+	}
+
+	// A uniform shuffle puts every endpoint at every position; the odds of a miss here are ~1e-44
+	seen := make(map[endpointSliceInfo]map[int]bool, numEndpoints)
+	for range iterations {
+		for pos, ep := range shuffle(slices.Clone(base)) {
+			if seen[ep] == nil {
+				seen[ep] = make(map[int]bool, numEndpoints)
+			}
+			seen[ep][pos] = true
+		}
+	}
+
+	for _, ep := range base {
+		assert.Len(t, seen[ep], numEndpoints, "endpoint %s never reached some positions", ep.ip)
+	}
+}
+
 // setupDualStackNodeController creates a controller backed by a dual-stack node (v4 primary + v6 internal).
 // It returns the ipvsState (for inspecting services), the mock, and the controller.
 //
