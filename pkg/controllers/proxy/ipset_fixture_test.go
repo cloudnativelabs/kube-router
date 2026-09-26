@@ -62,6 +62,10 @@ func (n *stubNode) GetNodeIPAddrs() []net.IP {
 	return res
 }
 
+func (n *stubNode) AddressesMatch(_ *v1.Node) bool {
+	return true
+}
+
 func (n *stubNode) GetPrimaryNodeIP() net.IP {
 	if len(n.ipv4Addrs) > 0 {
 		return n.ipv4Addrs[0]

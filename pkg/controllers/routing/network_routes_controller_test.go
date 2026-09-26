@@ -2116,7 +2116,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				clientset:       fake.NewSimpleClientset(),
 				krNode: &utils.LocalKRNode{
 					KRNode: utils.KRNode{
-						NodeName:      "node-1",
+						NodeName:      "node-local",
 						PrimaryIP:     net.ParseIP(testNodeIPv4),
 						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
 					},
@@ -2150,7 +2150,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				clientset:       fake.NewSimpleClientset(),
 				krNode: &utils.LocalKRNode{
 					KRNode: utils.KRNode{
-						NodeName:      "node-1",
+						NodeName:      "node-local",
 						PrimaryIP:     net.ParseIP(testNodeIPv4),
 						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
 					},
@@ -2198,7 +2198,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				clientset:       fake.NewSimpleClientset(),
 				krNode: &utils.LocalKRNode{
 					KRNode: utils.KRNode{
-						NodeName:      "node-1",
+						NodeName:      "node-local",
 						PrimaryIP:     net.ParseIP(testNodeIPv4),
 						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
 					},
@@ -2234,7 +2234,7 @@ func Test_syncInternalPeers(t *testing.T) {
 				clientset:       fake.NewSimpleClientset(),
 				krNode: &utils.LocalKRNode{
 					KRNode: utils.KRNode{
-						NodeName:      "node-1",
+						NodeName:      "node-local",
 						PrimaryIP:     net.ParseIP(testNodeIPv4),
 						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
 					},
@@ -2276,6 +2276,55 @@ func Test_syncInternalPeers(t *testing.T) {
 			},
 			map[string]bool{
 				"10.0.0.1": true,
+			},
+		},
+		{
+			// Self is identified by name, not IP, so if our own node's address drifts away from the krNode
+			// snapshot we still skip it rather than peering with ourselves
+			"skip self by name when its address has drifted from the snapshot",
+			&NetworkRoutingController{
+				bgpFullMeshMode: true,
+				clientset:       fake.NewSimpleClientset(),
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
+				},
+				bgpServer:   gobgp.NewBgpServer(),
+				activeNodes: make(map[string]bool),
+			},
+			[]*v1core.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-1",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.1",
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node-2",
+					},
+					Status: v1core.NodeStatus{
+						Addresses: []v1core.NodeAddress{
+							{
+								Type:    v1core.NodeInternalIP,
+								Address: "10.0.0.2",
+							},
+						},
+					},
+				},
+			},
+			map[string]bool{
+				"10.0.0.2": true,
 			},
 		},
 	}
@@ -2886,174 +2935,117 @@ func Test_goBGPListenAddrs(t *testing.T) {
 	}
 }
 
-/* Disabling test for now. OnNodeUpdate() behaviour is changed. test needs to be adopted.
+// We seed the cache because OnNodeUpdate re-lists nodes rather than using event objects
 func Test_OnNodeUpdate(t *testing.T) {
+	localNode := func() utils.NodeAware {
+		return &utils.LocalKRNode{
+			KRNode: utils.KRNode{
+				NodeName:      "node-local",
+				PrimaryIP:     net.ParseIP(testNodeIPv4),
+				NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+			},
+		}
+	}
+
 	testcases := []struct {
-		name        string
-		nrc         *NetworkRoutingController
-		nodeEvents  []*watchers.NodeUpdate
-		activeNodes map[string]bool
+		name             string
+		bgpServerStarted bool
+		existingNodes    []*v1core.Node
+		expectedActive   map[string]bool
 	}{
 		{
-			"node add event",
-			&NetworkRoutingController{
-				activeNodes:          make(map[string]bool),
-				bgpServer:            gobgp.NewBgpServer(),
-				defaultNodeAsnNumber: 1,
-				clientset:            fake.NewSimpleClientset(),
-			},
-			[]*watchers.NodeUpdate{
-				{
-					Node: &v1core.Node{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "node-1",
-						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
-								{
-									Type:    v1core.NodeInternalIP,
-									Address: "10.0.0.1",
-								},
-							},
-						},
-					},
-					Op: watchers.ADD,
-				},
-			},
-			map[string]bool{
-				"10.0.0.1": true,
-			},
+			name:             "single peer node",
+			bgpServerStarted: true,
+			existingNodes:    []*v1core.Node{nodeWithAddresses("node-1", internalIP("10.0.0.1"))},
+			expectedActive:   map[string]bool{"10.0.0.1": true},
 		},
 		{
-			"add multiple nodes",
-			&NetworkRoutingController{
-				activeNodes:          make(map[string]bool),
-				bgpServer:            gobgp.NewBgpServer(),
-				defaultNodeAsnNumber: 1,
-				clientset:            fake.NewSimpleClientset(),
+			name:             "multiple peer nodes",
+			bgpServerStarted: true,
+			existingNodes: []*v1core.Node{
+				nodeWithAddresses("node-1", internalIP("10.0.0.1")),
+				nodeWithAddresses("node-2", internalIP("10.0.0.2")),
 			},
-			[]*watchers.NodeUpdate{
-				{
-					Node: &v1core.Node{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "node-1",
-						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
-								{
-									Type:    v1core.NodeInternalIP,
-									Address: "10.0.0.1",
-								},
-							},
-						},
-					},
-					Op: watchers.ADD,
-				},
-				{
-					Node: &v1core.Node{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "node-2",
-						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
-								{
-									Type:    v1core.NodeExternalIP,
-									Address: "1.1.1.1",
-								},
-							},
-						},
-					},
-					Op: watchers.ADD,
-				},
-			},
-			map[string]bool{
-				"10.0.0.1": true,
-				"1.1.1.1":  true,
-			},
+			expectedActive: map[string]bool{"10.0.0.1": true, "10.0.0.2": true},
 		},
 		{
-			"add and then delete nodes",
-			&NetworkRoutingController{
-				activeNodes:          make(map[string]bool),
-				bgpServer:            gobgp.NewBgpServer(),
-				defaultNodeAsnNumber: 1,
-				clientset:            fake.NewSimpleClientset(),
+			name:             "the local node is not peered with itself",
+			bgpServerStarted: true,
+			existingNodes: []*v1core.Node{
+				nodeWithAddresses("node-local", internalIP(testNodeIPv4)),
+				nodeWithAddresses("node-1", internalIP("10.0.0.1")),
 			},
-			[]*watchers.NodeUpdate{
-				{
-					Node: &v1core.Node{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "node-1",
-						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
-								{
-									Type:    v1core.NodeInternalIP,
-									Address: "10.0.0.1",
-								},
-							},
-						},
-					},
-					Op: watchers.ADD,
-				},
-				{
-					Node: &v1core.Node{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "node-1",
-						},
-						Status: v1core.NodeStatus{
-							Addresses: []v1core.NodeAddress{
-								{
-									Type:    v1core.NodeInternalIP,
-									Address: "10.0.0.1",
-								},
-							},
-						},
-					},
-					Op: watchers.REMOVE,
-				},
+			expectedActive: map[string]bool{"10.0.0.1": true},
+		},
+		{
+			name:             "a node without addresses is skipped rather than aborting the sync",
+			bgpServerStarted: true,
+			existingNodes: []*v1core.Node{
+				nodeWithAddresses("node-uninitialized"),
+				nodeWithAddresses("node-1", internalIP("10.0.0.1")),
 			},
-			map[string]bool{},
+			expectedActive: map[string]bool{"10.0.0.1": true},
+		},
+		{
+			name:             "no-op while the BGP server is still starting",
+			bgpServerStarted: false,
+			existingNodes:    []*v1core.Node{nodeWithAddresses("node-1", internalIP("10.0.0.1"))},
+			expectedActive:   map[string]bool{},
 		},
 	}
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			go testcase.nrc.bgpServer.Serve()
-			err := testcase.nrc.bgpServer.Start(&config.Global{
-				Config: config.GlobalConfig{
-					As:       1,
-					RouterId: "10.0.0.0",
-					Port:     10000,
-				},
+			nrc := &NetworkRoutingController{
+				bgpEnableInternal: true,
+				bgpFullMeshMode:   true,
+				nodeLister:        cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{}),
+				svcLister:         cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{}),
+				krNode:            localNode(),
+				bgpServer:         gobgp.NewBgpServer(),
+				activeNodes:       make(map[string]bool),
+				epSliceLister: cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+					indexers.ServiceNameIndex: indexers.ServiceNameIndexFunc,
+				}),
+			}
+			nrc.bgpServerStarted.Store(testcase.bgpServerStarted)
+
+			go nrc.bgpServer.Serve()
+			err := nrc.bgpServer.StartBgp(context.Background(), &gobgpapi.StartBgpRequest{
+				Global: &gobgpapi.Global{Asn: 1, RouterId: testNodeIPv4, ListenPort: 10000},
 			})
-			testcase.nrc.bgpServerStarted.Store(true)
 			if err != nil {
 				t.Fatalf("failed to start BGP server: %v", err)
 			}
-			defer testcase.nrc.bgpServer.Stop()
-
-			for _, nodeEvent := range testcase.nodeEvents {
-				testcase.nrc.OnNodeUpdate(nodeEvent)
-			}
-
-			neighbors := testcase.nrc.bgpServer.GetNeighbor("", false)
-			for _, neighbor := range neighbors {
-				_, exists := testcase.activeNodes[neighbor.Config.NeighborAddress]
-				if !exists {
-					t.Errorf("expected neighbor: %v doesn't exist", neighbor.Config.NeighborAddress)
+			defer func() {
+				if err := nrc.bgpServer.StopBgp(context.Background(), &gobgpapi.StopBgpRequest{}); err != nil {
+					t.Fatalf("failed to stop BGP server: %v", err)
 				}
+			}()
+
+			for _, node := range testcase.existingNodes {
+				require.NoError(t, nrc.nodeLister.Add(node))
 			}
 
-			if !reflect.DeepEqual(testcase.nrc.activeNodes, testcase.activeNodes) {
-				t.Logf("actual active nodes: %v", testcase.nrc.activeNodes)
-				t.Logf("expected active nodes: %v", testcase.activeNodes)
-				t.Errorf("did not get expected activeNodes")
+			nrc.OnNodeUpdate()
+
+			assert.Equal(t, testcase.expectedActive, nrc.activeNodes)
+
+			neighbors := make(map[string]bool)
+			err = nrc.bgpServer.ListPeer(context.Background(), &gobgpapi.ListPeerRequest{},
+				func(peer *gobgpapi.Peer) {
+					if peer.Conf.NeighborAddress == "" {
+						return
+					}
+					neighbors[peer.Conf.NeighborAddress] = true
+				})
+			if err != nil {
+				t.Fatalf("error listing BGP peers: %v", err)
 			}
+			assert.Equal(t, testcase.expectedActive, neighbors)
 		})
 	}
 }
-*/
 
 func createServices(clientset kubernetes.Interface, svcs []*v1core.Service) error {
 	for _, svc := range svcs {

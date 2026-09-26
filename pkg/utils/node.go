@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 
 	"github.com/vishvananda/netlink"
 
@@ -47,6 +48,7 @@ type NodeIPAware interface {
 	GetNodeIPv6Addrs() []net.IP
 	GetNodeIPAddrs() []net.IP
 	GetPrimaryNodeIP() net.IP
+	AddressesMatch(node *apiv1.Node) bool
 }
 
 // NodeInterfaceAware is an interface that provides methods to get the node's interface name, MTU, and subnet. This
@@ -212,6 +214,28 @@ func (n *KRNode) GetNodeIPAddrs() []net.IP {
 	ipv6IPs := n.GetNodeIPv6Addrs()
 	nodeIPs = append(nodeIPs, ipv6IPs...)
 	return nodeIPs
+}
+
+// AddressesMatch reports whether the given node object would produce the same primary IP and the same per-type address
+// lists as this KRNode. Order matters within each list because the first entry is what the FindBest* methods return.
+func (n *KRNode) AddressesMatch(node *apiv1.Node) bool {
+	primaryIP, err := getPrimaryNodeIP(node)
+	if err != nil || !primaryIP.Equal(n.PrimaryIP) {
+		return false
+	}
+
+	ipv4Addrs, ipv6Addrs := getAllNodeIPs(node)
+	return addressMapsEqual(n.NodeIPv4Addrs, ipv4Addrs) && addressMapsEqual(n.NodeIPv6Addrs, ipv6Addrs)
+}
+
+// addressMapsEqual treats a missing key and an empty list the same, which maps.EqualFunc would not
+func addressMapsEqual(a, b addressMap) bool {
+	for _, addrType := range []apiv1.NodeAddressType{apiv1.NodeInternalIP, apiv1.NodeExternalIP} {
+		if !slices.EqualFunc(a[addrType], b[addrType], net.IP.Equal) {
+			return false
+		}
+	}
+	return true
 }
 
 // NewKRNode creates a new KRNode object from a Kubernetes Node Object. This function is used when kube-router is
