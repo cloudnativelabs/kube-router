@@ -1088,9 +1088,14 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 						isTerminating: ep.Conditions.Terminating != nil && *ep.Conditions.Terminating,
 					})
 				}
-				endpointsMap[svcID] = shuffle(endpoints)
+				endpointsMap[svcID] = endpoints
 			}
 		}
+	}
+
+	// Shuffle once per service after all slices are merged, shuffling on every append is O(n^2)
+	for _, endpoints := range endpointsMap {
+		shuffle(endpoints)
 	}
 	return endpointsMap
 }
