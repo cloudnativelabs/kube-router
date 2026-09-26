@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -2180,9 +2181,9 @@ func TestShuffleDoesNotPanicOnEmptySlice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Should not panic
+			want := slices.Clone(tt.input)
 			result := shuffle(tt.input)
-			assert.Equal(t, len(tt.input), len(result), "shuffle should preserve slice length")
+			assert.ElementsMatch(t, want, result, "shuffle should only reorder elements")
 		})
 	}
 }
