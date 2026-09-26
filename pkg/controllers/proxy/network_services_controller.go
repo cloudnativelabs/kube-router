@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -997,6 +998,24 @@ func shuffle(endPoints []endpointSliceInfo) []endpointSliceInfo {
 	return endPoints
 }
 
+// orderEndpointsForScheduler returns a copy of endpoints in the order they should be added to IPVS
+func orderEndpointsForScheduler(endpoints []endpointSliceInfo, scheduler string) []endpointSliceInfo {
+	ordered := slices.Clone(endpoints)
+	switch scheduler {
+	case ipvs.SourceHashing, ipvs.DestinationHashing, IpvsMaglevHashing:
+		// Hashing schedulers map clients based on destination order, so every node should have the same order, even
+		// maglev showed some small deviation when order was mixed (likely because of slot contention)
+		slices.SortFunc(ordered, func(a, b endpointSliceInfo) int {
+			return cmp.Or(strings.Compare(a.ip, b.ip), cmp.Compare(a.port, b.port))
+		})
+	default:
+		// For all other algorithms we shuffle here to improve the distribution of algorithms like rr and lc, see issue
+		// #99 for more info
+		shuffle(ordered)
+	}
+	return ordered
+}
+
 // buildEndpointSliceInfo creates a map of EndpointSlices taken at a moment in time
 func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfoMap {
 	endpointsMap := make(endpointSliceInfoMap)
@@ -1091,11 +1110,6 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 				endpointsMap[svcID] = endpoints
 			}
 		}
-	}
-
-	// Shuffle once per service after all slices are merged, shuffling on every append is O(n^2)
-	for _, endpoints := range endpointsMap {
-		shuffle(endpoints)
 	}
 	return endpointsMap
 }

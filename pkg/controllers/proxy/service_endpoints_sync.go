@@ -210,7 +210,7 @@ func (nsc *NetworkServicesController) addEndpointsToIPVSService(endpoints []endp
 	if len(endpoints) < 1 {
 		klog.Infof("No endpoints detected for service VIP: %s, skipping adding endpoints...", vip)
 	}
-	for _, endpoint := range endpoints {
+	for _, endpoint := range orderEndpointsForScheduler(endpoints, svc.scheduler) {
 		// Conditions on which to add an endpoint on this node:
 		// 1) Service is not a local service
 		// 2) Service is a local service, but has no active endpoints on this node
@@ -588,7 +588,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 
 	// add pod endpoints to the IPVS service (this is pretty much a repetition of addEndpointsToIPVSService, however,
 	// we duplicate the logic here, because DSR requires a bit of extra stuff)
-	for _, endpoint := range endpoints {
+	for _, endpoint := range orderEndpointsForScheduler(endpoints, svcIn.scheduler) {
 		// Conditions on which to add an endpoint on this node:
 		// 1) Service is not a local service
 		// 2) Service is a local service, but has no active endpoints on this node
