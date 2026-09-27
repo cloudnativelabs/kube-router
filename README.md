@@ -147,3 +147,5 @@ kube-router builds upon the following libraries:
 - [GoBGP](https://github.com/osrg/gobgp)
 - [Netlink](https://github.com/vishvananda/netlink)
 - [IPVS](https://github.com/moby/ipvs)
+
+[![Blacksmith](./assets/blacksmith-ci-logo.png)](https://www.blacksmith.sh)
