@@ -19,7 +19,7 @@ jobs:
   # Scans for hidden unicode characters (Trojan Source attacks) before any job that may use secrets
   ci-unicode-check:
     name: ci-unicode-check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
     - name: Check out code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -33,7 +33,7 @@ jobs:
   ci-go-lint:
     name: ci-go-lint
     needs: ci-unicode-check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
     - name: Check out code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -51,7 +51,7 @@ jobs:
   ci-unit-tests:
     name: ci-unit-tests
     needs: ci-unicode-check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
     - name: Check out code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -71,7 +71,7 @@ jobs:
   ci-build-kube-router:
     name: ci-build-kube-router
     needs: ci-unicode-check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
     - name: Check out code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

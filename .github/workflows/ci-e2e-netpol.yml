@@ -1,3 +1,6 @@
+# NOTE: Jobs in this workflow intentionally don't use Blacksmith CI.
+# These E2E jobs fail with the following error on Blacksmith runners:
+# "ipset v7.24: Kernel error received: set type not supported".
 name: ci-e2e-netpol
 
 on:
