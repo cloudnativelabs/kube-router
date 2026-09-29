@@ -19,7 +19,7 @@ permissions: read-all
 jobs:
   scorecard:
     name: scorecard
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       # Required to upload SARIF results to the GitHub Security tab.
       security-events: write
