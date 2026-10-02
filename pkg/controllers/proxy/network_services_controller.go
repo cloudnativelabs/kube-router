@@ -1,11 +1,11 @@
 package proxy
 
 import (
+	"cmp"
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
+	"math/rand/v2"
 	"net"
 	"reflect"
 	"slices"
@@ -988,16 +988,29 @@ func parseSchedFlags(value string) schedFlags {
 }
 
 func shuffle(endPoints []endpointSliceInfo) []endpointSliceInfo {
-	for index1 := range endPoints {
-		randBitInt, err := rand.Int(rand.Reader, big.NewInt(int64(index1+1)))
-		if err != nil {
-			klog.Warningf("unable to get a random int: %v", err)
-			continue
-		}
-		index2 := randBitInt.Int64()
-		endPoints[index1], endPoints[index2] = endPoints[index2], endPoints[index1]
-	}
+	// We don't need crypto/rand for ordering, and it costs a syscall per call on hot paths
+	rand.Shuffle(len(endPoints), func(i, j int) {
+		endPoints[i], endPoints[j] = endPoints[j], endPoints[i]
+	})
 	return endPoints
+}
+
+// orderEndpointsForScheduler returns a copy of endpoints in the order they should be added to IPVS
+func orderEndpointsForScheduler(endpoints []endpointSliceInfo, scheduler string) []endpointSliceInfo {
+	ordered := slices.Clone(endpoints)
+	switch scheduler {
+	case ipvs.SourceHashing, ipvs.DestinationHashing, IpvsMaglevHashing:
+		// Hashing schedulers map clients based on destination order, so every node should have the same order, even
+		// maglev showed some small deviation when order was mixed (likely because of slot contention)
+		slices.SortFunc(ordered, func(a, b endpointSliceInfo) int {
+			return cmp.Or(strings.Compare(a.ip, b.ip), cmp.Compare(a.port, b.port))
+		})
+	default:
+		// For all other algorithms we shuffle here to improve the distribution of algorithms like rr and lc, see issue
+		// #99 for more info
+		shuffle(ordered)
+	}
+	return ordered
 }
 
 // buildEndpointSliceInfo creates a map of EndpointSlices taken at a moment in time
@@ -1091,7 +1104,7 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 						isTerminating: ep.Conditions.Terminating != nil && *ep.Conditions.Terminating,
 					})
 				}
-				endpointsMap[svcID] = shuffle(endpoints)
+				endpointsMap[svcID] = endpoints
 			}
 		}
 	}

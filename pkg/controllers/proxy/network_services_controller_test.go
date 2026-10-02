@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 )
 
 // getServicesFromAddServiceCalls formats ipvsAddService calls as strings for comparison
@@ -2180,11 +2182,229 @@ func TestShuffleDoesNotPanicOnEmptySlice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Should not panic
+			want := slices.Clone(tt.input)
 			result := shuffle(tt.input)
-			assert.Equal(t, len(tt.input), len(result), "shuffle should preserve slice length")
+			assert.ElementsMatch(t, want, result, "shuffle should only reorder elements")
 		})
 	}
+}
+
+func TestShuffleRandomizesOrder(t *testing.T) {
+	const numEndpoints, iterations = 10, 1000
+
+	base := make([]endpointSliceInfo, numEndpoints)
+	for i := range base {
+		base[i] = endpointSliceInfo{ip: fmt.Sprintf("10.0.0.%d", i), port: 80}
+	}
+
+	// A uniform shuffle puts every endpoint at every position; the odds of a miss here are ~1e-44
+	seen := make(map[endpointSliceInfo]map[int]bool, numEndpoints)
+	for range iterations {
+		for pos, ep := range shuffle(slices.Clone(base)) {
+			if seen[ep] == nil {
+				seen[ep] = make(map[int]bool, numEndpoints)
+			}
+			seen[ep][pos] = true
+		}
+	}
+
+	for _, ep := range base {
+		assert.Len(t, seen[ep], numEndpoints, "endpoint %s never reached some positions", ep.ip)
+	}
+}
+
+func newTestEndpointSlice(name, svcName string, ready bool, portNames []string, ips ...string) *discoveryv1.EndpointSlice {
+	es := &discoveryv1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Labels:    map[string]string{"kubernetes.io/service-name": svcName},
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+	}
+	for i, portName := range portNames {
+		es.Ports = append(es.Ports, discoveryv1.EndpointPort{Name: new(portName), Port: new(int32(80 + i))})
+	}
+	for _, ip := range ips {
+		es.Endpoints = append(es.Endpoints, discoveryv1.Endpoint{
+			Addresses:  []string{ip},
+			NodeName:   new("node-1"),
+			Conditions: discoveryv1.EndpointConditions{Ready: new(ready)},
+		})
+	}
+	return es
+}
+
+func newTestNSCWithEndpointSlices(t *testing.T, epSlices ...*discoveryv1.EndpointSlice) *NetworkServicesController {
+	t.Helper()
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	for _, es := range epSlices {
+		if err := indexer.Add(es); err != nil {
+			t.Fatalf("failed to add EndpointSlice %s to indexer: %v", es.Name, err)
+		}
+	}
+	return &NetworkServicesController{
+		krNode:        &utils.LocalKRNode{KRNode: utils.KRNode{NodeName: "node-1"}},
+		epSliceLister: indexer,
+	}
+}
+
+func TestBuildEndpointSliceInfo(t *testing.T) {
+	http := []string{"http"}
+	tests := []struct {
+		name     string
+		epSlices []*discoveryv1.EndpointSlice
+		want     map[string][]string
+	}{
+		{
+			name:     "single slice",
+			epSlices: []*discoveryv1.EndpointSlice{newTestEndpointSlice("a", "svc", true, http, "10.1.0.1", "10.1.0.2")},
+			want:     map[string][]string{"default-svc-http": {"10.1.0.1", "10.1.0.2"}},
+		},
+		{
+			name: "multiple slices for one service are merged",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "svc", true, http, "10.1.0.1", "10.1.0.2"),
+				newTestEndpointSlice("b", "svc", true, http, "10.1.0.3", "10.1.0.4", "10.1.0.5"),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1", "10.1.0.2", "10.1.0.3", "10.1.0.4", "10.1.0.5"}},
+		},
+		{
+			name: "multiple ports get their own service IDs",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "svc", true, []string{"http", "https"}, "10.1.0.1", "10.1.0.2"),
+			},
+			want: map[string][]string{
+				"default-svc-http":  {"10.1.0.1", "10.1.0.2"},
+				"default-svc-https": {"10.1.0.1", "10.1.0.2"},
+			},
+		},
+		{
+			name: "multiple services stay separate",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "svc1", true, http, "10.1.0.1"),
+				newTestEndpointSlice("b", "svc2", true, http, "10.2.0.1", "10.2.0.2"),
+			},
+			want: map[string][]string{
+				"default-svc1-http": {"10.1.0.1"},
+				"default-svc2-http": {"10.2.0.1", "10.2.0.2"},
+			},
+		},
+		{
+			name: "non-ready endpoints are skipped",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "svc", true, http, "10.1.0.1"),
+				newTestEndpointSlice("b", "svc", false, http, "10.1.0.2"),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := newTestNSCWithEndpointSlices(t, tt.epSlices...).buildEndpointSliceInfo()
+
+			assert.Len(t, got, len(tt.want))
+			for svcID, wantIPs := range tt.want {
+				var gotIPs []string
+				for _, ep := range got[svcID] {
+					gotIPs = append(gotIPs, ep.ip)
+				}
+				assert.ElementsMatch(t, wantIPs, gotIPs, "endpoints for %s", svcID)
+			}
+		})
+	}
+}
+
+func TestOrderEndpointsForScheduler(t *testing.T) {
+	input := []endpointSliceInfo{
+		{ip: "10.1.0.3", port: 80},
+		{ip: "10.1.0.1", port: 443},
+		{ip: "10.1.0.4", port: 80},
+		{ip: "10.1.0.1", port: 80},
+		{ip: "10.1.0.2", port: 80},
+		{ip: "10.1.0.6", port: 80},
+		{ip: "10.1.0.5", port: 80},
+		{ip: "10.1.0.8", port: 80},
+		{ip: "10.1.0.7", port: 80},
+	}
+	sorted := []endpointSliceInfo{
+		{ip: "10.1.0.1", port: 80},
+		{ip: "10.1.0.1", port: 443},
+		{ip: "10.1.0.2", port: 80},
+		{ip: "10.1.0.3", port: 80},
+		{ip: "10.1.0.4", port: 80},
+		{ip: "10.1.0.5", port: 80},
+		{ip: "10.1.0.6", port: 80},
+		{ip: "10.1.0.7", port: 80},
+		{ip: "10.1.0.8", port: 80},
+	}
+
+	tests := []struct {
+		scheduler  string
+		wantSorted bool
+	}{
+		{scheduler: ipvs.RoundRobin},
+		{scheduler: ipvs.LeastConnection},
+		{scheduler: ipvs.SourceHashing, wantSorted: true},
+		{scheduler: ipvs.DestinationHashing, wantSorted: true},
+		{scheduler: IpvsMaglevHashing, wantSorted: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.scheduler, func(t *testing.T) {
+			orig := slices.Clone(input)
+			orders := make(map[string]bool)
+			for range 100 {
+				got := orderEndpointsForScheduler(input, tt.scheduler)
+				assert.ElementsMatch(t, input, got)
+				orders[fmt.Sprint(got)] = true
+				if tt.wantSorted {
+					assert.Equal(t, sorted, got)
+				}
+			}
+
+			assert.Equal(t, orig, input, "input slice should not be modified")
+			if !tt.wantSorted {
+				assert.Greater(t, len(orders), 1, "non-hashing schedulers should get a shuffled order")
+			}
+		})
+	}
+}
+
+func TestSyncIpvsServices_HashingSchedulerAddsSortedDestinations(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := &v1core.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "svc-mh",
+			Namespace:   "default",
+			Annotations: map[string]string{svcSchedulerAnnotation: IpvsMaglevHashing},
+		},
+		Spec: v1core.ServiceSpec{
+			Type:                  v1core.ServiceTypeClusterIP,
+			ClusterIP:             "10.100.1.1",
+			InternalTrafficPolicy: &intPolicyCluster,
+			ExternalTrafficPolicy: extPolicyCluster,
+			Ports:                 []v1core.ServicePort{{Name: "http", Port: 8080, Protocol: v1core.ProtocolTCP}},
+		},
+	}
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.3", "172.20.1.1"},
+		[]string{"172.20.2.2", "172.20.1.2", "172.20.2.1"})
+
+	err := nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{
+		"10.100.1.1:8080->172.20.1.1:80",
+		"10.100.1.1:8080->172.20.1.2:80",
+		"10.100.1.1:8080->172.20.1.3:80",
+		"10.100.1.1:8080->172.20.2.1:80",
+		"10.100.1.1:8080->172.20.2.2:80",
+	}, getEndpointsFromAddServerCalls(mock))
 }
 
 // setupDualStackNodeController creates a controller backed by a dual-stack node (v4 primary + v6 internal).
