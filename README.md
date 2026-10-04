@@ -148,12 +148,21 @@ kube-router builds upon the following libraries:
 - [Netlink](https://github.com/vishvananda/netlink)
 - [IPVS](https://github.com/moby/ipvs)
 
+Thanks to following projects for supporting kube-router through their open source programs!
+
 <!-- markdownlint-disable MD033 -->
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/img/blacksmith-ci-logo.png">
-  <source media="(prefers-color-scheme: light)" srcset="./docs/img/blacksmith-ci-logo-light.png">
-  <a href="https://www.blacksmith.sh">
-    <img alt="Blacksmith" src="./docs/img/blacksmith-ci-logo-light.png">
-  </a>
-</picture>
+<a href="https://www.blacksmith.sh">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/img/blacksmith-ci-logo.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs/img/blacksmith-ci-logo-light.png">
+    <img alt="CI powered by Blacksmith" src="./docs/img/blacksmith-ci-logo-light.png" width="368">
+  </picture>
+</a>
+<a href="https://www.greptile.com/?utm_source=oss_badge&utm_medium=readme&utm_campaign=greptile_for_open_source">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/img/greptile-logo.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs/img/greptile-logo-light.png">
+    <img alt="Reviews powered by Greptile" src="./docs/img/greptile-logo-light.png" width="368">
+  </picture>
+</a>
 <!-- markdownlint-enable MD033 -->
