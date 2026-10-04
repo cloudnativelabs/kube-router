@@ -147,3 +147,13 @@ kube-router builds upon the following libraries:
 - [GoBGP](https://github.com/osrg/gobgp)
 - [Netlink](https://github.com/vishvananda/netlink)
 - [IPVS](https://github.com/moby/ipvs)
+
+<!-- markdownlint-disable MD033 -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/img/blacksmith-ci-logo.png">
+  <source media="(prefers-color-scheme: light)" srcset="./docs/img/blacksmith-ci-logo-light.png">
+  <a href="https://www.blacksmith.sh">
+    <img alt="Blacksmith" src="./docs/img/blacksmith-ci-logo-light.png">
+  </a>
+</picture>
+<!-- markdownlint-enable MD033 -->
