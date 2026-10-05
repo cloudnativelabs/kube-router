@@ -111,11 +111,6 @@ func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInf
 			args := []string{"-A", podFwChainName, "-m", "comment", "--comment", comment,
 				"-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "NFLOG",
 				"--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10", "\n"}
-			// This used to be AppendUnique when we were using iptables directly, this checks to make sure we didn't drop
-			// unmarked for this chain already
-			if strings.Contains(filterTableRules.String(), strings.Join(args, " ")) {
-				continue
-			}
 			filterTableRules.WriteString(strings.Join(args, " "))
 
 			// add rule to DROP if no applicable network policy permits the traffic
