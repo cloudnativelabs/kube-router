@@ -97,6 +97,14 @@ func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInf
 	activePodFwChains := make(map[string]bool)
 	activePodIPs := make(map[api.IPFamily][]string)
 
+	// Per-family set of the log rules dropUnmarkedTrafficRules already wrote in this sync. Chain names carry the sync
+	// version, so rules left in the buffer by an earlier sync never match; looking for them with
+	// strings.Contains(filterTableRules.String(), ...) only copied the whole buffer once per pod.
+	loggedDrops := make(map[api.IPFamily]map[string]bool, len(npc.filterTableRules))
+	for ipFamily := range npc.filterTableRules {
+		loggedDrops[ipFamily] = make(map[string]bool)
+	}
+
 	dropUnmarkedTrafficRules := func(pod podInfo, podFwChainName string) {
 		for ipFamily, filterTableRules := range npc.filterTableRules {
 			_, err := getPodIPForFamily(pod, ipFamily)
@@ -113,10 +121,12 @@ func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInf
 				"--nflog-group", "100", "-m", "limit", "--limit", "10/minute", "--limit-burst", "10", "\n"}
 			// This used to be AppendUnique when we were using iptables directly, this checks to make sure we didn't drop
 			// unmarked for this chain already
-			if strings.Contains(filterTableRules.String(), strings.Join(args, " ")) {
+			logRule := strings.Join(args, " ")
+			if loggedDrops[ipFamily][logRule] {
 				continue
 			}
-			filterTableRules.WriteString(strings.Join(args, " "))
+			loggedDrops[ipFamily][logRule] = true
+			filterTableRules.WriteString(logRule)
 
 			// add rule to DROP if no applicable network policy permits the traffic
 			comment = "\"" + idComment(pod.namespace, pod.name, cmtReject) + "\""
