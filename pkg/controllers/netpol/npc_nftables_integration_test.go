@@ -444,7 +444,7 @@ func TestIntegrationIPBlockSetElements(t *testing.T) {
 	syncPolicies(t, npc, "1")
 
 	// Determine the expected set name the same way the implementation does.
-	setName := nftIndexedSourceIPBlockSetName("nsA", "ipblock-ingress", 0, v1core.IPv4Protocol)
+	setName := indexedSourceIPBlockSetName("nsA", "ipblock-ingress", 0, v1core.IPv4Protocol)
 
 	sets, err := nftItf.List(ctx, "sets")
 	if err != nil {
@@ -510,8 +510,8 @@ func TestIntegrationIPBlockExceptAbsentFromSet(t *testing.T) {
 
 	syncPolicies(t, npc, "1")
 
-	setName := nftIndexedSourceIPBlockSetName("nsA", "ipblock-except", 0, v1core.IPv4Protocol)
-	exceptSetName := nftIndexedSourceIPBlockExceptSetName("nsA", "ipblock-except", 0, v1core.IPv4Protocol)
+	setName := indexedSourceIPBlockSetName("nsA", "ipblock-except", 0, v1core.IPv4Protocol)
+	exceptSetName := indexedSourceIPBlockExceptSetName("nsA", "ipblock-except", 0, v1core.IPv4Protocol)
 
 	// Confirm both sets exist.
 	sets, err := nftItf.List(ctx, "sets")
@@ -578,7 +578,7 @@ func TestIntegrationIPBlockExceptAbsentFromSet(t *testing.T) {
 	// With except CIDRs, the policy chain jumps to a per-rule sub-chain that holds the
 	// except-return followed by the accept
 	policyChainName := networkPolicyChainName("nsA", "ipblock-except", "1", v1core.IPv4Protocol)
-	subChainName := nftIndexedSourceIPBlockChainName("nsA", "ipblock-except", 0, v1core.IPv4Protocol)
+	subChainName := indexedSourceIPBlockChainName("nsA", "ipblock-except", 0, v1core.IPv4Protocol)
 
 	// ListRules against real nft populates r.Comment but not r.Rule, so we match on comments
 	policyRules, err := nftItf.ListRules(ctx, policyChainName)

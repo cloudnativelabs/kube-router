@@ -3,8 +3,6 @@ package netpol
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base32"
 	"errors"
 	"fmt"
 	"strconv"
@@ -422,106 +420,6 @@ func NewNetworkPolicyControllerNftables(
 }
 
 // ---------------------------------------------------------------------------
-// nftables set naming helpers
-// ---------------------------------------------------------------------------
-// These produce bare names (no "6:" family prefix) because the sets live inside
-// a per-IP-family nftables table.
-
-func nftDestinationPodSetName(namespace, policyName string, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + string(ipFamily)))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
-}
-
-func nftSourcePodSetName(namespace, policyName string, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + string(ipFamily)))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeSourceIPSetPrefix + encoded[:16]
-}
-
-func nftIndexedSourcePodSetName(namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
-		string(ipFamily) + "pod"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeSourceIPSetPrefix + encoded[:16]
-}
-
-func nftIndexedDestinationPodSetName(namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
-		string(ipFamily) + "pod"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
-}
-
-func nftIndexedSourceIPBlockSetName(namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
-		string(ipFamily) + "ipblock"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeSourceIPSetPrefix + encoded[:16]
-}
-
-func nftIndexedSourceIPBlockExceptSetName(
-	namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
-		string(ipFamily) + "ipblockexcept"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeSourceIPSetPrefix + encoded[:16]
-}
-
-func nftIndexedDestinationIPBlockSetName(
-	namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
-		string(ipFamily) + "ipblock"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
-}
-
-func nftIndexedDestinationIPBlockExceptSetName(
-	namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
-		string(ipFamily) + "ipblockexcept"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
-}
-
-// nftIndexedSourceIPBlockChainName returns the name of a per-rule sub-chain used when an ingress
-// ipBlock rule has except CIDRs. Isolating the except-return inside a sub-chain ensures that the
-// return only exits back to the policy chain, not past all remaining policy rules.
-func nftIndexedSourceIPBlockChainName(
-	namespace, policyName string, ingressRuleNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
-		string(ipFamily) + "ipblockchain"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeNetworkPolicyChainPrefix + encoded[:16]
-}
-
-// nftIndexedDestinationIPBlockChainName returns the name of a per-rule sub-chain used when an egress
-// ipBlock rule has except CIDRs. See nftIndexedSourceIPBlockChainName for rationale.
-func nftIndexedDestinationIPBlockChainName(
-	namespace, policyName string, egressRuleNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
-		string(ipFamily) + "ipblockchain"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeNetworkPolicyChainPrefix + encoded[:16]
-}
-
-func nftIndexedIngressNamedPortSetName(
-	namespace, policyName string, ingressRuleNo, namedPortNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "ingressrule" + strconv.Itoa(ingressRuleNo) +
-		strconv.Itoa(namedPortNo) + string(ipFamily) + "namedport"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
-}
-
-func nftIndexedEgressNamedPortSetName(
-	namespace, policyName string, egressRuleNo, namedPortNo int, ipFamily v1core.IPFamily) string {
-	hash := sha256.Sum256([]byte(namespace + policyName + "egressrule" + strconv.Itoa(egressRuleNo) +
-		strconv.Itoa(namedPortNo) + string(ipFamily) + "namedport"))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubeDestinationIPSetPrefix + encoded[:16]
-}
-
-// ---------------------------------------------------------------------------
 // nftables set helpers
 // ---------------------------------------------------------------------------
 
@@ -738,13 +636,13 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 	for ruleIdx, ingressRule := range policy.ingressRules {
 
 		if len(ingressRule.srcPods) != 0 {
-			srcPodSetName := nftIndexedSourcePodSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
+			srcPodSetName := indexedSourcePodSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[srcPodSetName] = true
 			npc.nftAddOrReplaceIPSet(tx, srcPodSetName,
 				getIPsFromPods(ingressRule.srcPods, ipFamily), ipFamily)
 			npc.nftAddPodMatchRules(tx, policyChainName, policy, activePolicyIPSets, ruleIdx, ipFamily,
 				srcPodSetName, targetDestPodSetName,
-				ingressRule.ports, ingressRule.namedPorts, nftIndexedIngressNamedPortSetName, true)
+				ingressRule.ports, ingressRule.namedPorts, indexedIngressNamedPortSetName, true)
 		}
 
 		if ingressRule.matchAllSource && !ingressRule.matchAllPorts {
@@ -755,7 +653,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 					portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
 			}
 			for epIdx, endPoints := range ingressRule.namedPorts {
-				namedPortSetName := nftIndexedIngressNamedPortSetName(policy.namespace,
+				namedPortSetName := indexedIngressNamedPortSetName(policy.namespace,
 					policy.name, ruleIdx, epIdx, ipFamily)
 				activePolicyIPSets[namedPortSetName] = true
 				npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
@@ -774,8 +672,8 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 		}
 
 		if len(ingressRule.srcIPBlocks[ipFamily]) != 0 {
-			srcIPBlockSetName := nftIndexedSourceIPBlockSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
-			srcIPBlockExceptSetName := nftIndexedSourceIPBlockExceptSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
+			srcIPBlockSetName := indexedSourceIPBlockSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
+			srcIPBlockExceptSetName := indexedSourceIPBlockExceptSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[srcIPBlockSetName] = true
 			hasExcepts := npc.nftAddOrReplaceIPBlockSet(tx, srcIPBlockSetName, srcIPBlockExceptSetName,
 				ingressRule.srcIPBlocks[ipFamily], ipFamily)
@@ -790,7 +688,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 				if ipFamily == v1core.IPv6Protocol {
 					addrKeyword = "ip6"
 				}
-				subChainName := nftIndexedSourceIPBlockChainName(policy.namespace, policy.name, ruleIdx, ipFamily)
+				subChainName := indexedSourceIPBlockChainName(policy.namespace, policy.name, ruleIdx, ipFamily)
 				activePolicyChains[subChainName] = true
 				tx.Add(&knftables.Chain{Name: subChainName})
 				tx.Flush(&knftables.Chain{Name: subChainName})
@@ -815,7 +713,7 @@ func (npc *NetworkPolicyControllerNftables) processIngressRulesNft(
 						portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
 				}
 				for epIdx, endPoints := range ingressRule.namedPorts {
-					namedPortSetName := nftIndexedIngressNamedPortSetName(policy.namespace,
+					namedPortSetName := indexedIngressNamedPortSetName(policy.namespace,
 						policy.name, ruleIdx, epIdx, ipFamily)
 					activePolicyIPSets[namedPortSetName] = true
 					npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
@@ -850,13 +748,13 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 	for ruleIdx, egressRule := range policy.egressRules {
 
 		if len(egressRule.dstPods) != 0 {
-			dstPodSetName := nftIndexedDestinationPodSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
+			dstPodSetName := indexedDestinationPodSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[dstPodSetName] = true
 			npc.nftAddOrReplaceIPSet(tx, dstPodSetName,
 				getIPsFromPods(egressRule.dstPods, ipFamily), ipFamily)
 			npc.nftAddPodMatchRules(tx, policyChainName, policy, activePolicyIPSets, ruleIdx, ipFamily,
 				dstPodSetName, targetSourcePodSetName,
-				egressRule.ports, egressRule.namedPorts, nftIndexedEgressNamedPortSetName, false)
+				egressRule.ports, egressRule.namedPorts, indexedEgressNamedPortSetName, false)
 		}
 
 		if egressRule.matchAllDestinations && !egressRule.matchAllPorts {
@@ -868,7 +766,7 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 			}
 			// A named port refers to a port on the destination pod, so only match the pods that expose it
 			for epIdx, endPoints := range egressRule.namedPorts {
-				namedPortSetName := nftIndexedEgressNamedPortSetName(policy.namespace,
+				namedPortSetName := indexedEgressNamedPortSetName(policy.namespace,
 					policy.name, ruleIdx, epIdx, ipFamily)
 				activePolicyIPSets[namedPortSetName] = true
 				npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
@@ -887,8 +785,8 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 		}
 
 		if len(egressRule.dstIPBlocks[ipFamily]) != 0 {
-			dstIPBlockSetName := nftIndexedDestinationIPBlockSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
-			dstIPBlockExceptSetName := nftIndexedDestinationIPBlockExceptSetName(
+			dstIPBlockSetName := indexedDestinationIPBlockSetName(policy.namespace, policy.name, ruleIdx, ipFamily)
+			dstIPBlockExceptSetName := indexedDestinationIPBlockExceptSetName(
 				policy.namespace, policy.name, ruleIdx, ipFamily)
 			activePolicyIPSets[dstIPBlockSetName] = true
 			hasExcepts := npc.nftAddOrReplaceIPBlockSet(tx, dstIPBlockSetName, dstIPBlockExceptSetName,
@@ -904,7 +802,7 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 				if ipFamily == v1core.IPv6Protocol {
 					addrKeyword = "ip6"
 				}
-				subChainName := nftIndexedDestinationIPBlockChainName(policy.namespace, policy.name, ruleIdx, ipFamily)
+				subChainName := indexedDestinationIPBlockChainName(policy.namespace, policy.name, ruleIdx, ipFamily)
 				activePolicyChains[subChainName] = true
 				tx.Add(&knftables.Chain{Name: subChainName})
 				tx.Flush(&knftables.Chain{Name: subChainName})
@@ -1005,7 +903,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 
 			if policy.policyType == kubeBothPolicyType || policy.policyType == kubeIngressPolicyType {
 				// Destination-pod set – all pods targeted by this policy (used for ingress matching).
-				targetDestPodSetName := nftDestinationPodSetName(policy.namespace, policy.name, ipFamily)
+				targetDestPodSetName := destinationPodSetName(policy.namespace, policy.name, ipFamily)
 				activePolicyIPSets[targetDestPodSetName] = true
 				npc.nftAddOrReplaceIPSet(tx, targetDestPodSetName, currentPodIPs[ipFamily], ipFamily)
 
@@ -1015,7 +913,7 @@ func (npc *NetworkPolicyControllerNftables) syncNetworkPolicyChains(
 
 			if policy.policyType == kubeBothPolicyType || policy.policyType == kubeEgressPolicyType {
 				// Source-pod set – all pods targeted by this policy (used for egress matching).
-				targetSourcePodSetName := nftSourcePodSetName(policy.namespace, policy.name, ipFamily)
+				targetSourcePodSetName := sourcePodSetName(policy.namespace, policy.name, ipFamily)
 				activePolicyIPSets[targetSourcePodSetName] = true
 				npc.nftAddOrReplaceIPSet(tx, targetSourcePodSetName, currentPodIPs[ipFamily], ipFamily)
 
