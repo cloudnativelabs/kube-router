@@ -673,7 +673,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 			},
 			assertDump: func(t *testing.T, dump, _ string) {
 				t.Helper()
-				setName := nftIndexedSourceIPBlockSetName("nsA", "ingress-ipblock", 0, v1core.IPv4Protocol)
+				setName := indexedSourceIPBlockSetName("nsA", "ingress-ipblock", 0, v1core.IPv4Protocol)
 				if !strings.Contains(dump, setName) {
 					t.Errorf("ipBlock ingress: set %s not found in dump", setName)
 				}
@@ -702,8 +702,8 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 			},
 			assertDump: func(t *testing.T, dump, _ string) {
 				t.Helper()
-				mainSetName := nftIndexedSourceIPBlockSetName("nsA", "ingress-ipblock-except", 0, v1core.IPv4Protocol)
-				exceptSetName := nftIndexedSourceIPBlockExceptSetName("nsA", "ingress-ipblock-except", 0, v1core.IPv4Protocol)
+				mainSetName := indexedSourceIPBlockSetName("nsA", "ingress-ipblock-except", 0, v1core.IPv4Protocol)
+				exceptSetName := indexedSourceIPBlockExceptSetName("nsA", "ingress-ipblock-except", 0, v1core.IPv4Protocol)
 				// Main CIDR must be present in the main set.
 				if !strings.Contains(dump, "10.0.0.0/8") {
 					t.Errorf("ipBlock except: main CIDR 10.0.0.0/8 must be in nft dump")
@@ -745,7 +745,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 			},
 			assertDump: func(t *testing.T, dump, _ string) {
 				t.Helper()
-				setName := nftIndexedDestinationIPBlockSetName("nsA", "egress-ipblock", 0, v1core.IPv4Protocol)
+				setName := indexedDestinationIPBlockSetName("nsA", "egress-ipblock", 0, v1core.IPv4Protocol)
 				if !strings.Contains(dump, setName) {
 					t.Errorf("ipBlock egress: set %s not found in dump", setName)
 				}

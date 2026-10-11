@@ -1,8 +1,6 @@
 package netpol
 
 import (
-	"crypto/sha256"
-	"encoding/base32"
 	"strings"
 	"unicode"
 
@@ -342,10 +340,4 @@ func (npc *NetworkPolicyControllerBase) getLocalPods(localPods map[string]podInf
 			namespace: pod.Namespace,
 			labels:    pod.Labels}
 	}
-}
-
-func podFirewallChainName(namespace, podName string, version string) string {
-	hash := sha256.Sum256([]byte(namespace + podName + version))
-	encoded := base32.StdEncoding.EncodeToString(hash[:])
-	return kubePodFirewallChainPrefix + encoded[:16]
 }
