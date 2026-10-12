@@ -2576,10 +2576,11 @@ func Test_routeReflectorConfiguration(t *testing.T) {
 
 func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 	testCases := []struct {
-		name            string
-		nodeAnnotations map[string]string
-		expected        bgp.PeerConfigs
-		errorContains   string
+		name             string
+		nodeAnnotations  map[string]string
+		expected         bgp.PeerConfigs
+		errorContains    string
+		errorNotContains string
 	}{
 		{
 			name:            "node annotations are empty",
@@ -2698,6 +2699,26 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 			},
 			errorContains: "remoteasn cannot be empty",
 		},
+		{
+			name: "combined bgp peers config annotation with invalid yaml does not leak password",
+			nodeAnnotations: map[string]string{
+				peersAnnotation: `- remoteip: 10.0.0.1
+  password: cGFzc3dvcmQ=
+  remoteasn: [64640`,
+			},
+			errorContains:    "failed to parse " + peersAnnotation + " annotation",
+			errorNotContains: "cGFzc3dvcmQ=",
+		},
+		{
+			name: "combined bgp peers config annotation with invalid field type does not leak password",
+			nodeAnnotations: map[string]string{
+				peersAnnotation: `- remoteip: 10.0.0.1
+  remoteasn: notanumber
+  password: cGFzc3dvcmQ=`,
+			},
+			errorContains:    "failed to parse " + peersAnnotation + " annotation",
+			errorNotContains: "cGFzc3dvcmQ=",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -2705,6 +2726,9 @@ func Test_bgpPeerConfigsFromAnnotations(t *testing.T) {
 			bgpPeerCfgs, err := bgpPeerConfigsFromAnnotations(tc.nodeAnnotations, "")
 			if tc.errorContains != "" {
 				assert.ErrorContains(st, err, tc.errorContains)
+				if tc.errorNotContains != "" {
+					assert.NotContains(st, err.Error(), tc.errorNotContains)
+				}
 			} else {
 				require.NoError(t, err)
 				if !cmp.Equal(tc.expected, bgpPeerCfgs, cmp.AllowUnexported(bgp.PeerConfig{})) {

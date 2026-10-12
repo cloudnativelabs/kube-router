@@ -1578,7 +1578,8 @@ func bgpPeerConfigsFromAnnotations(
 
 	var peerConfigs bgp.PeerConfigs
 	if err := yaml.Unmarshal([]byte(nodeBgpPeersAnnotation), &peerConfigs); err != nil {
-		return nil, fmt.Errorf("failed to parse %s annotation: %w", peersAnnotation, err)
+		// Don't include the YAML source in the error, the annotation may contain BGP peer passwords
+		return nil, fmt.Errorf("failed to parse %s annotation: %s", peersAnnotation, yaml.FormatError(err, false, false))
 	}
 	klog.Infof("Peer config from %s annotation: %+v", peersAnnotation, peerConfigs)
 	return peerConfigs, nil

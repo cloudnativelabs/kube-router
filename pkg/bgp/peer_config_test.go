@@ -187,6 +187,13 @@ bfd:
   required_min_rx_interval: 0`),
 			errorContains: "bfd required min rx interval must be between",
 		},
+		{
+			name: "Invalid field type does not leak password",
+			input: []byte(`remoteip: 1.1.1.1
+remoteasn: notanumber
+password: aGVsbG8=`),
+			errorContains: "failed to unmarshal peer config",
+		},
 	}
 
 	for _, tt := range tests {
@@ -195,6 +202,7 @@ bfd:
 			err := yaml.Unmarshal(tt.input, &actual)
 			if tt.errorContains != "" {
 				assert.ErrorContains(st, err, tt.errorContains)
+				assert.NotContains(st, err.Error(), "aGVsbG8=")
 			} else {
 				assert.NoError(st, err)
 				assert.Equal(st, tt.expected, actual)
