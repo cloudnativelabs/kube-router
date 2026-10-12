@@ -2372,6 +2372,65 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 	}
 }
 
+func TestFindContainerRuntimeReferences(t *testing.T) {
+	const nodeIP = "192.168.50.10"
+	newPod := func(namespace, name, ip string, hostNetwork bool) *v1core.Pod {
+		return &v1core.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Spec: v1core.PodSpec{
+				HostNetwork: hostNetwork,
+				Containers:  []v1core.Container{{Name: "c"}},
+			},
+			Status: v1core.PodStatus{
+				HostIP:            nodeIP,
+				PodIPs:            []v1core.PodIP{{IP: ip}},
+				ContainerStatuses: []v1core.ContainerStatus{{ContainerID: "containerd://" + name}},
+			},
+		}
+	}
+
+	podLister := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	for _, pod := range []*v1core.Pod{
+		newPod("svc-ns", "backend", "10.244.1.5", false),
+		newPod("other-ns", "other", "10.244.1.6", false),
+		newPod("kube-system", "host-agent", nodeIP, true),
+	} {
+		if err := podLister.Add(pod); err != nil {
+			t.Fatalf("failed to add pod %s to indexer: %v", pod.Name, err)
+		}
+	}
+	nsc := &NetworkServicesController{
+		krNode:    &utils.LocalKRNode{KRNode: utils.KRNode{NodeName: "node-1", PrimaryIP: net.ParseIP(nodeIP)}},
+		podLister: podLister,
+	}
+
+	tests := []struct {
+		name            string
+		endpointIP      string
+		wantContainerID string
+		wantErr         bool
+	}{
+		{name: "pod in the service namespace", endpointIP: "10.244.1.5", wantContainerID: "backend"},
+		{name: "pod in another namespace", endpointIP: "10.244.1.6", wantErr: true},
+		{name: "hostNetwork pod", endpointIP: nodeIP, wantErr: true},
+		{name: "unknown IP", endpointIP: "10.244.9.9", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runtime, containerID, err := nsc.findContainerRuntimeReferences("svc-ns", tt.endpointIP)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Empty(t, containerID)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, "containerd", runtime)
+			assert.Equal(t, tt.wantContainerID, containerID)
+		})
+	}
+}
+
 func TestOrderEndpointsForScheduler(t *testing.T) {
 	input := []endpointSliceInfo{
 		{ip: "10.1.0.3", port: 80},

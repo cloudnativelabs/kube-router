@@ -163,7 +163,7 @@ type NetworkServicesController struct {
 	podIPv6CIDRs        []string
 
 	hpc                *hairpinController
-	hpEndpointReceiver chan string
+	hpEndpointReceiver chan hairpinEndpoint
 
 	nphc *nodePortHealthCheckController
 }
@@ -1315,7 +1315,7 @@ func (nsc *NetworkServicesController) syncHairpinIptablesRules() error {
 				// Without this change, the return traffic from a client to a service within the same pod will never
 				// make it back into the pod's namespace
 				if nsc.hpc != nil {
-					nsc.hpEndpointReceiver <- ep.ip
+					nsc.hpEndpointReceiver <- hairpinEndpoint{namespace: svcInfo.namespace, ip: ep.ip}
 				}
 
 				// Handle ClusterIP Service
@@ -2175,7 +2175,7 @@ func NewNetworkServicesController(clientset kubernetes.Interface,
 	// plugin ensures that hairpin mode is set much more reliably than we do. However, as a lot of work was put into
 	// the hairpin controller, and so that it is around to reference in the future if needed, I'm leaving the code
 	// for now.
-	// nsc.hpEndpointReceiver = make(chan string)
+	// nsc.hpEndpointReceiver = make(chan hairpinEndpoint)
 	// nsc.hpc = NewHairpinController(&nsc, nsc.hpEndpointReceiver)
 
 	nsc.nphc = NewNodePortHealthCheck()
