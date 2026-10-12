@@ -240,16 +240,17 @@ func convertSysCallProtoToSvcProto(sysProtocol uint16) string {
 }
 
 // findContainerRuntimeReferences find the container runtime and container ID for a given endpoint IP do this by:
-//   - Resolving the endpoint IP to a pod
+//   - Resolving the endpoint IP to a non-hostNetwork pod in the given namespace
 //   - Ensure that the pod actually exists on the node in question
 //   - Get the container ID of the primary container (since this function primarily allows us to enter the pod's
 //     namespace, it doesn't really matter which container we choose here, if this function gets used for something
 //     else in the future, this might have to be re-evaluated)
-func (nsc *NetworkServicesController) findContainerRuntimeReferences(endpointIP string) (string, string, error) {
-	podObj, err := nsc.getPodObjectForEndpointIP(endpointIP)
+func (nsc *NetworkServicesController) findContainerRuntimeReferences(namespace, endpointIP string) (string, string,
+	error) {
+	podObj, err := nsc.getNamespacedPodObjectForEndpointIP(namespace, endpointIP)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to find endpoint with ip: %s. so skipping preparing endpoint for DSR",
-			endpointIP)
+		return "", "", fmt.Errorf("failed to find endpoint with ip: %s. so skipping preparing endpoint for DSR: %w",
+			endpointIP, err)
 	}
 
 	// we are only concerned with endpoint pod running on current node
@@ -275,8 +276,8 @@ func (nsc *NetworkServicesController) findContainerRuntimeReferences(endpointIP 
 // addDSRIPInsidePodNetNamespace takes a given external IP and endpoint IP for a DSR service and then uses the container
 // runtime to add the external IP to a virtual interface inside the pod so that it can receive DSR traffic inside its
 // network namespace.
-func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(externalIP, endpointIP string) error {
-	crRuntime, containerID, err := nsc.findContainerRuntimeReferences(endpointIP)
+func (nsc *NetworkServicesController) addDSRIPInsidePodNetNamespace(namespace, externalIP, endpointIP string) error {
+	crRuntime, containerID, err := nsc.findContainerRuntimeReferences(namespace, endpointIP)
 	if err != nil {
 		return err
 	}
@@ -373,6 +374,24 @@ func (nsc *NetworkServicesController) getPodObjectForEndpointIP(endpointIP strin
 		}
 	}
 	return nil, errors.New("Failed to find pod with ip " + endpointIP)
+}
+
+// getNamespacedPodObjectForEndpointIP resolves an endpoint IP to a pod in the given namespace. EndpointSlice addresses
+// can point at any IP, so pods in other namespaces and hostNetwork pods (which share the node's IP) are never matched.
+func (nsc *NetworkServicesController) getNamespacedPodObjectForEndpointIP(namespace, endpointIP string) (*v1.Pod,
+	error) {
+	for _, obj := range nsc.podLister.List() {
+		pod := obj.(*v1.Pod)
+		if pod.Namespace != namespace || pod.Spec.HostNetwork {
+			continue
+		}
+		for _, ip := range pod.Status.PodIPs {
+			if strings.Compare(ip.IP, endpointIP) == 0 {
+				return pod, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("failed to find non-hostNetwork pod with ip %s in namespace %s", endpointIP, namespace)
 }
 
 func (nsc *NetworkServicesController) getServiceForServiceInfo(svcIn *serviceInfo) (*v1.Service, error) {
