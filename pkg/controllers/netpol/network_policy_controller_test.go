@@ -675,9 +675,10 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 
 }
 
-// tEgressAnyNamedPort sets up pods and an egress policy with an empty "to" and a named port. Pods in two namespaces
-// expose the named port, one pod in the policy namespace does not.
-func tEgressAnyNamedPort(t *testing.T, podInformer, npInformer cache.SharedIndexInformer) {
+// tCreateEgressAnyNamedPortPolicy sets up pods and an egress policy with an empty "to" and a named port. Pods in two namespaces
+// expose the named port, one pod in the policy namespace does not. One pod exposes the named port alongside another
+// named port that "other" also exposes, so "other" must not end up behind the policy's named port.
+func tCreateEgressAnyNamedPortPolicy(t *testing.T, podInformer, npInformer cache.SharedIndexInformer) {
 	t.Helper()
 	pods := []struct {
 		name, namespace, ip string
@@ -688,6 +689,11 @@ func tEgressAnyNamedPort(t *testing.T, podInformer, npInformer cache.SharedIndex
 			ports: []v1.ContainerPort{{Name: "metrics", ContainerPort: 9100, Protocol: v1.ProtocolTCP}}},
 		{name: "server-b", namespace: "nsB", ip: "10.2.0.2",
 			ports: []v1.ContainerPort{{Name: "metrics", ContainerPort: 9100, Protocol: v1.ProtocolTCP}}},
+		{name: "server-multi", namespace: "nsA", ip: "10.1.0.4",
+			ports: []v1.ContainerPort{
+				{Name: "metrics", ContainerPort: 9100, Protocol: v1.ProtocolTCP},
+				{Name: "web", ContainerPort: 8080, Protocol: v1.ProtocolTCP},
+			}},
 		{name: "other", namespace: "nsA", ip: "10.1.0.3",
 			ports: []v1.ContainerPort{{Name: "web", ContainerPort: 8080, Protocol: v1.ProtocolTCP}}},
 	}
@@ -716,7 +722,7 @@ func TestEgressAnyDestinationNamedPort(t *testing.T) {
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 	krNetPol := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
-	tEgressAnyNamedPort(t, podInformer, netpolInformer)
+	tCreateEgressAnyNamedPortPolicy(t, podInformer, netpolInformer)
 
 	netpols, err := krNetPol.buildNetworkPoliciesInfo()
 	if err != nil {
@@ -749,7 +755,7 @@ func TestEgressAnyDestinationNamedPort(t *testing.T) {
 			}
 		}
 	}
-	assert.ElementsMatch(t, []string{"10.1.0.2", "10.2.0.2"}, gotIPs)
+	assert.ElementsMatch(t, []string{"10.1.0.2", "10.2.0.2", "10.1.0.4"}, gotIPs)
 }
 
 type fakeIPTables struct {
