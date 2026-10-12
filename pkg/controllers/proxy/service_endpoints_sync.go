@@ -651,19 +651,27 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 			Weight:          1,
 		}
 
-		// add the destination for the IPVS service for this external IP
-		if err = nsc.ln.ipvsAddServer(ipvsExternalIPSvc, &dst); err != nil {
-			return fmt.Errorf("unable to add destination %s to externalIP service %s: %v",
-				endpoint.ip, externalIP, err)
-		}
-
 		// It's only for local endpoints that we can enter the container's namespace and add DSR receivers inside it.
 		// If we aren't local, then we should skip this step so that we don't accidentally throw an error.
 		if endpoint.isLocal {
 			// add the external IP to a virtual interface inside the pod so that the pod can receive it
-			if err = nsc.addDSRIPInsidePodNetNamespace(svcIn.namespace, externalIP.String(), endpoint.ip); err != nil {
+			err = nsc.addDSRIPInsidePodNetNamespace(svcIn.namespace, externalIP.String(), endpoint.ip)
+			if errors.Is(err, errNoServicePodForEndpoint) {
+				// the endpoint can't receive DSR traffic, skip it rather than failing the sync for every other
+				// external IP service
+				klog.Errorf("skipping DSR endpoint %s for service %s/%s: %v", endpoint.ip, svcIn.namespace,
+					svcIn.name, err)
+				continue
+			}
+			if err != nil {
 				return fmt.Errorf("unable to setup DSR receiver inside pod: %w", err)
 			}
+		}
+
+		// add the destination for the IPVS service for this external IP
+		if err = nsc.ln.ipvsAddServer(ipvsExternalIPSvc, &dst); err != nil {
+			return fmt.Errorf("unable to add destination %s to externalIP service %s: %v",
+				endpoint.ip, externalIP, err)
 		}
 
 		svcEndpointMap[externalIPServiceID] = append(svcEndpointMap[externalIPServiceID],
