@@ -2298,6 +2298,19 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 			},
 			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
 		},
+		{
+			name: "ports without a port number or name are skipped",
+			epSlices: []*discoveryv1.EndpointSlice{
+				func() *discoveryv1.EndpointSlice {
+					es := newTestEndpointSlice("a", "svc", true, http, "10.1.0.1")
+					es.Ports = append(es.Ports,
+						discoveryv1.EndpointPort{Name: new("no-port")},
+						discoveryv1.EndpointPort{Port: new(int32(81))})
+					return es
+				}(),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+		},
 	}
 
 	for _, tt := range tests {
