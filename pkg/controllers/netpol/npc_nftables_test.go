@@ -1504,7 +1504,7 @@ func TestEgressAnyDestinationNamedPortNft(t *testing.T) {
 	informerFactory.Start(ctx.Done())
 	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
 	krNetPol := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
-	tEgressAnyNamedPort(t, podInformer, netpolInformer)
+	tCreateEgressAnyNamedPortPolicy(t, podInformer, netpolInformer)
 
 	netpols, err := krNetPol.buildNetworkPoliciesInfo()
 	require.NoError(t, err)
@@ -1526,5 +1526,6 @@ func TestEgressAnyDestinationNamedPortNft(t *testing.T) {
 	require.Contains(t, dump, "daddr @"+setName+" tcp dport 9100")
 	require.Contains(t, dump, setName+" { 10.1.0.2 }")
 	require.Contains(t, dump, setName+" { 10.2.0.2 }")
+	require.Contains(t, dump, setName+" { 10.1.0.4 }")
 	require.NotContains(t, dump, "10.1.0.3")
 }

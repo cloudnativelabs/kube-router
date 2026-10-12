@@ -5,6 +5,8 @@ import (
 	"encoding/base32"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -883,8 +885,14 @@ func (npc *NetworkPolicyControllerBase) grabNamedPortFromPod(pod *api.Pod, named
 				(*namedPort2eps)[name][protocol] = make(numericPort2eps)
 			}
 			if eps, ok := (*namedPort2eps)[name][protocol][containerPort]; !ok {
+				// each entry needs its own copy of the IPs, otherwise appending another pod to one named port
+				// would also add it to every other named port this pod exposes
+				epIPs := maps.Clone(ips)
+				for family, familyIPs := range epIPs {
+					epIPs[family] = slices.Clone(familyIPs)
+				}
 				(*namedPort2eps)[name][protocol][containerPort] = &endPoints{
-					ips:             ips,
+					ips:             epIPs,
 					protocolAndPort: protocolAndPort{port: containerPort, protocol: protocol},
 				}
 			} else {
