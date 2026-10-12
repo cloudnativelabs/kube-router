@@ -1083,6 +1083,14 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 				var endpoints []endpointSliceInfo
 				var ok bool
 
+				// EndpointSlice ports may have a nil port or name (e.g. slices used for other purposes), we can't build
+				// an IPVS destination without them
+				if port.Port == nil || port.Name == nil {
+					klog.V(2).Infof("EndpointSlice %s/%s has a port without a name or port number, skipping...",
+						es.Namespace, es.Name)
+					continue
+				}
+
 				svcID := generateServiceID(es.Namespace, svcName, *port.Name)
 
 				// we may have already started to populate endpoints for this service from another EndpointSlice, if so
