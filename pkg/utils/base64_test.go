@@ -46,3 +46,10 @@ func TestBase64String(t *testing.T) {
 		})
 	}
 }
+
+func TestBase64String_UnmarshalYAMLErrorOmitsSource(t *testing.T) {
+	var b Base64String
+	err := b.UnmarshalYAML([]byte(`[c2VjcmV0cGFzc3dvcmQ=`))
+	assert.ErrorContains(t, err, "failed to unmarshal string into base64string type")
+	assert.NotContains(t, err.Error(), "c2VjcmV0cGFzc3dvcmQ=")
+}
