@@ -866,11 +866,17 @@ func (npc *NetworkPolicyControllerNftables) processEgressRulesNft(
 					targetSourcePodSetName, "",
 					portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
 			}
-			for _, portProtocol := range egressRule.namedPorts {
+			// A named port refers to a port on the destination pod, so only match the pods that expose it
+			for epIdx, endPoints := range egressRule.namedPorts {
+				namedPortSetName := nftIndexedEgressNamedPortSetName(policy.namespace,
+					policy.name, ruleIdx, epIdx, ipFamily)
+				activePolicyIPSets[namedPortSetName] = true
+				npc.nftAddOrReplaceIPSet(tx, namedPortSetName,
+					endPoints.ips[ipFamily], ipFamily)
 				comment := polRuleComment(policy, cmtEgressAny+cmtNamedPort)
 				npc.appendRuleToPolicyChainNft(tx, policyChainName, comment,
-					targetSourcePodSetName, "",
-					portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily)
+					targetSourcePodSetName, namedPortSetName,
+					endPoints.protocol, endPoints.port, endPoints.endport, ipFamily)
 			}
 		}
 

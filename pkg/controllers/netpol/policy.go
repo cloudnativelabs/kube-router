@@ -408,10 +408,19 @@ func (npc *NetworkPolicyControllerIptables) processEgressRules(policy networkPol
 					return err
 				}
 			}
-			for _, portProtocol := range egressRule.namedPorts {
+			// A named port refers to a port on the destination pod, so only match the pods that expose it
+			for epIdx, endPoints := range egressRule.namedPorts {
+				namedPortIPSetName := policyIndexedEgressNamedPortIPSetName(policy.namespace,
+					policy.name, ruleIdx, epIdx, ipFamily)
+				activePolicyIPSets[namedPortIPSetName] = true
+				setEntries := make([][]string, 0)
+				for _, ip := range endPoints.ips[ipFamily] {
+					setEntries = append(setEntries, []string{ip, utils.OptionTimeout, "0"})
+				}
+				npc.ipSetHandlers[ipFamily].RefreshSet(namedPortIPSetName, setEntries, utils.TypeHashIP)
 				comment := polRuleComment(policy, cmtEgressAny+cmtNamedPort)
 				if err := npc.appendRuleToPolicyChain(policyChainName, comment, targetSourcePodIPSetName,
-					"", portProtocol.protocol, portProtocol.port, portProtocol.endport, ipFamily); err != nil {
+					namedPortIPSetName, endPoints.protocol, endPoints.port, endPoints.endport, ipFamily); err != nil {
 					return err
 				}
 			}
@@ -627,11 +636,11 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 			// If this field is empty or missing in the spec, this rule matches all sources
 			if len(specEgressRule.To) == 0 {
 				egressRule.matchAllDestinations = true
-				// if rule.To is empty but rule.Ports not, we must try to grab NamedPort from pods that in same
-				// namespace, so that we can design iptables rule to describe "match all dst but match some named
-				// dst-port" egress rule
+				// if rule.To is empty but rule.Ports not, we must try to grab NamedPort from pods in all namespaces, so
+				// that we can design iptables rule to describe "match all dst but match some named dst-port" egress
+				// rule. A named port only exists on pods, so the rule must only match the pods that expose it.
 				if policyRulePortsHasNamedPort(specEgressRule.Ports) {
-					matchingPeerPods, _ := npc.ListPodsByNamespaceAndLabels(policy.Namespace, labels.Everything())
+					matchingPeerPods, _ := npc.ListPodsByNamespaceAndLabels(api.NamespaceAll, labels.Everything())
 					for _, peerPod := range matchingPeerPods {
 						if !isNetPolActionable(peerPod) {
 							continue

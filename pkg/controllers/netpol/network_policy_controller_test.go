@@ -675,6 +675,83 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 
 }
 
+// tEgressAnyNamedPort sets up pods and an egress policy with an empty "to" and a named port. Pods in two namespaces
+// expose the named port, one pod in the policy namespace does not.
+func tEgressAnyNamedPort(t *testing.T, podInformer, npInformer cache.SharedIndexInformer) {
+	t.Helper()
+	pods := []struct {
+		name, namespace, ip string
+		ports               []v1.ContainerPort
+	}{
+		{name: "client", namespace: "nsA", ip: "10.1.0.1"},
+		{name: "server-a", namespace: "nsA", ip: "10.1.0.2",
+			ports: []v1.ContainerPort{{Name: "metrics", ContainerPort: 9100, Protocol: v1.ProtocolTCP}}},
+		{name: "server-b", namespace: "nsB", ip: "10.2.0.2",
+			ports: []v1.ContainerPort{{Name: "metrics", ContainerPort: 9100, Protocol: v1.ProtocolTCP}}},
+		{name: "other", namespace: "nsA", ip: "10.1.0.3",
+			ports: []v1.ContainerPort{{Name: "web", ContainerPort: 8080, Protocol: v1.ProtocolTCP}}},
+	}
+	for _, p := range pods {
+		tAddToInformerStore(t, podInformer, &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: p.name, Namespace: p.namespace,
+				Labels: map[string]string{"app": p.name}},
+			Spec:   v1.PodSpec{Containers: []v1.Container{{Name: "c", Ports: p.ports}}},
+			Status: v1.PodStatus{PodIP: p.ip, PodIPs: []v1.PodIP{{IP: p.ip}}},
+		})
+	}
+	metricsPort := intstr.FromString("metrics")
+	np := tNetpol{name: "egress-metrics", namespace: "nsA",
+		podSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "client"}},
+		egress: []netv1.NetworkPolicyEgressRule{{Ports: []netv1.NetworkPolicyPort{
+			{Protocol: new(v1.ProtocolTCP), Port: &metricsPort},
+		}}},
+	}
+	np.createFakeNetpol(t, npInformer)
+}
+
+func TestEgressAnyDestinationNamedPort(t *testing.T) {
+	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode([]string{"10.10.10.10"})}})
+	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
+	ctx := t.Context()
+	informerFactory.Start(ctx.Done())
+	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
+	krNetPol := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
+	tEgressAnyNamedPort(t, podInformer, netpolInformer)
+
+	netpols, err := krNetPol.buildNetworkPoliciesInfo()
+	if err != nil {
+		t.Fatalf("failed to build network policies: %v", err)
+	}
+	if len(netpols) != 1 {
+		t.Fatalf("expected 1 network policy, got %d", len(netpols))
+	}
+
+	activeSets := make(map[string]bool)
+	if err := krNetPol.processEgressRules(netpols[0], "", activeSets, "1", v1.IPv4Protocol); err != nil {
+		t.Fatalf("failed to process egress rules: %v", err)
+	}
+
+	setName := policyIndexedEgressNamedPortIPSetName("nsA", "egress-metrics", 0, 0, v1.IPv4Protocol)
+	assert.True(t, activeSets[setName], "named port ipset should be active")
+	rules := krNetPol.filterTableRules[v1.IPv4Protocol].String()
+	assert.Contains(t, rules, "-m set --match-set "+setName+" dst")
+	assert.Contains(t, rules, "--dport 9100")
+
+	ipSet, ok := krNetPol.ipSetHandlers[v1.IPv4Protocol].(*fakeIPSet)
+	if !ok {
+		t.Fatalf("expected *fakeIPSet")
+	}
+	var gotIPs []string
+	for _, call := range ipSet.refreshCalls {
+		if call.name == setName {
+			for _, entry := range call.entries {
+				gotIPs = append(gotIPs, entry[0])
+			}
+		}
+	}
+	assert.ElementsMatch(t, []string{"10.1.0.2", "10.2.0.2"}, gotIPs)
+}
+
 type fakeIPTables struct {
 	protocol iptables.Protocol
 	// appendedRules captures the rules appended to a chain in the order Append was called. Keyed by
