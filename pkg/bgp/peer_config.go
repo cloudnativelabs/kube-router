@@ -101,7 +101,8 @@ func (p *PeerConfig) UnmarshalYAML(raw []byte) error {
 	}{}
 
 	if err := yaml.Unmarshal(raw, &tmp); err != nil {
-		return fmt.Errorf("failed to unmarshal peer config: %w", err)
+		// Don't include the YAML source in the error, it may contain the peer password
+		return fmt.Errorf("failed to unmarshal peer config: %s", yaml.FormatError(err, false, false))
 	}
 
 	if tmp.RemoteIP == nil {
