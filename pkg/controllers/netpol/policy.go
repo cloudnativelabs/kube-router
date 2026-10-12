@@ -149,6 +149,11 @@ func (npc *NetworkPolicyControllerIptables) syncNetworkPolicyChains(networkPolic
 				}
 				activePolicyIPSets[targetSourcePodIPSetName] = true
 			}
+			if isMonitorPolicy(policy) {
+				monitorRule := []string{"-A", policyChainName, "-m", "comment", "--comment", "\"rule to mark to monitor traffic\"",
+					"-m", "mark", "!", "--mark", "0x10000/0x10000", "-j", "MARK", "--set-xmark", "0x50000/0x50000", "\n"}
+				npc.filterTableRules[ipFamily].WriteString(strings.Join(monitorRule, " "))
+			}
 		}
 	}
 
@@ -482,7 +487,7 @@ func (npc *NetworkPolicyControllerIptables) appendRuleToPolicyChain(
 	}
 
 	//nolint:gocritic // we want to append to a separate array here so that we can re-use args below
-	markArgs := append(args, "-j", "MARK", "--set-xmark", "0x10000/0x10000", "\n")
+	markArgs := append(args, "-j", "MARK", "--set-xmark", "0x10000/0x50000", "\n")
 	npc.filterTableRules[ipFamily].WriteString(strings.Join(markArgs, " "))
 
 	args = append(args, "-m", "mark", "--mark", "0x10000/0x10000", "-j", "RETURN", "\n")
@@ -509,6 +514,7 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 			namespace:   policy.Namespace,
 			podSelector: podSelector,
 			policyType:  kubeIngressPolicyType,
+			annotations: policy.Annotations,
 		}
 
 		ingressType, egressType := false, false
@@ -959,4 +965,8 @@ func policyRulePortsHasNamedPort(npPorts []networking.NetworkPolicyPort) bool {
 		}
 	}
 	return false
+}
+
+func isMonitorPolicy(policy networkPolicyInfo) bool {
+	return policy.annotations["kube-router.io/network-policy.monitor"] == "true"
 }
