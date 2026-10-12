@@ -1496,3 +1496,35 @@ func TestNftablesFullPolicySyncReportsPartialFailure(t *testing.T) {
 	require.Contains(t, dump, kubeForwardChainName)
 	require.Contains(t, dump, kubeTailNetpolChain)
 }
+
+func TestEgressAnyDestinationNamedPortNft(t *testing.T) {
+	client := fake.NewSimpleClientset(&v1core.NodeList{Items: []v1core.Node{*newFakeNode([]string{"10.10.10.10"})}})
+	informerFactory, podInformer, nsInformer, netpolInformer := newFakeInformersFromClient(client)
+	ctx := t.Context()
+	informerFactory.Start(ctx.Done())
+	cache.WaitForCacheSync(ctx.Done(), podInformer.HasSynced)
+	krNetPol := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
+	tEgressAnyNamedPort(t, podInformer, netpolInformer)
+
+	netpols, err := krNetPol.buildNetworkPoliciesInfo()
+	require.NoError(t, err)
+	require.Len(t, netpols, 1)
+
+	nft := krNetPol.knftInterfaces[v1core.IPv4Protocol]
+	policyChainName := networkPolicyChainName("nsA", "egress-metrics", "1", v1core.IPv4Protocol)
+	tx := nft.NewTransaction()
+	tx.Add(&knftables.Chain{Name: policyChainName})
+	activeSets := make(map[string]bool)
+	krNetPol.processEgressRulesNft(tx, netpols[0], "", activeSets, make(map[string]bool), "1", v1core.IPv4Protocol)
+	require.NoError(t, nft.Run(ctx, tx))
+
+	setName := nftIndexedEgressNamedPortSetName("nsA", "egress-metrics", 0, 0, v1core.IPv4Protocol)
+	require.True(t, activeSets[setName], "named port set should be active")
+	fakeItf, ok := nft.(*knftables.Fake)
+	require.True(t, ok, "expected *knftables.Fake for IPv4")
+	dump := fakeItf.Dump()
+	require.Contains(t, dump, "daddr @"+setName+" tcp dport 9100")
+	require.Contains(t, dump, setName+" { 10.1.0.2 }")
+	require.Contains(t, dump, setName+" { 10.2.0.2 }")
+	require.NotContains(t, dump, "10.1.0.3")
+}
