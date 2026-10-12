@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+// Note: stale-object GC selects by these prefixes, so changing one strands existing objects on upgrade
 const (
 	kubePodFirewallChainPrefix   = "KUBE-POD-FW-"
 	kubeNetworkPolicyChainPrefix = "KUBE-NWPLCY-"
