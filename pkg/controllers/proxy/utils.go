@@ -31,6 +31,16 @@ const (
 	hairpinEnable          = "1"
 )
 
+var (
+	// errNoServicePodForEndpoint is returned when an endpoint IP doesn't belong to a non-hostNetwork pod in the
+	// service's namespace
+	errNoServicePodForEndpoint = errors.New("no non-hostNetwork pod found for endpoint in service namespace")
+
+	// errEndpointPodUnavailable is returned when the endpoint's pod exists but can't be entered from this node, either
+	// because it runs on another node or because it doesn't have a container yet
+	errEndpointPodUnavailable = errors.New("endpoint pod is not available on this node")
+)
+
 func attemptNamespaceResetAfterError(hostNSHandle netns.NsHandle) {
 	err := netns.Set(hostNSHandle)
 	if err != nil {
@@ -255,7 +265,13 @@ func (nsc *NetworkServicesController) findContainerRuntimeReferences(namespace, 
 
 	// we are only concerned with endpoint pod running on current node
 	if strings.Compare(podObj.Status.HostIP, nsc.krNode.GetPrimaryNodeIP().String()) != 0 {
-		return "", "", nil
+		return "", "", fmt.Errorf("%w: pod %s/%s for endpoint %s is on host %s", errEndpointPodUnavailable,
+			podObj.Namespace, podObj.Name, endpointIP, podObj.Status.HostIP)
+	}
+
+	if len(podObj.Status.ContainerStatuses) == 0 {
+		return "", "", fmt.Errorf("%w: pod %s/%s for endpoint %s has no container statuses yet",
+			errEndpointPodUnavailable, podObj.Namespace, podObj.Name, endpointIP)
 	}
 
 	containerURL := podObj.Status.ContainerStatuses[0].ContainerID
@@ -375,10 +391,6 @@ func (nsc *NetworkServicesController) getPodObjectForEndpointIP(endpointIP strin
 	}
 	return nil, errors.New("Failed to find pod with ip " + endpointIP)
 }
-
-// errNoServicePodForEndpoint is returned when an endpoint IP doesn't belong to a non-hostNetwork pod in the service's
-// namespace
-var errNoServicePodForEndpoint = errors.New("no non-hostNetwork pod found for endpoint in service namespace")
 
 // getNamespacedPodObjectForEndpointIP resolves an endpoint IP to a pod in the given namespace. EndpointSlice addresses
 // can point at any IP, so pods in other namespaces and hostNetwork pods (which share the node's IP) are never matched.

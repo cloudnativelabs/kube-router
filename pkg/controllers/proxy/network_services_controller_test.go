@@ -2379,7 +2379,15 @@ func TestFindContainerRuntimeReferences(t *testing.T) {
 		newPod("svc-ns", "backend", "10.244.1.5", false),
 		newPod("other-ns", "other", "10.244.1.6", false),
 		newPod("svc-ns", "host-agent", nodeIP, true),
+		newPod("svc-ns", "remote", "10.244.2.5", false),
+		newPod("svc-ns", "starting", "10.244.1.7", false),
 	} {
+		if pod.Name == "remote" {
+			pod.Status.HostIP = "192.168.50.11"
+		}
+		if pod.Name == "starting" {
+			pod.Status.ContainerStatuses = nil
+		}
 		if err := podLister.Add(pod); err != nil {
 			t.Fatalf("failed to add pod %s to indexer: %v", pod.Name, err)
 		}
@@ -2394,18 +2402,25 @@ func TestFindContainerRuntimeReferences(t *testing.T) {
 		endpointIP      string
 		wantContainerID string
 		wantErr         bool
+		wantUnavailable bool
 	}{
 		{name: "pod in the service namespace", endpointIP: "10.244.1.5", wantContainerID: "backend"},
 		{name: "pod in another namespace", endpointIP: "10.244.1.6", wantErr: true},
 		{name: "hostNetwork pod", endpointIP: nodeIP, wantErr: true},
 		{name: "unknown IP", endpointIP: "10.244.9.9", wantErr: true},
+		{name: "pod on another node", endpointIP: "10.244.2.5", wantErr: true, wantUnavailable: true},
+		{name: "pod without container statuses", endpointIP: "10.244.1.7", wantErr: true, wantUnavailable: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runtime, containerID, err := nsc.findContainerRuntimeReferences("svc-ns", tt.endpointIP)
 			if tt.wantErr {
-				assert.ErrorIs(t, err, errNoServicePodForEndpoint)
+				wantSentinel := errNoServicePodForEndpoint
+				if tt.wantUnavailable {
+					wantSentinel = errEndpointPodUnavailable
+				}
+				assert.ErrorIs(t, err, wantSentinel)
 				assert.Empty(t, containerID)
 				return
 			}

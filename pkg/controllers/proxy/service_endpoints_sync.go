@@ -656,7 +656,7 @@ func (nsc *NetworkServicesController) setupExternalIPForDSRService(svcIn *servic
 		if endpoint.isLocal {
 			// add the external IP to a virtual interface inside the pod so that the pod can receive it
 			err = nsc.addDSRIPInsidePodNetNamespace(svcIn.namespace, externalIP.String(), endpoint.ip)
-			if errors.Is(err, errNoServicePodForEndpoint) {
+			if errors.Is(err, errNoServicePodForEndpoint) || errors.Is(err, errEndpointPodUnavailable) {
 				// the endpoint can't receive DSR traffic, skip it rather than failing the sync for every other
 				// external IP service
 				klog.Errorf("skipping DSR endpoint %s for service %s/%s: %v", endpoint.ip, svcIn.namespace,
