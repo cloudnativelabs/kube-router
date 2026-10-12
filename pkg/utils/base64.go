@@ -14,7 +14,8 @@ type Base64String string
 func (b *Base64String) UnmarshalYAML(raw []byte) error {
 	var tmp string
 	if err := yaml.Unmarshal(raw, &tmp); err != nil {
-		return fmt.Errorf("failed to unmarshal string into base64string type: %w", err)
+		// Don't include the YAML source in the error, it is likely a secret
+		return fmt.Errorf("failed to unmarshal string into base64string type: %s", yaml.FormatError(err, false, false))
 	}
 	decoded, err := base64.StdEncoding.DecodeString(tmp)
 	if err != nil {
