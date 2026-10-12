@@ -1628,6 +1628,47 @@ func TestDSR_ExternalTrafficPolicyLocal_OnlyLocalEndpoints(t *testing.T) {
 		"ClusterIP should have remote endpoint (internalTrafficPolicy=Cluster)")
 }
 
+// TestDSR_LocalEndpointInOtherNamespaceIsSkipped verifies that a local endpoint which doesn't resolve to a pod in the
+// service's namespace is left out of the DSR service, without failing the sync for the remaining endpoints.
+func TestDSR_LocalEndpointInOtherNamespaceIsSkipped(t *testing.T) {
+	intPolicyCluster := v1core.ServiceInternalTrafficPolicyCluster
+	extPolicyCluster := v1core.ServiceExternalTrafficPolicyCluster
+
+	service := createDSRService("dsr-svc", "default", "10.100.1.1", "1.1.1.1", 8080,
+		&intPolicyCluster, extPolicyCluster)
+
+	_, mock, nsc := setupTestControllerWithEndpoints(t, service,
+		[]string{"172.20.1.1", "172.20.1.2"}, // local endpoints
+		nil)
+
+	// move the pod behind the second endpoint into another namespace
+	ctx := context.Background()
+	pod, err := nsc.client.CoreV1().Pods("default").Get(ctx, "endpoint-pod-1", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("failed to get endpoint pod: %v", err)
+	}
+	if err = nsc.client.CoreV1().Pods("default").Delete(ctx, pod.Name, metav1.DeleteOptions{}); err != nil {
+		t.Fatalf("failed to delete endpoint pod: %v", err)
+	}
+	pod.Namespace = "other-ns"
+	pod.ResourceVersion = ""
+	if _, err = nsc.client.CoreV1().Pods("other-ns").Create(ctx, pod, metav1.CreateOptions{}); err != nil {
+		t.Fatalf("failed to create endpoint pod in other namespace: %v", err)
+	}
+	assert.Eventually(t, func() bool {
+		_, exists, _ := nsc.podLister.GetByKey("other-ns/endpoint-pod-1")
+		_, stale, _ := nsc.podLister.GetByKey("default/endpoint-pod-1")
+		return exists && !stale
+	}, 10*time.Second, 10*time.Millisecond, "pod lister should see the moved pod")
+
+	err = nsc.syncIpvsServices(nsc.getServiceMap(), nsc.endpointsMap)
+	assert.NoError(t, err)
+
+	dsrEndpoints := getEndpointsForFWMarkServices(t, mock)
+	assert.Contains(t, dsrEndpoints, "172.20.1.1", "endpoint in the service namespace should be added")
+	assert.NotContains(t, dsrEndpoints, "172.20.1.2", "endpoint in another namespace should be skipped")
+}
+
 // TestDSR_ExternalTrafficPolicyLocal_NoLocalEndpoints verifies that DSR services with
 // externalTrafficPolicy=Local and no local endpoints skip service setup.
 func TestDSR_ExternalTrafficPolicyLocal_NoLocalEndpoints(t *testing.T) {
@@ -2393,7 +2434,7 @@ func TestFindContainerRuntimeReferences(t *testing.T) {
 	for _, pod := range []*v1core.Pod{
 		newPod("svc-ns", "backend", "10.244.1.5", false),
 		newPod("other-ns", "other", "10.244.1.6", false),
-		newPod("kube-system", "host-agent", nodeIP, true),
+		newPod("svc-ns", "host-agent", nodeIP, true),
 	} {
 		if err := podLister.Add(pod); err != nil {
 			t.Fatalf("failed to add pod %s to indexer: %v", pod.Name, err)
@@ -2420,7 +2461,7 @@ func TestFindContainerRuntimeReferences(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			runtime, containerID, err := nsc.findContainerRuntimeReferences("svc-ns", tt.endpointIP)
 			if tt.wantErr {
-				assert.Error(t, err)
+				assert.ErrorIs(t, err, errNoServicePodForEndpoint)
 				assert.Empty(t, containerID)
 				return
 			}

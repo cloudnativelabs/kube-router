@@ -376,6 +376,10 @@ func (nsc *NetworkServicesController) getPodObjectForEndpointIP(endpointIP strin
 	return nil, errors.New("Failed to find pod with ip " + endpointIP)
 }
 
+// errNoServicePodForEndpoint is returned when an endpoint IP doesn't belong to a non-hostNetwork pod in the service's
+// namespace
+var errNoServicePodForEndpoint = errors.New("no non-hostNetwork pod found for endpoint in service namespace")
+
 // getNamespacedPodObjectForEndpointIP resolves an endpoint IP to a pod in the given namespace. EndpointSlice addresses
 // can point at any IP, so pods in other namespaces and hostNetwork pods (which share the node's IP) are never matched.
 func (nsc *NetworkServicesController) getNamespacedPodObjectForEndpointIP(namespace, endpointIP string) (*v1.Pod,
@@ -391,7 +395,7 @@ func (nsc *NetworkServicesController) getNamespacedPodObjectForEndpointIP(namesp
 			}
 		}
 	}
-	return nil, fmt.Errorf("failed to find non-hostNetwork pod with ip %s in namespace %s", endpointIP, namespace)
+	return nil, fmt.Errorf("%w: ip %s, namespace %s", errNoServicePodForEndpoint, endpointIP, namespace)
 }
 
 func (nsc *NetworkServicesController) getServiceForServiceInfo(svcIn *serviceInfo) (*v1.Service, error) {
