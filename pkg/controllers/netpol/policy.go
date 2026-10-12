@@ -641,6 +641,9 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 				// if rule.To is empty but rule.Ports not, we must try to grab NamedPort from pods in all namespaces, so
 				// that we can design iptables rule to describe "match all dst but match some named dst-port" egress
 				// rule. A named port only exists on pods, so the rule must only match the pods that expose it.
+				//
+				// TODO: Each rule rescans every pod here, so building one index per sync would make it a single pass
+				// and a semi-significant performance improvement for users of Named Port policies without a To
 				if policyRulePortsHasNamedPort(specEgressRule.Ports) {
 					matchingPeerPods, _ := npc.ListPodsByNamespaceAndLabels(api.NamespaceAll, labels.Everything())
 					for _, peerPod := range matchingPeerPods {
