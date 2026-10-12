@@ -108,6 +108,9 @@ const (
 	gracefulTermServiceTickTime = 5 * time.Second
 
 	tcpHeaderMinLen = 20
+
+	minPortNumber = 1
+	maxPortNumber = 65535
 )
 
 // NetworkServicesController enables local node as network service proxy through IPVS/LVS.
@@ -1083,15 +1086,21 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 				var endpoints []endpointSliceInfo
 				var ok bool
 
-				// EndpointSlice ports may have a nil port or name (e.g. slices used for other purposes), we can't build
-				// an IPVS destination without them
-				if port.Port == nil || port.Name == nil {
-					klog.V(2).Infof("EndpointSlice %s/%s has a port without a name or port number, skipping...",
-						es.Namespace, es.Name)
+				// a nil port name is treated as an unnamed port, the same as the API server's defaulting
+				portName := ""
+				if port.Name != nil {
+					portName = *port.Name
+				}
+
+				// EndpointSlice ports may have a nil or out of range port number (e.g. slices used for other
+				// purposes), we can't build an IPVS destination without a valid one
+				if port.Port == nil || *port.Port < minPortNumber || *port.Port > maxPortNumber {
+					klog.V(2).Infof("EndpointSlice %s/%s has a port %s without a valid port number, skipping...",
+						es.Namespace, es.Name, portName)
 					continue
 				}
 
-				svcID := generateServiceID(es.Namespace, svcName, *port.Name)
+				svcID := generateServiceID(es.Namespace, svcName, portName)
 
 				// we may have already started to populate endpoints for this service from another EndpointSlice, if so
 				// continue where we left off, otherwise create a new slice
