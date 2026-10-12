@@ -2235,6 +2235,14 @@ func newTestEndpointSlice(name, svcName string, ready bool, portNames []string, 
 	return es
 }
 
+// newTestEndpointSliceWithPorts returns a slice for service "svc" with one ready endpoint (10.1.0.1) and a valid
+// "http" port, plus the given extra ports
+func newTestEndpointSliceWithPorts(ports ...discoveryv1.EndpointPort) *discoveryv1.EndpointSlice {
+	es := newTestEndpointSlice("a", "svc", true, []string{"http"}, "10.1.0.1")
+	es.Ports = append(es.Ports, ports...)
+	return es
+}
+
 func newTestNSCWithEndpointSlices(t *testing.T, epSlices ...*discoveryv1.EndpointSlice) *NetworkServicesController {
 	t.Helper()
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -2299,17 +2307,52 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
 		},
 		{
-			name: "ports without a port number or name are skipped",
+			name: "port without a name is treated as an unnamed port",
 			epSlices: []*discoveryv1.EndpointSlice{
-				func() *discoveryv1.EndpointSlice {
-					es := newTestEndpointSlice("a", "svc", true, http, "10.1.0.1")
-					es.Ports = append(es.Ports,
-						discoveryv1.EndpointPort{Name: new("no-port")},
-						discoveryv1.EndpointPort{Port: new(int32(81))})
-					return es
-				}(),
+				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Port: new(int32(81))}),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1"}, "default-svc-": {"10.1.0.1"}},
+		},
+		{
+			name: "port without a port number is skipped",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Name: new("no-port")}),
 			},
 			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+		},
+		{
+			name: "port number 0 is skipped",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Name: new("zero"), Port: new(int32(0))}),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+		},
+		{
+			name: "negative port number is skipped",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Name: new("negative"), Port: new(int32(-1))}),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+		},
+		{
+			name: "port number above 65535 is skipped",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Name: new("too-big"), Port: new(int32(65536))}),
+			},
+			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+		},
+		{
+			name: "port numbers 1 and 65535 are accepted",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSliceWithPorts(
+					discoveryv1.EndpointPort{Name: new("min"), Port: new(int32(1))},
+					discoveryv1.EndpointPort{Name: new("max"), Port: new(int32(65535))}),
+			},
+			want: map[string][]string{
+				"default-svc-http": {"10.1.0.1"},
+				"default-svc-min":  {"10.1.0.1"},
+				"default-svc-max":  {"10.1.0.1"},
+			},
 		},
 	}
 
