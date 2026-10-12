@@ -163,8 +163,8 @@ func assertPodFwRules(t *testing.T, npc *NetworkPolicyControllerBase, version st
 func TestSyncPodFirewallChainsDropRules(t *testing.T) {
 	const version = "1"
 	dualStack := []api.IPFamily{api.IPv4Protocol, api.IPv6Protocol}
-	// Guard the premise of the "sharing a chain name" case below.
-	require.Equal(t, podFirewallChainName("a", "bc", version), podFirewallChainName("ab", "c", version))
+	// Guard the premise of the "used to share a chain name" case below.
+	require.NotEqual(t, podFirewallChainName("a", "bc", version), podFirewallChainName("ab", "c", version))
 	tests := []struct {
 		name     string
 		families []api.IPFamily
@@ -189,9 +189,9 @@ func TestSyncPodFirewallChainsDropRules(t *testing.T) {
 			},
 		},
 		{
-			// The chain name hashes namespace+name without a separator, so these two distinct pods share a chain.
-			// The drop rules carry the pod identity, so both pods still get their own.
-			name:     "pods sharing a chain name",
+			// These pods shared a chain back when the chain name hashed namespace+name without a separator, so we
+			// make sure each one now gets its own chain holding only its own drop rules.
+			name:     "pods that used to share a chain name",
 			families: dualStack,
 			pods: []*api.Pod{
 				podFwTestPod("a", "bc", "10.1.0.1", "fd00::1"),
