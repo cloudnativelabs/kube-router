@@ -183,7 +183,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-C23KD7UE4TAT3Y5M tcp dport 30000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress egress any\"\n",
+			expectedRule: "add rule ip kube-router-filter-ipv4 " + testPolicyChainName("simple-egress") + " tcp dport 30000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress egress any\"\n",
 		},
 		{
 			name: "Simple Ingress/Egress Destination Port",
@@ -216,8 +216,8 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-IDIX352DRLNY3D23 tcp dport 30000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-ingress-egress egress any\"\n" +
-				"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-IDIX352DRLNY3D23 tcp dport 37000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-ingress-egress ingress any\"\n",
+			expectedRule: "add rule ip kube-router-filter-ipv4 " + testPolicyChainName("simple-ingress-egress") + " tcp dport 30000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-ingress-egress egress any\"\n" +
+				"add rule ip kube-router-filter-ipv4 " + testPolicyChainName("simple-ingress-egress") + " tcp dport 37000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-ingress-egress ingress any\"\n",
 		},
 		{
 			name: "Simple Egress Destination Port Range",
@@ -246,8 +246,8 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-2UTXQIFBI5TAPUCL tcp dport 30000-31000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress-pr egress any\"\n" +
-				"add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-2UTXQIFBI5TAPUCL tcp dport 34000-35000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress-pr egress any\"\n",
+			expectedRule: "add rule ip kube-router-filter-ipv4 " + testPolicyChainName("simple-egress-pr") + " tcp dport 30000-31000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress-pr egress any\"\n" +
+				"add rule ip kube-router-filter-ipv4 " + testPolicyChainName("simple-egress-pr") + " tcp dport 34000-35000 counter meta mark set meta mark or 0x10000 return comment \"nsA/simple-egress-pr egress any\"\n",
 		},
 		{
 			name: "Port > EndPort (invalid condition, should drop endport)",
@@ -272,7 +272,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 					},
 				},
 			},
-			expectedRule: "add rule ip kube-router-filter-ipv4 KUBE-NWPLCY-N5DQE4SCQ56JEMH7 tcp dport 34000 counter meta mark set meta mark or 0x10000 return comment \"nsA/invalid-endport egress any\"\n",
+			expectedRule: "add rule ip kube-router-filter-ipv4 " + testPolicyChainName("invalid-endport") + " tcp dport 34000 counter meta mark set meta mark or 0x10000 return comment \"nsA/invalid-endport egress any\"\n",
 		},
 	}
 
@@ -673,7 +673,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 			},
 			assertDump: func(t *testing.T, dump, _ string) {
 				t.Helper()
-				setName := nftIndexedSourceIPBlockSetName("nsA", "ingress-ipblock", 0, v1core.IPv4Protocol)
+				setName := indexedSourceIPBlockSetName("nsA", "ingress-ipblock", 0, v1core.IPv4Protocol)
 				if !strings.Contains(dump, setName) {
 					t.Errorf("ipBlock ingress: set %s not found in dump", setName)
 				}
@@ -702,8 +702,8 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 			},
 			assertDump: func(t *testing.T, dump, _ string) {
 				t.Helper()
-				mainSetName := nftIndexedSourceIPBlockSetName("nsA", "ingress-ipblock-except", 0, v1core.IPv4Protocol)
-				exceptSetName := nftIndexedSourceIPBlockExceptSetName("nsA", "ingress-ipblock-except", 0, v1core.IPv4Protocol)
+				mainSetName := indexedSourceIPBlockSetName("nsA", "ingress-ipblock-except", 0, v1core.IPv4Protocol)
+				exceptSetName := indexedSourceIPBlockExceptSetName("nsA", "ingress-ipblock-except", 0, v1core.IPv4Protocol)
 				// Main CIDR must be present in the main set.
 				if !strings.Contains(dump, "10.0.0.0/8") {
 					t.Errorf("ipBlock except: main CIDR 10.0.0.0/8 must be in nft dump")
@@ -745,7 +745,7 @@ func TestNetworkPolicyBuilderNftExtended(t *testing.T) {
 			},
 			assertDump: func(t *testing.T, dump, _ string) {
 				t.Helper()
-				setName := nftIndexedDestinationIPBlockSetName("nsA", "egress-ipblock", 0, v1core.IPv4Protocol)
+				setName := indexedDestinationIPBlockSetName("nsA", "egress-ipblock", 0, v1core.IPv4Protocol)
 				if !strings.Contains(dump, setName) {
 					t.Errorf("ipBlock egress: set %s not found in dump", setName)
 				}
