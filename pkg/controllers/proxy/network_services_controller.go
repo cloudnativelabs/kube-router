@@ -1812,9 +1812,10 @@ func isEndpointsForLeaderElection(ep *v1.Endpoints) bool {
 	return isLeaderElection
 }
 
-// unique identifier for a load-balanced service (namespace + name + portname)
+// unique identifier for a load-balanced service (namespace + name + portname), joined with "/" because all three
+// parts may contain "-" but never "/", so no two services can share an ID
 func generateServiceID(namespace, svcName, port string) string {
-	return namespace + "-" + svcName + "-" + port
+	return namespace + "/" + svcName + "/" + port
 }
 
 // unique identifier for a load-balanced service (namespace + name + portname)
