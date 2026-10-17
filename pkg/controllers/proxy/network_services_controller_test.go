@@ -2308,7 +2308,7 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 		{
 			name:     "single slice",
 			epSlices: []*discoveryv1.EndpointSlice{newTestEndpointSlice("a", "svc", true, http, "10.1.0.1", "10.1.0.2")},
-			want:     map[string][]string{"default-svc-http": {"10.1.0.1", "10.1.0.2"}},
+			want:     map[string][]string{"default/svc/http": {"10.1.0.1", "10.1.0.2"}},
 		},
 		{
 			name: "multiple slices for one service are merged",
@@ -2316,7 +2316,7 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 				newTestEndpointSlice("a", "svc", true, http, "10.1.0.1", "10.1.0.2"),
 				newTestEndpointSlice("b", "svc", true, http, "10.1.0.3", "10.1.0.4", "10.1.0.5"),
 			},
-			want: map[string][]string{"default-svc-http": {"10.1.0.1", "10.1.0.2", "10.1.0.3", "10.1.0.4", "10.1.0.5"}},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1", "10.1.0.2", "10.1.0.3", "10.1.0.4", "10.1.0.5"}},
 		},
 		{
 			name: "multiple ports get their own service IDs",
@@ -2324,8 +2324,8 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 				newTestEndpointSlice("a", "svc", true, []string{"http", "https"}, "10.1.0.1", "10.1.0.2"),
 			},
 			want: map[string][]string{
-				"default-svc-http":  {"10.1.0.1", "10.1.0.2"},
-				"default-svc-https": {"10.1.0.1", "10.1.0.2"},
+				"default/svc/http":  {"10.1.0.1", "10.1.0.2"},
+				"default/svc/https": {"10.1.0.1", "10.1.0.2"},
 			},
 		},
 		{
@@ -2335,8 +2335,19 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 				newTestEndpointSlice("b", "svc2", true, http, "10.2.0.1", "10.2.0.2"),
 			},
 			want: map[string][]string{
-				"default-svc1-http": {"10.1.0.1"},
-				"default-svc2-http": {"10.2.0.1", "10.2.0.2"},
+				"default/svc1/http": {"10.1.0.1"},
+				"default/svc2/http": {"10.2.0.1", "10.2.0.2"},
+			},
+		},
+		{
+			name: "services whose joined names match stay separate",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSlice("a", "web", true, []string{"http-alt"}, "10.1.0.1"),
+				newTestEndpointSlice("b", "web-http", true, []string{"alt"}, "10.2.0.1"),
+			},
+			want: map[string][]string{
+				"default/web/http-alt": {"10.1.0.1"},
+				"default/web-http/alt": {"10.2.0.1"},
 			},
 		},
 		{
@@ -2345,42 +2356,42 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 				newTestEndpointSlice("a", "svc", true, http, "10.1.0.1"),
 				newTestEndpointSlice("b", "svc", false, http, "10.1.0.2"),
 			},
-			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
 		},
 		{
 			name: "port without a name is treated as an unnamed port",
 			epSlices: []*discoveryv1.EndpointSlice{
 				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Port: new(int32(81))}),
 			},
-			want: map[string][]string{"default-svc-http": {"10.1.0.1"}, "default-svc-": {"10.1.0.1"}},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}, "default/svc/": {"10.1.0.1"}},
 		},
 		{
 			name: "port without a port number is skipped",
 			epSlices: []*discoveryv1.EndpointSlice{
 				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Name: new("no-port")}),
 			},
-			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
 		},
 		{
 			name: "port number 0 is skipped",
 			epSlices: []*discoveryv1.EndpointSlice{
 				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Name: new("zero"), Port: new(int32(0))}),
 			},
-			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
 		},
 		{
 			name: "negative port number is skipped",
 			epSlices: []*discoveryv1.EndpointSlice{
 				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Name: new("negative"), Port: new(int32(-1))}),
 			},
-			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
 		},
 		{
 			name: "port number above 65535 is skipped",
 			epSlices: []*discoveryv1.EndpointSlice{
 				newTestEndpointSliceWithPorts(discoveryv1.EndpointPort{Name: new("too-big"), Port: new(int32(65536))}),
 			},
-			want: map[string][]string{"default-svc-http": {"10.1.0.1"}},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
 		},
 		{
 			name: "port numbers 1 and 65535 are accepted",
@@ -2390,9 +2401,9 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 					discoveryv1.EndpointPort{Name: new("max"), Port: new(int32(65535))}),
 			},
 			want: map[string][]string{
-				"default-svc-http": {"10.1.0.1"},
-				"default-svc-min":  {"10.1.0.1"},
-				"default-svc-max":  {"10.1.0.1"},
+				"default/svc/http": {"10.1.0.1"},
+				"default/svc/min":  {"10.1.0.1"},
+				"default/svc/max":  {"10.1.0.1"},
 			},
 		},
 	}
