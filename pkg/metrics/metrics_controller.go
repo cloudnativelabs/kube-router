@@ -164,6 +164,11 @@ var (
 		Name:      "bgp_peer_info",
 		Help:      "BGP peer information",
 	}, []string{"address", "type", "asn", "state"})
+	ControllerBFDPeerInfo = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "bfd_peer_info",
+		Help:      "BFD peer information",
+	}, []string{"address", "state"})
 	// ControllerBGPInternalPeersSyncTime Time it took to sync internal bgp peers
 	ControllerBGPInternalPeersSyncTime = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,

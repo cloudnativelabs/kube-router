@@ -408,6 +408,7 @@ func (nrc *NetworkRoutingController) periodicSync() error {
 
 	if nrc.MetricsEnabled {
 		nrc.updateBGPPeerMetrics()
+		nrc.updateBFDPeerMetrics()
 	}
 
 	return syncErr
@@ -790,6 +791,14 @@ func (nrc *NetworkRoutingController) updateBGPPeerMetrics() {
 	if err != nil {
 		klog.Errorf("error updating BGP peer metrics: %v", err)
 	}
+}
+
+func (nrc *NetworkRoutingController) updateBFDPeerMetrics() {
+	metrics.ControllerBFDPeerInfo.Reset()
+	nrc.bgpServer.ListBfdPeer(context.Background(), func(peerAddress string, state *gobgpapi.BfdPeerState) {
+		peerState := strings.ToLower(strings.TrimPrefix(state.SessionState.String(), "BFD_SESSION_STATE_"))
+		metrics.ControllerBFDPeerInfo.WithLabelValues(peerAddress, peerState).Set(1)
+	})
 }
 
 func (nrc *NetworkRoutingController) isPeerEstablished(peerIP string) (bool, error) {
@@ -1285,6 +1294,7 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPadvertisementsSent)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPInternalPeersSyncTime)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBGPPeerInfo)
+		metrics.DefaultRegisterer.MustRegister(metrics.ControllerBFDPeerInfo)
 		metrics.DefaultRegisterer.MustRegister(metrics.ControllerRoutesSyncTime)
 		nrc.MetricsEnabled = true
 	}
