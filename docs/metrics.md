@@ -116,6 +116,9 @@ than not showing up at all. See [Health checking](/docs/health.md) for why, and 
 * bgp_peer_info
   BGP peer information: address, state, and type (internal for iBGP and external for eBGP)
   (labels: address, type, asn, state)
+* bfd_peer_info
+  BFD peer information: address and session state (up, down, init) for peers with BFD enabled
+  (labels: address, state)
 * controller_bgp_advertisements_received
   Total number of BGP advertisements received since kube-router started
 * controller_bgp_advertisements_sent
