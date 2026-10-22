@@ -18,9 +18,9 @@ permissions:
   contents: read
 
 env:
-  BUILDTIME_BASE: &buildtime_base "golang:1.26.6-alpine3.24@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df"
+  BUILDTIME_BASE: &buildtime_base "golang:1.26.10-alpine3.24@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61"
   RUNTIME_BASE: &runtime_base "alpine:3.24.3@sha256:b3413572228e34bd1c9245f5565e6cd127005655e8a7899aef33d8e83255c9e6"
-  GO_VERSION: &go_version "~1.26.6"
+  GO_VERSION: &go_version "~1.26.10"
 
 jobs:
   # Phase 1: Run all code quality checks (unicode scan, lint, tests, binary build).

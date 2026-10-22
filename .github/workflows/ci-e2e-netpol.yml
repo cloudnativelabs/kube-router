@@ -20,9 +20,9 @@ permissions:
 
 env:
   # Keep these in sync with ci.yml; update-deps will pin the SHAs.
-  BUILDTIME_BASE: "golang:1.26.6-alpine3.24@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df"
+  BUILDTIME_BASE: "golang:1.26.10-alpine3.24@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61"
   RUNTIME_BASE: "alpine:3.24.3@sha256:b3413572228e34bd1c9245f5565e6cd127005655e8a7899aef33d8e83255c9e6"
-  GO_VERSION: "~1.26.6"
+  GO_VERSION: "~1.26.10"
   KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
   KIND_VERSION: "v0.32.0"
   KIND_NODE_IMAGE: "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
