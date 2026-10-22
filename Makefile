@@ -25,7 +25,7 @@ GO_CACHE?=$(shell go env GOCACHE)
 GO_MOD_CACHE?=$(shell go env GOMODCACHE)
 BUILDTIME_BASE?=$(DOCKER_BUILD_IMAGE)
 # See Versions: https://hub.docker.com/_/alpine
-RUNTIME_BASE?=alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+RUNTIME_BASE?=alpine:3.24.3@sha256:b3413572228e34bd1c9245f5565e6cd127005655e8a7899aef33d8e83255c9e6
 # See Versions: https://hub.docker.com/r/golangci/golangci-lint/tags
 DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.12.2@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
