@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -859,55 +860,93 @@ func (npc *NetworkPolicyControllerIptables) cleanupStaleRules(activePolicyChains
 			}
 		}
 
-		var newChains, newRules, desiredFilterTable bytes.Buffer
+		staleChains := slices.Concat(cleanupPodFwChains, cleanupPolicyChains)
+		if deleteDefaultChains {
+			staleChains = append(staleChains, kubeInputChainName, kubeForwardChainName, kubeOutputChainName,
+				kubeDefaultNetpolChain, kubeCommonNetpolChain)
+		}
+
+		var newChains, newRules, deleteChains, desiredFilterTable bytes.Buffer
 		rules := strings.Split(npc.filterTableRules[ipFamily].String(), "\n")
 		if len(rules) > 0 && rules[len(rules)-1] == "" {
 			rules = rules[:len(rules)-1]
 		}
 		for _, rule := range rules {
-			skipRule := false
-			for _, podFWChainName := range cleanupPodFwChains {
-				if strings.Contains(rule, podFWChainName) {
-					skipRule = true
-					break
-				}
-			}
-			for _, policyChainName := range cleanupPolicyChains {
-				if strings.Contains(rule, policyChainName) {
-					skipRule = true
-					break
-				}
-			}
-			if deleteDefaultChains {
-				for _, chain := range []string{kubeInputChainName, kubeForwardChainName, kubeOutputChainName,
-					kubeDefaultNetpolChain, kubeCommonNetpolChain} {
-					if strings.Contains(rule, chain) {
-						skipRule = true
-						break
-					}
-				}
-			}
 			if strings.Contains(rule, "COMMIT") || strings.HasPrefix(rule, "# ") {
-				skipRule = true
+				continue
 			}
-			if skipRule {
+			chain := ruleChain(rule)
+			if !isNetpolChain(chain) {
+				// A jump into a chain that is deleted below would make the whole restore fail, so it is deleted
+				// first. These are the jumps from the builtin chains when deleteDefaultChains is set.
+				if strings.HasPrefix(rule, "-A ") && ruleJumpsTo(rule, staleChains) {
+					newRules.WriteString("-D" + strings.TrimPrefix(rule, "-A") + "\n")
+				}
 				continue
 			}
 			if strings.HasPrefix(rule, ":") {
+				// Declaring a chain under --noflush flushes it, which also drops its jumps into stale chains before
+				// they are deleted at the end
 				newChains.WriteString(rule + " - [0:0]\n")
+				if slices.Contains(staleChains, chain) {
+					deleteChains.WriteString("-X " + chain + "\n")
+				}
+				continue
 			}
-			if strings.HasPrefix(rule, "-") {
+			skipRule := false
+			for _, staleChain := range staleChains {
+				if strings.Contains(rule, staleChain) {
+					skipRule = true
+					break
+				}
+			}
+			if !skipRule {
 				newRules.WriteString(rule + "\n")
 			}
 		}
 		desiredFilterTable.WriteString("*filter" + "\n")
 		desiredFilterTable.Write(newChains.Bytes())
 		desiredFilterTable.Write(newRules.Bytes())
+		desiredFilterTable.Write(deleteChains.Bytes())
 		desiredFilterTable.WriteString("COMMIT" + "\n")
 		npc.filterTableRules[ipFamily] = &desiredFilterTable
 	}
 
 	return nil
+}
+
+// isNetpolChain returns true for the filter table chains that the network policy controller owns. Only these go into
+// the iptables-restore input, so the builtin chains and the chains of other programs (kube-proxy, flannel, the
+// kube-router service proxy) are never rewritten from an iptables-save that may be out of date by then.
+func isNetpolChain(chain string) bool {
+	switch chain {
+	case kubeInputChainName, kubeForwardChainName, kubeOutputChainName:
+		return true
+	}
+	return strings.HasPrefix(chain, kubeNetworkPolicyChainPrefix) || strings.HasPrefix(chain, kubePodFirewallChainPrefix)
+}
+
+// ruleChain returns the chain that an iptables-save line declares (":CHAIN") or adds a rule to ("-A CHAIN ...")
+func ruleChain(rule string) string {
+	fields := strings.Fields(strings.TrimPrefix(rule, ":"))
+	switch {
+	case strings.HasPrefix(rule, ":") && len(fields) > 0:
+		return fields[0]
+	case len(fields) > 1 && (fields[0] == "-A" || fields[0] == "-I"):
+		return fields[1]
+	}
+	return ""
+}
+
+// ruleJumpsTo returns true if rule jumps or goes to one of chains
+func ruleJumpsTo(rule string, chains []string) bool {
+	fields := strings.Fields(rule)
+	for i := 1; i < len(fields); i++ {
+		if (fields[i-1] == "-j" || fields[i-1] == "-g") && slices.Contains(chains, fields[i]) {
+			return true
+		}
+	}
+	return false
 }
 
 func (npc *NetworkPolicyControllerIptables) cleanupStaleIPSets(activePolicyIPSets map[string]bool) error {
