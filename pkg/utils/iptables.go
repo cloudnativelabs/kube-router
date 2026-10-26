@@ -204,13 +204,14 @@ func (i *IPTablesSaveRestore) SaveInto(table string, buffer *bytes.Buffer) error
 	return i.exec(i.saveCmd, []string{"-t", table}, nil, buffer)
 }
 
-// Restore updates table with the content of data
+// Restore updates table with the content of data without flushing it first (--noflush), so chains that data doesn't
+// declare keep their rules
 func (i *IPTablesSaveRestore) Restore(table string, data []byte) error {
 	var args []string
 	if hasWait {
-		args = []string{"--wait", "-T", table}
+		args = []string{"--wait", "--noflush", "-T", table}
 	} else {
-		args = []string{"-T", table}
+		args = []string{"--noflush", "-T", table}
 	}
 	return i.exec(i.restoreCmd, args, data, nil)
 }
