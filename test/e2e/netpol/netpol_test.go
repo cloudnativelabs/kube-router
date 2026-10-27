@@ -1,8 +1,6 @@
 package netpol_e2e
 
 import (
-	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -829,13 +827,29 @@ var _ = Describe("NetworkPolicy", func() {
 		})
 
 		// Test 87
-		// Serial: the spec relies on the CNI re-assigning a just-freed IP to the
-		// next pod created; concurrent specs creating pods would steal it and
-		// force the skip path.
-		It("removes a completed pod's IP from nftables sets so stale IPs do not grant access", Serial, func() {
+		// We read kube-router's sets directly rather than waiting for the CNI to
+		// hand the freed IP to another pod, since host-local allocates in order
+		// and won't reuse it until the range wraps.
+		It("drops a completed pod's IPs from kube-router's sets so a reused IP can't inherit its access", func() {
 			ns := createNamespace(nil)
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
-			allowedClient := launchClient(ns.Name, "allowed-client", map[string]string{"group": "allowed"})
+			// The allowed client keeps running until we create /tmp/done, so we decide when it completes
+			allowedClient := startPod(&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "allowed-client",
+					Namespace: ns.Name,
+					Labels:    map[string]string{"group": "allowed"},
+				},
+				Spec: corev1.PodSpec{
+					NodeName: clientNode,
+					Containers: []corev1.Container{{
+						Name:    "client",
+						Image:   testImage,
+						Command: []string{"/bin/sh", "-c", "until [ -e /tmp/done ]; do sleep 1; done"},
+					}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			})
 
 			applyPolicy(&netv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "allow-group", Namespace: ns.Name},
@@ -849,59 +863,26 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
+
+			// Every IP has to show up in a set first, otherwise the empty result below would prove nothing
+			var ips []string
+			for _, pip := range allowedClient.Status.PodIPs {
+				ips = append(ips, pip.IP)
+				Eventually(func() []string { return kubeRouterSetsHolding(pip.IP) }, pollTimeout, pollInterval).
+					ShouldNot(BeEmpty(), "client IP %s should be in a kube-router set while the pod runs", pip.IP)
+			}
 			assertConnected(allowedClient, podIPv4(server), serverPort)
 
-			// Record the IP before deletion.
-			originalIP := podIPv4(allowedClient)
+			_, stderr, exitCode, err := execInPod(ns.Name, allowedClient.Name, "client",
+				[]string{"touch", "/tmp/done"})
+			Expect(err).NotTo(HaveOccurred(), "exec touch /tmp/done")
+			Expect(exitCode).To(BeZero(), "touch /tmp/done failed: %s", stderr)
+			waitForPhase(ns.Name, allowedClient.Name, corev1.PodSucceeded)
 
-			// Delete the allowed client pod.
-			grace := int64(0)
-			err := k8sClient.CoreV1().Pods(ns.Name).Delete(
-				context.Background(), allowedClient.Name,
-				metav1.DeleteOptions{GracePeriodSeconds: &grace},
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Wait for kube-router to sync and purge the stale IP.
-			time.Sleep(pollTimeout / 6)
-
-			// Launch a new pod without the matching label. If the CNI re-assigns
-			// the same IP and kube-router has correctly removed it from the set,
-			// this pod must be blocked.
-			recycledPod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "recycled",
-					Namespace: ns.Name,
-					Labels:    map[string]string{"group": "not-allowed"},
-				},
-				Spec: corev1.PodSpec{
-					// The freed IP can only come back on the deleted client's node
-					NodeName: clientNode,
-					Containers: []corev1.Container{{
-						Name:    "client",
-						Image:   testImage,
-						Command: []string{"/bin/sleep"},
-						Args:    []string{"3600"},
-					}},
-					RestartPolicy: corev1.RestartPolicyNever,
-				},
+			for _, ip := range ips {
+				Eventually(func() []string { return kubeRouterSetsHolding(ip) }, pollTimeout, pollInterval).
+					Should(BeEmpty(), "completed pod's IP %s should leave every kube-router set", ip)
 			}
-			_, err = k8sClient.CoreV1().Pods(ns.Name).Create(
-				context.Background(), recycledPod, metav1.CreateOptions{},
-			)
-			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(deletePod, ns.Name, "recycled")
-			recycled := waitForRunning(ns.Name, "recycled")
-
-			// If the CNI assigned a different IP the stale-IP scenario cannot be
-			// exercised; skip rather than generating a false pass/fail.
-			if podIPv4(recycled) != originalIP {
-				Skip(fmt.Sprintf(
-					"CNI assigned a different IP (%s vs %s); stale-IP scenario is not reproducible",
-					podIPv4(recycled), originalIP,
-				))
-			}
-			assertBlocked(recycled, podIPv4(server), serverPort)
 		})
 	})
 

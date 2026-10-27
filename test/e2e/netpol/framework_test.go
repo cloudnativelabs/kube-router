@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -244,6 +246,12 @@ func startPod(p *corev1.Pod) *corev1.Pod {
 // object (with IPs populated).
 func waitForRunning(ns, name string) *corev1.Pod {
 	GinkgoHelper()
+	return waitForPhase(ns, name, corev1.PodRunning)
+}
+
+// waitForPhase polls until the pod reaches phase, then returns the latest pod object
+func waitForPhase(ns, name string, phase corev1.PodPhase) *corev1.Pod {
+	GinkgoHelper()
 	var pod *corev1.Pod
 	Eventually(func() bool {
 		var err error
@@ -251,8 +259,8 @@ func waitForRunning(ns, name string) *corev1.Pod {
 		if err != nil {
 			return false
 		}
-		return pod.Status.Phase == corev1.PodRunning
-	}, pollTimeout, pollInterval).Should(BeTrue(), "pod %s/%s to reach Running", ns, name)
+		return pod.Status.Phase == phase
+	}, pollTimeout, pollInterval).Should(BeTrue(), "pod %s/%s to reach %s", ns, name, phase)
 	return pod
 }
 
@@ -565,6 +573,72 @@ func kubeRouterPods() []corev1.Pod {
 		metav1.ListOptions{LabelSelector: kubeRouterLabelSelector})
 	Expect(err).NotTo(HaveOccurred(), "list kube-router pods")
 	return pods.Items
+}
+
+// ---------------------------------------------------------------------------
+// Set inspection helpers
+// ---------------------------------------------------------------------------
+
+// kubeRouterSetsHolding returns "<kube-router pod>: <set>" for every set or map, on any node, with ip as an element.
+// We read both `ipset save` and `nft list ruleset` so that it works the same against either backend.
+func kubeRouterSetsHolding(ip string) []string {
+	GinkgoHelper()
+	want, err := netip.ParseAddr(ip)
+	Expect(err).NotTo(HaveOccurred(), "parse IP %q", ip)
+
+	var holders []string
+	for _, kr := range kubeRouterPods() {
+		for _, cmd := range [][]string{{"ipset", "save"}, {"nft", "list", "ruleset"}} {
+			stdout, _, _, execErr := execInPod(kubeSystemNS, kr.Name, "kube-router", cmd)
+			if execErr != nil {
+				continue
+			}
+			for _, set := range setsHolding(stdout, want) {
+				holders = append(holders, kr.Name+": "+set)
+			}
+		}
+	}
+	return holders
+}
+
+// setsHolding walks `ipset save` or `nft list ruleset` output and returns the names of the sets and maps that have
+// want as an element. Addresses in rules don't count.
+func setsHolding(output string, want netip.Addr) []string {
+	isWant := func(tok string) bool {
+		if prefix, err := netip.ParsePrefix(tok); err == nil {
+			return prefix.IsSingleIP() && prefix.Addr() == want
+		}
+		addr, err := netip.ParseAddr(tok)
+		return err == nil && addr == want
+	}
+
+	var sets []string
+	current := ""
+	for line := range strings.SplitSeq(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Splitting on commas and braces too pulls bare addresses out of nft element lists and ipset ip,port entries
+		fields := strings.FieldsFunc(trimmed, func(r rune) bool {
+			return unicode.IsSpace(r) || r == ',' || r == '{' || r == '}'
+		})
+		name := ""
+		switch {
+		case len(fields) >= 3 && fields[0] == "add":
+			// ipset save: add <set> <entry> [options]
+			if isWant(fields[2]) {
+				name = fields[1]
+			}
+		case len(fields) >= 2 && (fields[0] == "set" || fields[0] == "map") && strings.HasSuffix(trimmed, "{"):
+			current = fields[1]
+		case trimmed == "}":
+			current = ""
+		case current != "" && slices.ContainsFunc(fields, isWant):
+			name = current
+		}
+		if name != "" && !slices.Contains(sets, name) {
+			sets = append(sets, name)
+		}
+	}
+	return sets
 }
 
 // ---------------------------------------------------------------------------
