@@ -1,0 +1,32 @@
+# This mirrors the untracked entries in .gitignore. We keep .git (GIT_COMMIT comes from `git describe`) and every
+# tracked file, since leaving a tracked file out would make the in-image build report itself as -dirty.
+
+# Built binaries and downloads
+/kube-router
+/gobgp
+/cni-download
+/cni-plugins-*.tgz
+
+# Go build and test output
+**/*.test
+**/*.out
+**/_output
+**/_cache
+**/vendor
+go.work
+go.work.sum
+
+# Editors, worktrees, and local env
+**/.*.sw?
+/.vscode
+/.idea
+**/worktrees
+**/.env
+
+# AI tooling and personal scripts
+/.plans
+/.reviews
+/.opencode
+/.claude
+/.codegraph
+/.scripts
