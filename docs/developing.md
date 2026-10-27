@@ -83,9 +83,9 @@ Currently the privileged tests are the one level you have to remember to run you
 netlink-heavy code (`pkg/routes`, for example), since CI doesn't run them anywhere yet.
 
 If you want to run every host-local level in one shot, `make test-all` chains the unit, privileged, and
-integration targets. The e2e suite is deliberately not part of it, since it stands up a Kind cluster and
-covering its full matrix takes several runs, but `make test-all e2e-netpol` composes the two when you want
-everything.
+integration targets. The e2e suite is deliberately not part of it, since it stands up a Kind cluster, but
+`make e2e-netpol-all` runs the whole e2e matrix (slow lifecycle specs included) back to back on fresh
+clusters.
 
 ### Unit Tests
 
@@ -159,9 +159,14 @@ The suite runs specs in parallel via the ginkgo CLI. In order of precedence, the
 - **`E2E_FOCUS`** / **`E2E_SKIP`** - `NO_DEFAULT_SET` - Regexes passed to ginkgo `--focus` / `--skip` so you
   can run a single spec instead of the whole suite.
 
-Because a given deployment is either default-deny or not, and either iptables or nftables, covering all 48
-specs takes a few runs with different combinations - any spec whose gate isn't met reports as skipped, not
-failed.
+Because a given deployment is either default-deny or not, and either iptables or nftables, covering every spec
+takes four runs with different combinations (any spec whose gate isn't met reports as skipped, not failed).
+`make e2e-netpol-all` does all four for you with `E2E_LONG=1`, building the image once and giving each
+combination its own fresh cluster:
+
+```bash
+make e2e-netpol-all
+```
 
 When you're iterating on a failing spec (this works equally well for a human or an AI agent, since nothing
 in the loop needs sudo once `kind` is installed), keep the cluster alive and rerun just the tests:
