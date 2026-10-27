@@ -85,7 +85,7 @@ netlink-heavy code (`pkg/routes`, for example), since CI doesn't run them anywhe
 If you want to run every host-local level in one shot, `make test-all` chains the unit, privileged, and
 integration targets. The e2e suite is deliberately not part of it, since it stands up a Kind cluster, but
 `make e2e-netpol-all` runs the whole e2e matrix (slow lifecycle specs included) back to back on fresh
-clusters.
+clusters. `make prep-release` runs both, so be sure to budget a while for it.
 
 ### Unit Tests
 
