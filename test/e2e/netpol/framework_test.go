@@ -279,6 +279,16 @@ func podIPv4(pod *corev1.Pod) string {
 	return ""
 }
 
+// podIPv6 returns the pod's IPv6 address, or "" when the cluster isn't dual-stack
+func podIPv6(pod *corev1.Pod) string {
+	for _, pip := range pod.Status.PodIPs {
+		if strings.Contains(pip.IP, ":") {
+			return pip.IP
+		}
+	}
+	return ""
+}
+
 // patchPodLabels replaces the pod's labels with newLabels and returns the
 // updated pod.
 func patchPodLabels(pod *corev1.Pod, newLabels map[string]string) *corev1.Pod {
