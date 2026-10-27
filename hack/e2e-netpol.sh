@@ -241,24 +241,18 @@ cmd_delete_cluster() {
 }
 
 cmd_all() {
-    _debug_dumped=0
-
-    _on_error() {
-        if [[ "${_debug_dumped}" -eq 0 ]]; then
-            _debug_dumped=1
+    _on_exit() {
+        local rc=$?
+        # The functions we call don't inherit an ERR trap without errtrace, so we key the dump off the exit status
+        if [[ "${rc}" -ne 0 ]]; then
             cmd_dump_debug || true
         fi
-    }
-
-    _on_exit() {
         if [[ "${SKIP_CLEANUP}" != "1" ]]; then
             cmd_delete_cluster || true
         else
             log "SKIP_CLEANUP=1: leaving cluster '${KIND_CLUSTER_NAME}' intact"
         fi
     }
-
-    trap _on_error ERR
     trap _on_exit EXIT
 
     cmd_build_image
