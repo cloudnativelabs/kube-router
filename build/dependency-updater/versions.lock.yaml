@@ -9,7 +9,7 @@
 
 constraints:
   golang:
-    constraint: "~1.26"
+    constraint: "~1.27"
     # The alpine variant suffix (e.g. -alpine3.23) is matched against the alpine constraint below
   alpine:
     constraint: "~3.24"
