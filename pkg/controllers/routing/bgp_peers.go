@@ -176,6 +176,7 @@ func (nrc *NetworkRoutingController) syncInternalPeers() error {
 				LocalAddress: nrc.krNode.GetPrimaryNodeIP().String(),
 				RemotePort:   nrc.bgpPort,
 			},
+			Bfd: nrc.ibgpBFDConfig.ToGoBGP(),
 		}
 
 		if nrc.bgpGracefulRestart {
