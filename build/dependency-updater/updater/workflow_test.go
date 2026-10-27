@@ -182,3 +182,46 @@ jobs: {}
 		}
 	}
 }
+
+// TestUpdateCIEnv_OnlyGoVersionGetsGoVersion is a regression test for KIND_VERSION being overwritten with the Go
+// version. A resolved Go version means no network calls are needed for the Go category.
+func TestUpdateCIEnv_OnlyGoVersionGetsGoVersion(t *testing.T) {
+	t.Parallel()
+
+	content := `name: e2e
+env:
+  GO_VERSION: "~1.25.7"
+  KIND_VERSION: "v0.32.0"
+  OTHER_VERSION: "1.2.3"
+jobs: {}
+`
+	want := `name: e2e
+env:
+  GO_VERSION: "~1.27.3"
+  KIND_VERSION: "v0.32.0"
+  OTHER_VERSION: "1.2.3"
+jobs: {}
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ci-e2e.yml")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cats := updater.Categories{Docker: false, Go: true}
+	_, warnings, err := updater.UpdateCIEnv([]string{path}, &config.LockFile{}, nil, nil, "1.27.3", cats, false, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("unexpected warnings: %v", warnings)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want {
+		t.Errorf("only GO_VERSION should change;\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
