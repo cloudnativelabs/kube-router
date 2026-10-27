@@ -175,8 +175,34 @@ func launchServerOnPort(ns, name string, labels map[string]string, port int) *co
 	})
 }
 
-// launchClient creates a long-running sleep pod on the client node, used as the connectivity probe source, and
-// waits for it to reach Running.
+// launchNamedPortServer creates a server that exposes serverPort as portName, plus an unnamed listener on altPort so
+// that specs can show a named-port policy opens only the port it names
+func launchNamedPortServer(ns, name string, labels map[string]string, portName string) *corev1.Pod {
+	GinkgoHelper()
+	return startPod(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
+		Spec: corev1.PodSpec{
+			NodeName: serverNode,
+			Containers: []corev1.Container{
+				{
+					Name:  "server",
+					Image: testImage,
+					Args:  serveHostnameArgs(serverPort),
+					Ports: []corev1.ContainerPort{{
+						Name:          portName,
+						ContainerPort: serverPort,
+						Protocol:      corev1.ProtocolTCP,
+					}},
+				},
+				{Name: "server-alt", Image: testImage, Args: serveHostnameArgs(altPort)},
+			},
+			RestartPolicy: corev1.RestartPolicyNever,
+		},
+	})
+}
+
+// launchClient creates a connectivity probe source on the client node and waits for it to reach Running. It also
+// listens on serverPort so that specs can probe ingress to a client.
 func launchClient(ns, name string, labels map[string]string) *corev1.Pod {
 	GinkgoHelper()
 	return launchClientOnNode(ns, name, labels, clientNode)
@@ -191,10 +217,9 @@ func launchClientOnNode(ns, name string, labels map[string]string, node string) 
 		Spec: corev1.PodSpec{
 			NodeName: node,
 			Containers: []corev1.Container{{
-				Name:    "client",
-				Image:   testImage,
-				Command: []string{"/bin/sleep"},
-				Args:    []string{"3600"},
+				Name:  "client",
+				Image: testImage,
+				Args:  serveHostnameArgs(serverPort),
 			}},
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
@@ -297,12 +322,14 @@ func deletePolicy(ns, name string) {
 // Connectivity probes
 // ---------------------------------------------------------------------------
 
-// canConnect runs `nc -zw2 <ip> <port>` inside clientPod's container and
-// returns true if the connection succeeds (exit code 0).
+// canConnect runs `nc -zw2 <ip> <port>` inside clientPod's first container and
+// returns true if the connection succeeds (exit code 0). Any launched pod can be
+// the source, since they all use the agnhost image.
 func canConnect(clientPod *corev1.Pod, dstIP string, port int) bool {
 	GinkgoHelper()
 	cmd := []string{"nc", "-zw2", dstIP, strconv.Itoa(port)}
-	stdout, stderr, exitCode, err := execInPod(clientPod.Namespace, clientPod.Name, "client", cmd)
+	container := clientPod.Spec.Containers[0].Name
+	stdout, stderr, exitCode, err := execInPod(clientPod.Namespace, clientPod.Name, container, cmd)
 	connected := err == nil && exitCode == 0
 	GinkgoWriter.Printf("[probe] %s/%s → %s:%d  connected=%v (exit=%d err=%v stdout=%q stderr=%q)\n",
 		clientPod.Namespace, clientPod.Name, dstIP, port, connected, exitCode, err,
@@ -311,7 +338,9 @@ func canConnect(clientPod *corev1.Pod, dstIP string, port int) bool {
 }
 
 // assertConnected polls until a connection from clientPod to dstIP:port
-// succeeds, or fails the spec after pollTimeout.
+// succeeds, or fails the spec after pollTimeout. Because it passes on the first
+// success it can't tell a just-applied policy from no policy at all, so specs
+// run assertBlocked (which waits out the sync) before checking an allow path.
 func assertConnected(clientPod *corev1.Pod, dstIP string, port int) {
 	GinkgoHelper()
 	GinkgoWriter.Printf("[assert] assertConnected: pod %s/%s → %s:%d (timeout=%s)\n",
@@ -404,6 +433,20 @@ func namedTCPPort(name string) netv1.NetworkPolicyPort {
 	proto := corev1.ProtocolTCP
 	p := intstr.FromString(name)
 	return netv1.NetworkPolicyPort{Protocol: &proto, Port: &p}
+}
+
+// allowIngressFromCIDR returns a policy that only lets cidr into the app=server pods in ns
+func allowIngressFromCIDR(ns, policyName, cidr string) *netv1.NetworkPolicy {
+	return &netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: ns},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{{
+				From: []netv1.NetworkPolicyPeer{{IPBlock: &netv1.IPBlock{CIDR: cidr}}},
+			}},
+		},
+	}
 }
 
 // denyAllIngress returns a deny-all-ingress NetworkPolicy for the given
