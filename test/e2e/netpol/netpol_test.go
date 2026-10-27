@@ -749,74 +749,40 @@ var _ = Describe("NetworkPolicy", func() {
 
 	Describe("dual-stack and IPv6", func() {
 
+		// launchDualStackPair starts a server and client and checks both families connect before any policy, so
+		// that neither spec below can pass a blocked check just because one family doesn't route
+		launchDualStackPair := func(ns string) (*corev1.Pod, *corev1.Pod) {
+			GinkgoHelper()
+			server := launchServer(ns, "server", map[string]string{"app": "server"})
+			client := launchClient(ns, "client", map[string]string{"app": "client"})
+			if podIPv6(server) == "" || podIPv6(client) == "" {
+				Skip("pods have no IPv6 address; cluster is not in dual-stack mode")
+			}
+			assertConnected(client, podIPv4(server), serverPort)
+			assertConnected(client, podIPv6(server), serverPort)
+			return server, client
+		}
+
 		// Test 83/84
 		It("enforces policy independently on IPv4 and IPv6 addresses of the same pod", func() {
 			ns := createNamespace(nil)
-			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
-			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+			server, client := launchDualStackPair(ns.Name)
 
-			serverPodFull, err := k8sClient.CoreV1().Pods(ns.Name).Get(
-				context.Background(), server.Name, metav1.GetOptions{},
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			var ipv4Addr, ipv6Addr string
-			for _, pip := range serverPodFull.Status.PodIPs {
-				if !strings.Contains(pip.IP, ":") && ipv4Addr == "" {
-					ipv4Addr = pip.IP
-				} else if strings.Contains(pip.IP, ":") && ipv6Addr == "" {
-					ipv6Addr = pip.IP
-				}
-			}
-			if ipv4Addr == "" {
-				Skip("server pod has no IPv4 address")
-			}
-
-			// IPv4 must be reachable.
-			assertConnected(client, ipv4Addr, serverPort)
-
-			// IPv6 — skip gracefully if cluster is not dual-stack.
-			if ipv6Addr == "" {
-				Skip("server pod has no IPv6 address; cluster is not in dual-stack mode")
-			}
-			assertConnected(client, ipv6Addr, serverPort)
+			// Only the client's IPv4 address is let in, so its IPv6 traffic must not ride along
+			applyPolicy(allowIngressFromCIDR(ns.Name, "ipv4-ipblock", podIPv4(client)+"/32"))
+			assertBlocked(client, podIPv6(server), serverPort)
+			assertConnected(client, podIPv4(server), serverPort)
 		})
 
 		// Test 85
 		It("enforces an IPv6 ipBlock CIDR for ingress", func() {
 			ns := createNamespace(nil)
-			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
-			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+			server, client := launchDualStackPair(ns.Name)
 
-			clientPodFull, err := k8sClient.CoreV1().Pods(ns.Name).Get(
-				context.Background(), client.Name, metav1.GetOptions{},
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			var clientIPv6 string
-			for _, pip := range clientPodFull.Status.PodIPs {
-				if strings.Contains(pip.IP, ":") {
-					clientIPv6 = pip.IP
-					break
-				}
-			}
-			if clientIPv6 == "" {
-				Skip("client pod has no IPv6 address; cluster is not in dual-stack mode")
-			}
-
-			applyPolicy(&netv1.NetworkPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "ipv6-ipblock", Namespace: ns.Name},
-				Spec: netv1.NetworkPolicySpec{
-					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
-					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-					Ingress: []netv1.NetworkPolicyIngressRule{{
-						From: []netv1.NetworkPolicyPeer{{
-							IPBlock: &netv1.IPBlock{CIDR: clientIPv6 + "/128"},
-						}},
-					}},
-				},
-			})
-			assertConnected(client, podIPv4(server), serverPort)
+			// The mirror of the spec above: only the client's IPv6 address is let in, so IPv4 must be blocked
+			applyPolicy(allowIngressFromCIDR(ns.Name, "ipv6-ipblock", podIPv6(client)+"/128"))
+			assertBlocked(client, podIPv4(server), serverPort)
+			assertConnected(client, podIPv6(server), serverPort)
 		})
 	})
 
