@@ -143,6 +143,10 @@ the image, creates the cluster, deploys kube-router, and runs the suite:
 make e2e-netpol E2E_LONG=1 BACKEND=nftables DEFAULT_DENY=true
 ```
 
+The cluster has a control plane and two workers. The suite puts servers on one worker and clients on the other,
+so nearly every spec exercises cross-node traffic (including the pod routes kube-router learns over BGP), while
+a couple of specs repeat with the clients on the server's node so that the same-node bridge path stays covered.
+
 The suite runs specs in parallel via the ginkgo CLI. In order of precedence, the knobs you'll want are:
 
 - **`BACKEND`** - `iptables` - Which netpol backend to deploy (`iptables` or `nftables`).
