@@ -137,7 +137,7 @@ else
 		github.com/cloudnativelabs/kube-router/v2/pkg/controllers/netpol/...
 endif
 
-test-all: test test-privileged test-integration ## Runs every host-local test level (unit, privileged, nftables integration). The e2e suite is separate; compose with: make test-all e2e-netpol
+test-all: test-pretty test-privileged test-integration ## Runs every host-local test level (unit, privileged, nftables integration). The e2e suite is separate; compose with: make test-all e2e-netpol
 
 test-pretty: gofmt ## Runs code quality pipelines (gofmt, tests, coverage, etc)
 ifeq "$(BUILD_IN_DOCKER)" "true"
@@ -351,7 +351,7 @@ else
 endif
 	@echo Finished dependency update dry-run.
 
-prep-release: update-deps doctoc lint test-pretty kube-router container scan ## Prepares for a release: updates deps, runs all checks, builds, and scans for CVEs.
+prep-release: update-deps doctoc lint test-all kube-router container scan e2e-netpol-all ## Prepares for a release: updates deps, runs every test level and the full e2e matrix, builds, and scans for CVEs.
 	@echo Finished prep-release. Review any dependency changes and commit before tagging.
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html

@@ -12,13 +12,17 @@ make prep-release
 
 This single command will:
 
-1. **Update all dependencies** — Docker base image tags (golang, alpine, golangci-lint, etc.),
+1. **Update all dependencies** - Docker base image tags (golang, alpine, golangci-lint, etc.),
    tool versions (GoBGP, GoReleaser, CNI plugins, etc.), and GitHub Action SHA pins are all
    fetched from their upstream sources and pinned to their latest stable versions. Version
    constraints in `build/dependency-updater/versions.lock.yaml` control which major/minor
    boundaries are respected (e.g. golang stays on `~1.25.x`).
-2. **Run all standard checks** — doctoc, lint, tests, binary build, and container image build
-   are run in sequence against the updated dependency set.
+2. **Run all standard checks** - doctoc, lint, every host-local test level (`make test-all`: unit,
+   privileged, and nftables integration), binary build, container image build, and a CVE scan are
+   run in sequence against the updated dependency set.
+3. **Run the full NetworkPolicy e2e matrix** - `make e2e-netpol-all` runs the e2e suite, slow
+   lifecycle specs included, for every backend and default-deny combination on its own fresh Kind
+   cluster. It needs `docker` and `kind`, and it's by far the slowest step.
 
 After `prep-release` completes, review and commit the changes. Use `git add --patch` (`-p`) to
 stage each dependency update as a separate commit, which keeps the history readable and makes it
