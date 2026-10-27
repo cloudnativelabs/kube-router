@@ -122,6 +122,7 @@ func updateCIEnvFile(
 		// Determine what this value is.
 		if categories.Docker && looksLikeImage(value) {
 			imageName, tag, _ := ParseImageRef(value)
+			tag = registry.TrimArchSuffix(tag)
 			constraint := lf.GetConstraint(imageBaseName(imageName))
 
 			if tag == "" {

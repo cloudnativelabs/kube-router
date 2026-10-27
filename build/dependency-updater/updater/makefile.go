@@ -151,6 +151,7 @@ func updateDockerImageValue(
 	verbose bool,
 ) (string, string, error) {
 	imageName, tag, _ := ParseImageRef(value)
+	tag = registry.TrimArchSuffix(tag)
 	constraint := lf.GetConstraint(imageBaseName(imageName))
 
 	// If no tag is present, find the latest.
