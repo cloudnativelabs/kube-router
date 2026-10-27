@@ -40,7 +40,7 @@ TYPOS_VERSION=v1.51.1
 GOBGP_VERSION=da824d99912e02124b53741245ee4186c381adcc  # v4.10.0
 QEMU_IMAGE?=multiarch/qemu-user-static:7.2.0-1@sha256:fe60359c92e86a43cc87b3d906006245f77bfc0565676b80004cc666e4feb9f0
 # See Versions: https://github.com/goreleaser/goreleaser/releases
-GORELEASER_VERSION=v2.17.1
+GORELEASER_VERSION=v2.19.0
 # See Versions: https://hub.docker.com/r/anchore/grype/tags
 GRYPE_IMAGE?=anchore/grype:v0.117.0@sha256:ddf9e9f204049f3a4a0955ef70873cabab6a31432125ad4f20a490b54950a253
 # See Versions: https://github.com/containernetworking/plugins/releases
