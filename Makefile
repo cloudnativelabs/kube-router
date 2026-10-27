@@ -35,7 +35,7 @@ DOCKER_DOCTOC_IMAGE?=node:alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921
 # See Versions: https://www.npmjs.com/package/doctoc
 DOCTOC_VERSION=2.5.0
 # See Versions: https://github.com/crate-ci/typos/releases
-TYPOS_VERSION=v1.49.0
+TYPOS_VERSION=v1.51.1
 # See Versions: https://github.com/osrg/gobgp/releases
 GOBGP_VERSION=da824d99912e02124b53741245ee4186c381adcc  # v4.10.0
 QEMU_IMAGE?=multiarch/qemu-user-static:7.2.0-1@sha256:fe60359c92e86a43cc87b3d906006245f77bfc0565676b80004cc666e4feb9f0
