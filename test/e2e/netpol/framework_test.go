@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +42,48 @@ const (
 	// consistentlyDuration is how long Consistently checks for stable blocking.
 	consistentlyDuration = 10 * time.Second
 )
+
+// serverNode and clientNode are where launchServer and launchClient put their pods. We keep them apart so that
+// every spec exercises cross-node traffic, and leave them empty (scheduler's choice) on a single-node cluster.
+var serverNode, clientNode string
+
+// ---------------------------------------------------------------------------
+// Topology helpers
+// ---------------------------------------------------------------------------
+
+// assignNodes picks the first two schedulable nodes, by name, as the server and client nodes
+func assignNodes() {
+	GinkgoHelper()
+	nodes, err := k8sClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	Expect(err).NotTo(HaveOccurred(), "list nodes")
+
+	var schedulable []string
+	for i := range nodes.Items {
+		if isSchedulable(&nodes.Items[i]) {
+			schedulable = append(schedulable, nodes.Items[i].Name)
+		}
+	}
+	slices.Sort(schedulable)
+	if len(schedulable) < 2 {
+		GinkgoWriter.Printf("[topology] only %d schedulable node(s), so specs won't exercise cross-node traffic\n",
+			len(schedulable))
+		return
+	}
+	serverNode, clientNode = schedulable[0], schedulable[1]
+	GinkgoWriter.Printf("[topology] servers on %s, clients on %s\n", serverNode, clientNode)
+}
+
+func isSchedulable(node *corev1.Node) bool {
+	if node.Spec.Unschedulable {
+		return false
+	}
+	for _, taint := range node.Spec.Taints {
+		if taint.Effect == corev1.TaintEffectNoSchedule || taint.Effect == corev1.TaintEffectNoExecute {
+			return false
+		}
+	}
+	return true
+}
 
 // ---------------------------------------------------------------------------
 // Namespace helpers
@@ -118,30 +161,35 @@ func launchServer(ns, name string, labels map[string]string) *corev1.Pod {
 // launchServerOnPort is like launchServer but with a custom port.
 func launchServerOnPort(ns, name string, labels map[string]string, port int) *corev1.Pod {
 	GinkgoHelper()
-	p := &corev1.Pod{
+	return startPod(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
 		Spec: corev1.PodSpec{
+			NodeName: serverNode,
 			Containers: []corev1.Container{{
 				Name:  "server",
 				Image: testImage,
-				Args:  []string{"serve-hostname", "--http=false", "--tcp=true", fmt.Sprintf("--port=%d", port)},
+				Args:  serveHostnameArgs(port),
 			}},
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
-	}
-	created, err := k8sClient.CoreV1().Pods(ns).Create(context.Background(), p, metav1.CreateOptions{})
-	Expect(err).NotTo(HaveOccurred(), "create server pod")
-	DeferCleanup(deletePod, ns, name)
-	return waitForRunning(ns, created.Name)
+	})
 }
 
-// launchClient creates a long-running sleep pod used as the connectivity probe
-// source and waits for it to reach Running phase.
+// launchClient creates a long-running sleep pod on the client node, used as the connectivity probe source, and
+// waits for it to reach Running.
 func launchClient(ns, name string, labels map[string]string) *corev1.Pod {
 	GinkgoHelper()
-	p := &corev1.Pod{
+	return launchClientOnNode(ns, name, labels, clientNode)
+}
+
+// launchClientOnNode is like launchClient but pins the pod to node, or leaves placement to the scheduler when node
+// is empty
+func launchClientOnNode(ns, name string, labels map[string]string, node string) *corev1.Pod {
+	GinkgoHelper()
+	return startPod(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
 		Spec: corev1.PodSpec{
+			NodeName: node,
 			Containers: []corev1.Container{{
 				Name:    "client",
 				Image:   testImage,
@@ -150,11 +198,21 @@ func launchClient(ns, name string, labels map[string]string) *corev1.Pod {
 			}},
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
-	}
-	created, err := k8sClient.CoreV1().Pods(ns).Create(context.Background(), p, metav1.CreateOptions{})
-	Expect(err).NotTo(HaveOccurred(), "create client pod")
-	DeferCleanup(deletePod, ns, name)
-	return waitForRunning(ns, created.Name)
+	})
+}
+
+// serveHostnameArgs returns the agnhost args for a plain TCP listener on port
+func serveHostnameArgs(port int) []string {
+	return []string{"serve-hostname", "--http=false", "--tcp=true", fmt.Sprintf("--port=%d", port)}
+}
+
+// startPod creates p, registers its cleanup, and waits for it to reach Running
+func startPod(p *corev1.Pod) *corev1.Pod {
+	GinkgoHelper()
+	created, err := k8sClient.CoreV1().Pods(p.Namespace).Create(context.Background(), p, metav1.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred(), "create pod %s/%s", p.Namespace, p.Name)
+	DeferCleanup(deletePod, p.Namespace, p.Name)
+	return waitForRunning(p.Namespace, created.Name)
 }
 
 // waitForRunning polls until pod phase is Running, then returns the latest pod

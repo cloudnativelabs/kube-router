@@ -80,28 +80,36 @@ var _ = Describe("NetworkPolicy", func() {
 
 	Describe("ingress rules", func() {
 
-		// Test 58
-		It("allows traffic from a matching podSelector and blocks non-matching pods", func() {
-			ns := createNamespace(nil)
-			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
-			allowed := launchClient(ns.Name, "allowed", map[string]string{"role": "allowed"})
-			denied := launchClient(ns.Name, "denied", map[string]string{"role": "denied"})
+		// Test 58: every other spec runs across nodes, so this one also covers same-node traffic over the bridge
+		DescribeTable("allows traffic from a matching podSelector and blocks non-matching pods",
+			func(sameNode bool) {
+				ns := createNamespace(nil)
+				server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
+				node := clientNode
+				if sameNode {
+					node = server.Spec.NodeName
+				}
+				allowed := launchClientOnNode(ns.Name, "allowed", map[string]string{"role": "allowed"}, node)
+				denied := launchClientOnNode(ns.Name, "denied", map[string]string{"role": "denied"}, node)
 
-			applyPolicy(&netv1.NetworkPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "ingress-pod-selector", Namespace: ns.Name},
-				Spec: netv1.NetworkPolicySpec{
-					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
-					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-					Ingress: []netv1.NetworkPolicyIngressRule{{
-						From: []netv1.NetworkPolicyPeer{{
-							PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "allowed"}},
+				applyPolicy(&netv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{Name: "ingress-pod-selector", Namespace: ns.Name},
+					Spec: netv1.NetworkPolicySpec{
+						PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
+						PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+						Ingress: []netv1.NetworkPolicyIngressRule{{
+							From: []netv1.NetworkPolicyPeer{{
+								PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "allowed"}},
+							}},
 						}},
-					}},
-				},
-			})
-			assertConnected(allowed, podIPv4(server), serverPort)
-			assertBlocked(denied, podIPv4(server), serverPort)
-		})
+					},
+				})
+				assertConnected(allowed, podIPv4(server), serverPort)
+				assertBlocked(denied, podIPv4(server), serverPort)
+			},
+			Entry("across nodes", false),
+			Entry("on the same node", true),
+		)
 
 		// Test 59
 		It("allows traffic from a matching namespaceSelector and blocks other namespaces", func() {
@@ -267,6 +275,7 @@ var _ = Describe("NetworkPolicy", func() {
 					Labels:    map[string]string{"app": "server"},
 				},
 				Spec: corev1.PodSpec{
+					NodeName: serverNode,
 					Containers: []corev1.Container{{
 						Name:  "server",
 						Image: testImage,
@@ -360,28 +369,36 @@ var _ = Describe("NetworkPolicy", func() {
 
 	Describe("egress rules", func() {
 
-		// Test 67
-		It("allows egress to a matching podSelector and blocks non-matching pods", func() {
-			ns := createNamespace(nil)
-			allowed := launchServer(ns.Name, "allowed-server", map[string]string{"role": "allowed"})
-			blocked := launchServer(ns.Name, "blocked-server", map[string]string{"role": "blocked"})
-			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+		// Test 67: like Test 58, this also covers same-node traffic over the bridge
+		DescribeTable("allows egress to a matching podSelector and blocks non-matching pods",
+			func(sameNode bool) {
+				ns := createNamespace(nil)
+				allowed := launchServer(ns.Name, "allowed-server", map[string]string{"role": "allowed"})
+				blocked := launchServer(ns.Name, "blocked-server", map[string]string{"role": "blocked"})
+				node := clientNode
+				if sameNode {
+					node = allowed.Spec.NodeName
+				}
+				client := launchClientOnNode(ns.Name, "client", map[string]string{"app": "client"}, node)
 
-			applyPolicy(&netv1.NetworkPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "egress-pod-selector", Namespace: ns.Name},
-				Spec: netv1.NetworkPolicySpec{
-					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "client"}},
-					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
-					Egress: []netv1.NetworkPolicyEgressRule{{
-						To: []netv1.NetworkPolicyPeer{{
-							PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "allowed"}},
+				applyPolicy(&netv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{Name: "egress-pod-selector", Namespace: ns.Name},
+					Spec: netv1.NetworkPolicySpec{
+						PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "client"}},
+						PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
+						Egress: []netv1.NetworkPolicyEgressRule{{
+							To: []netv1.NetworkPolicyPeer{{
+								PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "allowed"}},
+							}},
 						}},
-					}},
-				},
-			})
-			assertConnected(client, podIPv4(allowed), serverPort)
-			assertBlocked(client, podIPv4(blocked), serverPort)
-		})
+					},
+				})
+				assertConnected(client, podIPv4(allowed), serverPort)
+				assertBlocked(client, podIPv4(blocked), serverPort)
+			},
+			Entry("across nodes", false),
+			Entry("on the same node", true),
+		)
 
 		// Test 68
 		It("allows egress to a matching namespaceSelector and blocks other namespaces", func() {
@@ -541,6 +558,7 @@ var _ = Describe("NetworkPolicy", func() {
 					Labels:    map[string]string{"app": "server"},
 				},
 				Spec: corev1.PodSpec{
+					NodeName: serverNode,
 					Containers: []corev1.Container{{
 						Name:  "server",
 						Image: testImage,
@@ -863,6 +881,7 @@ var _ = Describe("NetworkPolicy", func() {
 					Labels:    map[string]string{"app": "host-server"},
 				},
 				Spec: corev1.PodSpec{
+					NodeName:    serverNode,
 					HostNetwork: true,
 					Containers: []corev1.Container{{
 						Name:  "server",
@@ -940,6 +959,8 @@ var _ = Describe("NetworkPolicy", func() {
 					Labels:    map[string]string{"group": "not-allowed"},
 				},
 				Spec: corev1.PodSpec{
+					// The freed IP can only come back on the deleted client's node
+					NodeName: clientNode,
 					Containers: []corev1.Container{{
 						Name:    "client",
 						Image:   testImage,

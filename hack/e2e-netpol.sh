@@ -3,7 +3,8 @@
 #
 # Subcommands (pass exactly one as the first argument, or "all" for a full local run):
 #   build-image      Build the kube-router container image via Docker Buildx.
-#   create-cluster   Create a dual-stack Kind cluster with default CNI disabled.
+#   create-cluster   Create a dual-stack Kind cluster (control plane plus two
+#                    workers) with default CNI disabled.
 #   load-image       Load the container image into the Kind cluster.
 #   deploy           Apply a mutated kube-router DaemonSet manifest to the cluster.
 #   wait             Wait for the kube-router DaemonSet to roll out.
@@ -100,7 +101,7 @@ cmd_install_kind() {
 }
 
 cmd_create_cluster() {
-    log "Creating Kind cluster '${KIND_CLUSTER_NAME}' (dual-stack, no default CNI)"
+    log "Creating Kind cluster '${KIND_CLUSTER_NAME}' (dual-stack, no default CNI, two workers)"
     kind create cluster \
         --image "${KIND_NODE_IMAGE}" \
         --name "${KIND_CLUSTER_NAME}" \
@@ -112,6 +113,9 @@ networking:
   ipFamily: dual
 nodes:
   - role: control-plane
+  # kind keeps the control plane tainted, so we need two workers for the suite to put servers and clients on
+  # different nodes and exercise cross-node traffic
+  - role: worker
   - role: worker
 EOF
 }
