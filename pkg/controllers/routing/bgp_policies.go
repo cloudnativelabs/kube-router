@@ -800,7 +800,7 @@ func (nrc *NetworkRoutingController) addExportPolicies() error {
 	// to incrementAndCreatePolicy so that the below method doesn't have to carry context about where it is called from
 	if currentPolicyName == "" {
 		currentPolicyName = kubeRouterExportPolicy + "0"
-		klog.Infof("Did not match any existing policies, starting import policy with default name: %s",
+		klog.Infof("Did not match any existing policies, starting export policy with default name: %s",
 			currentPolicyName)
 	}
 
