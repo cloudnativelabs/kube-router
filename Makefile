@@ -356,7 +356,7 @@ prep-release: update-deps doctoc lint test-pretty kube-router container scan ## 
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
 help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires docker + kind). Pass BACKEND=nftables, DEFAULT_DENY=true, SKIP_CLEANUP=1, E2E_LONG=1, E2E_PROCS=N, E2E_FOCUS/E2E_SKIP=regex as needed.
@@ -364,9 +364,14 @@ e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires doc
 		E2E_PROCS=$(E2E_PROCS) E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) \
 		hack/e2e-netpol.sh all
 
+e2e-netpol-all: ## Run the e2e suite for every BACKEND and DEFAULT_DENY combination with E2E_LONG=1, one fresh Kind cluster each. Takes a while.
+	E2E_LONG=1 E2E_PROCS=$(E2E_PROCS) E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) \
+		BUILDTIME_BASE="$(BUILDTIME_BASE)" RUNTIME_BASE="$(RUNTIME_BASE)" \
+		hack/e2e-netpol.sh matrix
+
 .PHONY: clean container run release goreleaser push gofmt gofmt-fix gomoqs scan
 .PHONY: test test-privileged test-integration test-all test-pretty lint docker-login push-manifest push-manifest-release
 .PHONY: push-release github-release help multiarch-binverify markdownlint doctoc
-.PHONY: spellcheck update-deps update-deps-dry prep-release kube-router gobgp cni-download e2e-netpol
+.PHONY: spellcheck update-deps update-deps-dry prep-release kube-router gobgp cni-download e2e-netpol e2e-netpol-all
 
 .DEFAULT: all

@@ -15,8 +15,12 @@
 #   dump-debug       Collect debug info (logs, events, nft ruleset). Intended for
 #                    use on failure.
 #   delete-cluster   Delete the Kind cluster.
-#   all              Run the full sequence locally with cleanup on exit and debug
-#                    dump on error.
+#   suite            Run create-cluster through run-tests against an image that's
+#                    already built, with debug dump on error and cleanup on exit.
+#   all              Build the image, then run "suite". The full sequence locally.
+#   matrix           Build the image once, then run "suite" for every BACKEND and
+#                    DEFAULT_DENY combination, same as the CI matrix. SKIP_CLEANUP
+#                    is ignored, since every suite reuses the same cluster name.
 #
 # Environment variables (all optional):
 #   BACKEND            iptables | nftables   (default: iptables)
@@ -37,7 +41,7 @@
 #   KIND_NODE_IMAGE    kindest/node:vX.Y.Z   (default: kindest/node:v1.32.2)
 #   BUILDTIME_BASE     docker image ref      (default: golang:alpine)
 #   RUNTIME_BASE       docker image ref      (default: alpine:3)
-#   SKIP_CLEANUP       1                     Skip cluster deletion on exit ("all" mode only)
+#   SKIP_CLEANUP       1                     Skip cluster deletion on exit ("all" and "suite" only)
 #
 # Iterating on a failing spec (human or AI agent) without rerunning "all":
 #
@@ -244,7 +248,7 @@ cmd_delete_cluster() {
     kind delete cluster --name "${KIND_CLUSTER_NAME}"
 }
 
-cmd_all() {
+cmd_suite() {
     _on_exit() {
         local rc=$?
         # The functions we call don't inherit an ERR trap without errtrace, so we key the dump off the exit status
@@ -259,14 +263,42 @@ cmd_all() {
     }
     trap _on_exit EXIT
 
-    cmd_build_image
-    cmd_install_kind
     cmd_create_cluster
     cmd_load_image
     cmd_deploy
     cmd_wait
     cmd_dump_initial
     cmd_run_tests
+}
+
+cmd_all() {
+    cmd_build_image
+    cmd_install_kind
+    cmd_suite
+}
+
+cmd_matrix() {
+    cmd_build_image
+    cmd_install_kind
+
+    local backend default_deny
+    local failed=()
+    for backend in iptables nftables; do
+        for default_deny in false true; do
+            log "Matrix suite: backend=${backend}, default-deny=${default_deny}"
+            # Each suite runs in its own process so that its errexit and traps behave, and one failure doesn't stop
+            # the rest of the matrix
+            if ! BACKEND="${backend}" DEFAULT_DENY="${default_deny}" SKIP_CLEANUP=0 "${BASH_SOURCE[0]}" suite; then
+                failed+=("backend=${backend},default-deny=${default_deny}")
+            fi
+        done
+    done
+
+    if [[ ${#failed[@]} -gt 0 ]]; then
+        log "Failed matrix suites: ${failed[*]}"
+        return 1
+    fi
+    log "All matrix suites passed"
 }
 
 # ---------------------------------------------------------------------------
@@ -286,10 +318,12 @@ case "${SUBCOMMAND}" in
     refresh)        cmd_refresh ;;
     dump-debug)     cmd_dump_debug ;;
     delete-cluster) cmd_delete_cluster ;;
+    suite)          cmd_suite ;;
     all)            cmd_all ;;
+    matrix)         cmd_matrix ;;
     *)
         echo "Unknown subcommand: ${SUBCOMMAND}" >&2
-        echo "Usage: $0 {build-image|create-cluster|load-image|deploy|wait|dump-initial|run-tests|refresh|dump-debug|delete-cluster|all}" >&2
+        echo "Usage: $0 {build-image|install-kind|create-cluster|load-image|deploy|wait|dump-initial|run-tests|refresh|dump-debug|delete-cluster|suite|all|matrix}" >&2
         exit 1
         ;;
 esac
