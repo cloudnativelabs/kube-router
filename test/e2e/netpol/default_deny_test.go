@@ -227,6 +227,7 @@ var _ = Describe("netpol-default-deny", func() {
 			ns := createNamespace(nil)
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+			other := launchClient(ns.Name, "other", map[string]string{"app": "other"})
 
 			applyPolicy(&netv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "allow-client", Namespace: ns.Name},
@@ -242,6 +243,8 @@ var _ = Describe("netpol-default-deny", func() {
 					}},
 				},
 			})
+			// The unselected pod being blocked shows us the policy is in place before we check the allow
+			assertBlocked(other, podIPv4(server), serverPort)
 			assertConnected(client, podIPv4(server), serverPort)
 		})
 	})
