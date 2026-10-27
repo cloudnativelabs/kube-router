@@ -67,6 +67,7 @@ var _ = BeforeSuite(func() {
 	if err != nil {
 		Fail("create Kubernetes client: " + err.Error())
 	}
+	assignNodes()
 })
 
 // ReportAfterEach dumps kube-router logs and nftables state to GinkgoWriter
