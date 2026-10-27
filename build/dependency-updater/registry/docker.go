@@ -36,17 +36,41 @@ func (c *DockerClient) LatestTag(image, constraint string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return PickLatestTag(tags, image, constraint)
+}
 
+// PickLatestTag returns the highest stable tag in tags that satisfies constraint. Several tags often share a version
+// (grype publishes v0.121.0, v0.121.0-debug, and v0.121.0-nonroot), so on a tie we take the plain tag, which keeps
+// the result from depending on the order the registry listed them in.
+func PickLatestTag(tags []string, image, constraint string) (string, error) {
 	candidates := filterStableTags(tags, image, constraint)
 	if len(candidates) == 0 {
 		return "", fmt.Errorf("no matching tag found for %s with constraint %q", image, constraint)
 	}
 
-	// Sort descending and return the best match.
 	sort.Slice(candidates, func(i, j int) bool {
-		return TagGreater(candidates[i], candidates[j], image)
+		a, b := candidates[i], candidates[j]
+		switch {
+		case TagGreater(a, b, image):
+			return true
+		case TagGreater(b, a, image):
+			return false
+		case len(a) != len(b):
+			return len(a) < len(b)
+		default:
+			return a < b
+		}
 	})
 	return candidates[0], nil
+}
+
+// TrimArchSuffix strips an architecture suffix from tag, e.g. "v0.121.0-s390x" -> "v0.121.0", so that a pin that
+// was resolved to a single-arch image goes back to the multi-arch tag
+func TrimArchSuffix(tag string) string {
+	if loc := archSuffixRe.FindStringIndex(tag); loc != nil {
+		return tag[:loc[0]]
+	}
+	return tag
 }
 
 // ResolveDigest returns the sha256 manifest digest for image:tag.
@@ -196,14 +220,17 @@ func parseLinkNext(header string) string {
 
 // --- tag filtering & sorting -------------------------------------------------
 
-// stableTagRe rejects tags that are clearly pre-release or architecture-specific.
 var (
 	alpineVariantRe = regexp.MustCompile(`^(\d+\.\d+\.\d+)-alpine(\d+\.\d+)$`)
 	stableTagRe     = regexp.MustCompile(`^v?\d+\.\d+`)
 	rejectRe        = regexp.MustCompile(`(?i)(alpha|beta|rc|pre|dev|nightly|snapshot|canary)`)
-	// variantSuffixRe rejects tags with OS/arch variant suffixes (e.g. -alpine, -alpine3.21,
+	// variantSuffixRe rejects tags with OS variant suffixes (e.g. -alpine, -alpine3.21,
 	// -bullseye, -buster) for images that are not the golang image.
 	variantSuffixRe = regexp.MustCompile(`(?i)-(alpine|bullseye|buster|bookworm|focal|jammy|slim)`)
+	// archSuffixRe matches a trailing architecture suffix (e.g. -s390x, -arm64v8, -debug-amd64). Those tags point at
+	// a single-arch image, so we never want one pinned for every platform.
+	archSuffixRe = regexp.MustCompile(
+		`(?i)-(amd64|x86_64|arm64(v8)?|aarch64|arm(32)?(v[5-7])?|armhf|armel|i386|386|ppc64le|s390x|riscv64)$`)
 )
 
 // isGolangImage reports whether image is the official golang Docker image.
@@ -220,6 +247,9 @@ func filterStableTags(tags []string, image, constraint string) []string {
 			continue
 		}
 		if !stableTagRe.MatchString(tag) {
+			continue
+		}
+		if TrimArchSuffix(tag) != tag {
 			continue
 		}
 		if isGolangImage(image) {
