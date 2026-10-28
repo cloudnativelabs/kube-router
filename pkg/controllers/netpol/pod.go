@@ -81,6 +81,11 @@ func (npc *NetworkPolicyControllerBase) handlePodDelete(obj any) {
 			return
 		}
 	}
+	// A pod that was not actionable when it went away was in no chain or set of the last sync (the informer's last
+	// state is what that sync read), so its deletion changes nothing.
+	if !isNetPolActionable(pod) {
+		return
+	}
 	klog.V(2).Infof("Received pod: %s/%s delete event", pod.Namespace, pod.Name)
 
 	npc.RequestFullSync()
