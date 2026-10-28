@@ -321,9 +321,50 @@ func (npc *NetworkPolicyControllerBase) interceptPodOutboundTraffic(pod podInfo,
 	}
 }
 
+// podSnapshot is the informer's pods as of one instant, grouped by namespace.
+type podSnapshot struct {
+	all         []*api.Pod
+	byNamespace map[string][]*api.Pod
+}
+
+// snapshotPods freezes the pod list for the rest of the current fullPolicySync (call it with npc.mu held and
+// pair it with dropPodSnapshot). A sync reads pods in many places: once per policy in buildNetworkPoliciesInfo
+// (targets and peers) and again in syncPodFirewallChains. Without one snapshot, a pod that gets its IP while
+// the sync runs lands in the policies listed after that moment and not in those listed before, so it can be
+// programmed with default-deny-all's chain and without allow-dns's rule, and is refused until the next sync.
+func (npc *NetworkPolicyControllerBase) snapshotPods() {
+	snapshot := &podSnapshot{all: npc.livePods(), byNamespace: make(map[string][]*api.Pod)}
+	for _, pod := range snapshot.all {
+		snapshot.byNamespace[pod.Namespace] = append(snapshot.byNamespace[pod.Namespace], pod)
+	}
+	npc.podSnapshot = snapshot
+}
+
+func (npc *NetworkPolicyControllerBase) dropPodSnapshot() {
+	npc.podSnapshot = nil
+}
+
+func (npc *NetworkPolicyControllerBase) livePods() []*api.Pod {
+	objs := npc.podLister.List()
+	pods := make([]*api.Pod, 0, len(objs))
+	for _, obj := range objs {
+		if pod, ok := obj.(*api.Pod); ok {
+			pods = append(pods, pod)
+		}
+	}
+	return pods
+}
+
+// listPods returns the sync's snapshot, or the live informer content outside a sync.
+func (npc *NetworkPolicyControllerBase) listPods() []*api.Pod {
+	if npc.podSnapshot != nil {
+		return npc.podSnapshot.all
+	}
+	return npc.livePods()
+}
+
 func (npc *NetworkPolicyControllerBase) getLocalPods(localPods map[string]podInfo, nodeIP string) {
-	for _, obj := range npc.podLister.List() {
-		pod := obj.(*api.Pod)
+	for _, pod := range npc.listPods() {
 		// ignore the pods running on the different node and pods that are not actionable
 		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || !isNetPolActionable(pod) {
 			continue
