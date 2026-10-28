@@ -104,6 +104,9 @@ type NetworkPolicyControllerBase struct {
 	npLister  cache.Indexer
 	nsLister  cache.Indexer
 
+	// podSnapshot is the pod list one fullPolicySync works from (see snapshotPods); nil outside a sync.
+	podSnapshot *podSnapshot
+
 	podEventHandler           cache.ResourceEventHandler
 	namespaceEventHandler     cache.ResourceEventHandler
 	networkPolicyEventHandler cache.ResourceEventHandler

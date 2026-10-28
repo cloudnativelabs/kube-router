@@ -776,6 +776,18 @@ func (npc *NetworkPolicyControllerBase) processNetworkPolicyPorts(npPorts []netw
 
 func (npc *NetworkPolicyControllerBase) ListPodsByNamespaceAndLabels(namespace string,
 	podSelector labels.Selector) (ret []*api.Pod, err error) {
+	if npc.podSnapshot != nil {
+		candidates := npc.podSnapshot.all
+		if namespace != api.NamespaceAll {
+			candidates = npc.podSnapshot.byNamespace[namespace]
+		}
+		for _, pod := range candidates {
+			if podSelector.Matches(labels.Set(pod.Labels)) {
+				ret = append(ret, pod)
+			}
+		}
+		return ret, nil
+	}
 	podLister := listers.NewPodLister(npc.podLister)
 	allMatchedNameSpacePods, err := podLister.Pods(namespace).List(podSelector)
 	if err != nil {
