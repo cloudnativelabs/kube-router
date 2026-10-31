@@ -1,5 +1,5 @@
-ARG BUILDTIME_BASE=golang:1-alpine@sha256:d530cf60723abf1ffae0cd16bb546b379ec0550d2f3815e5b16ed69dbc00fba4
-ARG RUNTIME_BASE=alpine:latest@sha256:71e9b7bae160ba167fa17414401b94cbcdaf3c32feeab9298bd794a2a0614c35
+ARG BUILDTIME_BASE=golang:1-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb
+ARG RUNTIME_BASE=alpine:latest@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 ARG TARGETPLATFORM
 ARG CNI_VERSION
 
@@ -40,7 +40,7 @@ RUN export GOARM="${TARGETVARIANT#v}" \
 
 # Runtime stage runs on TARGETPLATFORM (QEMU for non-native), so apk pulls per-arch packages
 # and `iptables-wrapper install` runs target-arch scripts — both fast.
-FROM ${RUNTIME_BASE}
+FROM ${RUNTIME_BASE} AS runtime
 
 RUN apk add --no-cache \
       nftables \

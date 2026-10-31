@@ -33,6 +33,10 @@ var envLineRe = regexp.MustCompile(
 // semverRangeRe matches a version or semver range value like "~1.25.7" or "1.25.7".
 var semverRangeRe = regexp.MustCompile(`^~?v?\d+\.\d+`)
 
+// goVersionEnvKey is the only env key that holds a Go version. We match on it because other keys (KIND_VERSION, for
+// example) carry versions too, and they used to get overwritten with the Go version.
+const goVersionEnvKey = "GO_VERSION"
+
 // UpdateCIEnv processes all YAML files in paths and updates Docker image values
 // and Go version values found in top-level env: blocks.
 // Only files that contain a top-level "env:" section are modified.
@@ -109,6 +113,7 @@ func updateCIEnvFile(
 			continue
 		}
 		preamble := m[1]
+		key := strings.TrimSuffix(strings.Fields(preamble)[0], ":")
 		openQuote := m[2]
 		value := strings.TrimSpace(m[3])
 		closeQuote := m[4]
@@ -117,6 +122,7 @@ func updateCIEnvFile(
 		// Determine what this value is.
 		if categories.Docker && looksLikeImage(value) {
 			imageName, tag, _ := ParseImageRef(value)
+			tag = registry.TrimArchSuffix(tag)
 			constraint := lf.GetConstraint(imageBaseName(imageName))
 
 			if tag == "" {
@@ -145,7 +151,7 @@ func updateCIEnvFile(
 			}
 			lines[i] = preamble + openQuote + pinned + closeQuote + trailingComment
 
-		} else if categories.Go && semverRangeRe.MatchString(value) {
+		} else if categories.Go && key == goVersionEnvKey && semverRangeRe.MatchString(value) {
 			// This looks like a Go version range (e.g. "~1.25.7").
 			prefix := ""
 			bare := value

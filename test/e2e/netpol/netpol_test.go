@@ -1,10 +1,7 @@
 package netpol_e2e
 
 import (
-	"context"
-	"fmt"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -80,28 +77,36 @@ var _ = Describe("NetworkPolicy", func() {
 
 	Describe("ingress rules", func() {
 
-		// Test 58
-		It("allows traffic from a matching podSelector and blocks non-matching pods", func() {
-			ns := createNamespace(nil)
-			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
-			allowed := launchClient(ns.Name, "allowed", map[string]string{"role": "allowed"})
-			denied := launchClient(ns.Name, "denied", map[string]string{"role": "denied"})
+		// Test 58: every other spec runs across nodes, so this one also covers same-node traffic over the bridge
+		DescribeTable("allows traffic from a matching podSelector and blocks non-matching pods",
+			func(sameNode bool) {
+				ns := createNamespace(nil)
+				server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
+				node := clientNode
+				if sameNode {
+					node = server.Spec.NodeName
+				}
+				allowed := launchClientOnNode(ns.Name, "allowed", map[string]string{"role": "allowed"}, node)
+				denied := launchClientOnNode(ns.Name, "denied", map[string]string{"role": "denied"}, node)
 
-			applyPolicy(&netv1.NetworkPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "ingress-pod-selector", Namespace: ns.Name},
-				Spec: netv1.NetworkPolicySpec{
-					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
-					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-					Ingress: []netv1.NetworkPolicyIngressRule{{
-						From: []netv1.NetworkPolicyPeer{{
-							PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "allowed"}},
+				applyPolicy(&netv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{Name: "ingress-pod-selector", Namespace: ns.Name},
+					Spec: netv1.NetworkPolicySpec{
+						PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
+						PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+						Ingress: []netv1.NetworkPolicyIngressRule{{
+							From: []netv1.NetworkPolicyPeer{{
+								PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "allowed"}},
+							}},
 						}},
-					}},
-				},
-			})
-			assertConnected(allowed, podIPv4(server), serverPort)
-			assertBlocked(denied, podIPv4(server), serverPort)
-		})
+					},
+				})
+				assertBlocked(denied, podIPv4(server), serverPort)
+				assertConnected(allowed, podIPv4(server), serverPort)
+			},
+			Entry("across nodes", false),
+			Entry("on the same node", true),
+		)
 
 		// Test 59
 		It("allows traffic from a matching namespaceSelector and blocks other namespaces", func() {
@@ -125,8 +130,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
-			assertConnected(allowed, podIPv4(server), serverPort)
 			assertBlocked(blocked, podIPv4(server), serverPort)
+			assertConnected(allowed, podIPv4(server), serverPort)
 		})
 
 		// Test 60
@@ -153,8 +158,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
-			assertConnected(allowed, podIPv4(server), serverPort)
 			assertBlocked(wrongPod, podIPv4(server), serverPort)
+			assertConnected(allowed, podIPv4(server), serverPort)
 		})
 
 		// Test 61
@@ -162,21 +167,11 @@ var _ = Describe("NetworkPolicy", func() {
 			ns := createNamespace(nil)
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+			outsider := launchClient(ns.Name, "outsider", map[string]string{"app": "outsider"})
 
-			clientIP := podIPv4(client)
-			applyPolicy(&netv1.NetworkPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "ingress-ipblock", Namespace: ns.Name},
-				Spec: netv1.NetworkPolicySpec{
-					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
-					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-					Ingress: []netv1.NetworkPolicyIngressRule{{
-						From: []netv1.NetworkPolicyPeer{{
-							IPBlock: &netv1.IPBlock{CIDR: clientIP + "/32"},
-						}},
-					}},
-				},
-			})
-			// The one IP that is in the /32 must be allowed.
+			// Only the client's /32 is let in, so the outsider must be blocked
+			applyPolicy(allowIngressFromCIDR(ns.Name, "ingress-ipblock", podIPv4(client)+"/32"))
+			assertBlocked(outsider, podIPv4(server), serverPort)
 			assertConnected(client, podIPv4(server), serverPort)
 		})
 
@@ -203,8 +198,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
-			assertConnected(allowed, podIPv4(server), serverPort)
 			assertBlocked(denied, podIPv4(server), serverPort)
+			assertConnected(allowed, podIPv4(server), serverPort)
 		})
 
 		// Test 63
@@ -229,14 +224,17 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
-			assertConnected(client, podIPv4(serverAllowed), serverPort)
 			assertBlocked(client, podIPv4(serverBlocked), altPort)
+			assertConnected(client, podIPv4(serverAllowed), serverPort)
 		})
 
 		// Test 64
 		It("allows traffic within a port range and blocks ports outside the range", func() {
 			ns := createNamespace(nil)
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
+			// Something has to listen beyond the range, otherwise the blocked check passes on ECONNREFUSED alone
+			outOfRange := launchServerOnPort(ns.Name, "server-out-of-range", map[string]string{"app": "server"},
+				serverPort+11)
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
 
 			applyPolicy(&netv1.NetworkPolicy{
@@ -249,42 +247,16 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
+			// Beyond end of range: blocked.
+			assertBlocked(client, podIPv4(outOfRange), serverPort+11)
 			// Start of range: allowed.
 			assertConnected(client, podIPv4(server), serverPort)
-			// Beyond end of range: blocked.
-			assertBlocked(client, podIPv4(server), serverPort+11)
 		})
 
 		// Test 65
 		It("resolves a named port and allows traffic to it", func() {
 			ns := createNamespace(nil)
-
-			// Server pod with an explicitly named container port.
-			serverPod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "server",
-					Namespace: ns.Name,
-					Labels:    map[string]string{"app": "server"},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  "server",
-						Image: testImage,
-						Args:  []string{"serve-hostname", "--http=false", "--tcp=true", fmt.Sprintf("--port=%d", serverPort)},
-						Ports: []corev1.ContainerPort{{
-							Name:          "http-named",
-							ContainerPort: serverPort,
-							Protocol:      corev1.ProtocolTCP,
-						}},
-					}},
-					RestartPolicy: corev1.RestartPolicyNever,
-				},
-			}
-			_, err := k8sClient.CoreV1().Pods(ns.Name).Create(context.Background(), serverPod, metav1.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(deletePod, ns.Name, "server")
-			server := waitForRunning(ns.Name, "server")
-
+			server := launchNamedPortServer(ns.Name, "server", map[string]string{"app": "server"}, "http-named")
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
 
 			applyPolicy(&netv1.NetworkPolicy{
@@ -297,6 +269,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
+			// The server's unnamed altPort listener must stay closed, or the named port didn't narrow anything
+			assertBlocked(client, podIPv4(server), altPort)
 			assertConnected(client, podIPv4(server), serverPort)
 		})
 
@@ -360,28 +334,36 @@ var _ = Describe("NetworkPolicy", func() {
 
 	Describe("egress rules", func() {
 
-		// Test 67
-		It("allows egress to a matching podSelector and blocks non-matching pods", func() {
-			ns := createNamespace(nil)
-			allowed := launchServer(ns.Name, "allowed-server", map[string]string{"role": "allowed"})
-			blocked := launchServer(ns.Name, "blocked-server", map[string]string{"role": "blocked"})
-			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+		// Test 67: like Test 58, this also covers same-node traffic over the bridge
+		DescribeTable("allows egress to a matching podSelector and blocks non-matching pods",
+			func(sameNode bool) {
+				ns := createNamespace(nil)
+				allowed := launchServer(ns.Name, "allowed-server", map[string]string{"role": "allowed"})
+				blocked := launchServer(ns.Name, "blocked-server", map[string]string{"role": "blocked"})
+				node := clientNode
+				if sameNode {
+					node = allowed.Spec.NodeName
+				}
+				client := launchClientOnNode(ns.Name, "client", map[string]string{"app": "client"}, node)
 
-			applyPolicy(&netv1.NetworkPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "egress-pod-selector", Namespace: ns.Name},
-				Spec: netv1.NetworkPolicySpec{
-					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "client"}},
-					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
-					Egress: []netv1.NetworkPolicyEgressRule{{
-						To: []netv1.NetworkPolicyPeer{{
-							PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "allowed"}},
+				applyPolicy(&netv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{Name: "egress-pod-selector", Namespace: ns.Name},
+					Spec: netv1.NetworkPolicySpec{
+						PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "client"}},
+						PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
+						Egress: []netv1.NetworkPolicyEgressRule{{
+							To: []netv1.NetworkPolicyPeer{{
+								PodSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"role": "allowed"}},
+							}},
 						}},
-					}},
-				},
-			})
-			assertConnected(client, podIPv4(allowed), serverPort)
-			assertBlocked(client, podIPv4(blocked), serverPort)
-		})
+					},
+				})
+				assertBlocked(client, podIPv4(blocked), serverPort)
+				assertConnected(client, podIPv4(allowed), serverPort)
+			},
+			Entry("across nodes", false),
+			Entry("on the same node", true),
+		)
 
 		// Test 68
 		It("allows egress to a matching namespaceSelector and blocks other namespaces", func() {
@@ -405,8 +387,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
-			assertConnected(client, podIPv4(allowed), serverPort)
 			assertBlocked(client, podIPv4(blocked), serverPort)
+			assertConnected(client, podIPv4(allowed), serverPort)
 		})
 
 		// Test 69
@@ -431,8 +413,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
-			assertConnected(client, podIPv4(allowed), serverPort)
 			assertBlocked(client, podIPv4(blocked), serverPort)
+			assertConnected(client, podIPv4(allowed), serverPort)
 		})
 
 		// Test 70
@@ -440,6 +422,7 @@ var _ = Describe("NetworkPolicy", func() {
 			ns := createNamespace(nil)
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
+			outside := launchServer(ns.Name, "outside", map[string]string{"app": "outside"})
 
 			serverIP := podIPv4(server)
 			applyPolicy(&netv1.NetworkPolicy{
@@ -454,6 +437,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
+			// Only the server's /32 is allowed out, so the other server must be unreachable
+			assertBlocked(client, podIPv4(outside), serverPort)
 			assertConnected(client, serverIP, serverPort)
 		})
 
@@ -480,8 +465,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
-			assertConnected(client, podIPv4(allowed), serverPort)
 			assertBlocked(client, blockedIP, serverPort)
+			assertConnected(client, podIPv4(allowed), serverPort)
 		})
 
 		// Test 72
@@ -506,8 +491,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
-			assertConnected(client, podIPv4(serverAllowed), serverPort)
 			assertBlocked(client, podIPv4(serverBlocked), altPort)
+			assertConnected(client, podIPv4(serverAllowed), serverPort)
 		})
 
 		// Test 73
@@ -515,6 +500,9 @@ var _ = Describe("NetworkPolicy", func() {
 			ns := createNamespace(nil)
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
+			// Something has to listen beyond the range, otherwise the blocked check passes on ECONNREFUSED alone
+			outOfRange := launchServerOnPort(ns.Name, "server-out-of-range", map[string]string{"app": "server"},
+				serverPort+11)
 
 			applyPolicy(&netv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "egress-port-range", Namespace: ns.Name},
@@ -526,39 +514,14 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
+			assertBlocked(client, podIPv4(outOfRange), serverPort+11)
 			assertConnected(client, podIPv4(server), serverPort)
-			assertBlocked(client, podIPv4(server), serverPort+11)
 		})
 
 		// Test 74
 		It("resolves a named port for egress and allows traffic to it", func() {
 			ns := createNamespace(nil)
-
-			serverPod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "server",
-					Namespace: ns.Name,
-					Labels:    map[string]string{"app": "server"},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:  "server",
-						Image: testImage,
-						Args:  []string{"serve-hostname", "--http=false", "--tcp=true", fmt.Sprintf("--port=%d", serverPort)},
-						Ports: []corev1.ContainerPort{{
-							Name:          "grpc",
-							ContainerPort: serverPort,
-							Protocol:      corev1.ProtocolTCP,
-						}},
-					}},
-					RestartPolicy: corev1.RestartPolicyNever,
-				},
-			}
-			_, err := k8sClient.CoreV1().Pods(ns.Name).Create(context.Background(), serverPod, metav1.CreateOptions{})
-			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(deletePod, ns.Name, "server")
-			server := waitForRunning(ns.Name, "server")
-
+			server := launchNamedPortServer(ns.Name, "server", map[string]string{"app": "server"}, "grpc")
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
 
 			applyPolicy(&netv1.NetworkPolicy{
@@ -574,6 +537,8 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
+			// The server's unnamed altPort listener must stay unreachable, or the named port didn't narrow anything
+			assertBlocked(client, podIPv4(server), altPort)
 			assertConnected(client, podIPv4(server), serverPort)
 		})
 
@@ -631,9 +596,9 @@ var _ = Describe("NetworkPolicy", func() {
 					},
 				},
 			})
+			assertBlocked(denied, podIPv4(server), serverPort)
 			assertConnected(clientA, podIPv4(server), serverPort)
 			assertConnected(clientB, podIPv4(server), serverPort)
-			assertBlocked(denied, podIPv4(server), serverPort)
 		})
 
 		// Test 77
@@ -642,6 +607,7 @@ var _ = Describe("NetworkPolicy", func() {
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
 			clientA := launchClient(ns.Name, "client-a", map[string]string{"group": "a"})
 			clientB := launchClient(ns.Name, "client-b", map[string]string{"group": "b"})
+			denied := launchClient(ns.Name, "denied", map[string]string{"group": "c"})
 
 			applyPolicy(&netv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "pol-a", Namespace: ns.Name},
@@ -663,6 +629,7 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
+			assertBlocked(denied, podIPv4(server), serverPort)
 			assertConnected(clientA, podIPv4(server), serverPort)
 			assertConnected(clientB, podIPv4(server), serverPort)
 		})
@@ -672,11 +639,13 @@ var _ = Describe("NetworkPolicy", func() {
 			ns := createNamespace(nil)
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
+			// Baseline, so the blocked check below can't pass just because the client isn't listening yet
+			assertConnected(server, podIPv4(client), serverPort)
 
 			// Deny all INGRESS to the client pod; its own EGRESS must be unaffected.
 			applyPolicy(denyAllIngress(ns.Name, "deny-client-ingress",
 				metav1.LabelSelector{MatchLabels: map[string]string{"app": "client"}}))
-
+			assertBlocked(server, podIPv4(client), serverPort)
 			assertConnected(client, podIPv4(server), serverPort)
 		})
 
@@ -685,6 +654,8 @@ var _ = Describe("NetworkPolicy", func() {
 			ns := createNamespace(nil)
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+			// Baseline, so the blocked check below can't pass just because the client isn't listening yet
+			assertConnected(server, podIPv4(client), serverPort)
 
 			// Deny all EGRESS from the server pod; inbound connections must still arrive.
 			applyPolicy(&netv1.NetworkPolicy{
@@ -694,6 +665,7 @@ var _ = Describe("NetworkPolicy", func() {
 					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeEgress},
 				},
 			})
+			assertBlocked(server, podIPv4(client), serverPort)
 			assertConnected(client, podIPv4(server), serverPort)
 		})
 
@@ -762,8 +734,6 @@ var _ = Describe("NetworkPolicy", func() {
 
 			// Re-label the namespace to env=prod.
 			patchNamespaceLabels(clientNS, map[string]string{"env": "prod"})
-			// Allow extra sync time for kube-router to pick up the namespace change.
-			time.Sleep(pollInterval * 2)
 			assertConnected(client, podIPv4(server), serverPort)
 		})
 	})
@@ -774,74 +744,40 @@ var _ = Describe("NetworkPolicy", func() {
 
 	Describe("dual-stack and IPv6", func() {
 
+		// launchDualStackPair starts a server and client and checks both families connect before any policy, so
+		// that neither spec below can pass a blocked check just because one family doesn't route
+		launchDualStackPair := func(ns string) (*corev1.Pod, *corev1.Pod) {
+			GinkgoHelper()
+			server := launchServer(ns, "server", map[string]string{"app": "server"})
+			client := launchClient(ns, "client", map[string]string{"app": "client"})
+			if podIPv6(server) == "" || podIPv6(client) == "" {
+				Skip("pods have no IPv6 address; cluster is not in dual-stack mode")
+			}
+			assertConnected(client, podIPv4(server), serverPort)
+			assertConnected(client, podIPv6(server), serverPort)
+			return server, client
+		}
+
 		// Test 83/84
 		It("enforces policy independently on IPv4 and IPv6 addresses of the same pod", func() {
 			ns := createNamespace(nil)
-			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
-			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+			server, client := launchDualStackPair(ns.Name)
 
-			serverPodFull, err := k8sClient.CoreV1().Pods(ns.Name).Get(
-				context.Background(), server.Name, metav1.GetOptions{},
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			var ipv4Addr, ipv6Addr string
-			for _, pip := range serverPodFull.Status.PodIPs {
-				if !strings.Contains(pip.IP, ":") && ipv4Addr == "" {
-					ipv4Addr = pip.IP
-				} else if strings.Contains(pip.IP, ":") && ipv6Addr == "" {
-					ipv6Addr = pip.IP
-				}
-			}
-			if ipv4Addr == "" {
-				Skip("server pod has no IPv4 address")
-			}
-
-			// IPv4 must be reachable.
-			assertConnected(client, ipv4Addr, serverPort)
-
-			// IPv6 — skip gracefully if cluster is not dual-stack.
-			if ipv6Addr == "" {
-				Skip("server pod has no IPv6 address; cluster is not in dual-stack mode")
-			}
-			assertConnected(client, ipv6Addr, serverPort)
+			// Only the client's IPv4 address is let in, so its IPv6 traffic must not ride along
+			applyPolicy(allowIngressFromCIDR(ns.Name, "ipv4-ipblock", podIPv4(client)+"/32"))
+			assertBlocked(client, podIPv6(server), serverPort)
+			assertConnected(client, podIPv4(server), serverPort)
 		})
 
 		// Test 85
 		It("enforces an IPv6 ipBlock CIDR for ingress", func() {
 			ns := createNamespace(nil)
-			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
-			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
+			server, client := launchDualStackPair(ns.Name)
 
-			clientPodFull, err := k8sClient.CoreV1().Pods(ns.Name).Get(
-				context.Background(), client.Name, metav1.GetOptions{},
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			var clientIPv6 string
-			for _, pip := range clientPodFull.Status.PodIPs {
-				if strings.Contains(pip.IP, ":") {
-					clientIPv6 = pip.IP
-					break
-				}
-			}
-			if clientIPv6 == "" {
-				Skip("client pod has no IPv6 address; cluster is not in dual-stack mode")
-			}
-
-			applyPolicy(&netv1.NetworkPolicy{
-				ObjectMeta: metav1.ObjectMeta{Name: "ipv6-ipblock", Namespace: ns.Name},
-				Spec: netv1.NetworkPolicySpec{
-					PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
-					PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-					Ingress: []netv1.NetworkPolicyIngressRule{{
-						From: []netv1.NetworkPolicyPeer{{
-							IPBlock: &netv1.IPBlock{CIDR: clientIPv6 + "/128"},
-						}},
-					}},
-				},
-			})
-			assertConnected(client, podIPv4(server), serverPort)
+			// The mirror of the spec above: only the client's IPv6 address is let in, so IPv4 must be blocked
+			applyPolicy(allowIngressFromCIDR(ns.Name, "ipv6-ipblock", podIPv6(client)+"/128"))
+			assertBlocked(client, podIPv4(server), serverPort)
+			assertConnected(client, podIPv6(server), serverPort)
 		})
 	})
 
@@ -855,52 +791,62 @@ var _ = Describe("NetworkPolicy", func() {
 		It("does not enforce NetworkPolicy against a host-network pod", func() {
 			ns := createNamespace(nil)
 
-			hostPort := int32(19080)
-			hostServerPod := &corev1.Pod{
+			const hostPort = 19080
+			hostServer := startPod(&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "host-server",
 					Namespace: ns.Name,
 					Labels:    map[string]string{"app": "host-server"},
 				},
 				Spec: corev1.PodSpec{
+					NodeName:    serverNode,
 					HostNetwork: true,
 					Containers: []corev1.Container{{
 						Name:  "server",
 						Image: testImage,
-						Args: []string{
-							"serve-hostname", "--http=false", "--tcp=true",
-							fmt.Sprintf("--port=%d", hostPort),
-						},
+						Args:  serveHostnameArgs(hostPort),
 					}},
 					RestartPolicy: corev1.RestartPolicyNever,
 				},
-			}
-			_, err := k8sClient.CoreV1().Pods(ns.Name).Create(
-				context.Background(), hostServerPod, metav1.CreateOptions{},
-			)
-			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(deletePod, ns.Name, "host-server")
-			hostServer := waitForRunning(ns.Name, "host-server")
-
+			})
+			// A regular pod sharing the host-network pod's labels shows us when the policy is in place
+			sibling := launchServer(ns.Name, "sibling", map[string]string{"app": "host-server"})
 			client := launchClient(ns.Name, "client", map[string]string{"app": "client"})
 
 			// Deny-all ingress policy selecting the host-network pod's labels.
 			// kube-router must NOT enforce this against the host-network pod.
 			applyPolicy(denyAllIngress(ns.Name, "deny-host-server",
 				metav1.LabelSelector{MatchLabels: map[string]string{"app": "host-server"}}))
+			assertBlocked(client, podIPv4(sibling), serverPort)
 
 			// Traffic to the host-network pod must still be allowed.
-			assertConnected(client, hostServer.Status.PodIP, int(hostPort))
+			assertConnected(client, hostServer.Status.PodIP, hostPort)
 		})
 
 		// Test 87
-		// Serial: the spec relies on the CNI re-assigning a just-freed IP to the
-		// next pod created; concurrent specs creating pods would steal it and
-		// force the skip path.
-		It("removes a completed pod's IP from nftables sets so stale IPs do not grant access", Serial, func() {
+		// We read kube-router's sets directly rather than waiting for the CNI to
+		// hand the freed IP to another pod, since host-local allocates in order
+		// and won't reuse it until the range wraps.
+		It("drops a completed pod's IPs from kube-router's sets so a reused IP can't inherit its access", func() {
 			ns := createNamespace(nil)
 			server := launchServer(ns.Name, "server", map[string]string{"app": "server"})
-			allowedClient := launchClient(ns.Name, "allowed-client", map[string]string{"group": "allowed"})
+			// The allowed client keeps running until we create /tmp/done, so we decide when it completes
+			allowedClient := startPod(&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "allowed-client",
+					Namespace: ns.Name,
+					Labels:    map[string]string{"group": "allowed"},
+				},
+				Spec: corev1.PodSpec{
+					NodeName: clientNode,
+					Containers: []corev1.Container{{
+						Name:    "client",
+						Image:   testImage,
+						Command: []string{"/bin/sh", "-c", "until [ -e /tmp/done ]; do sleep 1; done"},
+					}},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			})
 
 			applyPolicy(&netv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{Name: "allow-group", Namespace: ns.Name},
@@ -914,57 +860,26 @@ var _ = Describe("NetworkPolicy", func() {
 					}},
 				},
 			})
+
+			// Every IP has to show up in a set first, otherwise the empty result below would prove nothing
+			var ips []string
+			for _, pip := range allowedClient.Status.PodIPs {
+				ips = append(ips, pip.IP)
+				Eventually(func() []string { return kubeRouterSetsHolding(pip.IP) }, pollTimeout, pollInterval).
+					ShouldNot(BeEmpty(), "client IP %s should be in a kube-router set while the pod runs", pip.IP)
+			}
 			assertConnected(allowedClient, podIPv4(server), serverPort)
 
-			// Record the IP before deletion.
-			originalIP := podIPv4(allowedClient)
+			_, stderr, exitCode, err := execInPod(ns.Name, allowedClient.Name, "client",
+				[]string{"touch", "/tmp/done"})
+			Expect(err).NotTo(HaveOccurred(), "exec touch /tmp/done")
+			Expect(exitCode).To(BeZero(), "touch /tmp/done failed: %s", stderr)
+			waitForPhase(ns.Name, allowedClient.Name, corev1.PodSucceeded)
 
-			// Delete the allowed client pod.
-			grace := int64(0)
-			err := k8sClient.CoreV1().Pods(ns.Name).Delete(
-				context.Background(), allowedClient.Name,
-				metav1.DeleteOptions{GracePeriodSeconds: &grace},
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			// Wait for kube-router to sync and purge the stale IP.
-			time.Sleep(pollTimeout / 6)
-
-			// Launch a new pod without the matching label. If the CNI re-assigns
-			// the same IP and kube-router has correctly removed it from the set,
-			// this pod must be blocked.
-			recycledPod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "recycled",
-					Namespace: ns.Name,
-					Labels:    map[string]string{"group": "not-allowed"},
-				},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{
-						Name:    "client",
-						Image:   testImage,
-						Command: []string{"/bin/sleep"},
-						Args:    []string{"3600"},
-					}},
-					RestartPolicy: corev1.RestartPolicyNever,
-				},
+			for _, ip := range ips {
+				Eventually(func() []string { return kubeRouterSetsHolding(ip) }, pollTimeout, pollInterval).
+					Should(BeEmpty(), "completed pod's IP %s should leave every kube-router set", ip)
 			}
-			_, err = k8sClient.CoreV1().Pods(ns.Name).Create(
-				context.Background(), recycledPod, metav1.CreateOptions{},
-			)
-			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(deletePod, ns.Name, "recycled")
-			recycled := waitForRunning(ns.Name, "recycled")
-
-			// If the CNI assigned a different IP the stale-IP scenario cannot be
-			// exercised; skip rather than generating a false pass/fail.
-			if podIPv4(recycled) != originalIP {
-				Skip(fmt.Sprintf(
-					"CNI assigned a different IP (%s vs %s); stale-IP scenario is not reproducible",
-					podIPv4(recycled), originalIP,
-				))
-			}
-			assertBlocked(recycled, podIPv4(server), serverPort)
 		})
 	})
 
@@ -1007,10 +922,15 @@ var _ = Describe("NetworkPolicy", func() {
 				"/bin/sh", "-c",
 				`curl -sk -m 5 -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kubernetes.default.svc.cluster.local/api/`,
 			}
-			Eventually(func() bool {
+			apiBlocked := func() bool {
 				stdout, _, exitCode, err := execInPod(ns.Name, client.Name, "client", cmd)
-				return err == nil && exitCode == 0 && strings.Contains(stdout, "APIVersions")
-			}, pollTimeout, pollInterval).Should(BeTrue(), "baseline API server connectivity")
+				// Connection should fail (timeout or connection refused).
+				blocked := err != nil || exitCode != 0 || !strings.Contains(stdout, "APIVersions")
+				GinkgoWriter.Printf("[probe] API server blocked check: exit=%d err=%v blocked=%v\n",
+					exitCode, err, blocked)
+				return blocked
+			}
+			Eventually(apiBlocked, pollTimeout, probeInterval).Should(BeFalse(), "baseline API server connectivity")
 
 			// Apply an egress policy that blocks all traffic except DNS.
 			// This should block access to the API server.
@@ -1031,19 +951,11 @@ var _ = Describe("NetworkPolicy", func() {
 				},
 			})
 
-			// Give kube-router time to sync.
-			time.Sleep(pollInterval)
-
-			// Now verify that API server access is blocked.
-			Consistently(func() bool {
-				stdout, _, exitCode, err := execInPod(ns.Name, client.Name, "client", cmd)
-				// Connection should fail (timeout or connection refused).
-				blocked := err != nil || exitCode != 0 || !strings.Contains(stdout, "APIVersions")
-				GinkgoWriter.Printf("[probe] API server blocked check: exit=%d err=%v blocked=%v\n",
-					exitCode, err, blocked)
-				return blocked
-			}, consistentlyDuration, pollInterval).Should(BeTrue(),
-				"API server access should be blocked by egress policy")
+			// Same as assertBlocked: wait out the sync, then make sure the block holds
+			Eventually(apiBlocked, pollTimeout, probeInterval).Should(BeTrue(),
+				"API server access should become blocked by egress policy")
+			Consistently(apiBlocked, stayBlockedDuration, probeInterval).Should(BeTrue(),
+				"API server access should stay blocked by egress policy")
 		})
 	})
 })
@@ -1082,11 +994,11 @@ var _ = Describe("boundary-length identity", func() {
 			},
 		})
 
-		// Allow side: the selected client reaches the server, proving the
-		// policy's accept rule programmed despite maximum-length comments.
-		assertConnected(client, podIPv4(server), serverPort)
 		// Block side: a non-matching pod is rejected, proving the policy's
 		// implicit default-deny programmed rather than the sync silently aborting.
 		assertBlocked(other, podIPv4(server), serverPort)
+		// Allow side: the selected client reaches the server, proving the
+		// policy's accept rule programmed despite maximum-length comments.
+		assertConnected(client, podIPv4(server), serverPort)
 	})
 })

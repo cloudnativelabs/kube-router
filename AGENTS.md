@@ -153,10 +153,11 @@ GITHUB_TOKEN=ghp_... make update-deps
 
 #### Release Preparation
 
-- `make prep-release` - Full release preparation: update deps, run all checks, build container
+- `make prep-release` - Full release preparation: update deps, run all checks and test levels, build and scan the
+  container, and run the full e2e matrix
 
 This is the single command to run before tagging a new release. It calls `update-deps` first,
-then runs the same steps as `all` (`doctoc lint test-pretty kube-router container`).
+then runs `doctoc lint test-all kube-router container scan e2e-netpol-all`.
 
 #### Release and Distribution
 

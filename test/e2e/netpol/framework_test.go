@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,11 +39,114 @@ const (
 	// pollTimeout is the maximum time to wait for a connectivity state to be
 	// reached after a NetworkPolicy is applied or deleted.
 	pollTimeout = 60 * time.Second
-	// pollInterval is the retry cadence used by Eventually/Consistently.
+	// pollInterval is the retry cadence for heavier polls, like reading kube-router's sets on every node.
 	pollInterval = 2 * time.Second
-	// consistentlyDuration is how long Consistently checks for stable blocking.
-	consistentlyDuration = 10 * time.Second
+	// probeInterval is the retry cadence for connectivity probes.
+	probeInterval = 1 * time.Second
+	// stayBlockedDuration is how long a block has to hold once we've seen it, which is how we catch enforcement that
+	// flaps back open.
+	stayBlockedDuration = 4 * time.Second
+	// podPollInterval is how often we check a pod's phase, which is cheap and usually changes within a second
+	podPollInterval = 250 * time.Millisecond
+	// warmUpTimeout is longer than pollTimeout because, on a cluster where nobody preloaded the test image, the
+	// warm-up pods are the ones that pull it
+	warmUpTimeout = 3 * time.Minute
 )
+
+// serverNode and clientNode are where launchServer and launchClient put their pods. We keep them apart so that
+// every spec exercises cross-node traffic, and leave them empty (scheduler's choice) on a single-node cluster.
+var serverNode, clientNode string
+
+// defaultDeny is whether kube-router runs with --netpol-default-deny, checked once per process
+var defaultDeny bool
+
+// ---------------------------------------------------------------------------
+// Topology helpers
+// ---------------------------------------------------------------------------
+
+// assignNodes picks the first two schedulable nodes, by name, as the server and client nodes
+func assignNodes() {
+	GinkgoHelper()
+	nodes, err := k8sClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	Expect(err).NotTo(HaveOccurred(), "list nodes")
+
+	var schedulable []string
+	for i := range nodes.Items {
+		if isSchedulable(&nodes.Items[i]) {
+			schedulable = append(schedulable, nodes.Items[i].Name)
+		}
+	}
+	slices.Sort(schedulable)
+	if len(schedulable) < 2 {
+		GinkgoWriter.Printf("[topology] only %d schedulable node(s), so specs won't exercise cross-node traffic\n",
+			len(schedulable))
+		return
+	}
+	serverNode, clientNode = schedulable[0], schedulable[1]
+	GinkgoWriter.Printf("[topology] servers on %s, clients on %s\n", serverNode, clientNode)
+}
+
+// warmUpNodes runs a throwaway pod on every schedulable node and waits for them all to finish. A fresh node's first
+// pod can need a sandbox retry before it starts, and we'd rather pay for that here than in whichever spec goes first.
+func warmUpNodes() {
+	GinkgoHelper()
+	ctx := context.Background()
+	ns, err := k8sClient.CoreV1().Namespaces().Create(ctx,
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "netpol-e2e-warm-up-"}}, metav1.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred(), "create warm-up namespace")
+	defer func() {
+		_ = k8sClient.CoreV1().Namespaces().Delete(ctx, ns.Name, metav1.DeleteOptions{})
+	}()
+
+	nodes, err := k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	Expect(err).NotTo(HaveOccurred(), "list nodes")
+	var pods []string
+	for i := range nodes.Items {
+		node := &nodes.Items[i]
+		if !isSchedulable(node) {
+			continue
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "warm-up-" + node.Name, Namespace: ns.Name},
+			Spec: corev1.PodSpec{
+				NodeName: node.Name,
+				Containers: []corev1.Container{{
+					Name:    "warm-up",
+					Image:   testImage,
+					Command: []string{"/bin/sh", "-c", "true"},
+				}},
+				RestartPolicy: corev1.RestartPolicyNever,
+			},
+		}
+		_, err := k8sClient.CoreV1().Pods(ns.Name).Create(ctx, pod, metav1.CreateOptions{})
+		Expect(err).NotTo(HaveOccurred(), "create warm-up pod on %s", node.Name)
+		pods = append(pods, pod.Name)
+	}
+
+	start := time.Now()
+	for _, name := range pods {
+		Eventually(func() corev1.PodPhase {
+			pod, err := k8sClient.CoreV1().Pods(ns.Name).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return ""
+			}
+			return pod.Status.Phase
+		}, warmUpTimeout, podPollInterval).Should(Equal(corev1.PodSucceeded), "warm-up pod %s to finish", name)
+	}
+	GinkgoWriter.Printf("[topology] warmed up %d node(s) in %s\n", len(pods), time.Since(start).Round(time.Second))
+}
+
+func isSchedulable(node *corev1.Node) bool {
+	if node.Spec.Unschedulable {
+		return false
+	}
+	for _, taint := range node.Spec.Taints {
+		if taint.Effect == corev1.TaintEffectNoSchedule || taint.Effect == corev1.TaintEffectNoExecute {
+			return false
+		}
+	}
+	return true
+}
 
 // ---------------------------------------------------------------------------
 // Namespace helpers
@@ -118,48 +224,102 @@ func launchServer(ns, name string, labels map[string]string) *corev1.Pod {
 // launchServerOnPort is like launchServer but with a custom port.
 func launchServerOnPort(ns, name string, labels map[string]string, port int) *corev1.Pod {
 	GinkgoHelper()
-	p := &corev1.Pod{
+	return startPod(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
 		Spec: corev1.PodSpec{
+			NodeName: serverNode,
 			Containers: []corev1.Container{{
 				Name:  "server",
 				Image: testImage,
-				Args:  []string{"serve-hostname", "--http=false", "--tcp=true", fmt.Sprintf("--port=%d", port)},
+				Args:  serveHostnameArgs(port),
 			}},
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
-	}
-	created, err := k8sClient.CoreV1().Pods(ns).Create(context.Background(), p, metav1.CreateOptions{})
-	Expect(err).NotTo(HaveOccurred(), "create server pod")
-	DeferCleanup(deletePod, ns, name)
-	return waitForRunning(ns, created.Name)
+	})
 }
 
-// launchClient creates a long-running sleep pod used as the connectivity probe
-// source and waits for it to reach Running phase.
-func launchClient(ns, name string, labels map[string]string) *corev1.Pod {
+// launchNamedPortServer creates a server that exposes serverPort as portName, plus an unnamed listener on altPort so
+// that specs can show a named-port policy opens only the port it names
+func launchNamedPortServer(ns, name string, labels map[string]string, portName string) *corev1.Pod {
 	GinkgoHelper()
-	p := &corev1.Pod{
+	return startPod(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
 		Spec: corev1.PodSpec{
+			NodeName: serverNode,
+			Containers: []corev1.Container{
+				{
+					Name:  "server",
+					Image: testImage,
+					Args:  serveHostnameArgs(serverPort),
+					Ports: []corev1.ContainerPort{{
+						Name:          portName,
+						ContainerPort: serverPort,
+						Protocol:      corev1.ProtocolTCP,
+					}},
+				},
+				{Name: "server-alt", Image: testImage, Args: serveHostnameArgs(altPort)},
+			},
+			RestartPolicy: corev1.RestartPolicyNever,
+		},
+	})
+}
+
+// launchClient creates a connectivity probe source on the client node and waits for it to reach Running. It also
+// listens on serverPort so that specs can probe ingress to a client.
+func launchClient(ns, name string, labels map[string]string) *corev1.Pod {
+	GinkgoHelper()
+	return launchClientOnNode(ns, name, labels, clientNode)
+}
+
+// launchClientOnNode is like launchClient but pins the pod to node, or leaves placement to the scheduler when node
+// is empty
+func launchClientOnNode(ns, name string, labels map[string]string, node string) *corev1.Pod {
+	GinkgoHelper()
+	return startPod(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels},
+		Spec: corev1.PodSpec{
+			NodeName: node,
 			Containers: []corev1.Container{{
-				Name:    "client",
-				Image:   testImage,
-				Command: []string{"/bin/sleep"},
-				Args:    []string{"3600"},
+				Name:  "client",
+				Image: testImage,
+				Args:  serveHostnameArgs(serverPort),
 			}},
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
+	})
+}
+
+// serveHostnameArgs returns the agnhost args for a plain TCP listener on port
+func serveHostnameArgs(port int) []string {
+	return []string{"serve-hostname", "--http=false", "--tcp=true", fmt.Sprintf("--port=%d", port)}
+}
+
+// startPod creates p, registers its cleanup, and waits for it to reach Running
+func startPod(p *corev1.Pod) *corev1.Pod {
+	GinkgoHelper()
+	// agnhost ignores SIGTERM, so without this every namespace deletion waits out the default 30s grace period
+	noGrace := int64(0)
+	p.Spec.TerminationGracePeriodSeconds = &noGrace
+	created, err := k8sClient.CoreV1().Pods(p.Namespace).Create(context.Background(), p, metav1.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred(), "create pod %s/%s", p.Namespace, p.Name)
+	DeferCleanup(deletePod, p.Namespace, p.Name)
+	pod := waitForRunning(p.Namespace, created.Name)
+	// kube-router never programs host-network pods, so there's nothing to wait for with those
+	if defaultDeny && !pod.Spec.HostNetwork {
+		waitUntilAdmitted(pod)
 	}
-	created, err := k8sClient.CoreV1().Pods(ns).Create(context.Background(), p, metav1.CreateOptions{})
-	Expect(err).NotTo(HaveOccurred(), "create client pod")
-	DeferCleanup(deletePod, ns, name)
-	return waitForRunning(ns, created.Name)
+	return pod
 }
 
 // waitForRunning polls until pod phase is Running, then returns the latest pod
 // object (with IPs populated).
 func waitForRunning(ns, name string) *corev1.Pod {
+	GinkgoHelper()
+	return waitForPhase(ns, name, corev1.PodRunning)
+}
+
+// waitForPhase polls until the pod reaches phase, then returns the latest pod object
+func waitForPhase(ns, name string, phase corev1.PodPhase) *corev1.Pod {
 	GinkgoHelper()
 	var pod *corev1.Pod
 	Eventually(func() bool {
@@ -168,8 +328,8 @@ func waitForRunning(ns, name string) *corev1.Pod {
 		if err != nil {
 			return false
 		}
-		return pod.Status.Phase == corev1.PodRunning
-	}, pollTimeout, pollInterval).Should(BeTrue(), "pod %s/%s to reach Running", ns, name)
+		return pod.Status.Phase == phase
+	}, pollTimeout, podPollInterval).Should(BeTrue(), "pod %s/%s to reach %s", ns, name, phase)
 	return pod
 }
 
@@ -193,6 +353,16 @@ func podIPv4(pod *corev1.Pod) string {
 		return pod.Status.PodIP
 	}
 	Fail(fmt.Sprintf("pod %s/%s has no IPv4 address (PodIPs=%v)", pod.Namespace, pod.Name, pod.Status.PodIPs))
+	return ""
+}
+
+// podIPv6 returns the pod's IPv6 address, or "" when the cluster isn't dual-stack
+func podIPv6(pod *corev1.Pod) string {
+	for _, pip := range pod.Status.PodIPs {
+		if strings.Contains(pip.IP, ":") {
+			return pip.IP
+		}
+	}
 	return ""
 }
 
@@ -239,12 +409,14 @@ func deletePolicy(ns, name string) {
 // Connectivity probes
 // ---------------------------------------------------------------------------
 
-// canConnect runs `nc -zw2 <ip> <port>` inside clientPod's container and
-// returns true if the connection succeeds (exit code 0).
+// canConnect runs `nc -zw2 <ip> <port>` inside clientPod's first container and
+// returns true if the connection succeeds (exit code 0). Any launched pod can be
+// the source, since they all use the agnhost image.
 func canConnect(clientPod *corev1.Pod, dstIP string, port int) bool {
 	GinkgoHelper()
 	cmd := []string{"nc", "-zw2", dstIP, strconv.Itoa(port)}
-	stdout, stderr, exitCode, err := execInPod(clientPod.Namespace, clientPod.Name, "client", cmd)
+	container := clientPod.Spec.Containers[0].Name
+	stdout, stderr, exitCode, err := execInPod(clientPod.Namespace, clientPod.Name, container, cmd)
 	connected := err == nil && exitCode == 0
 	GinkgoWriter.Printf("[probe] %s/%s → %s:%d  connected=%v (exit=%d err=%v stdout=%q stderr=%q)\n",
 		clientPod.Namespace, clientPod.Name, dstIP, port, connected, exitCode, err,
@@ -253,32 +425,46 @@ func canConnect(clientPod *corev1.Pod, dstIP string, port int) bool {
 }
 
 // assertConnected polls until a connection from clientPod to dstIP:port
-// succeeds, or fails the spec after pollTimeout.
+// succeeds, or fails the spec after pollTimeout. Because it passes on the first
+// success it can't tell a just-applied policy from no policy at all, so specs
+// run assertBlocked (which waits out the sync) before checking an allow path.
 func assertConnected(clientPod *corev1.Pod, dstIP string, port int) {
 	GinkgoHelper()
 	GinkgoWriter.Printf("[assert] assertConnected: pod %s/%s → %s:%d (timeout=%s)\n",
 		clientPod.Namespace, clientPod.Name, dstIP, port, pollTimeout)
 	Eventually(func() bool {
 		return canConnect(clientPod, dstIP, port)
-	}, pollTimeout, pollInterval).Should(BeTrue(),
+	}, pollTimeout, probeInterval).Should(BeTrue(),
 		"expected %s to be reachable from pod %s/%s",
 		fmt.Sprintf("%s:%d", dstIP, port), clientPod.Namespace, clientPod.Name)
 }
 
-// assertBlocked verifies that traffic from clientPod to dstIP:port is
-// consistently blocked throughout consistentlyDuration. The check is run
-// after a brief initial wait (one poll interval) so that kube-router has had
-// time to program the policy.
+// assertBlocked waits for traffic from clientPod to dstIP:port to be blocked,
+// which covers the time kube-router takes to sync a policy change, and then
+// checks that it stays blocked for stayBlockedDuration.
 func assertBlocked(clientPod *corev1.Pod, dstIP string, port int) {
 	GinkgoHelper()
-	GinkgoWriter.Printf("[assert] assertBlocked: pod %s/%s → %s:%d (for=%s)\n",
-		clientPod.Namespace, clientPod.Name, dstIP, port, consistentlyDuration)
-	// Give kube-router time to sync before sampling.
-	time.Sleep(pollInterval)
+	GinkgoWriter.Printf("[assert] assertBlocked: pod %s/%s → %s:%d (within=%s)\n",
+		clientPod.Namespace, clientPod.Name, dstIP, port, pollTimeout)
+	Eventually(func() bool {
+		return canConnect(clientPod, dstIP, port)
+	}, pollTimeout, probeInterval).Should(BeFalse(),
+		"expected %s to become BLOCKED from pod %s/%s",
+		fmt.Sprintf("%s:%d", dstIP, port), clientPod.Namespace, clientPod.Name)
+	assertStaysBlocked(clientPod, dstIP, port)
+}
+
+// assertStaysBlocked checks that traffic which should already be blocked stays
+// blocked for stayBlockedDuration, without allowing any time for a sync. Use it
+// where an opening at any point would be a bug, such as across a restart.
+func assertStaysBlocked(clientPod *corev1.Pod, dstIP string, port int) {
+	GinkgoHelper()
+	GinkgoWriter.Printf("[assert] assertStaysBlocked: pod %s/%s → %s:%d (for=%s)\n",
+		clientPod.Namespace, clientPod.Name, dstIP, port, stayBlockedDuration)
 	Consistently(func() bool {
 		return canConnect(clientPod, dstIP, port)
-	}, consistentlyDuration, pollInterval).Should(BeFalse(),
-		"expected %s to be BLOCKED from pod %s/%s",
+	}, stayBlockedDuration, probeInterval).Should(BeFalse(),
+		"expected %s to stay BLOCKED from pod %s/%s",
 		fmt.Sprintf("%s:%d", dstIP, port), clientPod.Namespace, clientPod.Name)
 }
 
@@ -346,6 +532,20 @@ func namedTCPPort(name string) netv1.NetworkPolicyPort {
 	proto := corev1.ProtocolTCP
 	p := intstr.FromString(name)
 	return netv1.NetworkPolicyPort{Protocol: &proto, Port: &p}
+}
+
+// allowIngressFromCIDR returns a policy that only lets cidr into the app=server pods in ns
+func allowIngressFromCIDR(ns, policyName, cidr string) *netv1.NetworkPolicy {
+	return &netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: policyName, Namespace: ns},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "server"}},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{{
+				From: []netv1.NetworkPolicyPeer{{IPBlock: &netv1.IPBlock{CIDR: cidr}}},
+			}},
+		},
+	}
 }
 
 // denyAllIngress returns a deny-all-ingress NetworkPolicy for the given
@@ -454,6 +654,72 @@ func kubeRouterPods() []corev1.Pod {
 		metav1.ListOptions{LabelSelector: kubeRouterLabelSelector})
 	Expect(err).NotTo(HaveOccurred(), "list kube-router pods")
 	return pods.Items
+}
+
+// ---------------------------------------------------------------------------
+// Set inspection helpers
+// ---------------------------------------------------------------------------
+
+// kubeRouterSetsHolding returns "<kube-router pod>: <set>" for every set or map, on any node, with ip as an element.
+// We read both `ipset save` and `nft list ruleset` so that it works the same against either backend.
+func kubeRouterSetsHolding(ip string) []string {
+	GinkgoHelper()
+	want, err := netip.ParseAddr(ip)
+	Expect(err).NotTo(HaveOccurred(), "parse IP %q", ip)
+
+	var holders []string
+	for _, kr := range kubeRouterPods() {
+		for _, cmd := range [][]string{{"ipset", "save"}, {"nft", "list", "ruleset"}} {
+			stdout, _, _, execErr := execInPod(kubeSystemNS, kr.Name, "kube-router", cmd)
+			if execErr != nil {
+				continue
+			}
+			for _, set := range setsHolding(stdout, want) {
+				holders = append(holders, kr.Name+": "+set)
+			}
+		}
+	}
+	return holders
+}
+
+// setsHolding walks `ipset save` or `nft list ruleset` output and returns the names of the sets and maps that have
+// want as an element. Addresses in rules don't count.
+func setsHolding(output string, want netip.Addr) []string {
+	isWant := func(tok string) bool {
+		if prefix, err := netip.ParsePrefix(tok); err == nil {
+			return prefix.IsSingleIP() && prefix.Addr() == want
+		}
+		addr, err := netip.ParseAddr(tok)
+		return err == nil && addr == want
+	}
+
+	var sets []string
+	current := ""
+	for line := range strings.SplitSeq(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		// Splitting on commas and braces too pulls bare addresses out of nft element lists and ipset ip,port entries
+		fields := strings.FieldsFunc(trimmed, func(r rune) bool {
+			return unicode.IsSpace(r) || r == ',' || r == '{' || r == '}'
+		})
+		name := ""
+		switch {
+		case len(fields) >= 3 && fields[0] == "add":
+			// ipset save: add <set> <entry> [options]
+			if isWant(fields[2]) {
+				name = fields[1]
+			}
+		case len(fields) >= 2 && (fields[0] == "set" || fields[0] == "map") && strings.HasSuffix(trimmed, "{"):
+			current = fields[1]
+		case trimmed == "}":
+			current = ""
+		case current != "" && slices.ContainsFunc(fields, isWant):
+			name = current
+		}
+		if name != "" && !slices.Contains(sets, name) {
+			sets = append(sets, name)
+		}
+	}
+	return sets
 }
 
 // ---------------------------------------------------------------------------

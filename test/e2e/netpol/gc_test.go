@@ -36,7 +36,7 @@ const (
 	// then GC the churn namespace's chains. Generous because in dual-stack +
 	// default-deny mode every sync rewrites both address families' rulesets.
 	gcConvergeTimeout = 3 * time.Minute
-	gcConvergePoll    = 3 * time.Second
+	gcConvergePoll    = 1 * time.Second
 )
 
 // nsChainCount returns the number of distinct chains, across every kube-router
@@ -92,7 +92,9 @@ func waitNamespaceGone(ctx context.Context, name string) {
 		"namespace %s should be deleted within %s", name, gcConvergeTimeout)
 }
 
-var _ = Describe("nftables chain GC", Ordered, Serial, func() {
+// This doesn't need Serial, since it only counts chains attributed to its own namespace. It's the longest spec, so
+// SpecPriority starts it first rather than letting it become the tail of the run.
+var _ = Describe("nftables chain GC", Ordered, SpecPriority(1), func() {
 	BeforeEach(func() {
 		skipUnlessLong()
 		if backend() != "nftables" {

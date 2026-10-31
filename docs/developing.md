@@ -83,9 +83,9 @@ Currently the privileged tests are the one level you have to remember to run you
 netlink-heavy code (`pkg/routes`, for example), since CI doesn't run them anywhere yet.
 
 If you want to run every host-local level in one shot, `make test-all` chains the unit, privileged, and
-integration targets. The e2e suite is deliberately not part of it, since it stands up a Kind cluster and
-covering its full matrix takes several runs, but `make test-all e2e-netpol` composes the two when you want
-everything.
+integration targets. The e2e suite is deliberately not part of it, since it stands up a Kind cluster, but
+`make e2e-netpol-all` runs the whole e2e matrix (slow lifecycle specs included) on fresh clusters, as many
+at once as your machine has room for. `make prep-release` runs both.
 
 ### Unit Tests
 
@@ -135,13 +135,19 @@ Linux machine (or let the default in-Docker mode handle that for you).
 
 ### NetworkPolicy e2e Tests
 
-The NetworkPolicy e2e suite runs against a local dual-stack Kind cluster and needs `docker` plus `kind` (the
-harness installs `kind` for you if it's missing, which is the only step that needs sudo). A full run builds
-the image, creates the cluster, deploys kube-router, and runs the suite:
+The NetworkPolicy e2e suite runs against a local dual-stack Kind cluster and only needs `docker`. The harness
+downloads its own copy of `kind` into `_output/` instead of using whatever is on your `PATH`, and takes the kind
+version and node image from `KIND_VERSION` and `KIND_NODE_IMAGE` in
+[ci-e2e-netpol.yml](/.github/workflows/ci-e2e-netpol.yml), so local runs and CI always use the same pair. A full
+run builds the image, creates the cluster, deploys kube-router, and runs the suite:
 
 ```bash
 make e2e-netpol E2E_LONG=1 BACKEND=nftables DEFAULT_DENY=true
 ```
+
+The cluster has a control plane and two workers. The suite puts servers on one worker and clients on the other,
+so nearly every spec exercises cross-node traffic (including the pod routes kube-router learns over BGP), while
+a couple of specs repeat with the clients on the server's node so that the same-node bridge path stays covered.
 
 The suite runs specs in parallel via the ginkgo CLI. In order of precedence, the knobs you'll want are:
 
@@ -155,12 +161,31 @@ The suite runs specs in parallel via the ginkgo CLI. In order of precedence, the
 - **`E2E_FOCUS`** / **`E2E_SKIP`** - `NO_DEFAULT_SET` - Regexes passed to ginkgo `--focus` / `--skip` so you
   can run a single spec instead of the whole suite.
 
-Because a given deployment is either default-deny or not, and either iptables or nftables, covering all 48
-specs takes a few runs with different combinations - any spec whose gate isn't met reports as skipped, not
-failed.
+Because a given deployment is either default-deny or not, and either iptables or nftables, covering every spec
+takes four runs with different combinations (any spec whose gate isn't met reports as skipped, not failed).
+`make e2e-netpol-all` does all four for you with `E2E_LONG=1`, building the image once and giving each
+combination its own fresh cluster:
+
+```bash
+make e2e-netpol-all
+```
+
+A suite takes about two and a half minutes, and the matrix runs as many of them at once as your machine has
+room for, writing each one's log to `_output/e2e-matrix/`. It sizes that from the CPUs and memory docker can use
+and from `fs.inotify.max_user_instances`, which is usually the tightest of the three. Each suite's three kind
+nodes hold about 90 inotify instances at peak, and they all count against root's limit, which a lot of distros
+leave at 128. That's room for exactly one suite, so the matrix takes about 10 minutes. If you raise the limit the
+way kind's [known issues](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files)
+suggest, all four can run together:
+
+```bash
+sudo sysctl fs.inotify.max_user_instances=512
+```
+
+Set `E2E_PARALLEL` to override how many suites run at once.
 
 When you're iterating on a failing spec (this works equally well for a human or an AI agent, since nothing
-in the loop needs sudo once `kind` is installed), keep the cluster alive and rerun just the tests:
+in the loop needs sudo), keep the cluster alive and rerun just the tests:
 
 ```bash
 # once, to stand the cluster up and keep it around

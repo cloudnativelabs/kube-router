@@ -23,12 +23,14 @@ permissions:
 
 env:
   # Keep these in sync with ci.yml; update-deps will pin the SHAs.
-  BUILDTIME_BASE: "golang:1.26.10-alpine3.24@sha256:5cb67f19c5e7994dcb80c074f7cfca8aeeada45bbdca035f73df269cefdcce61"
-  RUNTIME_BASE: "alpine:3.24.3@sha256:b3413572228e34bd1c9245f5565e6cd127005655e8a7899aef33d8e83255c9e6"
-  GO_VERSION: "~1.26.10"
+  BUILDTIME_BASE: "golang:1.27.3-alpine3.24@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb"
+  RUNTIME_BASE: "alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a"
+  GO_VERSION: "~1.27.3"
   KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
-  KIND_VERSION: "v0.32.0"
-  KIND_NODE_IMAGE: "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
+  # hack/e2e-netpol.sh reads these two as its defaults, so local runs use the same kind as CI. Bump them as a pair:
+  # the node image should be one that the kind release's notes list.
+  KIND_VERSION: "v0.33.0"
+  KIND_NODE_IMAGE: "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5"
 
 jobs:
   # Executes Integration Tests (require nft binary + kernel nftables support) 
@@ -83,7 +85,7 @@ jobs:
       run: go clean -testcache
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
     # Build the kube-router image from source and load it into the local Docker daemon.
     # The Dockerfile handles compilation in a builder stage, so no pre-built binary is needed.
