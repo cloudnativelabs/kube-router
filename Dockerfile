@@ -40,7 +40,7 @@ RUN export GOARM="${TARGETVARIANT#v}" \
 
 # Runtime stage runs on TARGETPLATFORM (QEMU for non-native), so apk pulls per-arch packages
 # and `iptables-wrapper install` runs target-arch scripts — both fast.
-FROM ${RUNTIME_BASE}
+FROM ${RUNTIME_BASE} AS runtime
 
 RUN apk add --no-cache \
       nftables \

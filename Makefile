@@ -180,6 +180,7 @@ spellcheck: ## Checks for spelling mistakes in code and documentation.
 run: kube-router ## Runs "kube-router --help".
 	./kube-router --help
 
+# We skip the cache for the runtime stage so that apk always pulls current packages, otherwise scans see stale ones
 container: kube-router gobgp multiarch-binverify cni-download ## Builds a Docker container image.
 	@echo Starting kube-router container image build for $(GOARCH) on $(shell go env GOHOSTARCH)
 	@if [ "$(GOARCH)" != "$(shell go env GOHOSTARCH)" ]; then \
@@ -187,7 +188,8 @@ container: kube-router gobgp multiarch-binverify cni-download ## Builds a Docker
 		$(DOCKER_RUN) --rm --privileged $(QEMU_IMAGE) --reset -p yes; \
 	fi
 	$(DOCKER) build -t "$(REGISTRY_DEV):$(subst /,,$(IMG_TAG))" -f Dockerfile --build-arg ARCH="$(DOCKER_ARCH)" \
-		--build-arg BUILDTIME_BASE="$(BUILDTIME_BASE)" --build-arg RUNTIME_BASE="$(RUNTIME_BASE)" .
+		--build-arg BUILDTIME_BASE="$(BUILDTIME_BASE)" --build-arg RUNTIME_BASE="$(RUNTIME_BASE)" \
+		--no-cache-filter runtime .
 	@if [ "$(GIT_BRANCH)" = "master" ]; then \
 		$(DOCKER) tag "$(REGISTRY_DEV):$(IMG_TAG)" "$(REGISTRY_DEV)"; \
 	fi
