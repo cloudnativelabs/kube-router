@@ -71,8 +71,7 @@ func (nrc *NetworkRoutingController) disableSourceDestinationCheck() {
 			},
 		)
 		if err != nil {
-			var apiErr smithy.APIError
-			if errors.As(err, &apiErr) {
+			if apiErr, ok := errors.AsType[smithy.APIError](err); ok {
 				if apiErr.ErrorCode() == "UnauthorizedOperation" {
 					nrc.ec2IamAuthorized.Store(false)
 					klog.Errorf("Node does not have necessary IAM creds to modify instance attribute. So skipping "+
