@@ -22,7 +22,9 @@ This single command will:
    run in sequence against the updated dependency set.
 3. **Run the full NetworkPolicy e2e matrix** - `make e2e-netpol-all` runs the e2e suite, slow
    lifecycle specs included, for every backend and default-deny combination on its own fresh Kind
-   cluster. It needs `docker` and `kind`, and it's by far the slowest step.
+   cluster. It only needs `docker`, and it's the slowest step: about 10 minutes when the suites run
+   one at a time, and closer to 4 when the machine has room to run them together (see
+   [developing.md](docs/developing.md#networkpolicy-e2e-tests)).
 
 After `prep-release` completes, review and commit the changes. Use `git add --patch` (`-p`) to
 stage each dependency update as a separate commit, which keeps the history readable and makes it
