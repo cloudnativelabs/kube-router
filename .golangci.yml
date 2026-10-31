@@ -37,6 +37,11 @@ linters:
       disable:
         - fieldalignment
         - shadow
+    modernize:
+      disable:
+        # We're leaving embedlit off for now because adopting it means rewriting ~387 struct literals (mostly
+        # ObjectMeta in tests). It's worth looking into at some point in the future.
+        - embedlit
   exclusions:
     generated: lax
     presets:

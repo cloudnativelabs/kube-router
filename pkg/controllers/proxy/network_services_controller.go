@@ -992,6 +992,7 @@ func parseSchedFlags(value string) schedFlags {
 
 func shuffle(endPoints []endpointSliceInfo) []endpointSliceInfo {
 	// Important: Do not introduce crypto/rand here as it introduces too much CPU usage on larger clusters
+	//nolint:gosec // this usage does not need to be cryptographically secure
 	rand.Shuffle(len(endPoints), func(i, j int) {
 		endPoints[i], endPoints[j] = endPoints[j], endPoints[i]
 	})
