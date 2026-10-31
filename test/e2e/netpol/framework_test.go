@@ -43,6 +43,11 @@ const (
 	pollInterval = 2 * time.Second
 	// consistentlyDuration is how long Consistently checks for stable blocking.
 	consistentlyDuration = 10 * time.Second
+	// podPollInterval is how often we check a pod's phase, which is cheap and usually changes within a second
+	podPollInterval = 250 * time.Millisecond
+	// warmUpTimeout is longer than pollTimeout because, on a cluster where nobody preloaded the test image, the
+	// warm-up pods are the ones that pull it
+	warmUpTimeout = 3 * time.Minute
 )
 
 // serverNode and clientNode are where launchServer and launchClient put their pods. We keep them apart so that
@@ -73,6 +78,56 @@ func assignNodes() {
 	}
 	serverNode, clientNode = schedulable[0], schedulable[1]
 	GinkgoWriter.Printf("[topology] servers on %s, clients on %s\n", serverNode, clientNode)
+}
+
+// warmUpNodes runs a throwaway pod on every schedulable node and waits for them all to finish. A fresh node's first
+// pod can need a sandbox retry before it starts, and we'd rather pay for that here than in whichever spec goes first.
+func warmUpNodes() {
+	GinkgoHelper()
+	ctx := context.Background()
+	ns, err := k8sClient.CoreV1().Namespaces().Create(ctx,
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "netpol-e2e-warm-up-"}}, metav1.CreateOptions{})
+	Expect(err).NotTo(HaveOccurred(), "create warm-up namespace")
+	defer func() {
+		_ = k8sClient.CoreV1().Namespaces().Delete(ctx, ns.Name, metav1.DeleteOptions{})
+	}()
+
+	nodes, err := k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	Expect(err).NotTo(HaveOccurred(), "list nodes")
+	var pods []string
+	for i := range nodes.Items {
+		node := &nodes.Items[i]
+		if !isSchedulable(node) {
+			continue
+		}
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "warm-up-" + node.Name, Namespace: ns.Name},
+			Spec: corev1.PodSpec{
+				NodeName: node.Name,
+				Containers: []corev1.Container{{
+					Name:    "warm-up",
+					Image:   testImage,
+					Command: []string{"/bin/sh", "-c", "true"},
+				}},
+				RestartPolicy: corev1.RestartPolicyNever,
+			},
+		}
+		_, err := k8sClient.CoreV1().Pods(ns.Name).Create(ctx, pod, metav1.CreateOptions{})
+		Expect(err).NotTo(HaveOccurred(), "create warm-up pod on %s", node.Name)
+		pods = append(pods, pod.Name)
+	}
+
+	start := time.Now()
+	for _, name := range pods {
+		Eventually(func() corev1.PodPhase {
+			pod, err := k8sClient.CoreV1().Pods(ns.Name).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				return ""
+			}
+			return pod.Status.Phase
+		}, warmUpTimeout, podPollInterval).Should(Equal(corev1.PodSucceeded), "warm-up pod %s to finish", name)
+	}
+	GinkgoWriter.Printf("[topology] warmed up %d node(s) in %s\n", len(pods), time.Since(start).Round(time.Second))
 }
 
 func isSchedulable(node *corev1.Node) bool {
