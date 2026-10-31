@@ -315,7 +315,7 @@ func waitForPhase(ns, name string, phase corev1.PodPhase) *corev1.Pod {
 			return false
 		}
 		return pod.Status.Phase == phase
-	}, pollTimeout, pollInterval).Should(BeTrue(), "pod %s/%s to reach %s", ns, name, phase)
+	}, pollTimeout, podPollInterval).Should(BeTrue(), "pod %s/%s to reach %s", ns, name, phase)
 	return pod
 }
 
