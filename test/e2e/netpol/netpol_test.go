@@ -2,7 +2,6 @@ package netpol_e2e
 
 import (
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -735,8 +734,6 @@ var _ = Describe("NetworkPolicy", func() {
 
 			// Re-label the namespace to env=prod.
 			patchNamespaceLabels(clientNS, map[string]string{"env": "prod"})
-			// Allow extra sync time for kube-router to pick up the namespace change.
-			time.Sleep(pollInterval * 2)
 			assertConnected(client, podIPv4(server), serverPort)
 		})
 	})
@@ -925,10 +922,15 @@ var _ = Describe("NetworkPolicy", func() {
 				"/bin/sh", "-c",
 				`curl -sk -m 5 -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://kubernetes.default.svc.cluster.local/api/`,
 			}
-			Eventually(func() bool {
+			apiBlocked := func() bool {
 				stdout, _, exitCode, err := execInPod(ns.Name, client.Name, "client", cmd)
-				return err == nil && exitCode == 0 && strings.Contains(stdout, "APIVersions")
-			}, pollTimeout, pollInterval).Should(BeTrue(), "baseline API server connectivity")
+				// Connection should fail (timeout or connection refused).
+				blocked := err != nil || exitCode != 0 || !strings.Contains(stdout, "APIVersions")
+				GinkgoWriter.Printf("[probe] API server blocked check: exit=%d err=%v blocked=%v\n",
+					exitCode, err, blocked)
+				return blocked
+			}
+			Eventually(apiBlocked, pollTimeout, probeInterval).Should(BeFalse(), "baseline API server connectivity")
 
 			// Apply an egress policy that blocks all traffic except DNS.
 			// This should block access to the API server.
@@ -949,19 +951,11 @@ var _ = Describe("NetworkPolicy", func() {
 				},
 			})
 
-			// Give kube-router time to sync.
-			time.Sleep(pollInterval)
-
-			// Now verify that API server access is blocked.
-			Consistently(func() bool {
-				stdout, _, exitCode, err := execInPod(ns.Name, client.Name, "client", cmd)
-				// Connection should fail (timeout or connection refused).
-				blocked := err != nil || exitCode != 0 || !strings.Contains(stdout, "APIVersions")
-				GinkgoWriter.Printf("[probe] API server blocked check: exit=%d err=%v blocked=%v\n",
-					exitCode, err, blocked)
-				return blocked
-			}, consistentlyDuration, pollInterval).Should(BeTrue(),
-				"API server access should be blocked by egress policy")
+			// Same as assertBlocked: wait out the sync, then make sure the block holds
+			Eventually(apiBlocked, pollTimeout, probeInterval).Should(BeTrue(),
+				"API server access should become blocked by egress policy")
+			Consistently(apiBlocked, stayBlockedDuration, probeInterval).Should(BeTrue(),
+				"API server access should stay blocked by egress policy")
 		})
 	})
 })
