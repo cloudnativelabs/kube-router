@@ -54,6 +54,7 @@ E2E_LONG?=
 E2E_PROCS?=4
 E2E_FOCUS?=
 E2E_SKIP?=
+E2E_PARALLEL?=
 ifeq ($(GOARCH), arm)
 ARCH_TAG_PREFIX=$(GOARCH)
 FILE_ARCH=ARM
@@ -364,8 +365,8 @@ e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires doc
 		E2E_PROCS=$(E2E_PROCS) E2E_FOCUS="$(E2E_FOCUS)" E2E_SKIP="$(E2E_SKIP)" \
 		hack/e2e-netpol.sh all
 
-e2e-netpol-all: ## Run the e2e suite for every BACKEND and DEFAULT_DENY combination with E2E_LONG=1, one fresh Kind cluster each. Takes a while.
-	E2E_LONG=1 E2E_PROCS=$(E2E_PROCS) E2E_FOCUS="$(E2E_FOCUS)" E2E_SKIP="$(E2E_SKIP)" \
+e2e-netpol-all: ## Run the e2e suite for every BACKEND and DEFAULT_DENY combination with E2E_LONG=1, one fresh Kind cluster each, as many at once as the machine has room for. Pass E2E_PARALLEL=N to override.
+	E2E_LONG=1 E2E_PROCS=$(E2E_PROCS) E2E_FOCUS="$(E2E_FOCUS)" E2E_SKIP="$(E2E_SKIP)" E2E_PARALLEL="$(E2E_PARALLEL)" \
 		BUILDTIME_BASE="$(BUILDTIME_BASE)" RUNTIME_BASE="$(RUNTIME_BASE)" \
 		hack/e2e-netpol.sh matrix
 
