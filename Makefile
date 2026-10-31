@@ -359,7 +359,7 @@ help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires docker + kind). Pass BACKEND=nftables, DEFAULT_DENY=true, SKIP_CLEANUP=1, E2E_LONG=1, E2E_PROCS=N, E2E_FOCUS/E2E_SKIP=regex as needed.
+e2e-netpol: ## Run the kube-router NetworkPolicy e2e suite locally (requires docker; kind is downloaded for you). Pass BACKEND=nftables, DEFAULT_DENY=true, SKIP_CLEANUP=1, E2E_LONG=1, E2E_PROCS=N, E2E_FOCUS/E2E_SKIP=regex as needed.
 	BACKEND=$(BACKEND) DEFAULT_DENY=$(DEFAULT_DENY) SKIP_CLEANUP=$(SKIP_CLEANUP) E2E_LONG=$(E2E_LONG) \
 		E2E_PROCS=$(E2E_PROCS) E2E_FOCUS=$(E2E_FOCUS) E2E_SKIP=$(E2E_SKIP) \
 		hack/e2e-netpol.sh all

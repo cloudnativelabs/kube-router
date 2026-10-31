@@ -27,6 +27,8 @@ env:
   RUNTIME_BASE: "alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a"
   GO_VERSION: "~1.27.3"
   KUBE_ROUTER_IMAGE: "kube-router:e2e-test"
+  # hack/e2e-netpol.sh reads these two as its defaults, so local runs use the same kind as CI. Bump them as a pair:
+  # the node image should be one that the kind release's notes list.
   KIND_VERSION: "v0.33.0"
   KIND_NODE_IMAGE: "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5"
 

@@ -135,9 +135,11 @@ Linux machine (or let the default in-Docker mode handle that for you).
 
 ### NetworkPolicy e2e Tests
 
-The NetworkPolicy e2e suite runs against a local dual-stack Kind cluster and needs `docker` plus `kind` (the
-harness installs `kind` for you if it's missing, which is the only step that needs sudo). A full run builds
-the image, creates the cluster, deploys kube-router, and runs the suite:
+The NetworkPolicy e2e suite runs against a local dual-stack Kind cluster and only needs `docker`. The harness
+downloads its own copy of `kind` into `_output/` instead of using whatever is on your `PATH`, and takes the kind
+version and node image from `KIND_VERSION` and `KIND_NODE_IMAGE` in
+[ci-e2e-netpol.yml](/.github/workflows/ci-e2e-netpol.yml), so local runs and CI always use the same pair. A full
+run builds the image, creates the cluster, deploys kube-router, and runs the suite:
 
 ```bash
 make e2e-netpol E2E_LONG=1 BACKEND=nftables DEFAULT_DENY=true
@@ -169,7 +171,7 @@ make e2e-netpol-all
 ```
 
 When you're iterating on a failing spec (this works equally well for a human or an AI agent, since nothing
-in the loop needs sudo once `kind` is installed), keep the cluster alive and rerun just the tests:
+in the loop needs sudo), keep the cluster alive and rerun just the tests:
 
 ```bash
 # once, to stand the cluster up and keep it around
