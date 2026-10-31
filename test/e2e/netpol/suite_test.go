@@ -28,8 +28,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// k8sClient and restConfig are initialised once per suite in BeforeSuite and
-// reused by all specs via the helper functions in framework_test.go.
+// k8sClient and restConfig are initialised once per process in SynchronizedBeforeSuite
+// and reused by all specs via the helper functions in framework_test.go.
 var (
 	k8sClient  *kubernetes.Clientset
 	restConfig *rest.Config
@@ -46,7 +46,20 @@ func TestNetpol(t *testing.T) {
 	RunSpecs(t, "Network Policy E2E Suite")
 }
 
-var _ = BeforeSuite(func() {
+// Process 1 warms up the nodes once, before any process starts on specs
+var _ = SynchronizedBeforeSuite(func() []byte {
+	connect()
+	warmUpNodes()
+	return nil
+}, func(_ []byte) {
+	if k8sClient == nil {
+		connect()
+	}
+	assignNodes()
+})
+
+// connect builds the shared client from KUBECONFIG (or ~/.kube/config), and skips the suite when there's no cluster
+func connect() {
 	suiteStartTime = time.Now()
 
 	kubeconfig := os.Getenv("KUBECONFIG")
@@ -67,8 +80,7 @@ var _ = BeforeSuite(func() {
 	if err != nil {
 		Fail("create Kubernetes client: " + err.Error())
 	}
-	assignNodes()
-})
+}
 
 // ReportAfterEach dumps kube-router logs and nftables state to GinkgoWriter
 // whenever a spec fails, providing context for CI failures.

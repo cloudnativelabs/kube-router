@@ -5,7 +5,8 @@
 #   build-image      Build the kube-router container image via Docker Buildx.
 #   create-cluster   Create a dual-stack Kind cluster (control plane plus two
 #                    workers) with default CNI disabled.
-#   load-image       Load the container image into the Kind cluster.
+#   load-image       Load the kube-router image and the test pod image into the
+#                    Kind cluster.
 #   deploy           Apply a mutated kube-router DaemonSet manifest to the cluster.
 #   wait             Wait for the kube-router DaemonSet to roll out.
 #   dump-initial     Print initial cluster state (nodes / pods / daemonset / logs).
@@ -80,6 +81,9 @@ E2E_PROCS="${E2E_PROCS:-4}"
 E2E_FOCUS="${E2E_FOCUS:-}"
 E2E_SKIP="${E2E_SKIP:-}"
 KUBE_ROUTER_IMAGE="${KUBE_ROUTER_IMAGE:-kube-router:e2e-test}"
+# The image the suite runs its test pods from, declared once in framework_test.go
+TEST_IMAGE="$(sed -n 's/^[[:space:]]*testImage[[:space:]]*=[[:space:]]*"\(.*\)"$/\1/p' \
+    "${REPO_ROOT}/test/e2e/netpol/framework_test.go")"
 KIND_VERSION="${KIND_VERSION:-$(ci_env_default KIND_VERSION)}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-e2e}"
 KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-$(ci_env_default KIND_NODE_IMAGE)}"
@@ -88,6 +92,7 @@ RUNTIME_BASE="${RUNTIME_BASE:-alpine:3}"
 SKIP_CLEANUP="${SKIP_CLEANUP:-0}"
 : "${KIND_VERSION:?is unset and not declared in ${CI_WORKFLOW}}"
 : "${KIND_NODE_IMAGE:?is unset and not declared in ${CI_WORKFLOW}}"
+: "${TEST_IMAGE:?could not be read from test/e2e/netpol/framework_test.go}"
 # We always run this copy rather than whatever kind is on PATH (GitHub's runners ship their own), so that the version
 # we declare is the version we use
 KIND="${REPO_ROOT}/_output/kind/${KIND_VERSION}/kind"
@@ -172,9 +177,20 @@ nodes:
 EOF
 }
 
+# ensure_test_image pulls the test pod image into the local docker cache, once per machine
+ensure_test_image() {
+    if ! docker image inspect "${TEST_IMAGE}" > /dev/null 2>&1; then
+        log "Pulling test image '${TEST_IMAGE}'"
+        docker pull "${TEST_IMAGE}"
+    fi
+}
+
 cmd_load_image() {
-    log "Loading image '${KUBE_ROUTER_IMAGE}' into Kind cluster '${KIND_CLUSTER_NAME}'"
-    run_kind load docker-image "${KUBE_ROUTER_IMAGE}" --name "${KIND_CLUSTER_NAME}"
+    # Loading the test image from the host's cache keeps every node from pulling it from the registry in the middle
+    # of the suite, which once hung for minutes and timed out every spec that was waiting on a pod
+    ensure_test_image
+    log "Loading images '${KUBE_ROUTER_IMAGE}' and '${TEST_IMAGE}' into Kind cluster '${KIND_CLUSTER_NAME}'"
+    run_kind load docker-image "${KUBE_ROUTER_IMAGE}" "${TEST_IMAGE}" --name "${KIND_CLUSTER_NAME}"
 }
 
 cmd_deploy() {
