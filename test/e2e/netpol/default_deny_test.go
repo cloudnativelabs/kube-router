@@ -14,14 +14,20 @@ package netpol_e2e
 
 import (
 	"context"
+	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// localPodsSet holds the pod IPs that kube-router has programmed a firewall chain for, in both backends
+const localPodsSet = "kube-router-local-pods"
 
 // ---------------------------------------------------------------------------
 // Feature-detection helpers
@@ -82,43 +88,56 @@ func defaultDenyRejectRulesPresent() bool {
 // is present on the given kube-router pod (works for both the iptables ipset
 // and the nftables named set).
 func localPodsSetExistsOnNode(krPodName string) bool {
-	const setName = "kube-router-local-pods"
-
 	// iptables path: use the ipset utility.
 	stdout, _, exitCode, execErr := execInPod("kube-system", krPodName, "kube-router",
-		[]string{"ipset", "list", setName})
-	if execErr == nil && exitCode == 0 && strings.Contains(stdout, setName) {
+		[]string{"ipset", "list", localPodsSet})
+	if execErr == nil && exitCode == 0 && strings.Contains(stdout, localPodsSet) {
 		return true
 	}
 
 	// nftables path: the set name appears in "nft list ruleset" output.
 	stdout, _, _, execErr = execInPod("kube-system", krPodName, "kube-router",
 		[]string{"nft", "list", "ruleset"})
-	return execErr == nil && strings.Contains(stdout, setName)
+	return execErr == nil && strings.Contains(stdout, localPodsSet)
 }
 
 // podIPInLocalPodsSet returns true when ip is a member of the
 // kube-router-local-pods set on the given kube-router pod. It supports both
-// the iptables ipset and the nftables named set.
+// the iptables ipset and the nftables named set, for either IP family.
 func podIPInLocalPodsSet(krPodName, ip string) bool {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return false
+	}
+	ipsetName, nftFamily, nftTable := localPodsSet, "ip", "kube-router-filter-ipv4"
+	if addr.Is6() {
+		ipsetName, nftFamily, nftTable = "inet6:"+localPodsSet, "ip6", "kube-router-filter-ipv6"
+	}
+
 	// iptables path: `ipset test` exits 0 iff the element is present.
-	_, _, exitCode, execErr := execInPod("kube-system", krPodName, "kube-router",
-		[]string{"ipset", "test", "kube-router-local-pods", ip})
+	_, _, exitCode, execErr := execInPod(kubeSystemNS, krPodName, "kube-router",
+		[]string{"ipset", "test", ipsetName, ip})
 	if execErr == nil && exitCode == 0 {
 		return true
 	}
 
-	// nftables path: list the IPv4 set directly and grep for the IP.
-	stdout, _, _, execErr := execInPod("kube-system", krPodName, "kube-router",
-		[]string{"nft", "list", "set", "ip", "kube-router-filter-ipv4", "kube-router-local-pods"})
-	if execErr == nil && strings.Contains(stdout, ip) {
-		return true
-	}
+	// nftables path: list the family's set and look for an exact match, so that 10.244.1.5 doesn't match 10.244.1.50
+	stdout, _, _, execErr := execInPod(kubeSystemNS, krPodName, "kube-router",
+		[]string{"nft", "list", "set", nftFamily, nftTable, localPodsSet})
+	return execErr == nil && slices.Contains(setsHolding(stdout, addr), localPodsSet)
+}
 
-	// Also check the IPv6 table for completeness.
-	stdout, _, _, execErr = execInPod("kube-system", krPodName, "kube-router",
-		[]string{"nft", "list", "set", "ip6", "kube-router-filter-ipv6", "kube-router-local-pods"})
-	return execErr == nil && strings.Contains(stdout, ip)
+// waitUntilAdmitted waits for every IP of pod to land in kube-router-local-pods on its node. Under
+// --netpol-default-deny a new pod is rejected until then, and a spec could otherwise mistake that for a policy's block.
+func waitUntilAdmitted(pod *corev1.Pod) {
+	GinkgoHelper()
+	krPod := kubeRouterPodOnNode(pod.Spec.NodeName)
+	Expect(krPod).NotTo(BeEmpty(), "no kube-router pod on node %s", pod.Spec.NodeName)
+	for _, pip := range pod.Status.PodIPs {
+		Eventually(func() bool { return podIPInLocalPodsSet(krPod, pip.IP) }, pollTimeout, podPollInterval).
+			Should(BeTrue(), "pod %s/%s IP %s to be admitted to %s on %s",
+				pod.Namespace, pod.Name, pip.IP, localPodsSet, pod.Spec.NodeName)
+	}
 }
 
 // kubeRouterPodOnNode returns the name of the kube-router pod running on
@@ -143,7 +162,7 @@ func kubeRouterPodOnNode(nodeName string) string {
 
 var _ = Describe("netpol-default-deny", func() {
 	BeforeEach(func() {
-		if !isDefaultDenyEnabled() {
+		if !defaultDeny {
 			Skip("--netpol-default-deny is not enabled in this kube-router deployment; " +
 				"set --netpol-default-deny=true to run these tests")
 		}

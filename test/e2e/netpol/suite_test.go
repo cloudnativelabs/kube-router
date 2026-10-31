@@ -56,6 +56,7 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 		connect()
 	}
 	assignNodes()
+	defaultDeny = isDefaultDenyEnabled()
 })
 
 // connect builds the shared client from KUBECONFIG (or ~/.kube/config), and skips the suite when there's no cluster
