@@ -294,6 +294,9 @@ func serveHostnameArgs(port int) []string {
 // startPod creates p, registers its cleanup, and waits for it to reach Running
 func startPod(p *corev1.Pod) *corev1.Pod {
 	GinkgoHelper()
+	// agnhost ignores SIGTERM, so without this every namespace deletion waits out the default 30s grace period
+	noGrace := int64(0)
+	p.Spec.TerminationGracePeriodSeconds = &noGrace
 	created, err := k8sClient.CoreV1().Pods(p.Namespace).Create(context.Background(), p, metav1.CreateOptions{})
 	Expect(err).NotTo(HaveOccurred(), "create pod %s/%s", p.Namespace, p.Name)
 	DeferCleanup(deletePod, p.Namespace, p.Name)
