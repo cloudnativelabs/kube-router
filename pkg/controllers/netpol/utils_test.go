@@ -103,6 +103,7 @@ func Test_isPodUpdateNetPolRelevant(t *testing.T) {
 }
 
 func Test_isPodFinished(t *testing.T) {
+	fakePod := *fakePod.DeepCopy()
 	t.Run("Failed pod should be detected as finished", func(t *testing.T) {
 		fakePod.Status.Phase = api.PodFailed
 		assert.True(t, isFinished(&fakePod))
@@ -130,6 +131,7 @@ func Test_isPodFinished(t *testing.T) {
 }
 
 func Test_isNetPolActionable(t *testing.T) {
+	fakePod := *fakePod.DeepCopy()
 	t.Run("Normal pod should be actionable", func(t *testing.T) {
 		assert.True(t, isNetPolActionable(&fakePod))
 	})
