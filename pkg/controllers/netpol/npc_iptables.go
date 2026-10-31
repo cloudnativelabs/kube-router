@@ -108,6 +108,9 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() error {
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
 
+	npc.snapshotPods()
+	defer npc.dropPodSnapshot()
+
 	for ipFamily := range npc.ipSetHandlers {
 		// Ensure that we start with clean handlers that don't contain previous save data
 		var err error
