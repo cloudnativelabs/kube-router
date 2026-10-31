@@ -34,7 +34,7 @@ DOCKER_LINT_IMAGE?=golangci/golangci-lint:v2.15.0@sha256:fbfcfd12a6f8d7f1b97b336
 # See Versions: https://hub.docker.com/r/tmknom/markdownlint/tags
 DOCKER_MARKDOWNLINT_IMAGE?=tmknom/markdownlint:0.45.0@sha256:a9509a9d50a82781aa4cd0a48f182da55233071fb19454bc70cecc2782359c3c
 # See Versions: https://hub.docker.com/_/node
-DOCKER_DOCTOC_IMAGE?=node:alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797
+DOCKER_DOCTOC_IMAGE?=node:alpine@sha256:c6ad9e9c1d80f6eb607c26b4b0a132ff7a2344fad1c78ea3baa2a7d4c8de6d94
 # See Versions: https://www.npmjs.com/package/doctoc
 DOCTOC_VERSION=2.5.0
 # See Versions: https://github.com/crate-ci/typos/releases
