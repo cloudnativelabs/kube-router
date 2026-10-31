@@ -37,8 +37,9 @@
 #   E2E_SKIP           regex                 Skip specs matching the regex
 #                                            (ginkgo --skip)
 #   KUBE_ROUTER_IMAGE  image:tag             (default: kube-router:e2e-test)
+#   KIND_VERSION       vX.Y.Z                (default: from ci-e2e-netpol.yml)
 #   KIND_CLUSTER_NAME  name                  (default: e2e)
-#   KIND_NODE_IMAGE    kindest/node:vX.Y.Z   (default: kindest/node:v1.32.2)
+#   KIND_NODE_IMAGE    kindest/node:vX.Y.Z   (default: from ci-e2e-netpol.yml)
 #   BUILDTIME_BASE     docker image ref      (default: golang:alpine)
 #   RUNTIME_BASE       docker image ref      (default: alpine:3)
 #   SKIP_CLEANUP       1                     Skip cluster deletion on exit ("all" and "suite" only)
@@ -51,10 +52,23 @@
 #   E2E_LONG=1 BACKEND=nftables E2E_FOCUS='chain GC' hack/e2e-netpol.sh run-tests
 #   hack/e2e-netpol.sh delete-cluster                                   # when done
 #
-# Nothing in the loop needs sudo as long as kind is already installed and your
-# user can talk to the docker daemon.
+# Nothing in the loop needs sudo as long as your user can talk to the docker
+# daemon, since the script downloads its own copy of kind into _output/.
 
 set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CI_WORKFLOW="${REPO_ROOT}/.github/workflows/ci-e2e-netpol.yml"
+
+# ci_env_default prints a key from the top-level env block of the e2e workflow. We declare kind's version and node
+# image there and nowhere else, so that local runs use the same pair as CI.
+ci_env_default() {
+    awk -v key="$1:" '
+        $0 == "env:" { in_env = 1; next }
+        in_env && /^[^[:space:]]/ { exit }
+        in_env && $1 == key { gsub(/"/, "", $2); print $2; exit }
+    ' "${CI_WORKFLOW}"
+}
 
 # ---------------------------------------------------------------------------
 # Configuration (env with defaults)
@@ -66,17 +80,59 @@ E2E_PROCS="${E2E_PROCS:-4}"
 E2E_FOCUS="${E2E_FOCUS:-}"
 E2E_SKIP="${E2E_SKIP:-}"
 KUBE_ROUTER_IMAGE="${KUBE_ROUTER_IMAGE:-kube-router:e2e-test}"
-KIND_VERSION="${KIND_VERSION:-v0.27.0}"
+KIND_VERSION="${KIND_VERSION:-$(ci_env_default KIND_VERSION)}"
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-e2e}"
-KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-kindest/node:v1.32.2}"
+KIND_NODE_IMAGE="${KIND_NODE_IMAGE:-$(ci_env_default KIND_NODE_IMAGE)}"
 BUILDTIME_BASE="${BUILDTIME_BASE:-golang:alpine}"
 RUNTIME_BASE="${RUNTIME_BASE:-alpine:3}"
 SKIP_CLEANUP="${SKIP_CLEANUP:-0}"
+: "${KIND_VERSION:?is unset and not declared in ${CI_WORKFLOW}}"
+: "${KIND_NODE_IMAGE:?is unset and not declared in ${CI_WORKFLOW}}"
+# We always run this copy rather than whatever kind is on PATH (GitHub's runners ship their own), so that the version
+# we declare is the version we use
+KIND="${REPO_ROOT}/_output/kind/${KIND_VERSION}/kind"
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 log() { echo "=== [e2e-netpol] $* ==="; }
+
+# ensure_kind downloads KIND_VERSION into place if it isn't there yet, checking it against the release's checksum
+ensure_kind() {
+    if [[ ! -x "${KIND}" ]]; then
+        local os arch
+        os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        case "$(uname -m)" in
+            x86_64 | amd64) arch=amd64 ;;
+            aarch64 | arm64) arch=arm64 ;;
+            *) echo "No kind release for architecture $(uname -m)" >&2; return 1 ;;
+        esac
+        local url="https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-${os}-${arch}"
+        log "Installing kind ${KIND_VERSION} into ${KIND#"${REPO_ROOT}/"}"
+        mkdir -p "$(dirname "${KIND}")"
+        # -f so that a bad version fails here, rather than saving the 404 page as the binary
+        curl -fsSLo "${KIND}.download" "${url}"
+        local want got
+        want="$(curl -fsSL "${url}.sha256sum" | awk '{print $1}')"
+        got="$(sha256sum "${KIND}.download" | awk '{print $1}')"
+        if [[ -z "${want}" || "${want}" != "${got}" ]]; then
+            echo "Checksum mismatch for ${url}: want '${want}', got '${got}'" >&2
+            return 1
+        fi
+        chmod +x "${KIND}.download"
+        mv "${KIND}.download" "${KIND}"
+    fi
+    if [[ "$("${KIND}" version)" != "kind ${KIND_VERSION} "* ]]; then
+        echo "${KIND} reports '$("${KIND}" version)', expected kind ${KIND_VERSION}" >&2
+        return 1
+    fi
+}
+
+# run_kind runs our pinned copy of kind, installing it first if this is the first time we need it
+run_kind() {
+    ensure_kind
+    "${KIND}" "$@"
+}
 
 # ---------------------------------------------------------------------------
 # Subcommand implementations
@@ -92,21 +148,13 @@ cmd_build_image() {
 }
 
 cmd_install_kind() {
-    # Skipping the reinstall when kind is already present keeps sudo out of the
-    # loop entirely, which is what lets an AI agent drive this script unattended
-    if command -v kind > /dev/null 2>&1; then
-        log "Kind already installed ($(kind version 2>/dev/null || true)); skipping install"
-        return 0
-    fi
-    log "Installing Kind"
-    curl -sSLo ./kind https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64
-    chmod +x ./kind
-    sudo mv ./kind /usr/local/bin/kind
+    ensure_kind
+    log "Using $("${KIND}" version) from ${KIND#"${REPO_ROOT}/"} with node image ${KIND_NODE_IMAGE}"
 }
 
 cmd_create_cluster() {
     log "Creating Kind cluster '${KIND_CLUSTER_NAME}' (dual-stack, no default CNI, two workers)"
-    kind create cluster \
+    run_kind create cluster \
         --image "${KIND_NODE_IMAGE}" \
         --name "${KIND_CLUSTER_NAME}" \
         --config - <<'EOF'
@@ -126,7 +174,7 @@ EOF
 
 cmd_load_image() {
     log "Loading image '${KUBE_ROUTER_IMAGE}' into Kind cluster '${KIND_CLUSTER_NAME}'"
-    kind load docker-image "${KUBE_ROUTER_IMAGE}" --name "${KIND_CLUSTER_NAME}"
+    run_kind load docker-image "${KUBE_ROUTER_IMAGE}" --name "${KIND_CLUSTER_NAME}"
 }
 
 cmd_deploy() {
@@ -245,7 +293,7 @@ cmd_refresh() {
 
 cmd_delete_cluster() {
     log "Deleting Kind cluster '${KIND_CLUSTER_NAME}'"
-    kind delete cluster --name "${KIND_CLUSTER_NAME}"
+    run_kind delete cluster --name "${KIND_CLUSTER_NAME}"
 }
 
 cmd_suite() {
