@@ -136,7 +136,7 @@ var _ = Describe("controller restart", Ordered, Serial, func() {
 		Expect(rolledOut).To(BeTrue(),
 			"kube-router rollout did not complete within %s", rolloutTimeout)
 
-		// Steady state after the rollout: still blocked.
-		assertBlocked(client, serverIP, serverPort)
+		// Steady state after the rollout: still blocked, with no grace for a sync since any opening is the bug.
+		assertStaysBlocked(client, serverIP, serverPort)
 	})
 })

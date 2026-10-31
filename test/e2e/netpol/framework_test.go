@@ -39,10 +39,13 @@ const (
 	// pollTimeout is the maximum time to wait for a connectivity state to be
 	// reached after a NetworkPolicy is applied or deleted.
 	pollTimeout = 60 * time.Second
-	// pollInterval is the retry cadence used by Eventually/Consistently.
+	// pollInterval is the retry cadence for heavier polls, like reading kube-router's sets on every node.
 	pollInterval = 2 * time.Second
-	// consistentlyDuration is how long Consistently checks for stable blocking.
-	consistentlyDuration = 10 * time.Second
+	// probeInterval is the retry cadence for connectivity probes.
+	probeInterval = 1 * time.Second
+	// stayBlockedDuration is how long a block has to hold once we've seen it, which is how we catch enforcement that
+	// flaps back open.
+	stayBlockedDuration = 4 * time.Second
 	// podPollInterval is how often we check a pod's phase, which is cheap and usually changes within a second
 	podPollInterval = 250 * time.Millisecond
 	// warmUpTimeout is longer than pollTimeout because, on a cluster where nobody preloaded the test image, the
@@ -420,25 +423,37 @@ func assertConnected(clientPod *corev1.Pod, dstIP string, port int) {
 		clientPod.Namespace, clientPod.Name, dstIP, port, pollTimeout)
 	Eventually(func() bool {
 		return canConnect(clientPod, dstIP, port)
-	}, pollTimeout, pollInterval).Should(BeTrue(),
+	}, pollTimeout, probeInterval).Should(BeTrue(),
 		"expected %s to be reachable from pod %s/%s",
 		fmt.Sprintf("%s:%d", dstIP, port), clientPod.Namespace, clientPod.Name)
 }
 
-// assertBlocked verifies that traffic from clientPod to dstIP:port is
-// consistently blocked throughout consistentlyDuration. The check is run
-// after a brief initial wait (one poll interval) so that kube-router has had
-// time to program the policy.
+// assertBlocked waits for traffic from clientPod to dstIP:port to be blocked,
+// which covers the time kube-router takes to sync a policy change, and then
+// checks that it stays blocked for stayBlockedDuration.
 func assertBlocked(clientPod *corev1.Pod, dstIP string, port int) {
 	GinkgoHelper()
-	GinkgoWriter.Printf("[assert] assertBlocked: pod %s/%s → %s:%d (for=%s)\n",
-		clientPod.Namespace, clientPod.Name, dstIP, port, consistentlyDuration)
-	// Give kube-router time to sync before sampling.
-	time.Sleep(pollInterval)
+	GinkgoWriter.Printf("[assert] assertBlocked: pod %s/%s → %s:%d (within=%s)\n",
+		clientPod.Namespace, clientPod.Name, dstIP, port, pollTimeout)
+	Eventually(func() bool {
+		return canConnect(clientPod, dstIP, port)
+	}, pollTimeout, probeInterval).Should(BeFalse(),
+		"expected %s to become BLOCKED from pod %s/%s",
+		fmt.Sprintf("%s:%d", dstIP, port), clientPod.Namespace, clientPod.Name)
+	assertStaysBlocked(clientPod, dstIP, port)
+}
+
+// assertStaysBlocked checks that traffic which should already be blocked stays
+// blocked for stayBlockedDuration, without allowing any time for a sync. Use it
+// where an opening at any point would be a bug, such as across a restart.
+func assertStaysBlocked(clientPod *corev1.Pod, dstIP string, port int) {
+	GinkgoHelper()
+	GinkgoWriter.Printf("[assert] assertStaysBlocked: pod %s/%s → %s:%d (for=%s)\n",
+		clientPod.Namespace, clientPod.Name, dstIP, port, stayBlockedDuration)
 	Consistently(func() bool {
 		return canConnect(clientPod, dstIP, port)
-	}, consistentlyDuration, pollInterval).Should(BeFalse(),
-		"expected %s to be BLOCKED from pod %s/%s",
+	}, stayBlockedDuration, probeInterval).Should(BeFalse(),
+		"expected %s to stay BLOCKED from pod %s/%s",
 		fmt.Sprintf("%s:%d", dstIP, port), clientPod.Namespace, clientPod.Name)
 }
 
