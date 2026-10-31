@@ -57,6 +57,9 @@ const (
 // every spec exercises cross-node traffic, and leave them empty (scheduler's choice) on a single-node cluster.
 var serverNode, clientNode string
 
+// defaultDeny is whether kube-router runs with --netpol-default-deny, checked once per process
+var defaultDeny bool
+
 // ---------------------------------------------------------------------------
 // Topology helpers
 // ---------------------------------------------------------------------------
@@ -300,7 +303,12 @@ func startPod(p *corev1.Pod) *corev1.Pod {
 	created, err := k8sClient.CoreV1().Pods(p.Namespace).Create(context.Background(), p, metav1.CreateOptions{})
 	Expect(err).NotTo(HaveOccurred(), "create pod %s/%s", p.Namespace, p.Name)
 	DeferCleanup(deletePod, p.Namespace, p.Name)
-	return waitForRunning(p.Namespace, created.Name)
+	pod := waitForRunning(p.Namespace, created.Name)
+	// kube-router never programs host-network pods, so there's nothing to wait for with those
+	if defaultDeny && !pod.Spec.HostNetwork {
+		waitUntilAdmitted(pod)
+	}
+	return pod
 }
 
 // waitForRunning polls until pod phase is Running, then returns the latest pod
