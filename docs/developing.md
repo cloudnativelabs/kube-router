@@ -84,8 +84,8 @@ netlink-heavy code (`pkg/routes`, for example), since CI doesn't run them anywhe
 
 If you want to run every host-local level in one shot, `make test-all` chains the unit, privileged, and
 integration targets. The e2e suite is deliberately not part of it, since it stands up a Kind cluster, but
-`make e2e-netpol-all` runs the whole e2e matrix (slow lifecycle specs included) back to back on fresh
-clusters. `make prep-release` runs both, so be sure to budget a while for it.
+`make e2e-netpol-all` runs the whole e2e matrix (slow lifecycle specs included) on fresh clusters, as many
+at once as your machine has room for. `make prep-release` runs both.
 
 ### Unit Tests
 
@@ -169,6 +169,20 @@ combination its own fresh cluster:
 ```bash
 make e2e-netpol-all
 ```
+
+A suite takes about two and a half minutes, and the matrix runs as many of them at once as your machine has
+room for, writing each one's log to `_output/e2e-matrix/`. It sizes that from the CPUs and memory docker can use
+and from `fs.inotify.max_user_instances`, which is usually the tightest of the three. Each suite's three kind
+nodes hold about 90 inotify instances at peak, and they all count against root's limit, which a lot of distros
+leave at 128. That's room for exactly one suite, so the matrix takes about 10 minutes. If you raise the limit the
+way kind's [known issues](https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files)
+suggest, all four can run together:
+
+```bash
+sudo sysctl fs.inotify.max_user_instances=512
+```
+
+Set `E2E_PARALLEL` to override how many suites run at once.
 
 When you're iterating on a failing spec (this works equally well for a human or an AI agent, since nothing
 in the loop needs sudo), keep the cluster alive and rerun just the tests:

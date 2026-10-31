@@ -20,8 +20,10 @@
 #                    already built, with debug dump on error and cleanup on exit.
 #   all              Build the image, then run "suite". The full sequence locally.
 #   matrix           Build the image once, then run "suite" for every BACKEND and
-#                    DEFAULT_DENY combination, same as the CI matrix. SKIP_CLEANUP
-#                    is ignored, since every suite reuses the same cluster name.
+#                    DEFAULT_DENY combination, same as the CI matrix, as many at
+#                    once as the machine has room for. Each suite gets its own
+#                    cluster, and its log lands in _output/e2e-matrix/.
+#                    SKIP_CLEANUP is ignored.
 #
 # Environment variables (all optional):
 #   BACKEND            iptables | nftables   (default: iptables)
@@ -44,6 +46,8 @@
 #   BUILDTIME_BASE     docker image ref      (default: golang:alpine)
 #   RUNTIME_BASE       docker image ref      (default: alpine:3)
 #   SKIP_CLEANUP       1                     Skip cluster deletion on exit ("all" and "suite" only)
+#   E2E_PARALLEL       N                     How many suites "matrix" runs at once
+#                                            (default: what the machine has room for)
 #
 # Iterating on a failing spec (human or AI agent) without rerunning "all":
 #
@@ -96,6 +100,16 @@ SKIP_CLEANUP="${SKIP_CLEANUP:-0}"
 # We always run this copy rather than whatever kind is on PATH (GitHub's runners ship their own), so that the version
 # we declare is the version we use
 KIND="${REPO_ROOT}/_output/kind/${KIND_VERSION}/kind"
+# Where matrix keeps each suite's log, exit status, and kubeconfig
+MATRIX_DIR="${REPO_ROOT}/_output/e2e-matrix"
+# What one suite needs, so that matrix knows how many it can run at once. A suite (three kind nodes plus ginkgo)
+# measured about 1.25 cores on average, 2.6 at p90, 1.4GiB at peak, and 90 inotify instances at peak, so these leave
+# some headroom. The inotify instances all count against root's fs.inotify.max_user_instances, which is often just
+# 128, and an idle desktop's root processes already held about 35 of those.
+SUITE_CPUS=2
+SUITE_MEM_MIB=2048
+SUITE_INOTIFY=100
+HOST_INOTIFY_RESERVE=48
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -341,28 +355,92 @@ cmd_all() {
     cmd_suite
 }
 
+# matrix_parallelism prints how many suites the machine can run at once, from the CPUs and memory docker can use
+matrix_parallelism() {
+    if [[ -n "${E2E_PARALLEL:-}" ]]; then
+        echo "${E2E_PARALLEL}"
+        return
+    fi
+    local cpus mem_bytes avail_kib
+    read -r cpus mem_bytes < <(docker info --format '{{.NCPU}} {{.MemTotal}}')
+    local mem_mib=$((mem_bytes / 1048576))
+    # On Linux, MemAvailable leaves out whatever else the machine is already running
+    if [[ -r /proc/meminfo ]]; then
+        avail_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+        if ((avail_kib / 1024 < mem_mib)); then
+            mem_mib=$((avail_kib / 1024))
+        fi
+    fi
+    local by_cpu=$((cpus / SUITE_CPUS)) by_mem=$((mem_mib / SUITE_MEM_MIB)) by_inotify=4 max_instances=""
+    # Only readable when docker runs on this kernel, which is also the only case where the limit is ours to read
+    if [[ -r /proc/sys/fs/inotify/max_user_instances ]]; then
+        max_instances="$(cat /proc/sys/fs/inotify/max_user_instances)"
+        by_inotify=$(((max_instances - HOST_INOTIFY_RESERVE) / SUITE_INOTIFY))
+    fi
+    log "Room for ${by_cpu} suites by CPU (${cpus}), ${by_mem} by memory ($((mem_mib / 1024))GiB available)," \
+        "and ${by_inotify} by fs.inotify.max_user_instances (${max_instances:-unknown})" >&2
+    if ((by_inotify < 2 && by_cpu >= 2 && by_mem >= 2)); then
+        log "Raising fs.inotify.max_user_instances would let more suites run at once, as kind recommends:" \
+            "sudo sysctl fs.inotify.max_user_instances=512" >&2
+    fi
+    local n=4
+    ((by_cpu < n)) && n=${by_cpu}
+    ((by_mem < n)) && n=${by_mem}
+    ((by_inotify < n)) && n=${by_inotify}
+    ((n < 1)) && n=1
+    echo "${n}"
+}
+
 cmd_matrix() {
     cmd_build_image
     cmd_install_kind
+    ensure_test_image
+    # Every suite compiles ginkgo and the test binary, so we fill the build cache once rather than four times at once
+    go build -o /dev/null github.com/onsi/ginkgo/v2/ginkgo
+    go test -c -o /dev/null ./test/e2e/netpol
 
-    local backend default_deny
-    local failed=()
-    for backend in iptables nftables; do
-        for default_deny in false true; do
-            log "Matrix suite: backend=${backend}, default-deny=${default_deny}"
-            # Each suite runs in its own process so that its errexit and traps behave, and one failure doesn't stop
-            # the rest of the matrix
-            if ! BACKEND="${backend}" DEFAULT_DENY="${default_deny}" SKIP_CLEANUP=0 "${BASH_SOURCE[0]}" suite; then
-                failed+=("backend=${backend},default-deny=${default_deny}")
-            fi
-        done
+    local parallel
+    parallel="$(matrix_parallelism)"
+    log "Running the 4 matrix suites ${parallel} at a time (set E2E_PARALLEL to override)"
+    rm -rf "${MATRIX_DIR}"
+    mkdir -p "${MATRIX_DIR}"
+    # Each suite runs in its own process so that its errexit and traps behave, and one failure doesn't stop the rest
+    printf '%s\n' iptables:false iptables:true nftables:false nftables:true \
+        | xargs -n 1 -P "${parallel}" "${BASH_SOURCE[0]}" matrix-suite || true
+
+    local failed=() name
+    for name in e2e-iptables e2e-iptables-dd e2e-nftables e2e-nftables-dd; do
+        if [[ "$(cat "${MATRIX_DIR}/${name}.rc" 2>/dev/null)" != "0" ]]; then
+            failed+=("${name}")
+            echo "--- ${name} (${MATRIX_DIR#"${REPO_ROOT}/"}/${name}.log) ---"
+            # The ginkgo summary if the specs ran, otherwise whatever failed while standing the cluster up
+            grep -A 20 'Summarizing [0-9]* Failure' "${MATRIX_DIR}/${name}.log" \
+                || grep -m 5 -E '^(ERROR|error):' "${MATRIX_DIR}/${name}.log" \
+                || tail -n 20 "${MATRIX_DIR}/${name}.log"
+        fi
     done
-
     if [[ ${#failed[@]} -gt 0 ]]; then
         log "Failed matrix suites: ${failed[*]}"
         return 1
     fi
     log "All matrix suites passed"
+}
+
+# cmd_matrix_suite runs one matrix suite on its own cluster and kubeconfig, given "<backend>:<default-deny>"
+cmd_matrix_suite() {
+    local backend="${1%%:*}" default_deny="${1#*:}"
+    local name="e2e-${backend}"
+    [[ "${default_deny}" == "true" ]] && name+="-dd"
+    log "Starting ${name} (backend=${backend}, default-deny=${default_deny})"
+
+    local start=${SECONDS} rc=0
+    BACKEND="${backend}" DEFAULT_DENY="${default_deny}" SKIP_CLEANUP=0 KIND_CLUSTER_NAME="${name}" \
+        KUBECONFIG="${MATRIX_DIR}/${name}.kubeconfig" "${BASH_SOURCE[0]}" suite > "${MATRIX_DIR}/${name}.log" 2>&1 \
+        || rc=$?
+    echo "${rc}" > "${MATRIX_DIR}/${name}.rc"
+    local result="Passed"
+    ((rc == 0)) || result="FAILED"
+    log "${result} ${name} in $(((SECONDS - start) / 60))m$(((SECONDS - start) % 60))s"
 }
 
 # ---------------------------------------------------------------------------
@@ -385,6 +463,7 @@ case "${SUBCOMMAND}" in
     suite)          cmd_suite ;;
     all)            cmd_all ;;
     matrix)         cmd_matrix ;;
+    matrix-suite)   cmd_matrix_suite "${2:?matrix-suite needs <backend>:<default-deny>}" ;;
     *)
         echo "Unknown subcommand: ${SUBCOMMAND}" >&2
         echo "Usage: $0 {build-image|install-kind|create-cluster|load-image|deploy|wait|dump-initial|run-tests|refresh|dump-debug|delete-cluster|suite|all|matrix}" >&2
