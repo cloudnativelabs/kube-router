@@ -76,7 +76,7 @@ type onListIndexer struct {
 	onCall func(call int)
 }
 
-func (i *onListIndexer) List() []interface{} {
+func (i *onListIndexer) List() []any {
 	i.calls++
 	if i.onCall != nil {
 		i.onCall(i.calls)
@@ -124,7 +124,7 @@ func TestPodAppearingDuringPolicyBuildIsInAllPoliciesOrNone(t *testing.T) {
 		npc, pods, late := setup(t)
 		pods.onCall = func(call int) {
 			if call == 2 {
-				require.NoError(t, pods.Indexer.Add(late))
+				require.NoError(t, pods.Add(late))
 			}
 		}
 		assert.Equal(t, 1, targetsOfLate(t, npc))
@@ -135,7 +135,7 @@ func TestPodAppearingDuringPolicyBuildIsInAllPoliciesOrNone(t *testing.T) {
 		npc.snapshotPods()
 		defer npc.dropPodSnapshot()
 		pods.onCall = func(call int) { t.Errorf("pod list read live during the sync (call %d)", call) }
-		require.NoError(t, pods.Indexer.Add(late))
+		require.NoError(t, pods.Add(late))
 		assert.Equal(t, 0, targetsOfLate(t, npc))
 		local := map[string]podInfo{}
 		npc.getLocalPods(local, podFwTestNodeIP)
