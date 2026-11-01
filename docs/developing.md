@@ -5,7 +5,7 @@ For basic guidelines around contributing, see the [CONTRIBUTING](/CONTRIBUTING.m
 ## Prerequisites
 
 - Go 1.25+ (see [go.mod](/go.mod) for the exact version)
-- Docker (builds run inside containers by default)
+- Docker (builds run inside containers by default), 28.0 or newer for the NetworkPolicy e2e suite
 - Make
 
 ## Building
@@ -135,11 +135,11 @@ Linux machine (or let the default in-Docker mode handle that for you).
 
 ### NetworkPolicy e2e Tests
 
-The NetworkPolicy e2e suite runs against a local dual-stack Kind cluster and only needs `docker`. The harness
-downloads its own copy of `kind` into `_output/` instead of using whatever is on your `PATH`, and takes the kind
-version and node image from `KIND_VERSION` and `KIND_NODE_IMAGE` in
-[ci-e2e-netpol.yml](/.github/workflows/ci-e2e-netpol.yml), so local runs and CI always use the same pair. A full
-run builds the image, creates the cluster, deploys kube-router, and runs the suite:
+The NetworkPolicy e2e suite runs against a local dual-stack Kind cluster and only needs `docker` 28.0 or newer,
+since it loads images with `docker save --platform`. The harness downloads its own copy of `kind` into `_output/`
+instead of using whatever is on your `PATH`, and takes the kind version and node image from `KIND_VERSION` and
+`KIND_NODE_IMAGE` in [ci-e2e-netpol.yml](/.github/workflows/ci-e2e-netpol.yml), so local runs and CI always use the
+same pair. A full run builds the image, creates the cluster, deploys kube-router, and runs the suite:
 
 ```bash
 make e2e-netpol E2E_LONG=1 BACKEND=nftables DEFAULT_DENY=true
