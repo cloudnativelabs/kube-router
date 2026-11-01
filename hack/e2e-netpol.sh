@@ -133,7 +133,12 @@ ensure_kind() {
         curl -fsSLo "${KIND}.download" "${url}"
         local want got
         want="$(curl -fsSL "${url}.sha256sum" | awk '{print $1}')"
-        got="$(sha256sum "${KIND}.download" | awk '{print $1}')"
+        # Some macOS releases ship shasum but not sha256sum
+        if command -v sha256sum >/dev/null 2>&1; then
+            got="$(sha256sum "${KIND}.download" | awk '{print $1}')"
+        else
+            got="$(shasum -a 256 "${KIND}.download" | awk '{print $1}')"
+        fi
         if [[ -z "${want}" || "${want}" != "${got}" ]]; then
             echo "Checksum mismatch for ${url}: want '${want}', got '${got}'" >&2
             return 1
