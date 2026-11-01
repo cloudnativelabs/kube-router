@@ -144,7 +144,7 @@ jobs:
     # Generate an SPDX-JSON SBOM for the RC image using Syft. The SBOM is written to a local
     # file for the attestation step and also uploaded as a workflow artifact.
     - name: Generate SBOM for container image - New Tag (Release Candidate)
-      uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
+      uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
       id: sbom_rc
       if: ${{ startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-rc') }}
       with:
@@ -202,7 +202,7 @@ jobs:
 
     # Generate an SPDX-JSON SBOM for the production release image using Syft.
     - name: Generate SBOM for container image - New Tag
-      uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
+      uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
       id: sbom_release
       if: ${{ startsWith(github.ref, 'refs/tags/v') && ! contains(github.ref, '-rc') }}
       with:
