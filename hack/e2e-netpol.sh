@@ -19,11 +19,11 @@
 #   suite            Run create-cluster through run-tests against an image that's
 #                    already built, with debug dump on error and cleanup on exit.
 #   all              Build the image, then run "suite". The full sequence locally.
-#   matrix           Build the image once, then run "suite" for every BACKEND and
-#                    DEFAULT_DENY combination, same as the CI matrix, as many at
-#                    once as the machine has room for. Each suite gets its own
-#                    cluster, and its log lands in _output/e2e-matrix/.
-#                    SKIP_CLEANUP is ignored.
+#   matrix           Build the image and test binary once, then run "suite" for
+#                    every BACKEND and DEFAULT_DENY combination, same as the CI
+#                    matrix, as many at once as the machine has room for. Each
+#                    suite gets its own cluster, and its log lands in
+#                    _output/e2e-matrix/. SKIP_CLEANUP is ignored.
 #
 # Environment variables (all optional):
 #   BACKEND            iptables | nftables   (default: iptables)
@@ -39,6 +39,9 @@
 #                                            (ginkgo --focus)
 #   E2E_SKIP           regex                 Skip specs matching the regex
 #                                            (ginkgo --skip)
+#   E2E_TEST_BINARY    path/to/netpol.test   Run this prebuilt test binary rather
+#                                            than compiling the suite ("matrix"
+#                                            sets it for every suite)
 #   KUBE_ROUTER_IMAGE  image:tag             (default: kube-router:e2e-test)
 #   KIND_VERSION       vX.Y.Z                (default: from ci-e2e-netpol.yml)
 #   KIND_CLUSTER_NAME  name                  (default: e2e)
@@ -100,8 +103,9 @@ SKIP_CLEANUP="${SKIP_CLEANUP:-0}"
 # We always run this copy rather than whatever kind is on PATH (GitHub's runners ship their own), so that the version
 # we declare is the version we use
 KIND="${REPO_ROOT}/_output/kind/${KIND_VERSION}/kind"
-# Where matrix keeps each suite's log, exit status, and kubeconfig
+# Where matrix keeps each suite's log, exit status, and kubeconfig, plus the test binary they all share
 MATRIX_DIR="${REPO_ROOT}/_output/e2e-matrix"
+MATRIX_TEST_BINARY="${MATRIX_DIR}/netpol.test"
 # What one suite needs, so that matrix knows how many it can run at once. A suite (three kind nodes plus ginkgo)
 # measured about 1.25 cores on average, 2.6 at p90, 1.4GiB at peak, and 90 inotify instances at peak, so these leave
 # some headroom. The inotify instances all count against root's fs.inotify.max_user_instances, which is often just
@@ -289,7 +293,7 @@ cmd_run_tests() {
         ginkgo_args+=(--skip="${E2E_SKIP}")
     fi
     E2E=1 E2E_LONG="${E2E_LONG}" BACKEND="${BACKEND}" \
-        go run github.com/onsi/ginkgo/v2/ginkgo "${ginkgo_args[@]}" ./test/e2e/netpol
+        go run github.com/onsi/ginkgo/v2/ginkgo "${ginkgo_args[@]}" "${E2E_TEST_BINARY:-./test/e2e/netpol}"
 }
 
 cmd_dump_debug() {
@@ -408,15 +412,18 @@ cmd_matrix() {
     cmd_build_image
     cmd_install_kind
     ensure_test_image
-    # Every suite compiles ginkgo and the test binary, so we fill the build cache once rather than four times at once
+    rm -rf "${MATRIX_DIR}"
+    mkdir -p "${MATRIX_DIR}"
+    # Every suite compiles the ginkgo CLI through `go run`, so we fill the build cache once rather than four times
     go build -o /dev/null github.com/onsi/ginkgo/v2/ginkgo
-    go test -c -o /dev/null ./test/e2e/netpol
+    # Ginkgo deletes a test binary it compiled once its run ends, and every suite would compile to the same path, so
+    # we build one ourselves for all of them to share (ginkgo leaves a prebuilt binary alone) and remove it at the end
+    go test -c -o "${MATRIX_TEST_BINARY}" ./test/e2e/netpol
+    trap 'rm -f "${MATRIX_TEST_BINARY}"' EXIT
 
     local parallel
     parallel="$(matrix_parallelism)"
     log "Running the 4 matrix suites ${parallel} at a time (set E2E_PARALLEL to override)"
-    rm -rf "${MATRIX_DIR}"
-    mkdir -p "${MATRIX_DIR}"
     # Each suite runs in its own process so that its errexit and traps behave, and one failure doesn't stop the rest
     printf '%s\n' iptables:false iptables:true nftables:false nftables:true \
         | xargs -n 1 -P "${parallel}" "${BASH_SOURCE[0]}" matrix-suite || true
@@ -448,8 +455,8 @@ cmd_matrix_suite() {
 
     local start=${SECONDS} rc=0
     BACKEND="${backend}" DEFAULT_DENY="${default_deny}" SKIP_CLEANUP=0 KIND_CLUSTER_NAME="${name}" \
-        KUBECONFIG="${MATRIX_DIR}/${name}.kubeconfig" "${BASH_SOURCE[0]}" suite > "${MATRIX_DIR}/${name}.log" 2>&1 \
-        || rc=$?
+        KUBECONFIG="${MATRIX_DIR}/${name}.kubeconfig" E2E_TEST_BINARY="${MATRIX_TEST_BINARY}" \
+        "${BASH_SOURCE[0]}" suite > "${MATRIX_DIR}/${name}.log" 2>&1 || rc=$?
     echo "${rc}" > "${MATRIX_DIR}/${name}.rc"
     local result="Passed"
     ((rc == 0)) || result="FAILED"
