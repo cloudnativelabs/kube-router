@@ -203,8 +203,16 @@ cmd_load_image() {
     # Loading the test image from the host's cache keeps every node from pulling it from the registry in the middle
     # of the suite, which once hung for minutes and timed out every spec that was waiting on a pod
     ensure_test_image
-    log "Loading images '${KUBE_ROUTER_IMAGE}' and '${TEST_IMAGE}' into Kind cluster '${KIND_CLUSTER_NAME}'"
-    run_kind load docker-image "${KUBE_ROUTER_IMAGE}" "${TEST_IMAGE}" --name "${KIND_CLUSTER_NAME}"
+    # We save the archive ourselves rather than use "kind load docker-image", because kind saves every platform of a
+    # multi-arch image and imports them all, while docker's containerd image store only pulls the content for ours
+    local platform archive="${REPO_ROOT}/_output/e2e-images/${KIND_CLUSTER_NAME}.tar"
+    platform="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')"
+    log "Loading images '${KUBE_ROUTER_IMAGE}' and '${TEST_IMAGE}' (${platform})" \
+        "into Kind cluster '${KIND_CLUSTER_NAME}'"
+    mkdir -p "$(dirname "${archive}")"
+    docker save --platform "${platform}" -o "${archive}" "${KUBE_ROUTER_IMAGE}" "${TEST_IMAGE}"
+    run_kind load image-archive "${archive}" --name "${KIND_CLUSTER_NAME}"
+    rm -f "${archive}"
 }
 
 cmd_deploy() {
