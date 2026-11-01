@@ -357,7 +357,9 @@ else
 endif
 	@echo Finished dependency update dry-run.
 
-prep-release: update-deps doctoc lint test-all kube-router container scan e2e-netpol-all ## Prepares for a release: updates deps, runs every test level and the full e2e matrix, builds, and scans for CVEs.
+# update-deps rewrites the image pins in this Makefile, so we run the checks in a fresh make that reads the new ones
+prep-release: update-deps ## Prepares for a release: updates deps, runs every test level and the full e2e matrix, builds, and scans for CVEs.
+	$(MAKE) doctoc lint test-all kube-router container scan e2e-netpol-all
 	@echo Finished prep-release. Review any dependency changes and commit before tagging.
 
 # http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
