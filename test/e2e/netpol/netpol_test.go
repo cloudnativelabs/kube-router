@@ -861,12 +861,14 @@ var _ = Describe("NetworkPolicy", func() {
 				},
 			})
 
-			// Every IP has to show up in a set first, otherwise the empty result below would prove nothing
+			// Every IP has to show up in one of the policy's sets first, otherwise the empty result below would prove
+			// nothing. Default-deny's kube-router-local-pods is the only other set that holds pod IPs, so we skip it.
 			var ips []string
 			for _, pip := range allowedClient.Status.PodIPs {
 				ips = append(ips, pip.IP)
 				Eventually(func() ([]string, error) { return kubeRouterSetsHolding(pip.IP) }, pollTimeout, pollInterval).
-					ShouldNot(BeEmpty(), "client IP %s should be in a kube-router set while the pod runs", pip.IP)
+					Should(ContainElement(Not(HaveSuffix(localPodsSet))),
+						"client IP %s should be in one of the policy's sets while the pod runs", pip.IP)
 			}
 			assertConnected(allowedClient, podIPv4(server), serverPort)
 
