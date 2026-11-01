@@ -660,18 +660,43 @@ func kubeRouterPods() []corev1.Pod {
 // Set inspection helpers
 // ---------------------------------------------------------------------------
 
+// setReads are the commands that dump kube-router's sets, keyed by the backend that programs them
+var setReads = []struct {
+	backend string
+	cmd     []string
+}{
+	{backend: "iptables", cmd: []string{"ipset", "save"}},
+	{backend: "nftables", cmd: []string{"nft", "list", "ruleset"}},
+}
+
 // kubeRouterSetsHolding returns "<kube-router pod>: <set>" for every set or map, on any node, with ip as an element.
-// We read both `ipset save` and `nft list ruleset` so that it works the same against either backend.
-func kubeRouterSetsHolding(ip string) []string {
+// We read both backends' sets so that a leak shows up wherever it lands, but a failed read of the active backend is
+// an error so that a poll waiting for an empty result retries it instead of mistaking it for cleanup.
+func kubeRouterSetsHolding(ip string) ([]string, error) {
 	GinkgoHelper()
 	want, err := netip.ParseAddr(ip)
 	Expect(err).NotTo(HaveOccurred(), "parse IP %q", ip)
 
+	pods, err := k8sClient.CoreV1().Pods(kubeSystemNS).List(context.Background(),
+		metav1.ListOptions{LabelSelector: kubeRouterLabelSelector})
+	if err != nil {
+		return nil, fmt.Errorf("list kube-router pods: %w", err)
+	}
+	if len(pods.Items) == 0 {
+		return nil, errors.New("no kube-router pods to read sets from")
+	}
+
 	var holders []string
-	for _, kr := range kubeRouterPods() {
-		for _, cmd := range [][]string{{"ipset", "save"}, {"nft", "list", "ruleset"}} {
-			stdout, _, _, execErr := execInPod(kubeSystemNS, kr.Name, "kube-router", cmd)
+	for _, kr := range pods.Items {
+		for _, read := range setReads {
+			stdout, stderr, exitCode, execErr := execInPod(kubeSystemNS, kr.Name, "kube-router", read.cmd)
+			if execErr == nil && exitCode != 0 {
+				execErr = fmt.Errorf("exit code %d: %s", exitCode, strings.TrimSpace(stderr))
+			}
 			if execErr != nil {
+				if read.backend == backend() {
+					return nil, fmt.Errorf("%s on %s: %w", strings.Join(read.cmd, " "), kr.Name, execErr)
+				}
 				continue
 			}
 			for _, set := range setsHolding(stdout, want) {
@@ -679,7 +704,7 @@ func kubeRouterSetsHolding(ip string) []string {
 			}
 		}
 	}
-	return holders
+	return holders, nil
 }
 
 // setsHolding walks `ipset save` or `nft list ruleset` output and returns the names of the sets and maps that have

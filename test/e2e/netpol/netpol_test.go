@@ -865,7 +865,7 @@ var _ = Describe("NetworkPolicy", func() {
 			var ips []string
 			for _, pip := range allowedClient.Status.PodIPs {
 				ips = append(ips, pip.IP)
-				Eventually(func() []string { return kubeRouterSetsHolding(pip.IP) }, pollTimeout, pollInterval).
+				Eventually(func() ([]string, error) { return kubeRouterSetsHolding(pip.IP) }, pollTimeout, pollInterval).
 					ShouldNot(BeEmpty(), "client IP %s should be in a kube-router set while the pod runs", pip.IP)
 			}
 			assertConnected(allowedClient, podIPv4(server), serverPort)
@@ -877,7 +877,7 @@ var _ = Describe("NetworkPolicy", func() {
 			waitForPhase(ns.Name, allowedClient.Name, corev1.PodSucceeded)
 
 			for _, ip := range ips {
-				Eventually(func() []string { return kubeRouterSetsHolding(ip) }, pollTimeout, pollInterval).
+				Eventually(func() ([]string, error) { return kubeRouterSetsHolding(ip) }, pollTimeout, pollInterval).
 					Should(BeEmpty(), "completed pod's IP %s should leave every kube-router set", ip)
 			}
 		})
