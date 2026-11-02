@@ -132,6 +132,7 @@ type NetworkRoutingController struct {
 	nodePeerRouters                []string
 	enableCNI                      bool
 	bfdConfig                      bgp.BFDConfig
+	ibgpBFDConfig                  bgp.BFDConfig
 	bgpFullMeshMode                bool
 	bgpEnableInternal              bool
 	bgpGracefulRestart             bool
@@ -1446,6 +1447,21 @@ func NewNetworkRoutingController(clientset kubernetes.Interface,
 		DetectionMultiplier:   new(kubeRouterConfig.BFDDetectionMultiplier),
 		DesiredMinTxInterval:  new(kubeRouterConfig.BFDDesiredMinTxInterval),
 		RequiredMinRxInterval: new(kubeRouterConfig.BFDRequiredMinRxInterval),
+	}
+
+	nrc.ibgpBFDConfig = bgp.BFDConfig{
+		Enabled:               kubeRouterConfig.EnableiBGPBFD,
+		DetectionMultiplier:   new(kubeRouterConfig.BFDDetectionMultiplier),
+		DesiredMinTxInterval:  new(kubeRouterConfig.BFDDesiredMinTxInterval),
+		RequiredMinRxInterval: new(kubeRouterConfig.BFDRequiredMinRxInterval),
+	}
+	if nrc.ibgpBFDConfig.Enabled {
+		if err := nrc.ibgpBFDConfig.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid BFD config for iBGP peers: %w", err)
+		}
+		if nrc.bgpGracefulRestart {
+			klog.Warning("--enable-ibgp-bfd is set with --bgp-graceful-restart, BFD will bypass graceful restart")
+		}
 	}
 
 	// Convert ints to uint32s

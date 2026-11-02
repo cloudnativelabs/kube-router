@@ -44,6 +44,7 @@ type KubeRouterConfig struct {
 	EnableBFD                      bool
 	EnableCNI                      bool
 	EnableiBGP                     bool
+	EnableiBGPBFD                  bool
 	EnableIPv4                     bool
 	EnableIPv6                     bool
 	EnableOverlay                  bool
@@ -175,6 +176,8 @@ func (s *KubeRouterConfig) AddFlags(fs *pflag.FlagSet) {
 		"Enable CNI plugin. Disable if you want to use kube-router features alongside another CNI plugin.")
 	fs.BoolVar(&s.EnableiBGP, "enable-ibgp", true,
 		"Enables peering with nodes with the same ASN, if disabled will only peer with external BGP peers")
+	fs.BoolVar(&s.EnableiBGPBFD, "enable-ibgp-bfd", false,
+		"Enable BFD on BGP sessions between cluster nodes. Requires --enable-ibgp.")
 	fs.BoolVar(&s.EnableIPv4, "enable-ipv4", true, "Enables IPv4 support")
 	fs.BoolVar(&s.EnableIPv6, "enable-ipv6", false, "Enables IPv6 support")
 	fs.BoolVar(&s.EnableOverlay, "enable-overlay", true,
