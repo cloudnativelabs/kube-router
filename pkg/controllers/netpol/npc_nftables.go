@@ -187,6 +187,9 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() error {
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
 
+	npc.snapshotPods()
+	defer npc.dropPodSnapshot()
+
 	start := time.Now()
 	syncVersion := strconv.FormatInt(start.UnixNano(), syncVersionBase)
 	defer func() {
