@@ -64,6 +64,32 @@ func Test_isPodUpdateNetPolRelevant(t *testing.T) {
 		newPod.Status.HostIP = "10.0.0.2"
 		assert.True(t, isPodUpdateNetPolRelevant(&fakePod, newPod))
 	})
+	t.Run("Pending to Running with the IP already set should NOT be detected as NetworkPolicy relevant", func(t *testing.T) {
+		oldPod := fakePod.DeepCopy()
+		oldPod.Status.Phase = api.PodPending
+		assert.False(t, isPodUpdateNetPolRelevant(oldPod, &fakePod))
+	})
+	t.Run("Pod IP assignment should be detected as NetworkPolicy relevant", func(t *testing.T) {
+		oldPod := fakePod.DeepCopy()
+		oldPod.Status.Phase = api.PodPending
+		oldPod.Status.PodIP, oldPod.Status.PodIPs = "", nil
+		assert.True(t, isPodUpdateNetPolRelevant(oldPod, &fakePod))
+	})
+	t.Run("Host IP assignment to a pod without an IP should NOT be detected as NetworkPolicy relevant", func(t *testing.T) {
+		oldPod := fakePod.DeepCopy()
+		oldPod.Status.Phase = api.PodPending
+		oldPod.Status.PodIP, oldPod.Status.PodIPs, oldPod.Status.HostIP = "", nil, ""
+		newPod := oldPod.DeepCopy()
+		newPod.Status.HostIP = "10.0.0.1"
+		assert.False(t, isPodUpdateNetPolRelevant(oldPod, newPod))
+	})
+	t.Run("Label change of a finished pod should NOT be detected as NetworkPolicy relevant", func(t *testing.T) {
+		oldPod := fakePod.DeepCopy()
+		oldPod.Status.Phase = api.PodSucceeded
+		newPod := oldPod.DeepCopy()
+		newPod.Labels = map[string]string{"bar": "foo"}
+		assert.False(t, isPodUpdateNetPolRelevant(oldPod, newPod))
+	})
 	t.Run("Pod Image change should NOT be detected as NetworkPolicy relevant", func(t *testing.T) {
 		newPod := fakePod.DeepCopy()
 		newPod.Spec.Containers[0].Image = "k8s.gcr.io/otherimage"
@@ -77,6 +103,7 @@ func Test_isPodUpdateNetPolRelevant(t *testing.T) {
 }
 
 func Test_isPodFinished(t *testing.T) {
+	fakePod := *fakePod.DeepCopy()
 	t.Run("Failed pod should be detected as finished", func(t *testing.T) {
 		fakePod.Status.Phase = api.PodFailed
 		assert.True(t, isFinished(&fakePod))
@@ -104,6 +131,7 @@ func Test_isPodFinished(t *testing.T) {
 }
 
 func Test_isNetPolActionable(t *testing.T) {
+	fakePod := *fakePod.DeepCopy()
 	t.Run("Normal pod should be actionable", func(t *testing.T) {
 		assert.True(t, isNetPolActionable(&fakePod))
 	})

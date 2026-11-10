@@ -16,16 +16,21 @@ const (
 	PodCompleted api.PodPhase = "Completed"
 )
 
-// isPodUpdateNetPolRelevant checks the attributes that we care about for building NetworkPolicies on the host and if it
-// finds a relevant change, it returns true otherwise it returns false. The things we care about for NetworkPolicies:
-//  1. Is the phase of the pod changing? (matters for catching completed, succeeded, or failed jobs)
-//  2. Is the pod IP changing? (changes how the network policy is applied to the host)
-//  3. Is the pod's host IP changing? (should be caught in the above, with the CNI kube-router runs with but we check
-//     this as well for sanity)
-//  4. Is a pod's label changing? (potentially changes which NetworkPolicies select this pod)
+// isPodUpdateNetPolRelevant reports whether a pod update can change what a full sync programs. A sync only reads pods
+// through isNetPolActionable (targets, peers and local pods alike), so a pod that is not actionable before and after
+// the update contributes nothing, and an update that leaves an actionable pod's IPs, host IP and labels alone changes
+// nothing either (a Pending to Running transition, a status refresh, a finalizer removal). What matters:
+//  1. Does the pod enter or leave the actionable state (IP assigned, finished, ...)?
+//  2. For a pod that stays actionable: did its IPs or host IP change (changes how policy is applied on the host)?
+//  3. For a pod that stays actionable: did its labels change (potentially changes which NetworkPolicies select it)?
 func isPodUpdateNetPolRelevant(oldPod, newPod *api.Pod) bool {
-	return newPod.Status.Phase != oldPod.Status.Phase ||
-		newPod.Status.PodIP != oldPod.Status.PodIP ||
+	if isNetPolActionable(oldPod) != isNetPolActionable(newPod) {
+		return true
+	}
+	if !isNetPolActionable(newPod) {
+		return false
+	}
+	return newPod.Status.PodIP != oldPod.Status.PodIP ||
 		!reflect.DeepEqual(newPod.Status.PodIPs, oldPod.Status.PodIPs) ||
 		newPod.Status.HostIP != oldPod.Status.HostIP ||
 		!reflect.DeepEqual(newPod.Labels, oldPod.Labels)

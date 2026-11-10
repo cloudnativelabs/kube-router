@@ -237,3 +237,120 @@ func BenchmarkSyncPodFirewallChains(b *testing.B) {
 		npc.syncPodFirewallChains(nil, "bench")
 	}
 }
+
+func TestPodEventsRequestFullSyncOnlyWhenRelevant(t *testing.T) {
+	actionable := func() *api.Pod {
+		pod := fakePod.DeepCopy()
+		pod.Status.Phase = api.PodRunning
+		return pod
+	}
+	pendingWithoutIP := func() *api.Pod {
+		pod := actionable()
+		pod.Status.Phase = api.PodPending
+		pod.Status.PodIP, pod.Status.PodIPs, pod.Status.HostIP = "", nil, ""
+		return pod
+	}
+	finished := func() *api.Pod {
+		pod := actionable()
+		pod.Status.Phase = api.PodSucceeded
+		return pod
+	}
+
+	tests := []struct {
+		name string
+		// run delivers one event to the handler
+		run  func(h cache.ResourceEventHandler)
+		want bool
+	}{
+		{
+			name: "HostIP set at scheduling, pod still has no IP",
+			run: func(h cache.ResourceEventHandler) {
+				updated := pendingWithoutIP()
+				updated.Status.HostIP = "10.0.0.1"
+				h.OnUpdate(pendingWithoutIP(), updated)
+			},
+			want: false,
+		},
+		{
+			name: "Pending to Running with the IP already set",
+			run: func(h cache.ResourceEventHandler) {
+				pending := actionable()
+				pending.Status.Phase = api.PodPending
+				h.OnUpdate(pending, actionable())
+			},
+			want: false,
+		},
+		{
+			name: "label change of a finished pod",
+			run: func(h cache.ResourceEventHandler) {
+				updated := finished()
+				updated.Labels = map[string]string{"bar": "foo"}
+				h.OnUpdate(finished(), updated)
+			},
+			want: false,
+		},
+		{
+			name: "delete of a finished pod",
+			run:  func(h cache.ResourceEventHandler) { h.OnDelete(finished()) },
+			want: false,
+		},
+		{
+			name: "delete of a pod that never got an IP, as a tombstone",
+			run: func(h cache.ResourceEventHandler) {
+				h.OnDelete(cache.DeletedFinalStateUnknown{Key: "testnamespace/testpod", Obj: pendingWithoutIP()})
+			},
+			want: false,
+		},
+		{
+			name: "pod IP assigned",
+			run: func(h cache.ResourceEventHandler) {
+				h.OnUpdate(pendingWithoutIP(), actionable())
+			},
+			want: true,
+		},
+		{
+			name: "pod finished",
+			run:  func(h cache.ResourceEventHandler) { h.OnUpdate(actionable(), finished()) },
+			want: true,
+		},
+		{
+			name: "label change of an actionable pod",
+			run: func(h cache.ResourceEventHandler) {
+				updated := actionable()
+				updated.Labels = map[string]string{"bar": "foo"}
+				h.OnUpdate(actionable(), updated)
+			},
+			want: true,
+		},
+		{
+			name: "IP change of an actionable pod",
+			run: func(h cache.ResourceEventHandler) {
+				updated := actionable()
+				updated.Status.PodIP = "172.16.0.2"
+				updated.Status.PodIPs = []api.PodIP{{IP: "172.16.0.2"}}
+				h.OnUpdate(actionable(), updated)
+			},
+			want: true,
+		},
+		{
+			name: "delete of an actionable pod",
+			run:  func(h cache.ResourceEventHandler) { h.OnDelete(actionable()) },
+			want: true,
+		},
+		{
+			name: "delete of an actionable pod, as a tombstone",
+			run: func(h cache.ResourceEventHandler) {
+				h.OnDelete(cache.DeletedFinalStateUnknown{Key: "testnamespace/testpod", Obj: actionable()})
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			npc := &NetworkPolicyControllerBase{fullSyncRequestChan: make(chan struct{}, 1)}
+			tt.run(npc.newPodEventHandler())
+			assert.Equal(t, tt.want, len(npc.fullSyncRequestChan) == 1)
+		})
+	}
+}
