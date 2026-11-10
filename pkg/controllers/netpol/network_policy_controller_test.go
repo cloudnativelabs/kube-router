@@ -12,6 +12,7 @@ import (
 
 	"github.com/coreos/go-iptables/iptables"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/knftables"
 
 	netv1 "k8s.io/api/networking/v1"
@@ -164,15 +165,22 @@ func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInfo
 		{name: "Baa", labels: labels.Set{"app": "a", "component": "a"}, namespace: "nsB", ips: []v1.PodIP{{IP: "2.2.2.2"}}},
 		{name: "Bab", labels: labels.Set{"app": "a", "component": "b"}, namespace: "nsB", ips: []v1.PodIP{{IP: "2.3.2.2"}}},
 		{name: "Ca", labels: labels.Set{"app": "a"}, namespace: "nsC", ips: []v1.PodIP{{IP: "3.1"}}},
+		{name: "Eea", labels: labels.Set{"app": "e", "component": "a"}, namespace: "nsE", ips: []v1.PodIP{{IP: "4.1.1.1"}}},
+	}
+	remotePods := []podInfo{
+		{name: "Eeb", labels: labels.Set{"app": "e", "component": "b"}, namespace: "nsE", ips: []v1.PodIP{{IP: "4.2.1.1"}}},
+		{name: "Ff", labels: labels.Set{"app": "f"}, namespace: "nsF", ips: []v1.PodIP{{IP: "5.1.1.1"}}},
 	}
 	namespaces := []tNamespaceMeta{
 		{name: "nsA", labels: labels.Set{"name": "a", "team": "a"}},
 		{name: "nsB", labels: labels.Set{"name": "b", "team": "a"}},
 		{name: "nsC", labels: labels.Set{"name": "c"}},
 		{name: "nsD", labels: labels.Set{"name": "d"}},
+		{name: "nsE", labels: labels.Set{"name": "e"}},
+		{name: "nsF", labels: labels.Set{"name": "f"}},
 	}
 	ipsUsed := make(map[string]bool)
-	for _, pod := range pods {
+	addPod := func(pod podInfo, hostIP string) {
 		podNamespaceMap.addPod(pod)
 		// TODO: test multiple IPs
 		ipaddr := pod.ips[0].IP
@@ -183,7 +191,13 @@ func tCreateFakePods(t *testing.T, podInformer cache.SharedIndexInformer, nsInfo
 		ipsUsed[ipaddr] = true
 		tAddToInformerStore(t, podInformer,
 			&v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pod.name, Labels: pod.labels, Namespace: pod.namespace},
-				Status: v1.PodStatus{PodIP: ipaddr}})
+				Status: v1.PodStatus{PodIP: ipaddr, HostIP: hostIP}})
+	}
+	for _, pod := range pods {
+		addPod(pod, "10.10.10.10")
+	}
+	for _, remotePod := range remotePods {
+		addPod(remotePod, "20.20.20.20")
 	}
 	for _, ns := range namespaces {
 		tAddToInformerStore(t, nsInformer, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns.name, Labels: ns.labels}})
@@ -335,6 +349,11 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 			targetPods: nil,
 		},
 		{
+			name:       "Namespace with remote pods only",
+			netpol:     tNetpol{name: "nsF", podSelector: metav1.LabelSelector{}, namespace: "nsF"},
+			targetPods: nil,
+		},
+		{
 			name:       "All pods in nsA",
 			netpol:     tNetpol{name: "nsA", podSelector: metav1.LabelSelector{}, namespace: "nsA"},
 			targetPods: tNewPodNamespaceMapFromTC(map[string]string{"nsA": "Aa,Aaa,Aab,Aac"}),
@@ -414,6 +433,50 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 			},
 			targetPods: tNewPodNamespaceMapFromTC(map[string]string{"nsA": "Aab,Aac"}),
 		},
+		{
+			name: "Remote pods only",
+			netpol: tNetpol{name: "nsE-component-b", namespace: "nsE",
+				podSelector: metav1.LabelSelector{MatchLabels: map[string]string{"component": "b"}},
+			},
+			targetPods: nil,
+		},
+		{
+			name: "Remote and local pods",
+			netpol: tNetpol{name: "nsE-app-e", namespace: "nsE",
+				podSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "e"}},
+			},
+			targetPods: tNewPodNamespaceMapFromTC(map[string]string{"nsE": "Eea,Eeb"}),
+		},
+		{
+			name: "All pods app=a in nsA using matchLabels ingress allow from remote pods in nsF",
+			netpol: tNetpol{name: "nsA-app-a-from-nsF", namespace: "nsA",
+				podSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "a"}},
+				ingress: []netv1.NetworkPolicyIngressRule{
+					{
+						From: []netv1.NetworkPolicyPeer{{
+							NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"name": "f"}},
+						}},
+					},
+				},
+			},
+			targetPods:   tNewPodNamespaceMapFromTC(map[string]string{"nsA": "Aa,Aaa,Aab,Aac"}),
+			inSourcePods: tNewPodNamespaceMapFromTC(map[string]string{"nsF": "Ff"}),
+		},
+		{
+			name: "All pods app=a in nsA using matchLabels egress allow to remote pods in nsF",
+			netpol: tNetpol{name: "nsA-app-a-to-nsF", namespace: "nsA",
+				podSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "a"}},
+				egress: []netv1.NetworkPolicyEgressRule{
+					{
+						To: []netv1.NetworkPolicyPeer{{
+							NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"name": "f"}},
+						}},
+					},
+				},
+			},
+			targetPods:  tNewPodNamespaceMapFromTC(map[string]string{"nsA": "Aa,Aaa,Aab,Aac"}),
+			outDestPods: tNewPodNamespaceMapFromTC(map[string]string{"nsF": "Ff"}),
+		},
 	}
 
 	client := fake.NewSimpleClientset(&v1.NodeList{Items: []v1.Node{*newFakeNode([]string{"10.10.10.10"})}})
@@ -434,12 +497,17 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			np := test.netpol.findNetpolMatch(&netpols)
-			testForMissingOrUnwanted(t, "targetPods", tListOfPodsFromTargets(np.targetPods), test.targetPods)
-			for _, ingress := range np.ingressRules {
-				testForMissingOrUnwanted(t, "ingress srcPods", ingress.srcPods, test.inSourcePods)
-			}
-			for _, egress := range np.egressRules {
-				testForMissingOrUnwanted(t, "egress dstPods", egress.dstPods, test.outDestPods)
+			if test.targetPods == nil {
+				require.Nil(t, np, "NOT skipped a policy that selects no local pod and should be skipped")
+			} else {
+				require.NotNil(t, np, "Skipped a policy that selects local pods and should not be skipped: %v", test.targetPods)
+				testForMissingOrUnwanted(t, "targetPods", tListOfPodsFromTargets(np.targetPods), test.targetPods)
+				for _, ingress := range np.ingressRules {
+					testForMissingOrUnwanted(t, "ingress srcPods", ingress.srcPods, test.inSourcePods)
+				}
+				for _, egress := range np.egressRules {
+					testForMissingOrUnwanted(t, "egress dstPods", egress.dstPods, test.outDestPods)
+				}
 			}
 		})
 	}
@@ -702,7 +770,7 @@ func tCreateEgressAnyNamedPortPolicy(t *testing.T, podInformer, npInformer cache
 			ObjectMeta: metav1.ObjectMeta{Name: p.name, Namespace: p.namespace,
 				Labels: map[string]string{"app": p.name}},
 			Spec:   v1.PodSpec{Containers: []v1.Container{{Name: "c", Ports: p.ports}}},
-			Status: v1.PodStatus{PodIP: p.ip, PodIPs: []v1.PodIP{{IP: p.ip}}},
+			Status: v1.PodStatus{PodIP: p.ip, PodIPs: []v1.PodIP{{IP: p.ip}}, HostIP: "10.10.10.10"},
 		})
 	}
 	metricsPort := intstr.FromString("metrics")
@@ -1557,24 +1625,24 @@ func TestBuildNetworkPoliciesInfoEdgeCases(t *testing.T) {
 	tAddToInformerStore(t, podInformer, &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "hostnet-pod", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
 		Spec:       v1.PodSpec{HostNetwork: true},
-		Status:     v1.PodStatus{PodIP: "10.0.100.1"},
+		Status:     v1.PodStatus{PodIP: "10.0.100.1", HostIP: "10.10.10.10"},
 	})
 	tAddToInformerStore(t, podInformer, &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "completed-pod", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
-		Status:     v1.PodStatus{PodIP: "1.9.9.1", Phase: v1.PodSucceeded},
+		Status:     v1.PodStatus{PodIP: "1.9.9.1", Phase: v1.PodSucceeded, HostIP: "10.10.10.10"},
 	})
 	tAddToInformerStore(t, podInformer, &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "failed-pod", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
-		Status:     v1.PodStatus{PodIP: "1.9.9.2", Phase: v1.PodFailed},
+		Status:     v1.PodStatus{PodIP: "1.9.9.2", Phase: v1.PodFailed, HostIP: "10.10.10.10"},
 	})
 	tAddToInformerStore(t, podInformer, &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "no-ip-pod", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
-		Status:     v1.PodStatus{PodIP: ""},
+		Status:     v1.PodStatus{PodIP: "", HostIP: "10.10.10.10"},
 	})
 	// One normal running pod selected by app=z so we know the selector itself is correct.
 	tAddToInformerStore(t, podInformer, &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "running-z", Namespace: "nsA", Labels: map[string]string{"app": "z"}},
-		Status:     v1.PodStatus{PodIP: "1.9.9.3", Phase: v1.PodRunning, PodIPs: []v1.PodIP{{IP: "1.9.9.3"}}},
+		Status:     v1.PodStatus{PodIP: "1.9.9.3", Phase: v1.PodRunning, PodIPs: []v1.PodIP{{IP: "1.9.9.3"}}, HostIP: "10.10.10.10"},
 	})
 
 	proto := v1.ProtocolTCP

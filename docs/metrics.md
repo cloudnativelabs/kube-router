@@ -155,9 +155,9 @@ than not showing up at all. See [Health checking](/docs/health.md) for why, and 
 * controller_policy_ipset_v6_restore_time
   Time it took for controller to restore IPv6 ipsets
 * controller_policy_chains
-  Active policy chains (gauge)
+  Policy chains active on this node (gauge)
 * controller_policy_ipsets
-  Active policy ipsets (gauge)
+  Policy ipsets active on this node (gauge)
 
 ### --run-service-proxy=true
 

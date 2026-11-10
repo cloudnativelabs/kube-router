@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudnativelabs/kube-router/v2/pkg/utils"
 	api "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	klog "k8s.io/klog/v2"
 	netutils "k8s.io/utils/net"
 )
@@ -174,4 +175,13 @@ func ipSetName(setName string, ipFamily api.IPFamily) string {
 	} else {
 		return utils.IPSetName(setName, true)
 	}
+}
+
+func matchesAnyPod(pods []podInfo, selector labels.Selector) bool {
+	for _, pod := range pods {
+		if selector.Matches(labels.Set(pod.labels)) {
+			return true
+		}
+	}
+	return false
 }
