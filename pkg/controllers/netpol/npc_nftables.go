@@ -1060,13 +1060,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 	warnedFailedChains := make(map[string]bool)
 	var errs []error
 
-	// Collect all local pods across all node IPs.
-	allLocalPods := make(map[string]podInfo)
-	for _, nodeIP := range npc.krNode.GetNodeIPAddrs() {
-		npc.getLocalPods(allLocalPods, nodeIP.String(), pods)
-	}
-
-	for _, pod := range allLocalPods {
+	for _, pod := range npc.getLocalPods(pods) {
 		podFwChainName := podFirewallChainName(pod.namespace, pod.name, version)
 		activePodFwChains[podFwChainName] = true
 

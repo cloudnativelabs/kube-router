@@ -55,6 +55,7 @@ create KUBE-DST-U4DLEXNSHY7OCX7K hash:ip family inet hashsize 1024 maxelem 65536
 add KUBE-DST-U4DLEXNSHY7OCX7K 10.242.0.5 timeout 0
 add KUBE-DST-U4DLEXNSHY7OCX7K 10.242.1.4 timeout 0
 create KUBE-SRC-2MDFLQKW4NAY2DE6 hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x889d1bd6
+add KUBE-SRC-2MDFLQKW4NAY2DE6 10.242.0.6 timeout 0
 create inet6:KUBE-DST-7VXAG5HFSU7QXTW4 hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x9748e0b2
 add inet6:KUBE-DST-7VXAG5HFSU7QXTW4 2001:db8:42:1001::4 timeout 0
 add inet6:KUBE-DST-7VXAG5HFSU7QXTW4 2001:db8:42:1000::5 timeout 0
@@ -64,3 +65,8 @@ create inet6:KUBE-DST-YMAXCJ5K363CBW7X hash:ip family inet6 hashsize 1024 maxele
 add inet6:KUBE-DST-YMAXCJ5K363CBW7X 2001:db8:42:1001::4 timeout 0
 add inet6:KUBE-DST-YMAXCJ5K363CBW7X 2001:db8:42:1000::5 timeout 0
 create inet6:KUBE-SRC-NWEHERZ5RBOV25RC hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x0d5ebe1d
+add inet6:KUBE-SRC-NWEHERZ5RBOV25RC 2001:db8:42:1000::6 timeout 0
+create KUBE-SRC-BJVODIYFVFOUDMRO hash:ip family inet hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0xc409a8ff
+add KUBE-SRC-BJVODIYFVFOUDMRO 10.242.0.6 timeout 0
+create inet6:KUBE-SRC-7FH7K6BXL432EMRA hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 0 bucketsize 12 initval 0x0876f8d1
+add inet6:KUBE-SRC-7FH7K6BXL432EMRA 2001:db8:42:1000::6 timeout 0
