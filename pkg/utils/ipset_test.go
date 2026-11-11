@@ -51,26 +51,26 @@ func Test_buildIPSetRestore(t *testing.T) {
 				}},
 				setIncludeNames: nil,
 			},
-			want: "create TMP-7NOTZDOMLXBX6DAJ hash:ip yolo things 12345\n" +
-				"flush TMP-7NOTZDOMLXBX6DAJ\n" +
-				"add TMP-7NOTZDOMLXBX6DAJ 1.2.3.4\n" +
+			want: "create TMP-J2KRKU5L2IZLPXQA hash:ip yolo things 12345\n" +
+				"flush TMP-J2KRKU5L2IZLPXQA\n" +
+				"add TMP-J2KRKU5L2IZLPXQA 1.2.3.4\n" +
 				"create foo hash:ip yolo things 12345\n" +
-				"swap TMP-7NOTZDOMLXBX6DAJ foo\n" +
-				"flush TMP-7NOTZDOMLXBX6DAJ\n" +
-				"create TMP-XD7BSSQZELS7TP35 hash:ip lol\n" +
-				"flush TMP-XD7BSSQZELS7TP35\n" +
-				"add TMP-XD7BSSQZELS7TP35 4.4.4.4\n" +
-				"add TMP-XD7BSSQZELS7TP35 8.8.8.8\n" +
+				"swap TMP-J2KRKU5L2IZLPXQA foo\n" +
+				"flush TMP-J2KRKU5L2IZLPXQA\n" +
+				"create TMP-YR5LTIIM4INICO6B hash:ip lol\n" +
+				"flush TMP-YR5LTIIM4INICO6B\n" +
+				"add TMP-YR5LTIIM4INICO6B 4.4.4.4\n" +
+				"add TMP-YR5LTIIM4INICO6B 8.8.8.8\n" +
 				"create google-dns-servers hash:ip lol\n" +
-				"swap TMP-XD7BSSQZELS7TP35 google-dns-servers\n" +
-				"flush TMP-XD7BSSQZELS7TP35\n" +
-				"add TMP-XD7BSSQZELS7TP35 5.5.5.5\n" +
-				"add TMP-XD7BSSQZELS7TP35 6.6.6.6\n" +
+				"swap TMP-YR5LTIIM4INICO6B google-dns-servers\n" +
+				"flush TMP-YR5LTIIM4INICO6B\n" +
+				"add TMP-YR5LTIIM4INICO6B 5.5.5.5\n" +
+				"add TMP-YR5LTIIM4INICO6B 6.6.6.6\n" +
 				"create google-dns-servers hash:ip lol\n" +
-				"swap TMP-XD7BSSQZELS7TP35 google-dns-servers\n" +
-				"flush TMP-XD7BSSQZELS7TP35\n" +
-				"destroy TMP-7NOTZDOMLXBX6DAJ\n" +
-				"destroy TMP-XD7BSSQZELS7TP35\n",
+				"swap TMP-YR5LTIIM4INICO6B google-dns-servers\n" +
+				"flush TMP-YR5LTIIM4INICO6B\n" +
+				"destroy TMP-J2KRKU5L2IZLPXQA\n" +
+				"destroy TMP-YR5LTIIM4INICO6B\n",
 		},
 	}
 	for _, tt := range tests {
