@@ -506,12 +506,20 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 	_, isIPv4Enabled := npc.filterTableRules[api.IPv4Protocol]
 	_, isIPv6Enabled := npc.filterTableRules[api.IPv6Protocol]
 
+	localPodsByNamespace := make(map[string][]podInfo)
+	for _, localPod := range npc.getLocalPods() {
+		localPodsByNamespace[localPod.namespace] = append(localPodsByNamespace[localPod.namespace], localPod)
+	}
+
 	for _, policyObj := range npc.npLister.List() {
 
 		policy, ok := policyObj.(*networking.NetworkPolicy)
 		podSelector, _ := v1.LabelSelectorAsSelector(&policy.Spec.PodSelector)
 		if !ok {
 			return nil, errors.New("failed to convert")
+		}
+		if !matchesAnyPod(localPodsByNamespace[policy.Namespace], podSelector) {
+			continue
 		}
 		newPolicy := networkPolicyInfo{
 			name:        policy.Name,
