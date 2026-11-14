@@ -1074,10 +1074,9 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 		//     protocol: TCP
 		//
 		for _, ep := range es.Endpoints {
-			// We should only look at serving or ready if we want to be compliant with the upstream expectantions of a
-			// network provider
-			if (ep.Conditions.Serving == nil || !*ep.Conditions.Serving) &&
-				(ep.Conditions.Ready == nil || !*ep.Conditions.Ready) {
+			// We should only look at endpoints that are ready or serving if we want to be compliant with the
+			// upstream expectations of a network provider
+			if !utils.EndpointIsReadyOrServing(ep) {
 				klog.V(2).Infof("Endpoint (with addresses %s) does not have a ready or serving status, skipping...",
 					ep.Addresses)
 				continue
@@ -1117,8 +1116,8 @@ func (nsc *NetworkServicesController) buildEndpointSliceInfo() endpointSliceInfo
 						isLocal:       isLocal,
 						isIPv4:        isIPv4,
 						isIPv6:        isIPv6,
-						isReady:       ep.Conditions.Ready != nil && *ep.Conditions.Ready,
-						isServing:     ep.Conditions.Serving != nil && *ep.Conditions.Serving,
+						isReady:       ep.Conditions.Ready == nil || *ep.Conditions.Ready,
+						isServing:     ep.Conditions.Serving == nil || *ep.Conditions.Serving,
 						isTerminating: ep.Conditions.Terminating != nil && *ep.Conditions.Terminating,
 					})
 				}
