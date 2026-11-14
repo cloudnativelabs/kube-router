@@ -1871,6 +1871,124 @@ func Test_nodeHasEndpointsForService(t *testing.T) {
 	}
 }
 
+func Test_nodeHasEndpointsForService_readiness(t *testing.T) {
+	localEndpoint := func(address string, ready, serving bool) discoveryv1.Endpoint {
+		return discoveryv1.Endpoint{
+			Addresses: []string{address},
+			NodeName:  new("node-1"),
+			Conditions: discoveryv1.EndpointConditions{
+				Ready:   new(ready),
+				Serving: new(serving),
+			},
+		}
+	}
+
+	testcases := []struct {
+		name      string
+		endpoints []discoveryv1.Endpoint
+		want      bool
+	}{
+		{
+			name:      "local endpoint that is neither ready nor serving is not counted",
+			endpoints: []discoveryv1.Endpoint{localEndpoint("172.20.1.1", false, false)},
+			want:      false,
+		},
+		{
+			name:      "local ready endpoint is counted",
+			endpoints: []discoveryv1.Endpoint{localEndpoint("172.20.1.1", true, true)},
+			want:      true,
+		},
+		{
+			name:      "local serving terminating endpoint is counted",
+			endpoints: []discoveryv1.Endpoint{localEndpoint("172.20.1.1", false, true)},
+			want:      true,
+		},
+		{
+			name: "not-ready local endpoint is not counted when only a remote endpoint is ready",
+			endpoints: []discoveryv1.Endpoint{
+				localEndpoint("172.20.1.1", false, false),
+				{
+					Addresses:  []string{"172.20.2.1"},
+					NodeName:   new("node-2"),
+					Conditions: discoveryv1.EndpointConditions{Ready: new(true), Serving: new(true)},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "ready local endpoint is counted alongside a not-ready local endpoint",
+			endpoints: []discoveryv1.Endpoint{
+				localEndpoint("172.20.1.1", false, false),
+				localEndpoint("172.20.1.2", true, true),
+			},
+			want: true,
+		},
+		{
+			name: "nil conditions are interpreted as ready per the EndpointSlice API",
+			endpoints: []discoveryv1.Endpoint{
+				{
+					Addresses: []string{"172.20.1.1"},
+					NodeName:  new("node-1"),
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			nrc := &NetworkRoutingController{
+				krNode: &utils.LocalKRNode{
+					KRNode: utils.KRNode{
+						NodeName:      "node-1",
+						PrimaryIP:     net.ParseIP(testNodeIPv4),
+						NodeIPv4Addrs: map[v1core.NodeAddressType][]net.IP{v1core.NodeInternalIP: {net.ParseIP(testNodeIPv4)}},
+					},
+				},
+			}
+			clientset := fake.NewSimpleClientset()
+			startInformersForRoutes(t, nrc, clientset)
+
+			svc := &v1core.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc-1",
+					Namespace: "default",
+				},
+				Spec: v1core.ServiceSpec{
+					Type:      ClusterIPST,
+					ClusterIP: "10.0.0.1",
+				},
+			}
+			epSlice := &discoveryv1.EndpointSlice{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "svc-1",
+					Namespace: "default",
+					Labels:    map[string]string{discoveryv1.LabelServiceName: "svc-1"},
+				},
+				Endpoints: testcase.endpoints,
+			}
+
+			_, err := clientset.DiscoveryV1().EndpointSlices("default").Create(context.Background(), epSlice,
+				metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("failed to create existing endpoint slice: %v", err)
+			}
+
+			_, err = clientset.CoreV1().Services("default").Create(context.Background(), svc, metav1.CreateOptions{})
+			if err != nil {
+				t.Fatalf("failed to create existing service: %v", err)
+			}
+
+			waitForListerWithTimeout(nrc.svcLister, time.Second*10, t)
+			waitForListerWithTimeout(nrc.epSliceLister, time.Second*10, t)
+
+			got, err := nrc.nodeHasEndpointsForService(svc)
+			require.NoError(t, err)
+			assert.Equal(t, testcase.want, got)
+		})
+	}
+}
+
 func Test_advertisePodRoute(t *testing.T) {
 	testcases := []struct {
 		name        string
