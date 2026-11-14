@@ -583,14 +583,8 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 		}
 
 		for _, endpoint := range es.Endpoints {
-			// EndpointSlices include endpoints that are not ready to receive traffic, unlike the legacy
-			// Endpoints API which placed them in a separate NotReadyAddresses field. Only count endpoints
-			// that the service proxy would actually use (ready or serving); otherwise we advertise VIPs
-			// from nodes that have no usable local backend. Per the EndpointSlice API, a nil condition
-			// is interpreted as true.
-			ready := endpoint.Conditions.Ready == nil || *endpoint.Conditions.Ready
-			serving := endpoint.Conditions.Serving == nil || *endpoint.Conditions.Serving
-			if !ready && !serving {
+			// EndpointSlices include not-ready endpoints; skip those the service proxy would not use.
+			if !utils.EndpointIsReadyOrServing(endpoint) {
 				continue
 			}
 
