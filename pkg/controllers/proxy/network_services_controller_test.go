@@ -2270,8 +2270,18 @@ func newTestEndpointSlice(name, svcName string, ready bool, portNames []string, 
 		es.Endpoints = append(es.Endpoints, discoveryv1.Endpoint{
 			Addresses:  []string{ip},
 			NodeName:   new("node-1"),
-			Conditions: discoveryv1.EndpointConditions{Ready: new(ready)},
+			Conditions: discoveryv1.EndpointConditions{Ready: new(ready), Serving: new(ready)},
 		})
+	}
+	return es
+}
+
+// newTestEndpointSliceWithConditions returns a slice for service svcName whose endpoints use the given conditions.
+func newTestEndpointSliceWithConditions(name, svcName string, conditions discoveryv1.EndpointConditions,
+	portNames []string, ips ...string) *discoveryv1.EndpointSlice {
+	es := newTestEndpointSlice(name, svcName, true, portNames, ips...)
+	for i := range es.Endpoints {
+		es.Endpoints[i].Conditions = conditions
 	}
 	return es
 }
@@ -2355,6 +2365,30 @@ func TestBuildEndpointSliceInfo(t *testing.T) {
 			epSlices: []*discoveryv1.EndpointSlice{
 				newTestEndpointSlice("a", "svc", true, http, "10.1.0.1"),
 				newTestEndpointSlice("b", "svc", false, http, "10.1.0.2"),
+			},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
+		},
+		{
+			name: "terminating endpoints that are still serving are included",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSliceWithConditions("a", "svc",
+					discoveryv1.EndpointConditions{Ready: new(false), Serving: new(true), Terminating: new(true)},
+					http, "10.1.0.1"),
+			},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
+		},
+		{
+			name: "endpoints with nil conditions are included",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSliceWithConditions("a", "svc", discoveryv1.EndpointConditions{}, http, "10.1.0.1"),
+			},
+			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
+		},
+		{
+			name: "nil serving is interpreted as true",
+			epSlices: []*discoveryv1.EndpointSlice{
+				newTestEndpointSliceWithConditions("a", "svc", discoveryv1.EndpointConditions{Ready: new(false)},
+					http, "10.1.0.1"),
 			},
 			want: map[string][]string{"default/svc/http": {"10.1.0.1"}},
 		},
