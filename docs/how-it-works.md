@@ -87,6 +87,13 @@ configuration to reflect desired state of ingress firewall for the pods.
 
 Blog: [Kubernetes pod networking and beyond with BGP](https://cloudnativelabs.github.io/post/2017-05-22-kube-pod-networking)
 
+A node's Pod CIDR is the [IP address prefix](https://subneti.ca/en/glossary/cidr/)
+allocated to its Pods, for example `10.42.1.0/24`, using the prefix notation
+described in [RFC 4632, section 3.1](https://www.rfc-editor.org/rfc/rfc4632.html#section-3.1).
+Advertising this prefix tells peers where that address range is reachable; it
+does not itself allocate Pod IP addresses. Address allocation is a separate
+IPAM responsibility, for example the [CNI host-local plugin](https://www.cni.dev/plugins/current/ipam/host-local/).
+
 kube-router is expected to run on each Node. The subnet of the Node is obtained
 from the CNI configuration file on the Node or through the Node.PodCidr. Each
 kube-router instance on the Node acts as a BGP router and advertises the Pod
