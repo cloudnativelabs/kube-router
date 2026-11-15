@@ -123,9 +123,9 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 		sh -c \
-		'CGO_ENABLED=0 go test -v -timeout 30s -tags privileged -run "^TestPrivileged" $$(find . -name "*_privileged_test.go" -exec dirname {} + | sort -u)'
+		'CGO_ENABLED=0 go test -v -timeout 30s -tags privileged -run "^TestPrivileged" $$(find . -name "*_privileged_test.go" -exec dirname {} \; | sort -u)'
 else
-	go test -v -timeout 30s -tags privileged -run '^TestPrivileged' $$(find . -name '*_privileged_test.go' -exec dirname {} + | sort -u)
+	go test -v -timeout 30s -tags privileged -run '^TestPrivileged' $$(find . -name '*_privileged_test.go' -exec dirname {} \; | sort -u)
 endif
 
 test-integration: ## Runs nftables integration tests in a privileged container. Set BUILD_IN_DOCKER=false to run bare (requires root and nft).
