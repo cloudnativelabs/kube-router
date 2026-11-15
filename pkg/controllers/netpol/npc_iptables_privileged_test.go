@@ -5,6 +5,7 @@ package netpol
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
@@ -26,12 +27,17 @@ var tForeignChains = []string{"INPUT", "FORWARD", "OUTPUT", "CUSTOM-FORWARD", "F
 	"KUBE-PROXY-FIREWALL", "KUBE-ROUTER-SERVICES", "KUBE-SERVICES"}
 
 // setUpIptablesTest runs the test in a new network namespace, which comes with empty iptables tables of its own.
-// Tests using this helper require root privileges and will be skipped otherwise.
+// Tests using this helper require root privileges and the iptables commands, and will be skipped otherwise.
 func setUpIptablesTest(t *testing.T) {
 	t.Helper()
 
 	if os.Getuid() != 0 {
 		t.Skip("Test requires root privileges.")
+	}
+	for _, cmd := range []string{"iptables", "iptables-save", "iptables-restore"} {
+		if _, err := exec.LookPath(cmd); err != nil {
+			t.Skipf("Test requires %s in PATH.", cmd)
+		}
 	}
 
 	runtime.LockOSThread()
