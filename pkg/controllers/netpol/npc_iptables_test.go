@@ -2,6 +2,7 @@ package netpol
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -128,6 +129,82 @@ const tNetpolChainDeclarations = `:KUBE-NWPLCY-COMMON - [0:0] - [0:0]
 :KUBE-ROUTER-OUTPUT - [0:0] - [0:0]
 `
 
+// tIPv6 turns the IPv4 fixtures into their IPv6 equivalent. Policy chain names include the IP family so they change,
+// pod firewall chain names don't.
+var tIPv6 = strings.NewReplacer(
+	"10.42.0.5/32", "fd00:42::5/128",
+	"10.42.0.5", "fd00:42::5",
+	"10.42.0.0/24", "fd00:42::/120",
+	"10.42.0.0/16", "fd00:42::/112",
+	"10.43.0.10/32", "fd00:43::a/128",
+	"10.43.0.0/16", "fd00:43::/112",
+	"192.168.1.240/32", "fd00:192:168:1::f0/128",
+	"192.168.1.0/24", "fd00:192:168:1::/120",
+	"127.0.0.0/8", "::1/128",
+	"-p icmp ", "-p ipv6-icmp ",
+	"-m icmp --icmp-type 8", "-m icmp6 --icmpv6-type 128",
+	"icmp-port-unreachable", "icmp6-port-unreachable",
+	"KUBE-NWPLCY-LQXVSL3JNEZ2DTOP", "KUBE-NWPLCY-6BWVY4B7RTGXYNQC",
+	"KUBE-NWPLCY-C2X6HSYNWOLCJ5QF", "KUBE-NWPLCY-RZ4PMGQ2LDWNKH7E",
+	"iptables-save", "ip6tables-save",
+)
+
+// tWithSaveLines adds chain declarations and rules of other programs to an iptables-save output
+func tWithSaveLines(save, declarations, rules string) string {
+	save = strings.Replace(save, ":KUBE-SERVICES - [0:0]\n", ":KUBE-SERVICES - [0:0]\n"+declarations, 1)
+	return strings.Replace(save, "COMMIT\n", rules+"COMMIT\n", 1)
+}
+
+var tNetpolChainRe = regexp.MustCompile(`^(KUBE-ROUTER-(INPUT|FORWARD|OUTPUT)|KUBE-NWPLCY-.+|KUBE-POD-FW-.+)$`)
+
+// tAssertPayloadShape checks what every iptables-restore input of cleanupStaleRules has to look like: declarations
+// first, then rules, then chain deletions, and nothing but -D lines for chains the controller doesn't own
+func tAssertPayloadShape(t *testing.T, payload string, deleteDefaultChains bool) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSuffix(payload, "\n"), "\n")
+	require.GreaterOrEqual(t, len(lines), 2)
+	assert.Equal(t, "*filter", lines[0])
+	assert.Equal(t, "COMMIT", lines[len(lines)-1])
+
+	phase := 0
+	for _, line := range lines[1 : len(lines)-1] {
+		fields := strings.Fields(strings.TrimPrefix(line, ":"))
+		require.NotEmpty(t, fields, "empty line in payload")
+		linePhase := 0
+		switch {
+		case strings.HasPrefix(line, ":"):
+			assert.Regexp(t, tNetpolChainRe, fields[0], "declared a chain the controller doesn't own: %s", line)
+		case fields[0] == "-A" || fields[0] == "-I":
+			linePhase = 1
+			assert.Regexp(t, tNetpolChainRe, fields[1], "added a rule to a chain the controller doesn't own: %s", line)
+		case fields[0] == "-D":
+			linePhase = 1
+		case fields[0] == "-X":
+			linePhase = 2
+			if !deleteDefaultChains {
+				assert.NotContains(t, []string{kubeTailNetpolChain, kubeCommonNetpolChain, kubeDefaultNetpolChain,
+					kubeInputChainName, kubeForwardChainName, kubeOutputChainName}, fields[1],
+					"a sync deleted a chain that it should always keep")
+			}
+		default:
+			t.Errorf("unexpected line in payload: %s", line)
+		}
+		assert.GreaterOrEqual(t, linePhase, phase, "line out of order (declarations, rules, deletions): %s", line)
+		phase = max(phase, linePhase)
+	}
+}
+
+// tLinesWithPrefix returns the lines of payload that start with prefix
+func tLinesWithPrefix(payload, prefix string) []string {
+	var lines []string
+	for line := range strings.SplitSeq(payload, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
 // tChainsOf returns the chains that an iptables-save output declares, the way ListChains returns them
 func tChainsOf(save string) []string {
 	var chains []string
@@ -226,6 +303,132 @@ COMMIT
 			err := npc.cleanupStaleRules(tt.activePolicyChains, tt.activePodFwChains, tt.deleteDefaultChains)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, npc.filterTableRules[v1.IPv4Protocol].String())
+			tAssertPayloadShape(t, npc.filterTableRules[v1.IPv4Protocol].String(), tt.deleteDefaultChains)
+		})
+	}
+}
+
+// tForeignChainDeclaration and tForeignReferences are rules of another program that point at the network policy
+// controller chains of tFilterTableSave
+const tForeignChainDeclaration = ":CUSTOM-FWD - [0:0]\n"
+const tForeignReferences = `-A FORWARD -s 192.0.2.10/32 -m comment --comment "foreign jump" -j KUBE-POD-FW-4MKDWQBHZ6VQ3TOX
+-A CUSTOM-FWD -s 192.0.2.11/32 -j KUBE-NWPLCY-LQXVSL3JNEZ2DTOP
+-A CUSTOM-FWD -s 192.0.2.12/32 -g KUBE-POD-FW-4MKDWQBHZ6VQ3TOX
+-A CUSTOM-FWD -s 192.0.2.13/32 -j KUBE-NWPLCY-COMMON
+`
+
+func TestCleanupStaleRulesPayload(t *testing.T) {
+	type familyInput struct {
+		save      string
+		syncRules string
+	}
+	tests := []struct {
+		name               string
+		families           map[v1.IPFamily]familyInput
+		activePolicyChains map[string]bool
+		activePodFwChains  map[string]bool
+		wantDeletes        map[v1.IPFamily][]string
+		wantChainDeletes   map[v1.IPFamily][]string
+		wantAbsent         map[v1.IPFamily][]string
+	}{
+		{
+			name: "jumps and gotos of other programs into stale chains are deleted before the chains",
+			families: map[v1.IPFamily]familyInput{v1.IPv4Protocol: {
+				save:      tWithSaveLines(tFilterTableSave, tForeignChainDeclaration, tForeignReferences),
+				syncRules: tFilterTableSyncRules,
+			}},
+			activePolicyChains: map[string]bool{"KUBE-NWPLCY-C2X6HSYNWOLCJ5QF": true},
+			activePodFwChains:  map[string]bool{"KUBE-POD-FW-J3VXQYNMB6TLZK2A": true},
+			wantDeletes: map[v1.IPFamily][]string{v1.IPv4Protocol: {
+				`-D FORWARD -s 192.0.2.10/32 -m comment --comment "foreign jump" -j KUBE-POD-FW-4MKDWQBHZ6VQ3TOX`,
+				"-D CUSTOM-FWD -s 192.0.2.11/32 -j KUBE-NWPLCY-LQXVSL3JNEZ2DTOP",
+				"-D CUSTOM-FWD -s 192.0.2.12/32 -g KUBE-POD-FW-4MKDWQBHZ6VQ3TOX",
+			}},
+			wantChainDeletes: map[v1.IPFamily][]string{v1.IPv4Protocol: {
+				"-X KUBE-NWPLCY-LQXVSL3JNEZ2DTOP", "-X KUBE-POD-FW-4MKDWQBHZ6VQ3TOX"}},
+			// a jump into a chain that is kept is none of our business
+			wantAbsent: map[v1.IPFamily][]string{v1.IPv4Protocol: {"192.0.2.13", "CUSTOM-FWD - [0:0]"}},
+		},
+		{
+			name: "rules of other programs that only mention a stale chain are left alone",
+			families: map[v1.IPFamily]familyInput{v1.IPv4Protocol: {
+				save: tWithSaveLines(tFilterTableSave, tForeignChainDeclaration,
+					`-A CUSTOM-FWD -s 192.0.2.14/32 -m comment --comment "was KUBE-POD-FW-4MKDWQBHZ6VQ3TOX" -j ACCEPT
+-A FORWARD -m comment --comment "KUBE-NWPLCY-LQXVSL3JNEZ2DTOP" -j CUSTOM-FWD
+`),
+				syncRules: tFilterTableSyncRules,
+			}},
+			activePolicyChains: map[string]bool{"KUBE-NWPLCY-C2X6HSYNWOLCJ5QF": true},
+			activePodFwChains:  map[string]bool{"KUBE-POD-FW-J3VXQYNMB6TLZK2A": true},
+			wantDeletes:        map[v1.IPFamily][]string{v1.IPv4Protocol: nil},
+			wantChainDeletes: map[v1.IPFamily][]string{v1.IPv4Protocol: {
+				"-X KUBE-NWPLCY-LQXVSL3JNEZ2DTOP", "-X KUBE-POD-FW-4MKDWQBHZ6VQ3TOX"}},
+			wantAbsent: map[v1.IPFamily][]string{v1.IPv4Protocol: {"192.0.2.14", "-j CUSTOM-FWD"}},
+		},
+		{
+			name: "each family only deletes the stale chains that it has",
+			families: map[v1.IPFamily]familyInput{
+				v1.IPv4Protocol: {save: tFilterTableSave, syncRules: tFilterTableSyncRules},
+				v1.IPv6Protocol: {save: tIPv6.Replace(tFilterTableSave), syncRules: tIPv6.Replace(tFilterTableSyncRules)},
+			},
+			activePolicyChains: map[string]bool{"KUBE-NWPLCY-C2X6HSYNWOLCJ5QF": true,
+				"KUBE-NWPLCY-RZ4PMGQ2LDWNKH7E": true},
+			activePodFwChains: map[string]bool{"KUBE-POD-FW-J3VXQYNMB6TLZK2A": true},
+			wantDeletes:       map[v1.IPFamily][]string{v1.IPv4Protocol: nil, v1.IPv6Protocol: nil},
+			wantChainDeletes: map[v1.IPFamily][]string{
+				v1.IPv4Protocol: {"-X KUBE-NWPLCY-LQXVSL3JNEZ2DTOP", "-X KUBE-POD-FW-4MKDWQBHZ6VQ3TOX"},
+				v1.IPv6Protocol: {"-X KUBE-NWPLCY-6BWVY4B7RTGXYNQC", "-X KUBE-POD-FW-4MKDWQBHZ6VQ3TOX"},
+			},
+			wantAbsent: map[v1.IPFamily][]string{
+				v1.IPv4Protocol: {"KUBE-NWPLCY-6BWVY4B7RTGXYNQC", "KUBE-NWPLCY-RZ4PMGQ2LDWNKH7E", "fd00:"},
+				v1.IPv6Protocol: {"KUBE-NWPLCY-LQXVSL3JNEZ2DTOP", "KUBE-NWPLCY-C2X6HSYNWOLCJ5QF", "10.42."},
+			},
+		},
+		{
+			name: "a sync without any pods or policies keeps the chains that it always needs",
+			families: map[v1.IPFamily]familyInput{
+				v1.IPv4Protocol: {save: tFilterTableSave},
+			},
+			wantDeletes: map[v1.IPFamily][]string{v1.IPv4Protocol: nil},
+			wantChainDeletes: map[v1.IPFamily][]string{v1.IPv4Protocol: {
+				"-X KUBE-NWPLCY-LQXVSL3JNEZ2DTOP", "-X KUBE-POD-FW-4MKDWQBHZ6VQ3TOX"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// cleanupStaleRules walks the families in map order, so we run it a few times to cover both orders
+			for range 10 {
+				npc := NetworkPolicyControllerIptables{NetworkPolicyControllerBase: &NetworkPolicyControllerBase{}}
+				npc.iptablesCmdHandlers = map[v1.IPFamily]utils.IPTablesHandler{}
+				npc.filterTableRules = map[v1.IPFamily]*bytes.Buffer{}
+				for family, in := range tt.families {
+					npc.iptablesCmdHandlers[family] = &utils.IPTablesHandlerMock{
+						ListChainsFunc: func(table string) ([]string, error) { return tChainsOf(in.save), nil },
+					}
+					npc.filterTableRules[family] = bytes.NewBufferString(in.save + in.syncRules)
+				}
+
+				err := npc.cleanupStaleRules(tt.activePolicyChains, tt.activePodFwChains, false)
+				require.NoError(t, err)
+
+				for family := range tt.families {
+					payload := npc.filterTableRules[family].String()
+					tAssertPayloadShape(t, payload, false)
+					assert.ElementsMatch(t, tt.wantDeletes[family], tLinesWithPrefix(payload, "-D "),
+						"%s: unexpected -D lines", family)
+					assert.ElementsMatch(t, tt.wantChainDeletes[family], tLinesWithPrefix(payload, "-X "),
+						"%s: unexpected -X lines", family)
+					for _, absent := range tt.wantAbsent[family] {
+						assert.NotContains(t, payload, absent, "%s: payload shouldn't mention it", family)
+					}
+					for _, chain := range []string{kubeTailNetpolChain, kubeCommonNetpolChain, kubeDefaultNetpolChain,
+						kubeInputChainName, kubeForwardChainName, kubeOutputChainName} {
+						assert.NotEmpty(t, tLinesWithPrefix(payload, ":"+chain+" "),
+							"%s: %s should be declared so that it gets rebuilt", family, chain)
+					}
+				}
+			}
 		})
 	}
 }
