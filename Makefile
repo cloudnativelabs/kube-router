@@ -123,7 +123,7 @@ ifeq "$(BUILD_IN_DOCKER)" "true"
 		-v $(GO_MOD_CACHE):/go/pkg/mod \
 		-w /go/src/github.com/cloudnativelabs/kube-router $(DOCKER_BUILD_IMAGE) \
 		sh -c \
-		'apk add --no-cache iptables >/dev/null && CGO_ENABLED=0 go test -v -timeout 30s -tags privileged -run "^TestPrivileged" $$(find . -name "*_privileged_test.go" -exec dirname {} \; | sort -u)'
+		'apk add --no-cache iptables iptables-legacy nftables >/dev/null && CGO_ENABLED=0 go test -v -timeout 30s -tags privileged -run "^TestPrivileged" $$(find . -name "*_privileged_test.go" -exec dirname {} \; | sort -u)'
 else
 	go test -v -timeout 30s -tags privileged -run '^TestPrivileged' $$(find . -name '*_privileged_test.go' -exec dirname {} \; | sort -u)
 endif
