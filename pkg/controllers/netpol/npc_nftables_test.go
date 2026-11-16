@@ -908,9 +908,13 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	}
 	_ = npInformer.GetStore().Add(makePolicy("policy-keep"))
 	_ = npInformer.GetStore().Add(makePolicy("policy-delete"))
-	// Need a namespace so pod lookups don't fail.
+	// Need a namespace and a pod so policies won't get filtered out.
 	_ = nsInformer.GetStore().Add(&v1core.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+	})
+	_ = podInformer.GetStore().Add(&v1core.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "default"},
+		Status:     v1core.PodStatus{PodIP: "10.242.0.1", HostIP: "10.241.0.20"},
 	})
 
 	// First sync: both policies → both chains created.
