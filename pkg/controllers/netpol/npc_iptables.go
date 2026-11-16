@@ -882,7 +882,7 @@ func (npc *NetworkPolicyControllerIptables) cleanupStaleRules(activePolicyChains
 				if strings.HasPrefix(rule, "-A ") && ruleJumpsTo(rule, staleChains) {
 					newRules.WriteString("-D" + strings.TrimPrefix(rule, "-A") + "\n")
 				}
-				continue
+				continue // Skip rules that are not managed by kube-router
 			}
 			if strings.HasPrefix(rule, ":") {
 				// Declaring a chain under --noflush flushes it, which also drops its jumps into stale chains before
