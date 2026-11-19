@@ -285,7 +285,7 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 	tCreateFakePods(t, podInformer, nsInformer)
 	for _, test := range testCases {
 		test.netpol.createFakeNetpol(t, netpolInformer)
-		netpols, err := krNetPol.buildNetworkPoliciesInfo()
+		netpols, err := krNetPol.buildNetworkPoliciesInfo(newPodSnapshot(krNetPol.podLister))
 		if err != nil {
 			t.Errorf("Problems building policies: %s", err)
 		}
@@ -428,7 +428,7 @@ func TestFullPolicySync(t *testing.T) {
 	ipv4Dump := ipv4KNftInterface.Dump()
 	t.Logf("nftables dump: \n%s", ipv4Dump)
 
-	netpolInfo, err := npc.buildNetworkPoliciesInfo()
+	netpolInfo, err := npc.buildNetworkPoliciesInfo(newPodSnapshot(podInformer.GetIndexer()))
 	require.NoError(t, err)
 
 	_, _, err = npc.syncNetworkPolicyChains(netpolInfo, "fixture")
@@ -530,7 +530,7 @@ func TestFullPolicySync(t *testing.T) {
 func runNftPolicyRules(t *testing.T, npc *NetworkPolicyControllerNftables) {
 	t.Helper()
 	ctx := context.Background()
-	netpols, err := npc.buildNetworkPoliciesInfo()
+	netpols, err := npc.buildNetworkPoliciesInfo(newPodSnapshot(npc.podLister))
 	if err != nil {
 		t.Fatalf("buildNetworkPoliciesInfo failed: %v", err)
 	}
@@ -914,7 +914,7 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	})
 
 	// First sync: both policies → both chains created.
-	info1, err := npc.buildNetworkPoliciesInfo()
+	info1, err := npc.buildNetworkPoliciesInfo(newPodSnapshot(podInformer.GetIndexer()))
 	require.NoError(t, err)
 	_, _, err = npc.syncNetworkPolicyChains(info1, "v1")
 	require.NoError(t, err)
@@ -935,7 +935,7 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	require.True(t, exists)
 	require.NoError(t, npInformer.GetStore().Delete(obj))
 
-	info2, err := npc.buildNetworkPoliciesInfo()
+	info2, err := npc.buildNetworkPoliciesInfo(newPodSnapshot(podInformer.GetIndexer()))
 	require.NoError(t, err)
 	activeChains2, activeSets2, err := npc.syncNetworkPolicyChains(info2, "v1")
 	require.NoError(t, err)
@@ -1377,7 +1377,8 @@ func TestNftablesSyncPodFirewallChainsFailClosed(t *testing.T) {
 	require.NoError(t, goodNft.Run(ctx, goodTx))
 	npc.failedPolicyChains = map[string]bool{badChain: true}
 
-	activePodFwChains, _, _, err := npc.syncPodFirewallChains([]networkPolicyInfo{badPol, goodPol}, version)
+	activePodFwChains, _, _, err := npc.syncPodFirewallChains([]networkPolicyInfo{badPol, goodPol}, version,
+		newPodSnapshot(npc.podLister))
 	require.NoError(t, err)
 	require.Len(t, activePodFwChains, 2, "expected a pod-fw chain for each local pod")
 
@@ -1506,7 +1507,7 @@ func TestEgressAnyDestinationNamedPortNft(t *testing.T) {
 	krNetPol := newUneventfulNfTablesNPC(podInformer, netpolInformer, nsInformer)
 	tCreateEgressAnyNamedPortPolicy(t, podInformer, netpolInformer)
 
-	netpols, err := krNetPol.buildNetworkPoliciesInfo()
+	netpols, err := krNetPol.buildNetworkPoliciesInfo(newPodSnapshot(krNetPol.podLister))
 	require.NoError(t, err)
 	require.Len(t, netpols, 1)
 

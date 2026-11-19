@@ -187,9 +187,6 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() error {
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
 
-	npc.snapshotPods()
-	defer npc.dropPodSnapshot()
-
 	start := time.Now()
 	syncVersion := strconv.FormatInt(start.UnixNano(), syncVersionBase)
 	defer func() {
@@ -213,7 +210,8 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() error {
 	// per-CIDR REJECT rules track --netpol-default-deny / pod CIDR changes without a controller restart.
 	npc.ensureDefaultTailChain()
 
-	networkPoliciesInfo, err := npc.buildNetworkPoliciesInfo()
+	pods := newPodSnapshot(npc.podLister)
+	networkPoliciesInfo, err := npc.buildNetworkPoliciesInfo(pods)
 	if err != nil {
 		return fmt.Errorf("failed to build network policies: %w", err)
 	}
@@ -223,7 +221,7 @@ func (npc *NetworkPolicyControllerNftables) fullPolicySync() error {
 		return fmt.Errorf("failed to sync network policy chains: %w", err)
 	}
 
-	activePodFwChains, activePodIPs, podJumps, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+	activePodFwChains, activePodIPs, podJumps, err := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion, pods)
 	if err != nil {
 		return fmt.Errorf("failed to sync pod firewall chains: %w", err)
 	}
@@ -1051,7 +1049,7 @@ func (npc *NetworkPolicyControllerNftables) gcPolicyObjectsNft(
 // map of pod IPs whose chain was programmed this sync (consumed by populateProtectedPodsIPSet),
 // and the collected jump entries.
 func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
-	networkPoliciesInfo []networkPolicyInfo, version string) (
+	networkPoliciesInfo []networkPolicyInfo, version string, pods *podSnapshot) (
 	map[string]bool, map[v1core.IPFamily][]string, map[v1core.IPFamily][]podFwJump, error) {
 
 	ctx := npc.ctx
@@ -1065,7 +1063,7 @@ func (npc *NetworkPolicyControllerNftables) syncPodFirewallChains(
 	// Collect all local pods across all node IPs.
 	allLocalPods := make(map[string]podInfo)
 	for _, nodeIP := range npc.krNode.GetNodeIPAddrs() {
-		npc.getLocalPods(allLocalPods, nodeIP.String())
+		npc.getLocalPods(allLocalPods, nodeIP.String(), pods)
 	}
 
 	for _, pod := range allLocalPods {

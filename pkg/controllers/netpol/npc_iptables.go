@@ -108,9 +108,6 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() error {
 	npc.mu.Lock()
 	defer npc.mu.Unlock()
 
-	npc.snapshotPods()
-	defer npc.dropPodSnapshot()
-
 	for ipFamily := range npc.ipSetHandlers {
 		// Ensure that we start with clean handlers that don't contain previous save data
 		var err error
@@ -153,7 +150,8 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() error {
 	// Per-sync safety net for KUBE-NWPLCY-TAIL; the chain itself is built by ensureDefaultTailChain() in Run().
 	npc.ensureDefaultTailChainExists()
 
-	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo()
+	pods := newPodSnapshot(npc.podLister)
+	networkPoliciesInfo, err = npc.buildNetworkPoliciesInfo(pods)
 	if err != nil {
 		return fmt.Errorf("failed to build network policies: %w", err)
 	}
@@ -184,7 +182,7 @@ func (npc *NetworkPolicyControllerIptables) fullPolicySync() error {
 		return fmt.Errorf("failed to sync network policy chains: %w", err)
 	}
 
-	activePodFwChains, activePodIPs := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion)
+	activePodFwChains, activePodIPs := npc.syncPodFirewallChains(networkPoliciesInfo, syncVersion, pods)
 
 	// Refresh the kube-router-local-pods ipset before ensureTailChainPosition installs the TAIL jump, so the
 	// rules never reference a stale set. No-op when --netpol-default-deny is disabled.

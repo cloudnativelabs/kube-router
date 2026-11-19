@@ -426,7 +426,7 @@ func TestNewNetworkPolicySelectors(t *testing.T) {
 	for _, test := range testCases {
 		test.netpol.createFakeNetpol(t, netpolInformer)
 	}
-	netpols, err := krNetPol.buildNetworkPoliciesInfo()
+	netpols, err := krNetPol.buildNetworkPoliciesInfo(newPodSnapshot(krNetPol.podLister))
 	if err != nil {
 		t.Errorf("Problems building policies")
 	}
@@ -634,7 +634,7 @@ func TestNetworkPolicyBuilder(t *testing.T) {
 	tCreateFakePods(t, podInformer, nsInformer)
 	for _, test := range testCases {
 		test.netpol.createFakeNetpol(t, netpolInformer)
-		netpols, err := krNetPol.buildNetworkPoliciesInfo()
+		netpols, err := krNetPol.buildNetworkPoliciesInfo(newPodSnapshot(krNetPol.podLister))
 		if err != nil {
 			t.Errorf("Problems building policies: %s", err)
 		}
@@ -724,7 +724,7 @@ func TestEgressAnyDestinationNamedPort(t *testing.T) {
 	krNetPol := newUneventfulNetworkPolicyController(podInformer, netpolInformer, nsInformer)
 	tCreateEgressAnyNamedPortPolicy(t, podInformer, netpolInformer)
 
-	netpols, err := krNetPol.buildNetworkPoliciesInfo()
+	netpols, err := krNetPol.buildNetworkPoliciesInfo(newPodSnapshot(krNetPol.podLister))
 	if err != nil {
 		t.Fatalf("failed to build network policies: %v", err)
 	}
@@ -1707,7 +1707,7 @@ func TestBuildNetworkPoliciesInfoEdgeCases(t *testing.T) {
 		},
 	})
 
-	netpols, err := npc.buildNetworkPoliciesInfo()
+	netpols, err := npc.buildNetworkPoliciesInfo(newPodSnapshot(npc.podLister))
 	if err != nil {
 		t.Fatalf("buildNetworkPoliciesInfo() failed: %v", err)
 	}

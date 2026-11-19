@@ -68,7 +68,7 @@ type NetworkPolicyController interface {
 	ensureDefaultNetworkPolicyChain()
 	ensureCommonPolicyChain()
 
-	buildNetworkPoliciesInfo() ([]networkPolicyInfo, error)
+	buildNetworkPoliciesInfo(pods *podSnapshot) ([]networkPolicyInfo, error)
 	syncNetworkPolicyChains(networkPoliciesInfo []networkPolicyInfo,
 		version string) (map[string]bool, map[string]bool, error)
 
@@ -103,9 +103,6 @@ type NetworkPolicyControllerBase struct {
 	podLister cache.Indexer
 	npLister  cache.Indexer
 	nsLister  cache.Indexer
-
-	// podSnapshot is the pod list one fullPolicySync works from (see snapshotPods); nil outside a sync.
-	podSnapshot *podSnapshot
 
 	podEventHandler           cache.ResourceEventHandler
 	namespaceEventHandler     cache.ResourceEventHandler
