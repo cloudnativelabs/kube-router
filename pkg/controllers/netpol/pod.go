@@ -5,6 +5,7 @@ import (
 	"unicode"
 
 	api "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -90,7 +91,7 @@ func (npc *NetworkPolicyControllerBase) handlePodDelete(obj any) {
 // pod. Returns the active pod-firewall chain names (for stale-rule cleanup) and a per-family map of pod IPs
 // whose chain was programmed this sync (consumed by populateProtectedPodsIPSet).
 func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInfo []networkPolicyInfo,
-	version string) (map[string]bool, map[api.IPFamily][]string) {
+	version string, pods *podSnapshot) (map[string]bool, map[api.IPFamily][]string) {
 
 	activePodFwChains := make(map[string]bool)
 	activePodIPs := make(map[api.IPFamily][]string)
@@ -126,7 +127,7 @@ func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInf
 	// loop through the pods running on the node
 	allLocalPods := make(map[string]podInfo)
 	for _, nodeIP := range npc.krNode.GetNodeIPAddrs() {
-		npc.getLocalPods(allLocalPods, nodeIP.String())
+		npc.getLocalPods(allLocalPods, nodeIP.String(), pods)
 	}
 	for _, pod := range allLocalPods {
 
@@ -321,50 +322,39 @@ func (npc *NetworkPolicyControllerBase) interceptPodOutboundTraffic(pod podInfo,
 	}
 }
 
-// podSnapshot is the informer's pods as of one instant, grouped by namespace.
+// podSnapshot is the informer's pods as of one instant. A fullPolicySync takes one and passes it to everything that
+// reads pods (policy targets, peers, local pods): read live, a pod that gets its IP mid-sync lands in only some of
+// the policies that select it, or in the local pods and in no policy.
 type podSnapshot struct {
 	all         []*api.Pod
 	byNamespace map[string][]*api.Pod
 }
 
-// snapshotPods freezes the pod list for the rest of the current fullPolicySync (call it with npc.mu held and
-// pair it with dropPodSnapshot). A sync reads pods in many places: once per policy in buildNetworkPoliciesInfo
-// (targets and peers) and again in syncPodFirewallChains. Without one snapshot, a pod that gets its IP while
-// the sync runs lands in the policies listed after that moment and not in those listed before, so it can be
-// programmed with default-deny-all's chain and without allow-dns's rule, and is refused until the next sync.
-func (npc *NetworkPolicyControllerBase) snapshotPods() {
-	snapshot := &podSnapshot{all: npc.livePods(), byNamespace: make(map[string][]*api.Pod)}
-	for _, pod := range snapshot.all {
-		snapshot.byNamespace[pod.Namespace] = append(snapshot.byNamespace[pod.Namespace], pod)
-	}
-	npc.podSnapshot = snapshot
-}
-
-func (npc *NetworkPolicyControllerBase) dropPodSnapshot() {
-	npc.podSnapshot = nil
-}
-
-func (npc *NetworkPolicyControllerBase) livePods() []*api.Pod {
-	objs := npc.podLister.List()
-	pods := make([]*api.Pod, 0, len(objs))
+func newPodSnapshot(live cache.Indexer) *podSnapshot {
+	objs := live.List()
+	snapshot := &podSnapshot{all: make([]*api.Pod, 0, len(objs)), byNamespace: make(map[string][]*api.Pod)}
 	for _, obj := range objs {
 		if pod, ok := obj.(*api.Pod); ok {
-			pods = append(pods, pod)
+			snapshot.all = append(snapshot.all, pod)
+			snapshot.byNamespace[pod.Namespace] = append(snapshot.byNamespace[pod.Namespace], pod)
 		}
 	}
-	return pods
+	return snapshot
 }
 
-// listPods returns the sync's snapshot, or the live informer content outside a sync.
-func (npc *NetworkPolicyControllerBase) listPods() []*api.Pod {
-	if npc.podSnapshot != nil {
-		return npc.podSnapshot.all
+func (s *podSnapshot) byNamespaceAndLabels(namespace string, selector labels.Selector) []*api.Pod {
+	var matching []*api.Pod
+	for _, pod := range s.byNamespace[namespace] {
+		if selector.Matches(labels.Set(pod.Labels)) {
+			matching = append(matching, pod)
+		}
 	}
-	return npc.livePods()
+	return matching
 }
 
-func (npc *NetworkPolicyControllerBase) getLocalPods(localPods map[string]podInfo, nodeIP string) {
-	for _, pod := range npc.listPods() {
+func (npc *NetworkPolicyControllerBase) getLocalPods(localPods map[string]podInfo, nodeIP string,
+	pods *podSnapshot) {
+	for _, pod := range pods.all {
 		// ignore the pods running on the different node and pods that are not actionable
 		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || !isNetPolActionable(pod) {
 			continue

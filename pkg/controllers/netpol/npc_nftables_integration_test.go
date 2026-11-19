@@ -150,7 +150,7 @@ func setupIntegrationEnv(t *testing.T, tableName string) (
 func syncPolicies(t *testing.T, npc *NetworkPolicyControllerNftables, version string) (
 	activePolicyChains, activePolicyIPSets map[string]bool) {
 	t.Helper()
-	netpols, err := npc.buildNetworkPoliciesInfo()
+	netpols, err := npc.buildNetworkPoliciesInfo(newPodSnapshot(npc.podLister))
 	if err != nil {
 		t.Fatalf("buildNetworkPoliciesInfo: %v", err)
 	}
@@ -659,7 +659,7 @@ func TestIntegrationProtocolOnlyPolicySyncs(t *testing.T) {
 		t.Fatalf("add policy: %v", err)
 	}
 
-	netpols, err := npc.buildNetworkPoliciesInfo()
+	netpols, err := npc.buildNetworkPoliciesInfo(newPodSnapshot(npc.podLister))
 	if err != nil {
 		t.Fatalf("buildNetworkPoliciesInfo: %v", err)
 	}

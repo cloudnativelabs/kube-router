@@ -204,7 +204,7 @@ func TestSyncPodFirewallChainsDropRules(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			npc := newPodFwTestController(t, tt.families, tt.pods...)
 
-			activeChains, _ := npc.syncPodFirewallChains(nil, version)
+			activeChains, _ := npc.syncPodFirewallChains(nil, version, newPodSnapshot(npc.podLister))
 
 			assertPodFwRules(t, npc, version, tt.pods...)
 			for _, pod := range tt.pods {
@@ -234,6 +234,6 @@ func BenchmarkSyncPodFirewallChains(b *testing.B) {
 	for b.Loop() {
 		buf.Reset()
 		buf.Write(existing.Bytes())
-		npc.syncPodFirewallChains(nil, "bench")
+		npc.syncPodFirewallChains(nil, "bench", newPodSnapshot(npc.podLister))
 	}
 }

@@ -500,7 +500,7 @@ func (npc *NetworkPolicyControllerIptables) appendRuleToPolicyChain(
 	return nil
 }
 
-func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPolicyInfo, error) {
+func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo(pods *podSnapshot) ([]networkPolicyInfo, error) {
 
 	NetworkPolicies := make([]networkPolicyInfo, 0)
 	_, isIPv4Enabled := npc.filterTableRules[api.IPv4Protocol]
@@ -538,20 +538,17 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 			newPolicy.policyType = kubeIngressPolicyType
 		}
 
-		matchingPods, err := npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
 		newPolicy.targetPods = make(map[string]podInfo)
 		namedPort2IngressEps := make(namedPort2eps)
-		if err == nil {
-			for _, matchingPod := range matchingPods {
-				if !isNetPolActionable(matchingPod) {
-					continue
-				}
-				newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ips: matchingPod.Status.PodIPs,
-					name:      matchingPod.Name,
-					namespace: matchingPod.Namespace,
-					labels:    matchingPod.Labels}
-				npc.grabNamedPortFromPod(matchingPod, &namedPort2IngressEps)
+		for _, matchingPod := range pods.byNamespaceAndLabels(policy.Namespace, podSelector) {
+			if !isNetPolActionable(matchingPod) {
+				continue
 			}
+			newPolicy.targetPods[matchingPod.Status.PodIP] = podInfo{ips: matchingPod.Status.PodIPs,
+				name:      matchingPod.Name,
+				namespace: matchingPod.Namespace,
+				labels:    matchingPod.Labels}
+			npc.grabNamedPortFromPod(matchingPod, &namedPort2IngressEps)
 		}
 
 		if policy.Spec.Ingress == nil {
@@ -577,7 +574,7 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 			} else {
 				ingressRule.matchAllSource = false
 				for _, peer := range specIngressRule.From {
-					if peerPods, err := npc.evalPodPeer(policy, peer); err == nil {
+					if peerPods, err := npc.evalPodPeer(policy, peer, pods); err == nil {
 						for _, peerPod := range peerPods {
 							if !isNetPolActionable(peerPod) {
 								continue
@@ -643,8 +640,7 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 				// TODO: Each rule rescans every pod here, so building one index per sync would make it a single pass
 				// and a semi-significant performance improvement for users of Named Port policies without a To
 				if policyRulePortsHasNamedPort(specEgressRule.Ports) {
-					matchingPeerPods, _ := npc.ListPodsByNamespaceAndLabels(api.NamespaceAll, labels.Everything())
-					for _, peerPod := range matchingPeerPods {
+					for _, peerPod := range pods.all {
 						if !isNetPolActionable(peerPod) {
 							continue
 						}
@@ -654,7 +650,7 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 			} else {
 				egressRule.matchAllDestinations = false
 				for _, peer := range specEgressRule.To {
-					if peerPods, err := npc.evalPodPeer(policy, peer); err == nil {
+					if peerPods, err := npc.evalPodPeer(policy, peer, pods); err == nil {
 						for _, peerPod := range peerPods {
 							if !isNetPolActionable(peerPod) {
 								continue
@@ -712,11 +708,10 @@ func (npc *NetworkPolicyControllerBase) buildNetworkPoliciesInfo() ([]networkPol
 }
 
 func (npc *NetworkPolicyControllerBase) evalPodPeer(policy *networking.NetworkPolicy,
-	peer networking.NetworkPolicyPeer) ([]*api.Pod, error) {
+	peer networking.NetworkPolicyPeer, pods *podSnapshot) ([]*api.Pod, error) {
 
 	var matchingPods []*api.Pod
 	matchingPods = make([]*api.Pod, 0)
-	var err error
 	// spec can have both PodSelector AND NamespaceSelector
 	if peer.NamespaceSelector != nil {
 		namespaceSelector, _ := v1.LabelSelectorAsSelector(peer.NamespaceSelector)
@@ -730,18 +725,14 @@ func (npc *NetworkPolicyControllerBase) evalPodPeer(policy *networking.NetworkPo
 			podSelector, _ = v1.LabelSelectorAsSelector(peer.PodSelector)
 		}
 		for _, namespace := range namespaces {
-			namespacePods, err := npc.ListPodsByNamespaceAndLabels(namespace.Name, podSelector)
-			if err != nil {
-				return nil, fmt.Errorf("failed to build network policies info due to: %w", err)
-			}
-			matchingPods = append(matchingPods, namespacePods...)
+			matchingPods = append(matchingPods, pods.byNamespaceAndLabels(namespace.Name, podSelector)...)
 		}
 	} else if peer.PodSelector != nil {
 		podSelector, _ := v1.LabelSelectorAsSelector(peer.PodSelector)
-		matchingPods, err = npc.ListPodsByNamespaceAndLabels(policy.Namespace, podSelector)
+		matchingPods = pods.byNamespaceAndLabels(policy.Namespace, podSelector)
 	}
 
-	return matchingPods, err
+	return matchingPods, nil
 }
 
 func (npc *NetworkPolicyControllerBase) processNetworkPolicyPorts(npPorts []networking.NetworkPolicyPort,
@@ -776,18 +767,6 @@ func (npc *NetworkPolicyControllerBase) processNetworkPolicyPorts(npPorts []netw
 
 func (npc *NetworkPolicyControllerBase) ListPodsByNamespaceAndLabels(namespace string,
 	podSelector labels.Selector) (ret []*api.Pod, err error) {
-	if npc.podSnapshot != nil {
-		candidates := npc.podSnapshot.all
-		if namespace != api.NamespaceAll {
-			candidates = npc.podSnapshot.byNamespace[namespace]
-		}
-		for _, pod := range candidates {
-			if podSelector.Matches(labels.Set(pod.Labels)) {
-				ret = append(ret, pod)
-			}
-		}
-		return ret, nil
-	}
 	podLister := listers.NewPodLister(npc.podLister)
 	allMatchedNameSpacePods, err := podLister.Pods(namespace).List(podSelector)
 	if err != nil {

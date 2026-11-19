@@ -92,7 +92,7 @@ func TestNetworkPolicyFixtureIPSets(t *testing.T) {
 	addNetworkPoliciesToInformer(t, npInformer.GetStore(), networkPolicies)
 	addNamespacesToInformer(nsInformer.GetStore(), namespaces)
 
-	netpolInfo, err := controller.buildNetworkPoliciesInfo()
+	netpolInfo, err := controller.buildNetworkPoliciesInfo(newPodSnapshot(podInformer.GetIndexer()))
 	require.NoError(t, err)
 
 	_, _, err = controller.syncNetworkPolicyChains(netpolInfo, "fixture")
