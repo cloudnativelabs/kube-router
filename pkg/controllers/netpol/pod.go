@@ -46,10 +46,9 @@ func (npc *NetworkPolicyControllerBase) newPodEventHandler() cache.ResourceEvent
 				return
 			}
 
-			// We don't check isNetPolActionable here, because if it is transitioning in or out of the actionable state
-			// we want to run the full sync so that it can be added or removed from the existing network policy of the
-			// host. For the network policies, we are only interested in some changes, most pod changes aren't relevant
-			// to network policy
+			// For the network policies, we are only interested in some changes, most pod changes aren't relevant
+			// to network policy. isPodUpdateNetPolRelevant passes a pod that is transitioning in or out of the
+			// actionable state, so that the full sync adds it to or removes it from the network policy of the host.
 			if isPodUpdateNetPolRelevant(oldPodObj, newPodObj) {
 				npc.OnPodUpdate(newObj)
 			}
@@ -81,8 +80,9 @@ func (npc *NetworkPolicyControllerBase) handlePodDelete(obj any) {
 			return
 		}
 	}
-	// A pod that was not actionable when it went away was in no chain or set of the last sync (the informer's last
-	// state is what that sync read), so its deletion changes nothing.
+	// The delete of a pod whose last state in the informer was not actionable needs no sync of its own: either the
+	// pod never was actionable and no sync programmed it, or the update that took it out of the actionable state
+	// already requested a full sync, and a sync that starts after that update reads the pod as not actionable.
 	if !isNetPolActionable(pod) {
 		return
 	}
