@@ -342,9 +342,15 @@ func newPodSnapshot(live cache.Indexer) *podSnapshot {
 	return snapshot
 }
 
+// byNamespaceAndLabels returns the pods of namespace that selector matches; api.NamespaceAll selects from every
+// namespace.
 func (s *podSnapshot) byNamespaceAndLabels(namespace string, selector labels.Selector) []*api.Pod {
+	candidates := s.byNamespace[namespace]
+	if namespace == api.NamespaceAll {
+		candidates = s.all
+	}
 	var matching []*api.Pod
-	for _, pod := range s.byNamespace[namespace] {
+	for _, pod := range candidates {
 		if selector.Matches(labels.Set(pod.Labels)) {
 			matching = append(matching, pod)
 		}
