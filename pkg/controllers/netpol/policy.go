@@ -765,16 +765,6 @@ func (npc *NetworkPolicyControllerBase) processNetworkPolicyPorts(npPorts []netw
 	return
 }
 
-func (npc *NetworkPolicyControllerBase) ListPodsByNamespaceAndLabels(namespace string,
-	podSelector labels.Selector) (ret []*api.Pod, err error) {
-	podLister := listers.NewPodLister(npc.podLister)
-	allMatchedNameSpacePods, err := podLister.Pods(namespace).List(podSelector)
-	if err != nil {
-		return nil, err
-	}
-	return allMatchedNameSpacePods, nil
-}
-
 func (npc *NetworkPolicyControllerBase) ListNamespaceByLabels(
 	namespaceSelector labels.Selector) ([]*api.Namespace, error) {
 	namespaceLister := listers.NewNamespaceLister(npc.nsLister)

@@ -69,5 +69,7 @@ func TestPodSnapshotSelectsByNamespaceAndLabels(t *testing.T) {
 	assert.Equal(t, []*api.Pod{a}, pods.byNamespaceAndLabels("a", labels.SelectorFromSet(labels.Set{"app": "x"})))
 	assert.ElementsMatch(t, []*api.Pod{a, other}, pods.byNamespaceAndLabels("a", labels.Everything()))
 	assert.Empty(t, pods.byNamespaceAndLabels("missing", labels.Everything()))
+	assert.ElementsMatch(t, []*api.Pod{a, b},
+		pods.byNamespaceAndLabels(api.NamespaceAll, labels.SelectorFromSet(labels.Set{"app": "x"})))
 	assert.ElementsMatch(t, []*api.Pod{a, b, other}, pods.all)
 }
