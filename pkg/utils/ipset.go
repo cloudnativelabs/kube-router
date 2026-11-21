@@ -2,8 +2,7 @@ package utils
 
 import (
 	"bytes"
-	//nolint:gosec // we don't use this hash in a sensitive capacity, so we don't care that its weak
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base32"
 	"errors"
 	"fmt"
@@ -551,8 +550,7 @@ func BuildIPSetRestore(ipset *IPSet, setIncludeNames []string) string {
 		tmpSetName := tmpSets[setOptions]
 		if tmpSetName == "" {
 			// create a temporary set per unique set-options:
-			//nolint:gosec // we don't use this hash in a sensitive capacity, so we don't care that its weak
-			hash := sha1.Sum([]byte("tmp:" + setOptions))
+			hash := sha256.Sum256([]byte("tmp:" + setOptions))
 			tmpSetName = tmpIPSetPrefix + base32.StdEncoding.EncodeToString(hash[:10])
 			fmt.Fprintf(ipSetRestore, "create %s %s\n", tmpSetName, setOptions)
 			// just in case we are starting up after a crash, we should flush the TMP ipset to be safe if it
