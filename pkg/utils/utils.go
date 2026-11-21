@@ -56,7 +56,7 @@ func CloseCloserDisregardError(handler io.Closer) {
 func TCPAddressBindable(addr string, port uint16) error {
 	ctx, cancel := context.WithTimeout(context.Background(), maxListenTestTimeout)
 	defer cancel()
-	endpoint := addr + ":" + strconv.Itoa(int(port))
+	endpoint := net.JoinHostPort(addr, strconv.Itoa(int(port)))
 	lc := net.ListenConfig{}
 	ln, err := lc.Listen(ctx, "tcp", endpoint)
 	if err != nil {
