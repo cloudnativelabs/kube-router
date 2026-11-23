@@ -644,7 +644,7 @@ Use test fixtures for large amounts of test data (>100 lines):
 // Place test data in testdata directory
 ```
 
-See `testdata/ipset_test_1/` for examples.
+See `testdata/ipset_test_1_no_skipped_policy/` for examples.
 
 ### Parallel Tests
 

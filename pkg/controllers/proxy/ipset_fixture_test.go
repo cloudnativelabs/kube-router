@@ -185,7 +185,7 @@ func filterExpectations(src map[string]testhelpers.IPSetExpectation, include fun
 }
 
 func TestNetworkServicesFixtureIPSets(t *testing.T) {
-	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1")
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1_no_skipped_policy")
 
 	services := testhelpers.LoadServiceList(t, filepath.Join(fixtureDir, "services.yaml"))
 
