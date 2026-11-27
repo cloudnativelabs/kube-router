@@ -23,7 +23,15 @@ import (
 )
 
 func TestNetworkPolicyFixtureIPSets(t *testing.T) {
-	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1")
+	for _, fixture := range []string{"ipset_test_1_no_skipped_policy", "ipset_test_1_skipped_policy"} {
+		t.Run(fixture, func(t *testing.T) {
+			testNetworkPolicyFixtureIPSets(t, fixture)
+		})
+	}
+}
+
+func testNetworkPolicyFixtureIPSets(t *testing.T, fixture string) {
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", fixture)
 
 	pods := testhelpers.LoadPodList(t, filepath.Join(fixtureDir, "pods.yaml"))
 	networkPolicies := testhelpers.LoadNetworkPolicyList(t, filepath.Join(fixtureDir, "networkpolicy.yaml"))

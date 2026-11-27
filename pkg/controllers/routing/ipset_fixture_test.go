@@ -18,7 +18,7 @@ import (
 )
 
 func TestNetworkRoutingFixtureIPSets(t *testing.T) {
-	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1")
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1_no_skipped_policy")
 
 	nodes := testhelpers.LoadNodeList(t, filepath.Join(fixtureDir, "nodes.yaml"))
 

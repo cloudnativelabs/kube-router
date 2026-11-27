@@ -130,11 +130,7 @@ func (npc *NetworkPolicyControllerBase) syncPodFirewallChains(networkPoliciesInf
 	}
 
 	// loop through the pods running on the node
-	allLocalPods := make(map[string]podInfo)
-	for _, nodeIP := range npc.krNode.GetNodeIPAddrs() {
-		npc.getLocalPods(allLocalPods, nodeIP.String(), pods)
-	}
-	for _, pod := range allLocalPods {
+	for _, pod := range npc.getLocalPods(pods) {
 
 		// ensure pod specific firewall chain exist for all the pods that need ingress firewall
 		podFwChainName := podFirewallChainName(pod.namespace, pod.name, version)
@@ -363,11 +359,16 @@ func (s *podSnapshot) byNamespaceAndLabels(namespace string, selector labels.Sel
 	return matching
 }
 
-func (npc *NetworkPolicyControllerBase) getLocalPods(localPods map[string]podInfo, nodeIP string,
-	pods *podSnapshot) {
+func (npc *NetworkPolicyControllerBase) getLocalPods(pods *podSnapshot) map[string]podInfo {
+	nodeIPs := make(map[string]bool)
+	for _, nodeIP := range npc.krNode.GetNodeIPAddrs() {
+		nodeIPs[nodeIP.String()] = true
+	}
+
+	localPods := make(map[string]podInfo)
 	for _, pod := range pods.all {
 		// ignore the pods running on the different node and pods that are not actionable
-		if strings.Compare(pod.Status.HostIP, nodeIP) != 0 || !isNetPolActionable(pod) {
+		if !nodeIPs[pod.Status.HostIP] || !isNetPolActionable(pod) {
 			continue
 		}
 		localPods[pod.Status.PodIP] = podInfo{
@@ -377,4 +378,5 @@ func (npc *NetworkPolicyControllerBase) getLocalPods(localPods map[string]podInf
 			namespace: pod.Namespace,
 			labels:    pod.Labels}
 	}
+	return localPods
 }

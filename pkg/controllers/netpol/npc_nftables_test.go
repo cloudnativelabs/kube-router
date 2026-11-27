@@ -339,7 +339,21 @@ func TestNetworkPolicyBuilderNft(t *testing.T) {
 }
 
 func TestFullPolicySync(t *testing.T) {
-	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1")
+	for _, test := range []struct {
+		fixture               string
+		shouldSkipDebugPolicy bool
+	}{
+		{"ipset_test_1_no_skipped_policy", false},
+		{"ipset_test_1_skipped_policy", true},
+	} {
+		t.Run(test.fixture, func(t *testing.T) {
+			testFullPolicySync(t, test.fixture, test.shouldSkipDebugPolicy)
+		})
+	}
+}
+
+func testFullPolicySync(t *testing.T, fixture string, shouldSkipDebugPolicy bool) {
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", fixture)
 
 	pods := testhelpers.LoadPodList(t, filepath.Join(fixtureDir, "pods.yaml"))
 	networkPolicies := testhelpers.LoadNetworkPolicyList(t, filepath.Join(fixtureDir, "networkpolicy.yaml"))
@@ -462,8 +476,12 @@ func TestFullPolicySync(t *testing.T) {
 	// Per-policy chains for the two fixture policies must exist.
 	require.Contains(t, ipv4Dump, `comment "netpol default/whoami"`,
 		"ipv4: whoami policy chain missing")
-	require.Contains(t, ipv4Dump, `comment "netpol default/debug"`,
-		"ipv4: debug policy chain missing")
+	debugPolicyComment := `comment "netpol default/debug"`
+	if shouldSkipDebugPolicy {
+		require.NotContains(t, ipv4Dump, debugPolicyComment, "ipv4: debug policy chain present")
+	} else {
+		require.Contains(t, ipv4Dump, debugPolicyComment, "ipv4: debug policy chain missing")
+	}
 
 	// "whoami" ingress policy: allow TCP 5000 from ipBlock 10.95.0.239/32 to whoami pod IPs.
 	require.Contains(t, ipv4Dump, `tcp dport 5000 counter meta mark set meta mark or 0x10000 return comment "default/whoami ingress cidr"`,
@@ -480,8 +498,12 @@ func TestFullPolicySync(t *testing.T) {
 		"ipv4: whoami pod IP 10.242.1.4 missing from destination set")
 
 	// "debug" egress policy: allow traffic from debug-toolbox pods to whoami pods (no port restriction).
-	require.Contains(t, ipv4Dump, `counter meta mark set meta mark or 0x10000 return comment "default/debug egress pods"`,
-		"ipv4: debug egress rule missing")
+	debugPolicyEgressRule := `counter meta mark set meta mark or 0x10000 return comment "default/debug egress pods"`
+	if shouldSkipDebugPolicy {
+		require.NotContains(t, ipv4Dump, debugPolicyEgressRule, "ipv4: debug egress rule present")
+	} else {
+		require.Contains(t, ipv4Dump, debugPolicyEgressRule, "ipv4: debug egress rule missing")
+	}
 
 	// Cluster-IP and node-port pass-through rules in KUBE-ROUTER-INPUT.
 	require.Contains(t, ipv4Dump, `ip daddr 10.96.0.0/16 counter return comment "allow cluster IP range"`,
@@ -506,12 +528,18 @@ func TestFullPolicySync(t *testing.T) {
 	// Per-policy chains for IPv6.
 	require.Contains(t, ipv6Dump, `comment "netpol default/whoami"`,
 		"ipv6: whoami policy chain missing")
-	require.Contains(t, ipv6Dump, `comment "netpol default/debug"`,
-		"ipv6: debug policy chain missing")
+	if shouldSkipDebugPolicy {
+		require.NotContains(t, ipv6Dump, debugPolicyComment, "ipv6: debug policy chain present")
+	} else {
+		require.Contains(t, ipv6Dump, debugPolicyComment, "ipv6: debug policy chain missing")
+	}
 
 	// "debug" egress rule for IPv6.
-	require.Contains(t, ipv6Dump, `counter meta mark set meta mark or 0x10000 return comment "default/debug egress pods"`,
-		"ipv6: debug egress rule missing")
+	if shouldSkipDebugPolicy {
+		require.NotContains(t, ipv6Dump, debugPolicyEgressRule, "ipv6: debug egress rule present")
+	} else {
+		require.Contains(t, ipv6Dump, debugPolicyEgressRule, "ipv6: debug egress rule missing")
+	}
 
 	// IPv6 destination sets for whoami pods.
 	require.Contains(t, ipv6Dump, `{ 2001:db8:42:1000::5 }`,
@@ -846,7 +874,7 @@ func TestNftablesChainsIdempotency(t *testing.T) {
 // correspond to an active NetworkPolicy are deleted during the next syncNetworkPolicyChains
 // call.
 func TestNftablesStalePolicyCleanup(t *testing.T) {
-	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1")
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1_no_skipped_policy")
 	nodes := testhelpers.LoadNodeList(t, filepath.Join(fixtureDir, "nodes.yaml"))
 
 	client := fake.NewSimpleClientset()
@@ -908,9 +936,13 @@ func TestNftablesStalePolicyCleanup(t *testing.T) {
 	}
 	_ = npInformer.GetStore().Add(makePolicy("policy-keep"))
 	_ = npInformer.GetStore().Add(makePolicy("policy-delete"))
-	// Need a namespace so pod lookups don't fail.
+	// Need a namespace and a pod so policies won't get filtered out.
 	_ = nsInformer.GetStore().Add(&v1core.Namespace{
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+	})
+	_ = podInformer.GetStore().Add(&v1core.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "pod", Namespace: "default"},
+		Status:     v1core.PodStatus{PodIP: "10.242.0.1", HostIP: "10.241.0.20"},
 	})
 
 	// First sync: both policies → both chains created.
@@ -979,7 +1011,7 @@ func TestNftablesStalePodFwChainCleanup(t *testing.T) {
 // the only syntax accepted by nftables.  Using a colon in a dport expression
 // causes a nftables syntax error at rule-install time.
 func TestNftablesNodePortRange(t *testing.T) {
-	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1")
+	fixtureDir := filepath.Join("..", "..", "..", "testdata", "ipset_test_1_no_skipped_policy")
 	nodes := testhelpers.LoadNodeList(t, filepath.Join(fixtureDir, "nodes.yaml"))
 
 	for _, tc := range []struct {
