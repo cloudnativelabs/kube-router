@@ -364,8 +364,8 @@ for the risk and impact discussion.
 
 ## BFD (Bidirectional Forwarding Detection)
 
-kube-router integrates GoBGP's support for BFD for external peers. Please review GoBGP's
-[docs on BFD](https://github.com/osrg/gobgp/blob/master/docs/sources/bfd.md)
+kube-router integrates GoBGP's support for BFD for external peers and for iBGP peers between cluster nodes. Please
+review GoBGP's [docs on BFD](https://github.com/osrg/gobgp/blob/master/docs/sources/bfd.md)
 for details on features and limitations, as GoBGP's implementation for BFD is new,
 and does not support all features.
 
@@ -405,6 +405,12 @@ Per-node BFD settings can be configured via the `kube-router.io/peers` annotatio
 
 Per-node BFD settings are _not_ supported via the individual BGP node annotations,
 which have been deprecated since v2.7.0.
+
+**iBGP Peers Between Nodes:**
+
+You can enable BFD for the iBGP sessions between cluster nodes by specifying `--enable-ibgp-bfd=true`. These sessions
+use the same `--bfd-detection-multiplier`, `--bfd-required-min-rx-interval`, and `--bfd-desired-min-tx-interval` flags
+as global external BGP peers.
 
 ### BFD & Graceful Restart
 
