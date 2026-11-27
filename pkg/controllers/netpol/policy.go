@@ -756,8 +756,10 @@ func (npc *NetworkPolicyControllerBase) processNetworkPolicyPorts(npPorts []netw
 			numericPorts = append(numericPorts, portProto)
 		} else if protocol2eps, ok := namedPort2eps[npPort.Port.String()]; ok {
 			if numericPort2eps, ok := protocol2eps[protocol]; ok {
-				for _, eps := range numericPort2eps {
-					namedPorts = append(namedPorts, *eps)
+				// sorted, not a map walk: the ipset of each entry is named by its position, so the order has to
+				// be the same in every sync or a set name gets paired with another port number
+				for _, port := range slices.Sorted(maps.Keys(numericPort2eps)) {
+					namedPorts = append(namedPorts, *numericPort2eps[port])
 				}
 			}
 		}
