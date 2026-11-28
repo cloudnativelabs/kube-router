@@ -44,6 +44,15 @@ jobs:
         cache-key: kube-router/container
         platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/s390x,linux/ppc64le
 
+    # Generate standard OCI labels/annotations (source, revision, version, ...) for the image and index.
+    # Only labels/annotations outputs are used; tags are still set on each build step below.
+    - name: Docker metadata
+      id: meta
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+      env:
+        # BuildKit rejects index annotations on the single-platform PR build.
+        DOCKER_METADATA_ANNOTATIONS_LEVELS: ${{ github.event_name == 'pull_request' && 'manifest' || 'manifest,index' }}
+
     # Authenticate to DockerHub so subsequent push steps and cosign attestation pushes succeed.
     - name: Login to DockerHub
       uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
@@ -89,6 +98,8 @@ jobs:
         build-args: |
           BUILDTIME_BASE=${{ inputs.buildtime-base }}
           RUNTIME_BASE=${{ inputs.runtime-base }}
+        labels: ${{ steps.meta.outputs.labels }}
+        annotations: ${{ steps.meta.outputs.annotations }}
         tags: cloudnativelabs/kube-router-git:${{ steps.extract_branch.outputs.branch }}
 
     # Build and push a single-arch (amd64) image tagged with the PR number for pull requests.
@@ -104,6 +115,8 @@ jobs:
         build-args: |
           BUILDTIME_BASE=${{ inputs.buildtime-base }}
           RUNTIME_BASE=${{ inputs.runtime-base }}
+        labels: ${{ steps.meta.outputs.labels }}
+        annotations: ${{ steps.meta.outputs.annotations }}
         tags: cloudnativelabs/kube-router-git:PR-${{ github.event.pull_request.number }}
 
     # -----------------------------------------------------------------------------------------
@@ -129,6 +142,8 @@ jobs:
         build-args: |
           BUILDTIME_BASE=${{ inputs.buildtime-base }}
           RUNTIME_BASE=${{ inputs.runtime-base }}
+        labels: ${{ steps.meta.outputs.labels }}
+        annotations: ${{ steps.meta.outputs.annotations }}
         tags: |
           cloudnativelabs/kube-router:${{ steps.extract_tag.outputs.tag }}
 
@@ -190,6 +205,8 @@ jobs:
         build-args: |
           BUILDTIME_BASE=${{ inputs.buildtime-base }}
           RUNTIME_BASE=${{ inputs.runtime-base }}
+        labels: ${{ steps.meta.outputs.labels }}
+        annotations: ${{ steps.meta.outputs.annotations }}
         tags: |
           cloudnativelabs/kube-router:${{ steps.extract_tag.outputs.tag }}
           cloudnativelabs/kube-router:latest
