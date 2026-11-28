@@ -560,7 +560,8 @@ func isEndpointSliceForLeaderElection(ep *discoveryv1.EndpointSlice) bool {
 }
 
 // nodeHasEndpointsForService will get the corresponding EndpointSlice resource for a given Service
-// return true if any endpoint addresses has NodeName matching the node name of the route controller
+// return true if any local, ready or serving endpoint has a NodeName matching the node name of the route
+// controller
 func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Service) (bool, error) {
 	// 1. Construct the lookup key from the Service object.
 	// This key must match the format produced by ServiceNameIndexFunc (see k8s/indexers/endpointslices.go)
@@ -582,6 +583,11 @@ func (nrc *NetworkRoutingController) nodeHasEndpointsForService(svc *v1core.Serv
 		}
 
 		for _, endpoint := range es.Endpoints {
+			// EndpointSlices include not-ready endpoints; skip those the service proxy would not use.
+			if !utils.EndpointIsReadyOrServing(endpoint) {
+				continue
+			}
+
 			if endpoint.NodeName != nil {
 				if *endpoint.NodeName == nrc.krNode.GetNodeName() {
 					return true, nil
